@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from . import questions
 from .config import Config
-from .events import RED_KINDS, Event, EventLog
+from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
 from .state import View, decide
 from .util import clock, now
 
@@ -65,6 +66,19 @@ def describe(ev: Event) -> str:
             text = "daemon stopped" + (f"; still running: {', '.join(d['running'])}" if d.get("running") else "")
         case "drift":
             text = f"control folder changed outside an executor window (accepted): {'; '.join(d.get('changes', []))}"
+        case "ask":
+            how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
+            text = f"{who} asked `{d.get('question')}` ({how}): {d.get('text')}"
+        case "answer":
+            text = f"{who} got an answer to `{d.get('question')}`: {d.get('text')}"
+        case "default":
+            text = f"{who} took the default for `{d.get('question')}` (nobody answered): {d.get('text')}"
+        case "late":
+            text = f"late answer to `{d.get('question')}` ignored ({d.get('outcome')} already): {d.get('text')}"
+        case "question_closed":
+            text = f"`{d.get('question')}` closed unanswered: {d.get('reason') or d.get('outcome')}"
+        case "queue_empty":
+            text = f"queue `{ev.repo}` is empty (last: {d.get('last')})"
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
         case _:
@@ -90,14 +104,27 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     holds = [e for e in events if e.kind == "hold" and e.item not in started]
     finished = [e for e in events if e.kind == "finish"]
     changes = [e for e in events if e.kind in ("request", "commit")]
-    other = [e for e in events if e not in red + holds + finished + changes
-             and e.kind not in ("read", "enqueue", "start")]
+    open_qs = [q for q in questions.scan(cfg.control) if q.is_open]
+    open_ids = {q.id for q in open_qs}
+    asked = [e for e in events if e.kind in QUESTION_KINDS
+             and not (e.kind == "ask" and e.detail.get("question") in open_ids)]
+    other = [e for e in events if e not in red + holds + finished + changes + asked
+             and e.kind not in ("read", "enqueue", "start", "ask")]
 
     out = [f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
     out.append(f"Generated {clock(now())} · {len(events)} event(s) {since}, through #{top}.")
     out.append(f"Mark read: write a file in `signals/` containing `read: {top}`.")
-    sections = [("Red", red), ("Holds", holds), ("Finished", finished),
+    if open_qs:
+        # Open questions lead whatever the read mark says: they are live, not news.
+        out += ["", "## Questions"]
+        for q in open_qs:
+            how = ("**blocking**" if q.block else
+                   f"default at {clock(q.deadline)}: {q.default}")
+            out.append(f"- {clock(q.asked)} `{q.id}` from {q.item} — {how}")
+            out += [f"  > {ln}" if ln else "  >" for ln in q.body.rstrip().splitlines()]
+            out.append(f"  Answer: write `questions/{q.id}.answer.md`.")
+    sections = [("Red", red), ("Holds", holds), ("Finished", finished), ("Questions resolved", asked),
                 ("Requests and commits", changes), ("Other", other)]
     for title, evs in sections:
         if evs:

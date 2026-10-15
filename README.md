@@ -15,6 +15,9 @@ uv run conductor run    <control folder>   # the daemon, foreground; Ctrl+C stop
 uv run conductor status [<control folder>]
 uv run conductor inbox  [<control folder>]
 uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--kind K] [--paths]
+uv run conductor questions [<control folder>] [--all]      # open asks (--all: resolved too)
+uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
+uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
 ```
 
 The control folder argument defaults to `$CONDUCTOR_CONTROL`, then the current folder.
@@ -43,14 +46,14 @@ reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner → conductor: read mark, queue clears
-questions/                     reserved (phase 2)
+questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
 .conductor/                    daemon lock and the guard snapshot
 ```
 
 Conductor creates the runtime folders on start and logs a `warning` event if any of
-them is not git-ignored. A suitable `.gitignore`:
+them is not git-ignored. `conductor init` (below) writes all of this. A suitable `.gitignore`:
 
 ```
 queue/
@@ -75,6 +78,8 @@ locks = ["shared"]            # named locks items may take; must not clash with 
 [defaults]
 max_hours = 2                 # per item unless the item sets max_hours
 poll_seconds = 2              # daemon loop interval
+ask_default_minutes = 10      # an unanswered non-blocking ask returns its default after this
+toasts = true                 # Windows desktop notifications (see Toasts)
 
 [repos]                       # name = path; relative paths resolve from the control folder
 sandbox = "../conductor-sandbox"
@@ -140,13 +145,29 @@ Each item runs as
 
 ```
 claude -p --dangerously-skip-permissions --output-format stream-json --verbose --session-id <uuid>
+       --mcp-config reports/<repo>__NNN_name.mcp.json
 ```
 
 with cwd = the repo and the prompt on stdin: a conductor preamble followed by the item
-body. The preamble names the item, says the session is unattended and never stops to
-ask (every gate is a branch), gives the time limit and kill time, the **absolute report
-path** (the only file the executor may write outside its repo), and the report header.
+body. The preamble names the item and says the session is unattended; gives the asking
+rule (ask only when a wrong guess would waste real work or be hard to undo, give a
+default whenever one exists, block only when every default is worse than waiting;
+everything else is a branch); the time limit and kill time; the **absolute report
+path** (the only file the executor may write outside its repo); the report header and
+what each status means; and that the final message ends `Report written to <path>`.
 The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
+
+The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
+(`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …`);
+its one tool is `ask` (see *Questions*).
+
+**Long tool calls.** Claude Code (2.1.301) aborts an MCP tool call that sends no
+response or progress for 1800s ("sent no response or progress for 1800s; aborting"),
+and `MCP_TOOL_TIMEOUT` does not change that. Two independent guards keep a blocking ask
+alive, each proven alone with a 35-minute call: the server entry carries
+`"timeout": 604800000` (7 days in ms), and the ask server sends
+`notifications/progress` every 60s against the `progressToken` Claude Code puts in
+every call's `_meta`.
 
 Conductor generates the session id and passes it with `--session-id`, so the id is
 known (in `.run.json` and the `start` event) before the executor writes a byte; phase 3
@@ -175,11 +196,91 @@ item that changed its repo, or a launch failure. The reasons are listed in the
 `finish` and `red` events.
 
 **max_hours** is enforced by the daemon: past the deadline (stored in `.run.json`, so
-it survives restarts) the executor's whole process tree is killed (`kill` event).
+it survives restarts) the executor's whole process tree is killed (`kill` event). Time
+blocked on a question does not count: no kill while a blocking ask is open, and when it
+resolves the deadline moves later by the time it was open (`deadline` in the `answer`
+event; `blocked_seconds` in `.run.json`). Time waiting on a defaulted ask does count.
 
 **readonly** items: conductor records the repo's HEAD and tracked-file status before
 and compares after; any difference is red. Commits made by any item are logged as
 `commit` events (`scope` = the repo).
+
+## Questions
+
+An executor reaches Matt with the `ask` tool (`mcp__conductor__ask`):
+
+```
+ask(question, options?, default?, block?)     # block defaults to false
+```
+
+A call writes `questions/<repo>__<NNN_name>__<n>.md` (`n` counts from 1 per item) and
+holds the tool call open until the question resolves:
+
+```
+---
+item: sandbox/012_ask_block
+asked: '2026-10-15T14:31:31-07:00'
+block: false
+default: notes/default-taken.md
+deadline: '2026-10-15T14:41:31-07:00'   # asked + ask_default_minutes; null when blocking
+session_id: a6874e17-…
+---
+What should the notes file be called?
+
+Options:
+- notes/default-taken.md
+- notes/answered.md
+```
+
+- **Answer.** The planner (or `conductor answer <id> <text>`) writes
+  `questions/<id>.answer.md`: the answer as plain text (front-matter, if any, is
+  dropped). It is read once it has been unchanged for 1 second. The tool returns
+  `Answer to <id>:` and the text.
+- **Default.** With a default and `block: false`, an unanswered question returns the
+  default at its `deadline`; the tool result says nobody answered and the default was
+  taken. An answer file written after that is logged `late` and does nothing else.
+- **Block.** `block: true`, or no default at all: the call waits until answered,
+  however long. That time does not count toward `max_hours`.
+- **Closed.** An item that ends with a question still open (killed, crashed) has it
+  closed by the daemon (`question_closed`).
+
+The ask server resolves the question by creating `<id>.result.json` exclusively
+(`outcome`: `answered` | `default` | `cancelled`, `text`, `at`, `by`); the daemon only
+creates one for `closed`. So a question resolves exactly once, and an executor gets its
+answer even while the daemon is down. The daemon observes the folder each tick and logs
+`ask`, `answer`, `default`, `late` and `question_closed`, each naming the question
+in `detail.question`. Open questions lead the inbox under **Questions** whatever the
+read mark says, each with the answer file to write. `conductor questions` lists them;
+`conductor answer` takes the full id or an unambiguous short form (`012_ask_block__1`,
+`012__1`).
+
+## Toasts
+
+The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
+`ask`, `red`, `tamper`, `hold` and `queue_empty` events. Each title names the project and
+the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
+history records. Toasts use Command Prompt's registered app id, with "Conductor" as
+the attribution line, so nothing has to be installed. A toast that fails is logged as a
+`warning` and never stops the daemon. `toasts = false` in `[defaults]` turns them off;
+on other platforms each would fail, so turn them off there.
+
+`queue_empty` is logged when an item finishes and its repo has nothing queued or
+running.
+
+## conductor init
+
+```
+conductor init C:\Code\<project>-control --project <project> --repo app=C:\Code\app [--repo …]
+```
+
+creates the folder with the layout above: `conductor.toml` (the project, the repos —
+relative like `../app` when beside or under the control folder, else absolute —, `max_hours = 2`,
+`ask_default_minutes = 10`), a stub `state.md`, `.gitignore` covering every runtime
+path, `.gitattributes` (`* text=auto eol=lf`), the runtime folders and a queue folder
+per repo; then `git init -b main` and a first commit of the four tracked files. An
+existing empty folder is fine (Matt may create it first to grant access); a non-empty
+one is refused, never overwritten. A repo path that is not a git repo yet is a warning,
+not an error: its queue holds until it is one.
 
 ## Control-folder guard
 
@@ -246,9 +347,11 @@ that arrived after reading stay unread.
 ## Inbox
 
 `inbox.md` is regenerated whenever the log or the read mark changes (and every 30s
-for the *Now* section): every event after the read mark, grouped **Red** (tamper first,
+for the *Now* section). First **Questions**: every open ask, regardless of the read
+mark. Then every event after the read mark, grouped **Red** (tamper first,
 then `red`, `kill`, `request_failed`, `invalid`), **Holds**, **Finished** (status,
-blocks, carry, report path), **Requests and commits**, **Other**; then **Now**: per
+blocks, carry, report path), **Questions resolved** (answers, defaults taken, late
+answers, closes), **Requests and commits**, **Other**; then **Now**: per
 repo, what is running, queued, waiting or held, plus proposed items. `enqueue` and
 `start` events are left out of the inbox (they are in `conductor events`).
 `conductor inbox` prints the same thing without moving the mark.
@@ -277,7 +380,13 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `request` / `request_failed` | a request applied or rejected | request, message, targets / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through / repo |
-| `config_reload`, `warning` | config applied; runtime path not ignored | |
+| `ask` | a question file appeared | question (id), text, block, default, deadline |
+| `answer` | answered before it resolved | question, text, waited_seconds, deadline (moved, when blocking) |
+| `default` | the default deadline passed unanswered | question, text (the default) |
+| `late` | an answer file after a default or close | question, text, outcome |
+| `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
+| `queue_empty` | an item finished and its repo has nothing queued or running | last |
+| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed | note |
 
 ## Restart rule
 
@@ -313,7 +422,10 @@ without `/T`.
 ## Development
 
 `uv run pytest` runs the suite against a fake executor (`tests/fake_claude.py`, which
-obeys `FAKE …` lines in the prompt), so the scheduling, guard, request and restart
-paths are covered without spending Claude runs. The sandbox
+obeys `FAKE …` lines in the prompt), so the scheduling, guard, request, restart and
+question paths are covered without spending Claude runs. `FAKE ask {json}` calls the
+real ask server through the item's `--mcp-config` using `tests/mcp_client.py`, a
+scripted MCP client that also runs standalone:
+`python tests/mcp_client.py <mcp.json> '{"question": "…", "default": "…"}'`. The sandbox
 (`C:\Code\conductor-sandbox`, `C:\Code\conductor-sandbox-control`) is for end-to-end
 runs with real executors.

@@ -5,6 +5,8 @@
     FAKE write <path> <text>                 write a file (absolute, or relative to cwd)
     FAKE commit <file> <text>                write <file> in cwd and commit it
     FAKE error                               emit an is_error result
+    FAKE ask <json arguments>                call the ask tool through --mcp-config;
+                                             the result text goes into the report
 """
 
 import json
@@ -26,11 +28,16 @@ def emit(obj):
 
 emit({"type": "system", "subtype": "init", "session_id": session})
 status, is_error = "done", False
+answers = []
 for ln in lines:
     if not ln.startswith("FAKE "):
         continue
     parts = ln.split(" ", 3)
     match parts[1]:
+        case "ask":
+            from mcp_client import call_ask
+            text, _ = call_ask(Path(args[args.index("--mcp-config") + 1]), json.loads(ln.split(" ", 2)[2]))
+            answers.append(text)
         case "sleep":
             time.sleep(float(parts[2]))
         case "report":
@@ -44,6 +51,7 @@ for ln in lines:
         case "error":
             is_error = True
 if status != "none":
-    report.write_text(f"status: {status}\nblocks: none\ncarry: none\n\nFake report.\n", encoding="utf-8")
+    report.write_text(f"status: {status}\nblocks: none\ncarry: none\n\nFake report.\n"
+                      + "".join(f"\nASK RESULT: {a}\n" for a in answers), encoding="utf-8")
 emit({"type": "result", "subtype": "error_during_execution" if is_error else "success",
       "is_error": is_error, "session_id": session, "result": "ok", "num_turns": 1, "total_cost_usd": 0})

@@ -46,17 +46,22 @@ class Env:
         self.repo = root / "code"
         init_repo(self.repo, {"README.md": "code\n"})
         toml = (
-            'project = "test"\nlocks = ["gpu"]\n\n[defaults]\nmax_hours = 1\npoll_seconds = 0.1\n\n'
+            'project = "test"\nlocks = ["gpu"]\n\n[defaults]\nmax_hours = 1\npoll_seconds = 0.1\n'
+            'ask_default_minutes = 0.03\n\n'
             f'[repos]\ncode = "../code"\n\n[executor]\ncommand = {[sys.executable, str(FAKE)]!r}\n'
         ).replace("'", '"').replace("\\", "/")
         init_repo(self.control, {"conductor.toml": toml, "state.md": "# state\n",
                                  ".gitignore": CONTROL_GITIGNORE, ".gitattributes": "* text=auto eol=lf\n"})
         self.cfg = config.load(self.control)
         self.lines: list[str] = []
+        self.toasts: list[tuple[str, str, str]] = []
         self.d = self.new_daemon()
 
+    def notifier(self, title: str, body: str, tag: str) -> None:
+        self.toasts.append((title, body, tag))
+
     def new_daemon(self) -> daemon.Daemon:
-        d = daemon.Daemon(config.load(self.control), echo=self.lines.append)
+        d = daemon.Daemon(config.load(self.control), echo=self.lines.append, notifier=self.notifier)
         d.startup()
         return d
 

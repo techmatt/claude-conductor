@@ -19,13 +19,14 @@ from pathlib import Path
 import psutil
 
 from . import config as config_mod
-from . import executor, git, guard, inbox, items, procs, request, state
+from . import executor, git, guard, inbox, items, notify, procs, questions, request, state
 from .config import RUNTIME, Config
-from .events import Event, EventLog
+from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, now, parse_stamp, read_text, stamp, write_text
 
 INBOX_REFRESH_SECONDS = 30
 SIGNAL_SETTLE_SECONDS = 1.0
+OUTCOME_KINDS = {"answered": "answer", "default": "default"}     # anything else: question_closed
 
 
 class DaemonError(RuntimeError):
@@ -60,23 +61,35 @@ class Run:
 
 
 class Daemon:
-    def __init__(self, cfg: Config, echo=print):
+    def __init__(self, cfg: Config, echo=print, notifier=None):
+        """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
         self.echo = echo
-        self.log = EventLog(cfg.events_db, on_append=self._echo_event)
+        self.notifier = notifier if notifier is not None else notify.Toaster()
+        self.log = EventLog(cfg.events_db, on_append=self._on_event)
         self.runs: dict[str, Run] = {}
         self.snapshot: guard.Snapshot | None = None
         self.enqueued = {e.item for e in self.log.query(kinds=["enqueue"])}
         self.holds = {e.item: e.detail.get("reason") for e in self.log.query(kinds=["hold"])}
+        self.q_seen = {(e.kind, e.detail.get("question")) for e in self.log.query(kinds=QUESTION_KINDS)}
+        self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
         self._inbox_key: tuple | None = None
         self._inbox_at = 0.0
         self._lock_file = cfg.state_dir / "daemon.json"
 
     # ---------------------------------------------------------------- lifecycle
-    def _echo_event(self, ev: Event) -> None:
+    def _on_event(self, ev: Event) -> None:
         if self.echo:
             self.echo(f"{clock(ev.ts)} #{ev.id} {inbox.describe(ev)}")
+        if not (self.cfg.toasts and self.notifier):
+            return
+        msg = notify.message(self.cfg.project, ev.kind, ev.item, ev.repo, ev.detail)
+        if msg:
+            try:
+                self.notifier(*msg, f"{self.cfg.project}#{ev.id}")
+            except Exception as exc:     # a toast never stops the daemon
+                self.log.append("warning", note=f"toast for #{ev.id} ({ev.kind}) failed: {exc!r}")
 
     def acquire(self) -> None:
         if self._lock_file.is_file():
@@ -139,6 +152,7 @@ class Daemon:
     def tick(self) -> None:
         self.process_signals()
         self.process_requests()
+        self.process_questions()
         self.check_runs()
         self.schedule()
         self.write_inbox()
@@ -283,6 +297,55 @@ class Daemon:
                     self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",
                                     error=f"{exc}; still using the previous config")
 
+    # ---------------------------------------------------------------- questions
+    def process_questions(self) -> None:
+        """Log what the ask servers and the planner wrote in questions/. The server
+        resolves questions; the daemon only observes, and moves deadlines for blocked time."""
+        blocked = set()
+        for q in questions.scan(self.cfg.control):
+            rel = self.cfg.rel(q.path)
+            if ("ask", q.id) not in self.q_seen:
+                self._q_log("ask", q, [rel], text=q.summary(), block=q.block, default=q.default,
+                            deadline=q.deadline, deadline_clock=clock(q.deadline) if q.deadline else None)
+            if q.is_open:
+                if q.block:
+                    blocked.add(q.item)
+                continue
+            outcome = q.result.get("outcome")
+            kind = OUTCOME_KINDS.get(outcome, "question_closed")
+            if (kind, q.id) not in self.q_seen:
+                waited = (parse_stamp(q.result["at"]) - parse_stamp(q.asked)).total_seconds()
+                extra = {}
+                if q.block and (run := self.runs.get(q.item)):
+                    extra["deadline"] = self._extend_deadline(run, waited)
+                paths = [self.cfg.rel(q.answer_path)] if outcome == "answered" else [rel]
+                self._q_log(kind, q, paths, outcome=outcome, text=q.result.get("text"),
+                            reason=q.result.get("reason"), waited_seconds=round(waited), **extra)
+            if outcome != "answered" and ("late", q.id) not in self.q_seen and q.answer_path.exists():
+                text = questions.read_answer(q)
+                if text is not None:
+                    self._q_log("late", q, [self.cfg.rel(q.answer_path)], text=text, outcome=outcome,
+                                note="answered after the question resolved; the executor never saw it")
+        self.blocked = blocked
+
+    def _q_log(self, kind: str, q: questions.Question, paths: list[str], **detail) -> None:
+        self.q_seen.add((kind, q.id))
+        self.log.append(kind, item=q.item, paths=paths, question=q.id, **detail)
+
+    def _extend_deadline(self, run: Run, seconds: float) -> str:
+        """Time blocked on a question does not count toward max_hours."""
+        rec = run.rec
+        rec["deadline"] = stamp(parse_stamp(rec["deadline"]) + timedelta(seconds=seconds))
+        rec["blocked_seconds"] = rec.get("blocked_seconds", 0) + round(seconds)
+        write_text(run.rec_path, json.dumps(rec, indent=1))
+        return rec["deadline"]
+
+    def _close_questions(self, item_id: str) -> None:
+        for q in questions.scan(self.cfg.control):
+            if q.item == item_id and q.is_open:
+                questions.resolve(q, "closed", None, "daemon", reason="the item finished before an answer")
+        self.process_questions()
+
     # ---------------------------------------------------------------- scheduling
     def schedule(self) -> None:
         view = state.scan(self.cfg, self.log)
@@ -342,10 +405,11 @@ class Daemon:
             if stale.exists():
                 stale.unlink()
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline))
+        write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         run = Run(rec, rec_path, md_path)
         self.runs[item.id] = run
         try:
-            run.popen = procs.spawn(executor.command(cfg, rec["session_id"]), repo_path,
+            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp), repo_path,
                                     paths.prompt, paths.log, paths.stderr)
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
@@ -364,7 +428,7 @@ class Daemon:
         for run in list(self.runs.values()):
             if run.exited():
                 self.finish(run)
-            elif now() > parse_stamp(run.rec["deadline"]):
+            elif now() > parse_stamp(run.rec["deadline"]) and run.item_id not in self.blocked:
                 pid = run.pid()
                 procs.kill_tree(pid)
                 self.log.append("kill", item=run.item_id, pid=pid,
@@ -420,6 +484,11 @@ class Daemon:
                             reasons=reasons, after_red=rec.get("after_red", "stop"))
         self._move_to_done(run)
         self.runs.pop(item_id, None)
+        self._close_questions(item_id)
+        qdir = cfg.path("queue", repo)
+        still_running = any(r.rec["repo"] == repo for r in self.runs.values())
+        if not still_running and not (qdir.is_dir() and any(qdir.glob("*.md"))):
+            self.log.append("queue_empty", item=item_id, repo=repo, last=item_id)
 
     def _move_to_done(self, run: Run) -> None:
         ddir = self.cfg.path("done", run.rec["repo"])

@@ -9,6 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
     "psutil>=5.9",
     "pyyaml>=6.0",
+    "windows-toasts>=1.3 ; sys_platform == 'win32'",
 ]
 
 [project.scripts]

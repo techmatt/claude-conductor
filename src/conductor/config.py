@@ -28,6 +28,8 @@ class Config:
     locks: set[str] = field(default_factory=set)
     max_hours: float = 2.0
     poll_seconds: float = 2.0
+    ask_default_minutes: float = 10.0
+    toasts: bool = True
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
 
@@ -54,6 +56,11 @@ class Config:
             return path.resolve().as_posix()
 
 
+def check_repo_name(name: str) -> None:
+    if not name or "__" in name or "/" in name or "\\" in name:
+        raise ConfigError(f"{CONFIG_NAME}: repo name {name!r} may not be empty or contain '__' or slashes")
+
+
 def load(control: Path) -> Config:
     control = Path(control).resolve()
     cfg_file = control / CONFIG_NAME
@@ -74,8 +81,7 @@ def load(control: Path) -> Config:
     for name, value in raw_repos.items():
         if not isinstance(value, str):
             raise ConfigError(f"{CONFIG_NAME}: repos.{name} must be a path string")
-        if "__" in name or "/" in name or "\\" in name:
-            raise ConfigError(f"{CONFIG_NAME}: repo name {name!r} may not contain '__' or slashes")
+        check_repo_name(name)
         p = Path(value)
         repos[name] = (p if p.is_absolute() else control / p).resolve()
 
@@ -98,6 +104,8 @@ def load(control: Path) -> Config:
         locks=set(locks),
         max_hours=float(defaults.get("max_hours", 2.0)),
         poll_seconds=float(defaults.get("poll_seconds", 2.0)),
+        ask_default_minutes=float(defaults.get("ask_default_minutes", 10.0)),
+        toasts=bool(defaults.get("toasts", True)),
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],
     )
