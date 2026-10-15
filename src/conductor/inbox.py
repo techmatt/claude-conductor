@@ -33,7 +33,30 @@ def describe(ev: Event) -> str:
         case "hold":
             text = f"{who} held: {d.get('reason')}"
         case "start":
-            text = f"{who} started (session {d.get('session_id')}, pid {d.get('pid')})"
+            how = "resumed its staged session" if d.get("resumed") else "started"
+            text = f"{who} {how} (session {d.get('session_id')}, pid {d.get('pid')})"
+            if d.get("branch"):
+                text += f" on `{d['branch']}`"
+            if d.get("error"):
+                text += f"; launch failed: {d['error']}"
+        case "stage":
+            text = f"{who} staging (session {d.get('session_id')}, pid {d.get('pid')}) in {d.get('worktree')}"
+        case "staged":
+            plan = (d.get("plan") or "").strip().splitlines()
+            text = f"{who} staged; waits for the lock" + (f": {plan[0][:160]}" if plan else "")
+        case "merge":
+            text = f"{who} merged `{d.get('branch')}` into main at {str(d.get('sha') or '')[:10]} ({d.get('commits')} commit(s))"
+        case "conflict":
+            files = f" in {', '.join(d['files'][:5])}" if d.get("files") else ""
+            text = f"{who} rebase conflicted{files}; `{d.get('branch')}` kept, main untouched"
+        case "paths_violation":
+            files = d.get("files", [])
+            text = (f"{who} changed {len(files)} file(s) outside its paths "
+                    f"{d.get('paths_declared')}: {', '.join(files[:5])}")
+        case "worktree":
+            text = f"{who} worktree {d.get('action')}: {ev.paths[0] if ev.paths else ''}"
+            if d.get("note"):
+                text += f" ({d['note']})"
         case "kill":
             text = f"{who} killed: {d.get('reason')}"
         case "commit":
@@ -55,7 +78,7 @@ def describe(ev: Event) -> str:
             extras += [k for k in ("needs_planner", "readonly") if d.get(k)]
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
         case "adopt":
-            text = f"{who} adopted after restart (pid {d.get('pid')})"
+            text = f"{who} {'stage ' if d.get('stage') else ''}adopted after restart (pid {d.get('pid')})"
         case "recover":
             text = f"{who} finished while conductor was down; harvested"
         case "requeue":
@@ -99,17 +122,20 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     top = log.max_id()
     mark_ev = log.last("read")
     red = sorted((e for e in events if e.kind in RED_KINDS), key=lambda e: (e.kind != "tamper", e.id))
-    # Only holds still in effect: the item has not started since.
-    started = {e.item for e in log.query(kinds=["start"])}
-    holds = [e for e in events if e.kind == "hold" and e.item not in started]
+    # Only holds still in effect: the item has not started or finished since.
+    moved: dict[str, int] = {}
+    for e in log.query(kinds=["start", "finish", "merge"]):
+        moved[e.item] = e.id
+    holds = [e for e in events if e.kind == "hold" and moved.get(e.item, 0) < e.id]
     finished = [e for e in events if e.kind == "finish"]
     changes = [e for e in events if e.kind in ("request", "commit")]
     open_qs = [q for q in questions.scan(cfg.control) if q.is_open]
     open_ids = {q.id for q in open_qs}
     asked = [e for e in events if e.kind in QUESTION_KINDS
              and not (e.kind == "ask" and e.detail.get("question") in open_ids)]
+    changes += [e for e in events if e.kind == "merge"]
     other = [e for e in events if e not in red + holds + finished + changes + asked
-             and e.kind not in ("read", "enqueue", "start", "ask")]
+             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree")]
 
     out = [f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
@@ -137,10 +163,14 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     for repo in cfg.repos:
         d = decisions[repo]
         queued = [i.name for i in view.queued.get(repo, [])]
-        running = [i.split("/", 1)[1] for i in view.running if i.startswith(repo + "/")]
+        running = [rec["name"] + (" (merging)" if rec.get("phase") == "merge" else "")
+                   for rec in view.running.values() if rec["repo"] == repo]
+        staged = [f"{rec['name']} ({rec.get('phase')})" for rec in view.staged.values() if rec["repo"] == repo]
         parts = []
         if running:
             parts.append(f"running {', '.join(running)}")
+        if staged:
+            parts.append(f"staged {', '.join(staged)}")
         if queued:
             parts.append(f"queued {', '.join(queued)}")
         if d.action in ("hold", "wait"):

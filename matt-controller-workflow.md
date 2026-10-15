@@ -36,7 +36,7 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
    It writes the layout, `conductor.toml`, a stub `state.md` and the `.gitignore`, then makes the first commit. It refuses a folder that already has files in it. Matt creates any code repo that doesn't exist yet.
 3. The planner asks for folder access to the control folder and to each repo. Access can only be granted to a folder that exists.
-4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`), as one request. It also writes each code repo's `CLAUDE.md` standing contract (report shape, commit rules, how to background long steps, the `Report written to` sign-off) as a first queued prompt for that repo.
+4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, or `worktrees = false`), as one request. It also writes each code repo's `CLAUDE.md` standing contract (report shape, commit rules, how to background long steps, the `Report written to` sign-off) as a first queued prompt for that repo.
 5. Matt starts conductor for the project (`uv run conductor run C:\Code\<project>-control`). From then on, work flows through the queue.
 
 ## Every session
@@ -47,7 +47,10 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 
 ## Writing a prompt
 
-- **Front-matter first.** `repo` (required), and as needed: `locks` (named locks beyond the repo's own), `depends_on`, `after_red` (`stop`, the default, or `continue`), `needs_planner` (the next item can't be written until this report is read), `readonly`, `max_hours`.
+- **Front-matter first.** `repo` (required), and as needed: `locks` (named locks beyond the repo's own), `depends_on`, `after_red` (`stop`, the default, or `continue`), `needs_planner` (the next item can't be written until this report is read), `readonly`, `max_hours`, `paths` (globs the item may change), `stage` (`false` to skip staging this item).
+- **Concurrency is declared, not judged.** Every item runs in its own worktree on `conductor/<item>` and is merged into `main` when it finishes `done` or `partial`. Two items in one repo run at the same time only when both declare `paths`, the globs are disjoint, and they share no named lock; anything else waits its turn. Declare `paths` only when the work really is confined. Touching a file outside them makes the item red and unmerged, and the check is conservative, so a doubtful pair runs serially. A dependent item starts only after its dependency has merged.
+- **Staging is automatic.** A queue head that is waiting only on a busy lock or a running dependency gets a read-only head start in its worktree, then resumes in the same session when it gets the lock. Set `stage: false` when that reading would be wasted, or when the item's plan depends on what the running item produces.
+- **A code repo's `CLAUDE.md` says "commit to the branch you are on"**, never "commit to `main`". Executors work on `conductor/<item>`, and conductor does the merge.
 - **Approval.** An item goes into `queue\` only when Matt has approved it in the conversation; otherwise it goes to `proposed\`. A `readonly` item (writes nothing tracked, no commit, no shared lock) may go straight to the queue — Matt sees it but doesn't approve it.
 - **A started item is never edited.** A correction or follow-up is a new queue item. An item not yet started may be rewritten freely.
 - **Short, goal-first.** Length scales with risk; trust the executor on mechanics. Never restate what the repo's `CLAUDE.md` owns. End with "Commit when done." unless the prompt says why not.

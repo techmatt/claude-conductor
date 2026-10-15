@@ -30,7 +30,7 @@ CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
 """
 
 # Kinds that put an event in the inbox's red section.
-RED_KINDS = {"red", "tamper", "kill", "request_failed", "invalid"}
+RED_KINDS = {"red", "tamper", "conflict", "paths_violation", "kill", "request_failed", "invalid"}
 # One question's trail; each is logged at most once per question (detail `question`).
 QUESTION_KINDS = ("ask", "answer", "default", "late", "question_closed")
 

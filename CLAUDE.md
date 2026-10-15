@@ -14,5 +14,6 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
 - Clock times are local 12-hour (`5:25pm`).
 - A step estimated over ~30 seconds is backgrounded, with a completion waiter on the real process, never on a launcher wrapper.
+- Before committing, update `HANDOFF.md` *Status* and *Open* to match what the prompt left behind, and commit it with the rest.
 - Commit to `main` only, by explicit path. "Commit when done." in a prompt means one commit at the end unless the prompt asks for one per phase.
 - Every prompt names this repo; if the working directory is not `claude-conductor`, stop and say so.

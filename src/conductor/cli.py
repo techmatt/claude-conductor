@@ -53,21 +53,34 @@ def cmd_status(args) -> int:
     for repo in cfg.repos:
         print(f"\n{repo}  ({cfg.repos[repo]})")
         for item_id, rec in view.running.items():
+            if rec["repo"] != repo:
+                continue
+            where = f", on {rec['branch']}" if rec.get("branch") else ""
+            if rec.get("phase") == "merge":
+                hold = log.last("hold", item=item_id)
+                why = f" — {hold.detail.get('reason')}" if hold and hold.detail.get("merge") else ""
+                print(f"  merging  {rec['name']}  {rec['outcome']['status']}{where}{why}")
+                continue
+            age = (now() - parse_stamp(rec["started"])).total_seconds()
+            blocked = [q.id for q in open_qs if q.item == item_id and q.block]
+            kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
+                    else f"kill at {clock(rec['deadline'])}")
+            print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}, {kill}")
+        for item_id, rec in view.staged.items():
             if rec["repo"] == repo:
                 age = (now() - parse_stamp(rec["started"])).total_seconds()
-                blocked = [q.id for q in open_qs if q.item == item_id and q.block]
-                kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
-                        else f"kill at {clock(rec['deadline'])}")
-                print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}, {kill}")
+                what = (f"staging  {rec['name']}  {duration(age)}, pid {rec.get('pid')}" if rec["phase"] == "staging"
+                        else f"staged   {rec['name']}  plan ready, resumes when it can run")
+                print(f"  {what}")
         for i, item in enumerate(view.queued.get(repo, [])):
             note = ""
-            if i == 0 and decisions[repo].action in ("hold", "wait", "run"):
+            if i == 0 and decisions[repo].action in ("hold", "wait", "run", "resume", "stage"):
                 note = f"  — {decisions[repo].action}" + (f": {decisions[repo].reason}" if decisions[repo].reason else "")
             print(f"  queued   {item.name}{note}")
         if ev := view.red_hold.get(repo):
             print(f"  held     after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
         if not (view.queued.get(repo) or view.red_hold.get(repo)
-                or any(r["repo"] == repo for r in view.running.values())):
+                or any(r["repo"] == repo for r in [*view.running.values(), *view.staged.values()])):
             print("  idle")
     proposed = sorted(cfg.path("proposed").glob("*.md")) if cfg.path("proposed").is_dir() else []
     if proposed:

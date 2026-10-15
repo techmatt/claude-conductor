@@ -65,6 +65,18 @@ class Env:
         d.startup()
         return d
 
+    def configure(self, repo_table: str) -> None:
+        """Replace `code = "../code"` with a `[repos.code]` table and restart the daemon."""
+        toml = self.control / "conductor.toml"
+        text = toml.read_text(encoding="utf-8").replace('[repos]\ncode = "../code"\n', repo_table)
+        toml.write_text(text, encoding="utf-8", newline="\n")
+        git(self.control, "commit", "-qam", "configure")
+        self.d.log.close()
+        self.d = self.new_daemon()
+
+    def worktree(self, name: str) -> Path:
+        return self.d.cfg.worktree("code", name)
+
     def queue(self, name: str, body: str, repo: str = "code", **meta) -> Path:
         fm = "\n".join(f"{k}: {v}" for k, v in {"repo": repo, **meta}.items())
         p = self.control / "queue" / repo / f"{name}.md"

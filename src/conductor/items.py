@@ -6,10 +6,12 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import globs
 from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
-FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours"}
+FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
+          "paths", "stage"}
 
 
 @dataclass
@@ -24,6 +26,8 @@ class Item:
     needs_planner: bool = False
     readonly: bool = False
     max_hours: float | None = None
+    paths: list[str] = field(default_factory=list)     # globs the item may change; [] = undeclared
+    stage: bool | None = None                           # None: the repo's `stage` setting
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -34,7 +38,7 @@ class Item:
     def meta(self) -> dict:
         return {"locks": self.locks, "depends_on": self.depends_on, "after_red": self.after_red,
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
-                "max_hours": self.max_hours}
+                "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage}
 
 
 def _list(value, what: str, errors: list[str]) -> list[str]:
@@ -87,6 +91,15 @@ def parse(path: Path, repo: str) -> Item:
                 raise ValueError
         except (TypeError, ValueError):
             item.errors.append("`max_hours` must be a positive number")
+    item.paths = _list(meta.get("paths"), "paths", item.errors)
+    for glob in item.paths:
+        if globs.invalid(glob):
+            item.errors.append(f"`paths`: {glob!r} must be a relative glob inside the repo")
+    if meta.get("stage") is not None:
+        if not isinstance(meta["stage"], bool):
+            item.errors.append("`stage` must be true or false")
+        else:
+            item.stage = meta["stage"]
     if not body.strip():
         item.errors.append("the prompt body is empty")
     return item

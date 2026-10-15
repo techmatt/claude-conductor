@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import git, items
+from . import git, globs, items
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
@@ -15,7 +15,7 @@ from .items import Item
 @dataclass
 class Decision:
     repo: str
-    action: str                 # run | wait | hold | busy | idle
+    action: str                 # run | resume | stage | wait | hold | busy | idle
     item: Item | None = None
     reason: str = ""
 
@@ -24,6 +24,7 @@ class Decision:
 class View:
     queued: dict[str, list[Item]] = field(default_factory=dict)
     running: dict[str, dict] = field(default_factory=dict)     # item id → run record
+    staged: dict[str, dict] = field(default_factory=dict)      # item id → stage record (item still queued)
     done: set[str] = field(default_factory=set)
     finishes: dict[str, Event] = field(default_factory=dict)   # item id → last finish event
     read_mark: int = 0
@@ -62,6 +63,9 @@ def scan(cfg: Config, log: EventLog) -> View:
             if rec.with_name(rec.name.removesuffix(".run.json") + ".md").is_file():
                 data = read_run(rec)
                 view.running[data["item"]] = data
+        for rec in sorted(cfg.path("running", repo).glob("*.stage.json")) if cfg.path("running", repo).is_dir() else []:
+            data = read_run(rec)
+            view.staged[data["item"]] = data
         ddir = cfg.path("done", repo)
         if ddir.is_dir():
             view.done |= {f"{repo}/{p.stem}" for p in ddir.glob("*.md")}
@@ -77,33 +81,84 @@ def scan(cfg: Config, log: EventLog) -> View:
     return view
 
 
+def can_share(cfg: Config, head: Item, rec: dict) -> bool:
+    """May `head` run beside the running item `rec` in the same repo? Only in worktrees,
+    when both declared `paths`, the globs are disjoint and they share no named lock."""
+    return (cfg.opts(head.repo).worktrees and bool(rec.get("worktree"))
+            and globs.disjoint(head.paths, rec.get("paths") or [])
+            and not set(head.locks) & set(rec.get("locks") or []))
+
+
+def may_stage(cfg: Config, view: View, head: Item) -> bool:
+    opts = cfg.opts(head.repo)
+    wanted = head.stage if head.stage is not None else opts.stage
+    others = [i for i, rec in view.staged.items() if rec["repo"] == head.repo and i != head.id]
+    return opts.worktrees and wanted and not others
+
+
 def decide(cfg: Config, view: View) -> dict[str, Decision]:
-    """One decision per configured repo. Items run strictly in NNN order per repo."""
+    """One decision per configured repo. Items start strictly in NNN order per repo.
+
+    A finished item still waiting to merge keeps its repo lock but not its named locks.
+    """
     held_locks: dict[str, str] = {}
     for item_id, rec in view.running.items():
-        for lock in rec.get("locks", []):
-            held_locks[lock] = item_id
+        if rec.get("phase", "exec") == "exec":
+            for lock in rec.get("locks", []):
+                held_locks[lock] = item_id
     known = view.known()
     out: dict[str, Decision] = {}
     for repo in cfg.repos:
-        running_here = [i for i in view.running if i.startswith(repo + "/")]
+        running_here = {i: r for i, r in view.running.items() if r["repo"] == repo}
         queue = view.queued.get(repo, [])
         head = queue[0] if queue else None
-        if running_here:
-            out[repo] = Decision(repo, "busy", head, f"running {running_here[0]}")
-            continue
         if head is None:
-            out[repo] = Decision(repo, "idle")
+            out[repo] = Decision(repo, "busy" if running_here else "idle", None,
+                                 f"running {next(iter(running_here))}" if running_here else "")
             continue
-        out[repo] = d = _decide_head(cfg, view, repo, head, known, held_locks)
-        if d.action == "run":
+        out[repo] = d = _decide_head(cfg, view, repo, head, known, held_locks, running_here)
+        if d.action in ("run", "resume"):
             for lock in head.locks:
                 held_locks[lock] = head.id
     return out
 
 
 def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str],
-                 held_locks: dict[str, str]) -> Decision:
+                 held_locks: dict[str, str], running_here: dict[str, dict]) -> Decision:
+    if d := _hold(cfg, view, repo, head, known):
+        return d
+    # What the head waits on; staging is allowed only when every wait is a busy lock or
+    # a dependency that is running.
+    waits: list[tuple[str, bool]] = []
+    for item_id, rec in running_here.items():
+        if not can_share(cfg, head, rec):
+            what = "merging" if rec.get("phase") == "merge" else "running"
+            waits.append((f"repo busy: {item_id} {what}", True))
+            break
+    for ref in head.depends_on:
+        dep = items.resolve_ref(ref, repo, known)
+        status = view.status_of(dep)
+        if status in ("queued", "running"):
+            waits.append((f"waiting on {dep} ({status})", status == "running"))
+    for lock in head.locks:
+        if lock in held_locks:
+            waits.append((f"lock {lock} held by {held_locks[lock]}", True))
+    stage = view.staged.get(head.id)
+    if waits:
+        reason = waits[0][0]
+        if stage is None and all(ok for _, ok in waits) and may_stage(cfg, view, head):
+            return Decision(repo, "stage", head, reason)
+        if stage is not None:
+            reason += f"; {'staging' if stage.get('phase') == 'staging' else 'staged'}"
+        return Decision(repo, "wait", head, reason)
+    if stage is not None:
+        if stage.get("phase") == "staging":
+            return Decision(repo, "wait", head, "staging; executes when the stage finishes")
+        return Decision(repo, "resume", head)
+    return Decision(repo, "run", head)
+
+
+def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> Decision | None:
     def hold(reason: str) -> Decision:
         return Decision(repo, "hold", head, reason)
 
@@ -127,11 +182,6 @@ def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str
         status = view.status_of(dep)
         if status == "queued" and dep.startswith(repo + "/"):
             return hold(f"depends on {dep}, which is later in its own queue")
-        if status in ("queued", "running"):
-            return Decision(repo, "wait", head, f"waiting on {dep} ({status})")
-        if status != "done":
+        if status not in ("queued", "running", "done"):
             return hold(f"dependency {dep} ended {status}")
-    for lock in head.locks:
-        if lock in held_locks:
-            return Decision(repo, "wait", head, f"lock {lock} held by {held_locks[lock]}")
-    return Decision(repo, "run", head)
+    return None

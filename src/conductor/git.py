@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -11,8 +12,10 @@ class GitError(RuntimeError):
 
 
 def run(repo: Path, *args: str, check: bool = True, input: bytes | None = None) -> str:
+    # GIT_EDITOR: a rebase or merge must never wait on an editor nobody sees.
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], input=input, capture_output=True,
+        env={**os.environ, "GIT_EDITOR": "true", "GIT_TERMINAL_PROMPT": "0"},
     )
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {proc.stderr.decode('utf-8', 'replace').strip()}")
@@ -52,6 +55,27 @@ def write_tree(repo: Path) -> str | None:
 def tracked_status(repo: Path) -> str:
     """Porcelain status of tracked files only (untracked files are not a change)."""
     return run(repo, "status", "--porcelain=v1", "--untracked-files=no")
+
+
+def rev(repo: Path, ref: str) -> str | None:
+    out = run(repo, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", check=False).strip()
+    return out or None
+
+
+def is_ancestor(repo: Path, a: str, b: str) -> bool:
+    return subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", a, b],
+                          capture_output=True).returncode == 0
+
+
+def changed_files(repo: Path, before: str, after: str) -> list[str]:
+    """Files that differ between two commits (renames as delete + add)."""
+    out = run(repo, "diff", "--name-only", "--no-renames", "-z", before, after)
+    return [p for p in out.split("\0") if p]
+
+
+def rebase_in_progress(worktree: Path) -> bool:
+    gitdir = Path(run(worktree, "rev-parse", "--absolute-git-dir").strip())
+    return (gitdir / "rebase-merge").exists() or (gitdir / "rebase-apply").exists()
 
 
 def commits_between(repo: Path, before: str | None, after: str | None) -> list[tuple[str, str]]:

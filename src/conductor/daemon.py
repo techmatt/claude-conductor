@@ -1,11 +1,13 @@
 """The daemon: one polling loop per control folder.
 
-Each tick: signals → requests → running executors → schedule → inbox. Single-threaded;
-executors are separate processes the loop polls, so several repos run at once.
+Each tick: signals → requests → questions → stages → running executors and merges →
+schedule → inbox. Single-threaded; executors are separate processes the loop polls,
+so several repos (and disjoint items within one) run at once.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -19,7 +21,7 @@ from pathlib import Path
 import psutil
 
 from . import config as config_mod
-from . import executor, git, guard, inbox, items, notify, procs, questions, request, state
+from . import executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, worktrees
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, now, parse_stamp, read_text, stamp, write_text
@@ -35,6 +37,8 @@ class DaemonError(RuntimeError):
 
 @dataclass
 class Run:
+    """An executor process: an item's run (record `running/<repo>/NNN.run.json`) or a
+    stage (`running/<repo>/NNN.stage.json`)."""
     rec: dict
     rec_path: Path
     md_path: Path
@@ -60,6 +64,13 @@ class Run:
         return self.popen.pid if self.popen else (self.proc.pid if self.proc else None)
 
 
+def _file_hash(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
 class Daemon:
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
@@ -67,7 +78,9 @@ class Daemon:
         self.echo = echo
         self.notifier = notifier if notifier is not None else notify.Toaster()
         self.log = EventLog(cfg.events_db, on_append=self._on_event)
-        self.runs: dict[str, Run] = {}
+        self.runs: dict[str, Run] = {}              # executing, or finished and waiting to merge
+        self.stages: dict[str, Run] = {}            # staging processes still running
+        self.no_stage: set[str] = set()             # a stage failed or was discarded: launch fresh
         self.snapshot: guard.Snapshot | None = None
         self.enqueued = {e.item for e in self.log.query(kinds=["enqueue"])}
         self.holds = {e.item: e.detail.get("reason") for e in self.log.query(kinds=["hold"])}
@@ -120,7 +133,7 @@ class Daemon:
         # Items left in running/ are judged against the snapshot they launched under.
         self.snapshot = guard.load(self.cfg.state_dir)
         self.recover()
-        if not self.runs:
+        if not self._active():
             if self.snapshot and (changes := guard.diff(self.cfg.control, self.snapshot)):
                 self.log.append("drift", paths=guard.changed_paths(changes), changes=changes,
                                 note="control folder changed while conductor was not running; accepted")
@@ -143,7 +156,7 @@ class Daemon:
                 self.tick()
                 time.sleep(self.cfg.poll_seconds)
         except KeyboardInterrupt:
-            self.log.append("daemon_stop", running=sorted(self.runs),
+            self.log.append("daemon_stop", running=sorted(self.runs), staging=sorted(self.stages),
                             note="executors keep running; the next start adopts them")
         finally:
             self.write_inbox(force=True)
@@ -153,30 +166,55 @@ class Daemon:
         self.process_signals()
         self.process_requests()
         self.process_questions()
+        self.check_stages()
         self.check_runs()
+        self.process_merges()
         self.schedule()
         self.write_inbox()
+
+    def _active(self) -> dict[str, Run]:
+        """Executor processes that may be running: guard attribution covers these."""
+        active = {i: r for i, r in self.runs.items() if r.rec.get("phase", "exec") == "exec"}
+        return {**active, **self.stages}
 
     # ---------------------------------------------------------------- recovery
     def recover(self) -> None:
         """Restart rule: never re-run. Adopt a live executor, harvest a finished one,
-        requeue one that provably never launched, and mark anything else red."""
+        requeue one that provably never launched, resume an interrupted merge, and mark
+        anything else red. Stages are adopted, harvested or discarded."""
         for repo in self.cfg.repos:
             rdir = self.cfg.path("running", repo)
             if not rdir.is_dir():
                 continue
             for rec_path in sorted(rdir.glob("*.run.json")):
                 md = rec_path.with_name(rec_path.name.removesuffix(".run.json") + ".md")
-                if not md.is_file():
-                    rec_path.unlink()       # launch died before the item moved; it is still queued
-                    continue
                 rec = state.read_run(rec_path)
+                if not md.is_file():
+                    # The launch died before the item moved; it is still queued.
+                    if rec.get("worktree") and not rec.get("staged"):
+                        self._discard_worktree(rec, "launch interrupted before the item moved")
+                    rec_path.unlink()
+                    continue
                 run = Run(rec, rec_path, md)
                 item_id = rec["item"]
                 if self.log.last("finish", item=item_id):
                     self._move_to_done(run)       # finish was logged; only the move was lost
                     continue
-                if rec.get("pid") is None and not procs.find_by_marker(rec["session_id"]):
+                if rec.get("phase") == "merge":
+                    self.runs[item_id] = run
+                    self.log.append("recover", item=item_id, note="merge interrupted by a restart; resumed")
+                    continue
+                if rec.get("phase") == "concluding":
+                    self.runs[item_id] = run
+                    self.log.append("recover", item=item_id, note="judged before the restart; concluding")
+                    self._settle(run)
+                    continue
+                # No pid and no process: never launched, unless the executor left output
+                # (spawned, then exited before its pid was saved).
+                if (rec.get("pid") is None and not procs.find_by_marker(rec["session_id"])
+                        and not (rec.get("log") and Path(rec["log"]).exists())):
+                    if rec.get("worktree"):
+                        self._discard_worktree(rec, "never launched; requeued")
                     os.replace(md, self.cfg.path("queue", repo, md.name))
                     rec_path.unlink()
                     self.log.append("requeue", item=item_id, paths=[f"queue/{repo}/{md.name}"],
@@ -207,6 +245,37 @@ class Daemon:
                 else:
                     os.replace(md, self.cfg.path("queue", repo, md.name))
                     self.log.append("requeue", item=item_id, reason="no run record in running/")
+            for spath in sorted(rdir.glob("*.stage.json")):
+                self._recover_stage(spath)
+
+    def _recover_stage(self, spath: Path) -> None:
+        rec = state.read_run(spath)
+        run = Run(rec, spath, self.cfg.path("queue", rec["repo"], f"{rec['name']}.md"))
+        item_id = rec["item"]
+        if item_id in self.runs or spath.with_name(f"{rec['name']}.run.json").exists():
+            spath.unlink()          # the resume launch got far enough; the run owns the worktree
+            return
+        if self.log.last("start", item=item_id):
+            self._discard_stage(run, "the item already started")
+            return
+        if rec.get("phase") == "staged":
+            return                                  # waiting for the lock; nothing runs
+        if rec.get("pid") is None and not procs.find_by_marker(rec["session_id"]):
+            self._discard_stage(run, "the daemon stopped before the stage launched")
+            return
+        if procs.alive(rec.get("pid"), rec.get("create_time")):
+            run.proc = psutil.Process(rec["pid"])
+        else:
+            run.proc = procs.find_by_marker(rec["session_id"])
+        if run.proc is not None:
+            self.stages[item_id] = run
+            self.log.append("adopt", item=item_id, pid=run.proc.pid, session_id=rec["session_id"], stage=True)
+            return
+        if executor.read_result(Path(rec["log"])) is None:
+            self._discard_stage(run, "the stage was interrupted by a restart and left no result")
+            return
+        self.stages[item_id] = run
+        self._stage_exited(run)
 
     # ---------------------------------------------------------------- guard
     def _guard_check(self, context: str) -> None:
@@ -217,17 +286,18 @@ class Daemon:
         changes = guard.diff(self.cfg.control, self.snapshot)
         if not changes:
             return
-        if not self.runs:
+        active = self._active()
+        if not active:
             self.log.append("drift", paths=guard.changed_paths(changes), changes=changes,
                             note=f"changed while no executor ran ({context}); accepted")
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
             return
         guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
-        running = sorted(self.runs)
+        running = sorted(active)
         self.log.append("tamper", item=running[0] if len(running) == 1 else None,
                         paths=guard.changed_paths(changes), changes=changes,
                         concurrent=running if len(running) > 1 else [], found=context)
-        for run in self.runs.values():
+        for run in active.values():
             run.tamper += changes
 
     # ---------------------------------------------------------------- signals
@@ -291,7 +361,12 @@ class Daemon:
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
             if "conductor.toml" in req.targets:
                 try:
-                    self.cfg = config_mod.load(self.cfg.control)
+                    new = config_mod.load(self.cfg.control)
+                    busy = {r.rec["repo"] for r in [*self.runs.values(), *self.stages.values()]}
+                    busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
+                    if gone := sorted(busy - set(new.repos)):
+                        raise config_mod.ConfigError(f"repos {gone} still have items in running/")
+                    self.cfg = new
                     self.log.append("config_reload", paths=["conductor.toml"])
                 except config_mod.ConfigError as exc:
                     self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",
@@ -337,7 +412,7 @@ class Daemon:
         rec = run.rec
         rec["deadline"] = stamp(parse_stamp(rec["deadline"]) + timedelta(seconds=seconds))
         rec["blocked_seconds"] = rec.get("blocked_seconds", 0) + round(seconds)
-        write_text(run.rec_path, json.dumps(rec, indent=1))
+        self._save(run)
         return rec["deadline"]
 
     def _close_questions(self, item_id: str) -> None:
@@ -355,25 +430,73 @@ class Daemon:
                 self.invalid_seen[key] = "stray"
                 self.log.append("invalid", paths=[key], path=key,
                                 error="queue folder is not a repo in conductor.toml")
+        queued: dict[str, items.Item] = {}
         for repo, queue in view.queued.items():
             for item in queue:
+                queued[item.id] = item
                 if item.id not in self.enqueued:
                     self.enqueued.add(item.id)
-                    self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)], **item.meta())
+                    meta = item.meta()
+                    meta["paths_declared"] = meta.pop("paths")      # `paths` is the event's own column
+                    self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)], **meta)
                 if item.errors:
                     key = f"{item.id}:{item.path.stat().st_mtime}"
                     if self.invalid_seen.get(item.id) != key:
                         self.invalid_seen[item.id] = key
                         self.log.append("invalid", item=item.id, paths=[self.cfg.rel(item.path)],
                                         error="; ".join(item.errors))
+        # A stage belongs to the item file it read; a changed or removed item drops it.
+        for item_id, srec in list(view.staged.items()):
+            item = queued.get(item_id)
+            if item_id in view.running:
+                # A resume launch stopped between moving the item and dropping the record.
+                self._stage_run(srec).rec_path.unlink(missing_ok=True)
+                view.staged.pop(item_id)
+            elif item is None or _file_hash(item.path) != srec.get("item_hash"):
+                run = self.stages.get(item_id) or self._stage_run(srec)
+                self._discard_stage(run, "the item file changed or left the queue after staging")
+                view.staged.pop(item_id)
         for repo, d in state.decide(self.cfg, view).items():
             if d.action == "hold" and d.item and self.holds.get(d.item.id) != d.reason:
                 self.holds[d.item.id] = d.reason
                 self.log.append("hold", item=d.item.id, paths=[self.cfg.rel(d.item.path)], reason=d.reason)
             elif d.action == "run":
                 self.launch(d.item)
+            elif d.action == "resume":
+                self.resume(d.item, view.staged[d.item.id])
+            elif d.action == "stage" and d.item.id not in self.no_stage and d.item.id not in self.stages:
+                self.stage(d.item)
 
-    def launch(self, item: items.Item) -> None:
+    def _stage_run(self, srec: dict) -> Run:
+        return Run(srec, self.cfg.path("running", srec["repo"], f"{srec['name']}.stage.json"),
+                   self.cfg.path("queue", srec["repo"], f"{srec['name']}.md"))
+
+    def _save(self, run: Run) -> None:
+        write_text(run.rec_path, json.dumps(run.rec, indent=1))
+
+    def _worktree_event(self, rec: dict, action: str, note: str = "") -> None:
+        self.log.append("worktree", item=rec["item"], paths=[Path(rec["worktree"]).as_posix()],
+                        action=action, branch=rec.get("branch"), base=rec.get("base"), note=note)
+
+    def _discard_worktree(self, rec: dict, note: str, action: str = "discarded") -> None:
+        worktrees.discard(self.cfg, rec["repo"], Path(rec["worktree"]), rec.get("branch"))
+        self._worktree_event(rec, action, note)
+
+    def _make_worktree(self, item: items.Item, rec: dict, setup_log: Path) -> str | None:
+        """Create the item's worktree into `rec`; the error, if it failed."""
+        try:
+            made = worktrees.create(self.cfg, item.repo, item.name, setup_log)
+        except (worktrees.WorktreeError, git.GitError, OSError) as exc:
+            return f"worktree: {exc}"
+        rec.update(worktree=str(made.path), branch=made.branch, base=made.base, shared=made.linked)
+        self._worktree_event(rec, "created", "; ".join(made.warnings))
+        for w in made.warnings:
+            self.log.append("warning", item=item.id, note=w)
+        return None
+
+    def launch(self, item: items.Item, stage: dict | None = None) -> None:
+        """Run an item: in a new worktree, in the main checkout (`worktrees = false`),
+        or, with `stage`, by resuming its staged session in the stage's worktree."""
         cfg = self.cfg
         # Idle: a difference is drift (accepted, re-snapshotted). Busy: it is tamper.
         self._guard_check(f"before launching {item.id}")
@@ -388,29 +511,54 @@ class Daemon:
         md_path = rdir / f"{item.name}.md"
         rec = {
             "item": item.id, "repo": item.repo, "name": item.name,
-            "session_id": str(uuid.uuid4()), "started": stamp(started), "deadline": stamp(deadline),
-            "max_hours": max_hours, **item.meta(),
+            "session_id": stage["session_id"] if stage else str(uuid.uuid4()),
+            "started": stamp(started), "deadline": stamp(deadline),
+            "max_hours": max_hours, **item.meta(), "phase": "exec",
             "report": str(paths.report), "log": str(paths.log), "stderr": str(paths.stderr),
             "prompt": str(paths.prompt),
-            "repo_head": git.head(repo_path),
-            "repo_status": git.tracked_status(repo_path) if item.readonly else None,
+            "worktree": None, "branch": None, "base": None, "shared": [], "staged": bool(stage),
             "pid": None, "create_time": None,
         }
-        # Durable order: record, then move, then launch, then record the pid. A restart
-        # that finds no pid and no live process with this session id requeues the item.
-        write_text(rec_path, json.dumps(rec, indent=1))
+        run = Run(rec, rec_path, md_path)
+        # Durable order: record, then worktree, then move, then launch, then the pid. A
+        # restart that finds no pid and no live process with this session id requeues it.
+        self._save(run)
+        error, resume = None, None
+        if stage:
+            rec.update(worktree=stage["worktree"], branch=stage["branch"], shared=stage.get("shared", []))
+            wt = Path(stage["worktree"])
+            try:
+                rec["base"] = worktrees.move_to(cfg, item.repo, wt)
+                error = worktrees.run_setup(cfg, item.repo, wt, paths.setup)
+            except (git.GitError, OSError) as exc:
+                error = f"moving the staged worktree to {cfg.opts(item.repo).main}: {exc}"
+            landed = git.commits_between(repo_path, stage["base"], rec["base"]) if not error else []
+            resume = {"old": stage["base"], "new": rec["base"] or stage["base"], "landed": len(landed)}
+            self._worktree_event(rec, "moved", f"{stage['base'][:10]} → {(rec['base'] or '?')[:10]}")
+        elif cfg.opts(item.repo).worktrees:
+            error = self._make_worktree(item, rec, paths.setup)
+        cwd = Path(rec["worktree"]) if rec["worktree"] else repo_path
+        rec["repo_head"] = rec["base"] or git.head(repo_path)
+        rec["repo_status"] = git.tracked_status(cwd) if item.readonly and not error else None
+        self._save(run)
         os.replace(item.path, md_path)
+        if stage:
+            Path(self._stage_run(stage).rec_path).unlink(missing_ok=True)
         paths.report.parent.mkdir(parents=True, exist_ok=True)
         for stale in (paths.report, paths.log, paths.stderr):
             if stale.exists():
                 stale.unlink()
-        write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline))
-        write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
-        run = Run(rec, rec_path, md_path)
         self.runs[item.id] = run
+        if error:
+            self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
+                            pid=None, error=error)
+            self.finish(run, launch_error=error)
+            return
+        write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume))
+        write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         try:
-            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp), repo_path,
-                                    paths.prompt, paths.log, paths.stderr)
+            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage)),
+                                    cwd, paths.prompt, paths.log, paths.stderr)
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
                             pid=None, error=str(exc))
@@ -418,14 +566,123 @@ class Daemon:
             return
         rec["pid"] = run.popen.pid
         rec["create_time"] = procs.create_time(run.popen.pid)
-        write_text(rec_path, json.dumps(rec, indent=1))
+        self._save(run)
+        extra = {"worktree": rec["worktree"], "branch": rec["branch"]} if rec["worktree"] else {}
+        if resume:
+            extra |= {"resumed": True, "landed": resume["landed"]}
         self.log.append("start", item=item.id,
                         paths=[cfg.rel(md_path), cfg.rel(paths.report), cfg.rel(paths.log)],
-                        session_id=rec["session_id"], pid=run.popen.pid, deadline=rec["deadline"])
+                        session_id=rec["session_id"], pid=run.popen.pid, deadline=rec["deadline"], **extra)
+
+    # ---------------------------------------------------------------- staging
+    def stage(self, item: items.Item) -> None:
+        """Launch the queue head early, read-only, in its own worktree: it reads and
+        plans, then stops; `resume` continues the same session once it can run."""
+        cfg = self.cfg
+        self._guard_check(f"before staging {item.id}")
+        paths = executor.RunPaths.for_item(cfg, item)
+        started = now()
+        rec = {
+            "item": item.id, "repo": item.repo, "name": item.name, "phase": "staging",
+            "session_id": str(uuid.uuid4()), "started": stamp(started),
+            "deadline": stamp(started + timedelta(minutes=cfg.stage_minutes)),
+            "item_hash": _file_hash(item.path),
+            "log": str(paths.stage_log), "stderr": str(paths.stage_stderr), "prompt": str(paths.stage_prompt),
+            "worktree": None, "branch": None, "base": None, "shared": [], "pid": None, "create_time": None,
+        }
+        run = self._stage_run(rec)
+        self._save(run)
+        error = self._make_worktree(item, rec, paths.setup)
+        if error:
+            run.rec_path.unlink(missing_ok=True)
+            self.no_stage.add(item.id)
+            self.log.append("warning", item=item.id, note=f"could not stage: {error}; it will launch fresh")
+            return
+        rec["untracked"] = worktrees.untracked(Path(rec["worktree"]))      # setup's output is allowed
+        self._save(run)
+        paths.report.parent.mkdir(parents=True, exist_ok=True)
+        for stale in (paths.stage_log, paths.stage_stderr):
+            stale.unlink(missing_ok=True)
+        write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec))
+        try:
+            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], None), Path(rec["worktree"]),
+                                    paths.stage_prompt, paths.stage_log, paths.stage_stderr)
+        except OSError as exc:
+            self._discard_stage(run, f"stage launch failed: {exc}")
+            return
+        rec["pid"] = run.popen.pid
+        rec["create_time"] = procs.create_time(run.popen.pid)
+        self._save(run)
+        self.stages[item.id] = run
+        self.log.append("stage", item=item.id, paths=[cfg.rel(paths.stage_log)], session_id=rec["session_id"],
+                        pid=run.popen.pid, worktree=rec["worktree"], deadline=rec["deadline"])
+
+    def check_stages(self) -> None:
+        for run in list(self.stages.values()):
+            if run.exited():
+                self._stage_exited(run)
+            elif now() > parse_stamp(run.rec["deadline"]):
+                procs.kill_tree(run.pid())
+                self._discard_stage(run, f"the stage ran past stage_minutes ({self.cfg.stage_minutes:g})")
+
+    def _stage_exited(self, run: Run) -> None:
+        self._guard_check(f"after staging {run.item_id}")
+        rec = run.rec
+        result = executor.read_result(Path(rec["log"]))
+        wt = Path(rec["worktree"])
+        problem = None
+        if run.tamper:
+            problem = "the stage changed the control folder (reverted)"
+        elif result is None or result.get("is_error"):
+            problem = "the stage left no result" if result is None else f"the stage errored: {result.get('subtype')}"
+        elif self._stage_dirty(rec):
+            problem = "the stage changed its worktree"
+        if problem:
+            self._discard_stage(run, problem)
+            return
+        rec["phase"] = "staged"
+        rec["staged"] = stamp()
+        self._save(run)
+        self.stages.pop(run.item_id, None)
+        plan = str(result.get("result") or "").strip()
+        self.log.append("staged", item=run.item_id, paths=[self.cfg.rel(Path(rec["log"]))],
+                        session_id=rec["session_id"], plan=plan[:500], cost_usd=result.get("total_cost_usd"),
+                        worktree=str(wt))
+
+    def _stage_dirty(self, rec: dict) -> bool:
+        wt = Path(rec["worktree"])
+        try:
+            return (not wt.is_dir() or git.head(wt) != rec["base"] or bool(worktrees.changed(wt))
+                    or worktrees.untracked(wt) != rec.get("untracked", []))
+        except git.GitError:
+            return True
+
+    def _discard_stage(self, run: Run, reason: str) -> None:
+        rec = run.rec
+        if run.pid() and not run.exited():
+            procs.kill_tree(run.pid())
+        if rec["item"] in self.stages:
+            # Its window closes here: what it did to the control folder is its own tamper.
+            self._guard_check(f"discarding the stage of {rec['item']}")
+        self.stages.pop(rec["item"], None)
+        self.no_stage.add(rec["item"])
+        if rec.get("worktree"):
+            self._discard_worktree(rec, "stage discarded")
+        run.rec_path.unlink(missing_ok=True)
+        self.log.append("warning", item=rec["item"], note=f"stage discarded: {reason}; the item launches fresh")
+
+    def resume(self, item: items.Item, srec: dict) -> None:
+        if self._stage_dirty(srec):
+            self._discard_stage(self._stage_run(srec), "the staged worktree has changes")
+            self.launch(item)
+            return
+        self.launch(item, stage=srec)
 
     # ---------------------------------------------------------------- runs
     def check_runs(self) -> None:
         for run in list(self.runs.values()):
+            if run.rec.get("phase") == "merge":
+                continue
             if run.exited():
                 self.finish(run)
             elif now() > parse_stamp(run.rec["deadline"]) and run.item_id not in self.blocked:
@@ -437,6 +694,8 @@ class Daemon:
 
     def finish(self, run: Run, killed: bool = False, interrupted: bool = False,
                launch_error: str | None = None) -> None:
+        """Judge an exited executor. A worktree item that is not red waits to merge;
+        everything else concludes now."""
         cfg, rec = self.cfg, run.rec
         item_id, repo = rec["item"], rec["repo"]
         self._guard_check(f"after {item_id} exited")
@@ -459,29 +718,140 @@ class Daemon:
         if problem:
             reasons.append(problem)
         repo_path = cfg.repos.get(repo)
-        after_head = git.head(repo_path) if repo_path and git.is_repo(repo_path) else None
-        if rec.get("readonly") and repo_path:
-            if after_head != rec.get("repo_head") or git.tracked_status(repo_path) != rec.get("repo_status"):
-                reasons.append("readonly item changed the repo")
-        for sha, subject in reversed(git.commits_between(repo_path, rec.get("repo_head"), after_head)
-                                     if repo_path else []):
-            self.log.append("commit", item=item_id, scope=repo, sha=sha, subject=subject)
+        wt = Path(rec["worktree"]) if rec.get("worktree") else None
+        cwd = wt if wt and wt.is_dir() else repo_path
+        after_head = git.head(cwd) if cwd and git.is_repo(cwd) else None
+        if not launch_error and cwd and after_head:
+            if rec.get("readonly"):
+                if after_head != rec.get("repo_head") or git.tracked_status(cwd) != rec.get("repo_status"):
+                    reasons.append("readonly item changed the repo")
+            elif wt and git.symbolic_head(wt) != f"refs/heads/{rec['branch']}":
+                reasons.append(f"the worktree left {rec['branch']} (HEAD {git.symbolic_head(wt) or 'detached'}); "
+                               "nothing merged, worktree kept")
+            elif wt and worktrees.changed(wt):
+                reasons.append("uncommitted changes left in the worktree (not merged)")
+            branch = {"branch": rec["branch"]} if wt else {}
+            for sha, subject in reversed(git.commits_between(cwd, rec.get("repo_head"), after_head)):
+                self.log.append("commit", item=item_id, scope=repo, sha=sha, subject=subject, **branch)
+            if rec.get("paths") and rec.get("repo_head") and after_head != rec["repo_head"]:
+                outside = globs.outside(git.changed_files(cwd, rec["repo_head"], after_head), rec["paths"])
+                if outside:
+                    reasons.append(f"paths violation: changed {len(outside)} file(s) outside `paths`")
+                    self.log.append("paths_violation", item=item_id, files=outside[:50],
+                                    paths_declared=rec["paths"], branch=rec.get("branch"))
         report_status = header.get("status") if header and not problem else None
         if report_status == "red" and not reasons:
             reasons.append("report says red")
         status = "red" if reasons or report_status is None else report_status
+        rec["outcome"] = {
+            "status": status, "report_status": report_status, "reasons": reasons,
+            "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
+            "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
+            "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
+        }
+        rec["exited"] = stamp()
+        # The judgement is saved before anything else happens, so a restart from here on
+        # resumes it (`merge` or `concluding`) instead of judging the item again.
+        rec["phase"] = "merge" if wt and status != "red" and not launch_error and not rec.get("readonly") \
+            else "concluding"
+        self._save(run)
+        if rec["phase"] == "concluding":
+            self._settle(run)
+
+    def _settle(self, run: Run) -> None:
+        """An item that will not merge: discard or keep its worktree, then conclude.
+        Safe to repeat after a restart."""
+        rec = run.rec
+        if rec.get("worktree"):
+            if rec["outcome"].get("merged"):
+                self._worktree_op(rec, "removed", "merged")
+            elif rec["outcome"].get("launch_failed") or rec.get("readonly"):
+                self._worktree_op(rec, "discarded", "readonly: never merged" if rec.get("readonly") else "launch failed")
+            else:
+                self._worktree_op(rec, "kept", "red: branch and worktree kept for inspection")
+        self._conclude(run)
+
+    def _worktree_op(self, rec: dict, action: str, note: str) -> None:
+        """Discard (`discarded`/`removed`) or keep a worktree; a failure is a warning,
+        never a crash: the item concludes either way."""
+        try:
+            if action == "kept":
+                worktrees.keep(self.cfg, rec["repo"], Path(rec["worktree"]))
+                self._worktree_event(rec, action, note)
+            else:
+                self._discard_worktree(rec, note, action=action)
+        except (OSError, git.GitError, KeyError) as exc:
+            self.log.append("warning", item=rec["item"],
+                            note=f"worktree {rec['worktree']} not {action}: {exc!r}; remove it by hand")
+
+    def process_merges(self) -> None:
+        """Merge finished items into main, per repo serially in finish order."""
+        pending: dict[str, list[Run]] = {}
+        for run in self.runs.values():
+            if run.rec.get("phase") == "merge":
+                pending.setdefault(run.rec["repo"], []).append(run)
+        for repo, runs in pending.items():
+            for run in sorted(runs, key=lambda r: (r.rec["exited"], r.item_id)):
+                if not self._merge(run):
+                    break
+
+    def _merge(self, run: Run) -> bool:
+        """One merge attempt; False when it holds (later merges in the repo wait too)."""
+        rec = run.rec
+        wt = Path(rec["worktree"])
+        try:
+            m = worktrees.merge(self.cfg, rec["repo"], wt, rec["branch"])
+        except git.GitError as exc:
+            m = worktrees.Merge("hold", reason=f"git failed: {str(exc)[:300]}")
+        if m.outcome == "hold":
+            reason = f"merge waits: {m.reason}"
+            if self.holds.get(rec["item"]) != reason:
+                self.holds[rec["item"]] = reason
+                self.log.append("hold", item=rec["item"], reason=reason, merge=True)
+            return False
+        out = rec["outcome"]
+        if m.outcome == "conflict":
+            out["status"] = "red"
+            out["reasons"] = out["reasons"] + [f"rebase onto {self.cfg.opts(rec['repo']).main} conflicted"]
+            self.log.append("conflict", item=rec["item"], branch=rec["branch"], files=m.files, error=m.reason,
+                            note="branch kept; main untouched")
+            rec["phase"] = "concluding"
+            self._save(run)
+            self._worktree_op(rec, "kept", "conflict: branch and worktree kept for inspection")
+        else:
+            commits = git.commits_between(self.cfg.repos[rec["repo"]], rec["base"], m.sha) if m.sha else []
+            out["merged"] = m.sha
+            self.log.append("merge", item=rec["item"], branch=rec["branch"], sha=m.sha, commits=len(commits),
+                            note=m.reason)
+            rec["phase"] = "concluding"
+            self._save(run)
+            self._worktree_op(rec, "removed", "merged")
+        self._conclude(run)
+        return True
+
+    def _conclude(self, run: Run) -> None:
+        cfg, rec = self.cfg, run.rec
+        item_id, repo, out = rec["item"], rec["repo"], rec["outcome"]
         done_md = f"done/{repo}/{rec['name']}.md"
+        extra = {k: rec[k] for k in ("branch",) if rec.get(k)}
+        if out.get("merged"):
+            extra["merged"] = out["merged"]
+        # `red` before `finish`: a restart that finds the finish logged only moves the
+        # item, so the red hold must already be on record.
+        if out["status"] == "red":
+            self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
+                            reasons=out["reasons"], after_red=rec.get("after_red", "stop"))
         self.log.append(
             "finish", item=item_id, paths=[cfg.rel(Path(rec["report"])), cfg.rel(Path(rec["log"])), done_md],
-            status=status, report_status=report_status, reasons=reasons,
-            blocks=(header or {}).get("blocks"), carry=(header or {}).get("carry"),
-            session_id=rec["session_id"], exit_code=exit_code,
-            cost_usd=(result or {}).get("total_cost_usd"), turns=(result or {}).get("num_turns"),
-            needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"),
+            status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
+            blocks=out["blocks"], carry=out["carry"],
+            session_id=rec["session_id"], exit_code=out["exit_code"],
+            cost_usd=out["cost_usd"], turns=out["turns"],
+            needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,
         )
-        if status == "red":
-            self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
-                            reasons=reasons, after_red=rec.get("after_red", "stop"))
+        rec["phase"] = "done"
+        if run.rec_path.exists():
+            self._save(run)
         self._move_to_done(run)
         self.runs.pop(item_id, None)
         self._close_questions(item_id)

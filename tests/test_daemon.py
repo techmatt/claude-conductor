@@ -169,6 +169,7 @@ def test_restart_harvests_finished_executor(env):
     env.d.log.close()
     env.d = env.new_daemon()
     assert env.events("recover")
+    env.tick_until(lambda: env.finished("code/001_quick"))      # harvested, then merged
     assert env.finished("code/001_quick").detail["status"] == "done"
 
 

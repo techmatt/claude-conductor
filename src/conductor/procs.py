@@ -41,6 +41,82 @@ def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path) ->
                                 env=child_env(), **kwargs)
 
 
+def link_dir(target: Path, link: Path) -> None:
+    """A directory link at `link` → `target`: a junction on Windows (no privilege
+    needed), a symlink elsewhere."""
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if WINDOWS:
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def is_link_dir(path: Path) -> bool:
+    return os.path.isjunction(path) or path.is_symlink()
+
+
+def unlink_dir(link: Path) -> None:
+    """Remove the link only, never what it points at."""
+    if os.path.isjunction(link):
+        os.rmdir(link)
+    elif link.is_symlink():
+        try:
+            link.unlink()
+        except OSError:          # a directory symlink on Windows
+            os.rmdir(link)
+
+
+def unlink_all_links(root: Path) -> list[str]:
+    """Remove every directory link (junction or symlink) under `root`, never following
+    one. `os.walk` would descend into a junction, so this walks by hand. Returns the
+    links removed, relative to `root`."""
+    removed = []
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            entries = list(os.scandir(d))
+        except OSError:
+            continue
+        for e in entries:
+            p = Path(e.path)
+            if os.path.isjunction(p) or (e.is_symlink() and e.is_dir()):
+                unlink_dir(p)
+                removed.append(p.relative_to(root).as_posix())
+            elif e.is_dir(follow_symlinks=False):
+                stack.append(p)
+    return removed
+
+
+def remove_tree(root: Path) -> None:
+    """Delete a folder that may hold links into other folders: links first, then the rest."""
+    if not root.exists():
+        return
+    unlink_all_links(root)
+    import shutil
+    def onerror(func, path, exc):     # git marks object files read-only
+        os.chmod(path, 0o700)
+        func(path)
+    shutil.rmtree(root, onexc=onerror)
+
+
+def run_shell(command: str, cwd: Path, log: Path, timeout: float) -> int | None:
+    """Run a setup command through the platform shell; output appended to `log`.
+    Returns the exit code, or None on timeout (the process tree is killed)."""
+    kwargs: dict = {"creationflags": subprocess.CREATE_NO_WINDOW} if WINDOWS else {}
+    with open(log, "ab") as out:
+        out.write(f"$ {command}\n".encode("utf-8"))
+        out.flush()
+        p = subprocess.Popen(command, shell=True, cwd=str(cwd), stdin=subprocess.DEVNULL,
+                             stdout=out, stderr=subprocess.STDOUT, env=child_env(), **kwargs)
+        try:
+            return p.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            kill_tree(p.pid)
+            return None
+
+
 def resolve(command: str) -> str:
     """`claude` → full path (Windows needs it for .cmd/.exe shims under Popen)."""
     import shutil
