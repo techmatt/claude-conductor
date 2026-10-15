@@ -1,0 +1,129 @@
+"""`inbox.md`: everything since the planner's read mark, reds and holds first."""
+
+from __future__ import annotations
+
+from .config import Config
+from .events import RED_KINDS, Event, EventLog
+from .state import View, decide
+from .util import clock, now
+
+
+def describe(ev: Event) -> str:
+    """One line for an event, used by the inbox and `conductor events`."""
+    d = ev.detail
+    who = ev.item or ev.repo or ""
+    match ev.kind:
+        case "finish":
+            text = f"{who} finished **{d.get('status')}**"
+            if d.get("reasons"):
+                text += f" ({'; '.join(d['reasons'])})"
+            if d.get("blocks") not in (None, "none"):
+                text += f" · blocks: {d['blocks']}"
+            if d.get("carry") not in (None, "none"):
+                text += f" · carry: {d['carry']}"
+        case "red":
+            text = f"{who} red: {'; '.join(d.get('reasons', []))}"
+            if d.get("after_red", "stop") == "stop":
+                text += f" — queue `{ev.repo}` held"
+        case "tamper":
+            text = f"{who} changed the control folder; reverted: {'; '.join(d.get('changes', []))}"
+            if d.get("concurrent"):
+                text += f" (also running: {', '.join(d['concurrent'])})"
+        case "hold":
+            text = f"{who} held: {d.get('reason')}"
+        case "start":
+            text = f"{who} started (session {d.get('session_id')}, pid {d.get('pid')})"
+        case "kill":
+            text = f"{who} killed: {d.get('reason')}"
+        case "commit":
+            text = f"{d.get('scope')} commit {d.get('sha', '')[:10]} {d.get('subject', '')}".strip()
+        case "request":
+            text = f"request {d.get('request')} applied: {d.get('message', '').splitlines()[0] if d.get('message') else ''}"
+            if d.get("no_change"):
+                text += " (no change)"
+        case "request_failed":
+            text = f"request {d.get('request')} failed: {d.get('error')}"
+        case "invalid":
+            text = f"{who or d.get('path')} invalid: {d.get('error')}"
+        case "read":
+            text = f"read mark → #{d.get('through')}"
+        case "clear":
+            text = f"queue `{ev.repo}` cleared"
+        case "enqueue":
+            extras = [f"{k}: {d[k]}" for k in ("depends_on", "locks") if d.get(k)]
+            extras += [k for k in ("needs_planner", "readonly") if d.get(k)]
+            text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
+        case "adopt":
+            text = f"{who} adopted after restart (pid {d.get('pid')})"
+        case "recover":
+            text = f"{who} finished while conductor was down; harvested"
+        case "requeue":
+            text = f"{who} returned to the queue: {d.get('reason')}"
+        case "daemon_start":
+            text = f"daemon started (pid {d.get('pid')})"
+        case "daemon_stop":
+            text = "daemon stopped" + (f"; still running: {', '.join(d['running'])}" if d.get("running") else "")
+        case "drift":
+            text = f"control folder changed outside an executor window (accepted): {'; '.join(d.get('changes', []))}"
+        case "warning" | "config_reload":
+            text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
+        case _:
+            extras = ", ".join(f"{k}={v}" for k, v in d.items())
+            text = f"{ev.kind} {who} {extras}".strip()
+    return text
+
+
+def _line(ev: Event) -> str:
+    shown = ev.paths[:1] if ev.kind == "finish" else ev.paths     # the report; log and done/ are derivable
+    paths = f" — {', '.join(shown)}" if shown and ev.kind in ("finish", "tamper", "request") else ""
+    return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}"
+
+
+def render(cfg: Config, log: EventLog, view: View) -> str:
+    mark = log.read_mark()
+    events = log.query(since_id=mark)
+    top = log.max_id()
+    mark_ev = log.last("read")
+    red = sorted((e for e in events if e.kind in RED_KINDS), key=lambda e: (e.kind != "tamper", e.id))
+    # Only holds still in effect: the item has not started since.
+    started = {e.item for e in log.query(kinds=["start"])}
+    holds = [e for e in events if e.kind == "hold" and e.item not in started]
+    finished = [e for e in events if e.kind == "finish"]
+    changes = [e for e in events if e.kind in ("request", "commit")]
+    other = [e for e in events if e not in red + holds + finished + changes
+             and e.kind not in ("read", "enqueue", "start")]
+
+    out = [f"# Inbox — {cfg.project}", ""]
+    since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
+    out.append(f"Generated {clock(now())} · {len(events)} event(s) {since}, through #{top}.")
+    out.append(f"Mark read: write a file in `signals/` containing `read: {top}`.")
+    sections = [("Red", red), ("Holds", holds), ("Finished", finished),
+                ("Requests and commits", changes), ("Other", other)]
+    for title, evs in sections:
+        if evs:
+            out += ["", f"## {title}", *(_line(e) for e in evs)]
+    if not events:
+        out += ["", "Nothing new."]
+
+    out += ["", "## Now"]
+    decisions = decide(cfg, view)
+    for repo in cfg.repos:
+        d = decisions[repo]
+        queued = [i.name for i in view.queued.get(repo, [])]
+        running = [i.split("/", 1)[1] for i in view.running if i.startswith(repo + "/")]
+        parts = []
+        if running:
+            parts.append(f"running {', '.join(running)}")
+        if queued:
+            parts.append(f"queued {', '.join(queued)}")
+        if d.action in ("hold", "wait"):
+            parts.append(f"{d.action}: {d.reason}")
+        elif ev := view.red_hold.get(repo):
+            parts.append(f"held after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
+        out.append(f"- `{repo}`: {'; '.join(parts) or 'idle'}")
+    for d in view.stray:
+        out.append(f"- `queue/{d.name}` is not a repo in conductor.toml; its items never run")
+    proposed = list(cfg.path("proposed").glob("*.md")) if cfg.path("proposed").is_dir() else []
+    if proposed:
+        out.append(f"- proposed, awaiting approval: {', '.join(p.stem for p in sorted(proposed))}")
+    return "\n".join(out) + "\n"

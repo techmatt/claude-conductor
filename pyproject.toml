@@ -1,0 +1,25 @@
+[project]
+name = "conductor"
+version = "0.1.0"
+description = "Daemon that runs queued Claude Code prompts for a project"
+authors = [
+    { name = "Matt Fisher", email = "techmatt@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "psutil>=5.9",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+conductor = "conductor.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
