@@ -9,6 +9,10 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 - `README.md` is the canon for how conductor works. Facts learned while working — commands, file formats, front-matter fields, event kinds — are promoted there as you pass them, never left only in a report.
 - Never touch a real project's control folder or code repo. Testing uses the sandbox (`C:\Code\conductor-sandbox` and `C:\Code\conductor-sandbox-control`) only.
 
+## "Launch the conductor"
+
+When Matt says "launch the conductor" (or "launch conductor", "start the conductor app", "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\corelight-control`). The app also reopens every remembered project, so naming the newest one is enough. It is a viewer only — it does not start the daemon (`uv run conductor run <control>`), and launching it is not a test, so the sandbox-only rule below does not apply.
+
 ## Standing prompt contract
 
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
