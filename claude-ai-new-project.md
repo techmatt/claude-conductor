@@ -2,7 +2,7 @@
 
 Read this at the start of a claude.ai session that opens a NEW project, or when Matt (the user) says "read the workflow". It is the whole method; nothing from earlier projects is assumed. Every rule here would still be true if the project were about something else. How conductor itself works is in its `README.md`; the phrases Matt uses are in **Vocab** at the end.
 
-**This workflow replaces an older one.** It uses no Google Drive, no prompt or report folders outside the control folder, no "CLOSEOUT apply" prompts, and no files for Matt to place by hand. If memory or saved preferences describe Drive delivery, folder-resolution rules, apply-scripts or checkpoint numbering, those belong to the earlier fractal project and do not apply here. Where a saved preference and this file disagree about mechanics, this file wins. Matt's own stated preferences about content and judgement still apply.
+**This workflow replaces an older one.** It uses no Google Drive, no prompt or report folders outside the control folder, no "CLOSEOUT apply" prompts, and no files for Matt to place by hand. If memory or saved preferences describe Drive delivery, folder-resolution rules, apply-scripts or checkpoint numbering, those belong to the earlier fractal project and do not apply here. Conductor's own checkpoints (see *Every session*) are numbered by conductor, never by the planner. Where a saved preference and this file disagree about mechanics, this file wins. Matt's own stated preferences about content and judgement still apply.
 
 ## The three roles
 
@@ -22,7 +22,7 @@ C:\Code\<project>-control\        git; the planner's world
   reports\<repo>__NNN_name.md      executor reports
   questions\                       open asks and their answers
   requests\                        planner → conductor (apply + commit)
-  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, run, stop
+  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, checkpoint, run, stop
   inbox.md                         generated digest since the planner's last read
   events.db                        append-only event log (SQLite)
 C:\Code\<repo>\                    code repos; executors work here
@@ -30,7 +30,7 @@ C:\Code\<repo>\                    code repos; executors work here
 
 Everything except the tracked docs and `conductor.toml` is git-ignored runtime state.
 
-**The tracked control files change only through conductor.** The planner writes a request (`requests\<stamp>\` holding whole replacement files plus `request.md` with a commit message); conductor copies them over, commits, and logs it. Conductor snapshots the control folder around every executor run and reverts any change it finds to a tracked file there, logging a red event — so an errant prompt cannot damage the docs. The planner never hand-patches a tracked file in place, and never uses hunks: it stages the current file, edits in its workspace, and sends the whole file.
+**The tracked control files change only through conductor.** The planner writes a request (`requests\<stamp>\` holding whole replacement files plus `request.md` with a commit message); conductor copies them over, commits, and logs it. `request.md`'s front-matter is YAML: quote `message:` when it contains a colon (`message: "state: v0.2"`). An unquoted colon fails the YAML, and the request lands `.failed`. Conductor snapshots the control folder around every executor run and reverts any change it finds to a tracked file there, logging a red event — so an errant prompt cannot damage the docs. The planner never hand-patches a tracked file in place, and never uses hunks: it stages the current file, edits in its workspace, and sends the whole file.
 
 ## The bridge
 
@@ -58,13 +58,14 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 
 ## Every session
 
-- Start: read `state.md` and the **Vocab** section below, then "check inbox" unless Matt opens with something else. Open questions lead the inbox; raise blocking ones first.
+- Start (Matt says **start a new <project> session**): if folder access isn't granted yet, request access to the control folder and the code repos first. Read this file (the **Vocab** section included), then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Send `checkpoint: session start` (`by: planner`), then do **check inbox**. Open questions lead the inbox; raise blocking ones first, then any report the checkpoint's warnings name as still unreviewed.
+- **Checkpoints.** A checkpoint is a session boundary. Finished items reviewed before the latest one drop out of the inbox's counts, the app's Repos tab (into a collapsed *earlier checkpoints* group) and its Events tab (which starts at the checkpoint). Unreviewed reports, red holds, open questions and anything queued, staged, running or proposed always carry forward, and nothing is deleted. Conductor numbers checkpoints by their event id, so the planner never keeps a counter. `inbox.md` names the current one at the top.
 - Matt raises every next step. The planner answers what is asked and lists open questions; it never assumes or schedules the next leg.
 - `remind me the vocab` prints the **Vocab** table.
 - Design and scoping decisions are made in conversation with Matt, not handed to an executor. What an executor adds is facts: comparisons, audits, prototypes to look at. Those are usually `readonly` items, which the planner may queue without approval when they take no shared lock (see *Approval*).
 - For a trivial outcome, two sentences and no write-up.
 - If this file turns out to be wrong or missing something during a project, tell Matt in a line. Then, when no conductor prompt is running, add a line to *Open* in `C:\Code\claude-conductor\HANDOFF.md` so the next conductor prompt fixes it.
-- Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos (with finished items and a Mark reviewed button), questions, the event trail (Activity by default; Advanced for every event), and proposed items. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
+- Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos (with finished items and a Mark reviewed button), questions, the event trail (Activity since the latest checkpoint by default; Advanced for every event), proposed items, and a **New checkpoint…** button. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
 
 ## Writing a prompt
 
@@ -101,7 +102,7 @@ Matt or the planner can **message a running executor**: signal `tell: <repo>/<NN
 
 ## Run targets
 
-A project's runnable thing (a dev server, the game) is a **run target**: a `[run.<name>]` table in `conductor.toml` with the repo (or folder) it runs in, the server command, the URL to open, and optionally a different URL to wait on and how long to wait (conductor's README, *Run targets*). The planner sets a project's targets through a `conductor.toml` request, with the command and URL the repo's README gives. "run X" is the signal `run: X`. Conductor starts the server if it isn't already answering, waits for it, and opens the URL in Matt's browser. A server that never comes up is a red `run_failed` event carrying the end of its log; the planner reads it and says what broke. `run: X stop` stops it. Matt can also use the app's **Run X** button, which shows whether X is up. Matt never types the commands.
+A project's runnable thing (a dev server, the game) is a **run target**: a `[run.<name>]` table in `conductor.toml` with the repo (or folder) it runs in, the server command, the URL to open, and optionally a different URL to wait on and how long to wait (conductor's README, *Run targets*). The planner sets a project's targets through a `conductor.toml` request, with the command and URL the repo's README gives. A repo's main checkout has no installed dependencies, because executors install them in worktrees that are then deleted. So a target's `command` installs them first (e.g. `npm install && npm run dev -- --port 5173`). "run X" is the signal `run: X`. Conductor starts the server if it isn't already answering, waits for it, and opens the URL in Matt's browser. A server that never comes up is a red `run_failed` event carrying the end of its log; the planner reads it and says what broke. `run: X stop` stops it. Matt can also use the app's **Run X** button, which shows whether X is up. Matt never types the commands.
 
 ## Reading a report
 
@@ -136,6 +137,8 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 
 | Phrase | What the planner does |
 |---|---|
+| **start a new <project> session** | If folder access isn't granted yet, requests access to the control folder and the code repos first. Reads this file, then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Signals `checkpoint: session start` (`by: planner`), then does **check inbox**. |
+| **checkpoint** [label] | Signal `checkpoint: <label>` (`by: planner`) mid-session, when Matt asks: finished, reviewed items drop out of the current view. Its number is the event id `inbox.md` then names. |
 | **check inbox** | Reads `inbox.md` (everything since the last read): what finished, what's red, what's asking. Leads with open questions, then the unreviewed reports. Says what changed, not a summary. Marks it read: signal `read: <id>`, the id printed at the top of `inbox.md`. Reading never marks a report reviewed. |
 | **check reports** / **show reports** | One compact table and nothing else: every finished report not yet reviewed (item, status, finish time), oldest first, then every running or staged item with its elapsed time as "not in yet". In the same turn, the planner reviews each unreviewed report (as **process X**) and marks it reviewed. |
 | **check reports verbose** | The same, plus a few lines per report on what it changes and anything blocking. |
@@ -148,7 +151,7 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **queue status** | Every repo: running item with its elapsed time and latest progress line (note, ETA, when sent), queued items in order, proposed items awaiting approval. |
 | **ETA on X?** | X's latest progress line from `inbox.md` (*Now*) or its `progress` events: the ETA and when it was given. If X has posted none, says so. |
 | **tell X: …** | Signal `tell: <repo>/<NNN_name> <Matt's words>` (one line, `by: planner`): a message to running item X, delivered after its next tool call. The answer comes back as a progress line; the planner reports it on the next check. Refused if X isn't running. |
-| **show events** [since X / for Y] | Stages `events.db` and queries it: a timeline, filtered by time, repo or item. |
+| **show events** [since X / for Y] | Stages `events.db` and queries it: a timeline, filtered by time, repo or item. "since checkpoint N" means events with id ≥ N (checkpoint N is event #N); plain "since checkpoint" means the latest, the one `inbox.md` names. |
 | **postmortem Y** | Walks item Y's event trail, prompt and report, and says where it went wrong. |
 | **propose** / **enqueue** | Writes a new prompt into `proposed\` (needs approval) or `queue\<repo>\` (Matt approved it here). |
 | **approve X** | Signal `approve: NNN_name`. Conductor moves `proposed\NNN_name.md` into the queue of the repo its front-matter names. |

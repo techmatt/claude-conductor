@@ -472,7 +472,7 @@ class Daemon:
             key, sep, value = s.partition(":")
             key = key.strip().lower()
             # A message is free text: a ` # ` in it is part of it, not a comment.
-            value = value.strip() if key == "tell" else _strip_comment(value)
+            value = value.strip() if key in ("tell", "checkpoint") else _strip_comment(value)
             if not sep or not key:
                 raise ValueError(f"line {n}: expected `key: value`, got {s!r}")
             if key == "by":
@@ -497,6 +497,8 @@ class Daemon:
                 parts = value.split()
                 if not 1 <= len(parts) <= 2 or (len(parts) == 2 and parts[1].lower() != "stop"):
                     raise ValueError(f"line {n}: run: expects `<target>` or `<target> stop`, got {value!r}")
+            elif key == "checkpoint":
+                pass                                    # any label, or none
             elif key == "stop":
                 if value.lower() != "daemon":
                     raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
@@ -524,6 +526,8 @@ class Daemon:
             self._reviewed(value, rel)
         elif key == "tell":
             self._tell(value, rel)
+        elif key == "checkpoint":
+            self._checkpoint(value, rel)
         elif key == "run":
             name, *stop = value.split()
             (self.runner.stop if stop else self.runner.request)(name, self._by)
@@ -619,6 +623,15 @@ class Daemon:
         fin = view.finishes[item_id]
         self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
                         status=fin.detail.get("status"), by=self._by or "unknown")
+
+    def _checkpoint(self, label: str, rel: str) -> None:
+        """A session boundary: its event id is its number. Every report still unreviewed
+        gets a `warning` naming it, so the new session raises it first."""
+        cp = self.log.append("checkpoint", paths=[rel], label=label, by=self._by or "unknown")
+        for fin in state.scan(self.cfg, self.log).unreviewed():
+            self.log.append("warning", item=fin.item, paths=fin.paths[:1], checkpoint=cp.id, finish=fin.id,
+                            note=f"{fin.item} is still unreviewed at checkpoint #{cp.id} (finished "
+                                 f"{fin.detail.get('status')} {clock(fin.ts)}); it carries forward: raise it first")
 
     def _tell(self, value: str, rel: str) -> None:
         """A message for a running executor: logged `tell`, then left in its mailbox for

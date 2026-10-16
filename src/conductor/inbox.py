@@ -20,6 +20,12 @@ def progress_line(ev: Event) -> str:
     return str(d.get("note", "")) + (f" ({', '.join(bits)})" if bits else "")
 
 
+def checkpoint_name(ev: Event) -> str:
+    """`checkpoint #42 "session start"`: its number is its event id."""
+    label = ev.detail.get("label")
+    return f"checkpoint #{ev.id}" + (f' "{label}"' if label else "")
+
+
 def describe(ev: Event) -> str:
     """One line for an event, used by the inbox and `conductor events`."""
     d = ev.detail
@@ -55,6 +61,8 @@ def describe(ev: Event) -> str:
                 text += " — log tail: " + " ⏎ ".join(d["log_tail"].splitlines()[-5:])
         case "reviewed":
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
+        case "checkpoint":
+            text = checkpoint_name(ev)
         case "red":
             text = f"{who} red: {'; '.join(d.get('reasons', []))}"
             if d.get("after_red", "stop") == "stop":
@@ -188,6 +196,13 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
     out.append(f"Generated {clock(now())} · {len(events)} event(s) {since}, through #{top}.")
     out.append(f"Mark read: write a file in `signals/` containing `read: {top}`.")
+    if cp := view.checkpoint:
+        hidden = sum(1 for i in view.finishes if view.settled(i))
+        out.append(f"Current checkpoint: {checkpoint_name(cp)}, {clock(cp.ts)}"
+                   + (f" (by {cp.detail['by']})" if cp.detail.get("by") else "")
+                   + f" · {hidden} item(s) finished and reviewed before it hidden.")
+    else:
+        out.append("No checkpoint yet: signal `checkpoint: <label>` to start a session's view.")
     if open_qs:
         # Open questions lead whatever the read mark says: they are live, not news.
         out += ["", "## Questions"]
@@ -204,7 +219,9 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
             d = ev.detail
             report = f" — {ev.paths[0]}" if ev.paths else ""
             carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
-            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){report}{carry}")
+            old = (" · **carried from before checkpoint "
+                   f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
+            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){report}{carry}{old}")
         out.append("  Mark one reviewed once acted on: signal `reviewed: <repo>/<NNN_name>`.")
     sections = [("Red", red), ("Holds", holds), ("Finished", finished), ("Questions resolved", asked),
                 ("Requests and commits", changes), ("Other", other)]

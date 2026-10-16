@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | answer | tell | open | run-target | init | app`."""
+"""`conductor run | status | inbox | events | questions | answer | tell | checkpoint | open | run-target | init | app`."""
 
 from __future__ import annotations
 
@@ -89,6 +89,9 @@ def cmd_status(args) -> int:
         print(f"\nproposed: {', '.join(p.stem for p in proposed)}")
     if open_qs:
         print(f"\nquestions open: {', '.join(q.id for q in open_qs)}")
+    if cp := view.checkpoint:
+        print(f"\n{describe(cp)}, {clock(cp.ts)}; "
+              f"{sum(1 for i in view.finishes if view.settled(i))} earlier item(s) settled and hidden")
     unread = log.max_id() - log.read_mark()
     print(f"\ninbox: {unread} event(s) since read mark #{log.read_mark()}")
     return 0
@@ -225,9 +228,35 @@ def cmd_inbox(args) -> int:
     return 0
 
 
+def cmd_checkpoint(args) -> int:
+    from .app import actions
+    cfg = config_mod.load(_control(args.control))
+    path = actions.checkpoint(cfg.control, " ".join(args.label), by="cli")
+    print(f"wrote signals/{path.name}: the daemon logs `checkpoint` (its event id is its number) "
+          "and a warning for each report still unreviewed")
+    return 0
+
+
+def _since(log: EventLog, text: str) -> tuple[int | None, object]:
+    """`parse_since`, plus `checkpoint` (the latest) and `checkpoint N`: from that
+    checkpoint's own event on."""
+    words = text.split()
+    if words and words[0].lower() in ("checkpoint", "cp"):
+        if len(words) == 1:
+            if (cp := log.last("checkpoint")) is None:
+                raise ValueError("no checkpoint yet")
+            return cp.id - 1, None
+        return int(words[1].lstrip("#")) - 1, None
+    return parse_since(text)
+
+
 def cmd_events(args) -> int:
     cfg, log = _open(args.control)
-    since_id, since_ts = parse_since(args.since) if args.since else (None, None)
+    try:
+        since_id, since_ts = _since(log, args.since) if args.since else (None, None)
+    except ValueError as exc:
+        print(f"conductor: --since {args.since!r}: {exc}", file=sys.stderr)
+        return 1
     for ev in log.query(since_id=since_id, since_ts=since_ts, item=args.item,
                         kinds=args.kind or None, repo=args.repo):
         paths = f"  [{', '.join(ev.paths)}]" if ev.paths and args.paths else ""
@@ -263,7 +292,8 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
         sp.set_defaults(fn=fn)
         if name == "events":
-            sp.add_argument("--since", help="#id, 30m / 2h / 1d, 5:25pm, or an ISO time")
+            sp.add_argument("--since", help="#id, 30m / 2h / 1d, 5:25pm, an ISO time, "
+                                            "'checkpoint' (the latest) or 'checkpoint N'")
             sp.add_argument("--item", help="sandbox/001_x, 001_x or 001")
             sp.add_argument("--repo")
             sp.add_argument("--kind", action="append", help="repeatable")
@@ -282,6 +312,10 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("text", nargs="+", help="the message")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_tell)
+    sp = sub.add_parser("checkpoint", help="start a new checkpoint (a session boundary) via a signal")
+    sp.add_argument("label", nargs="*", help="e.g. session start")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_checkpoint)
     sp = sub.add_parser("open", help="open a finished item's session in a new console (claude --resume)")
     sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")

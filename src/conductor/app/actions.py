@@ -1,6 +1,6 @@
 """Everything the app writes. No Qt.
 
-The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, run and stop
+The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, checkpoint, run and stop
 are `signals/` files the daemon carries out and logs. Besides those it writes only an
 answer file (the same function `conductor answer` uses), starts the daemon, and opens a
 console on a finished item's session.
@@ -74,6 +74,12 @@ def tell(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     if not one:
         raise ValueError("the message is empty")
     return write_signal(control, f"tell: {item_id} {one}", by=by)
+
+
+def checkpoint(control: Path, label: str = "", by: str = BY) -> Path:
+    """A new checkpoint (a session boundary). The label is one line."""
+    one = " ".join(label.split())
+    return write_signal(control, f"checkpoint: {one}".rstrip(), by=by)
 
 
 def open_session(cfg, item_id: str, session_id: str, spawn=None):

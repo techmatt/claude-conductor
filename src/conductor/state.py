@@ -32,6 +32,7 @@ class View:
     red_hold: dict[str, Event] = field(default_factory=dict)   # repo → red event holding it
     planner_hold: dict[str, Event] = field(default_factory=dict)  # repo → unread finish
     stray: list[Path] = field(default_factory=list)            # queue folders for unknown repos
+    checkpoint: Event | None = None                            # the latest `checkpoint` event
 
     def known(self) -> list[str]:
         ids = [i.id for q in self.queued.values() for i in q]
@@ -49,13 +50,21 @@ class View:
         """The finish events of items whose report has no `reviewed` event, oldest first."""
         return sorted((ev for i, ev in self.finishes.items() if i not in self.reviews), key=lambda e: e.id)
 
+    def settled(self, item_id: str) -> bool:
+        """Hidden from the current view: finished before the latest checkpoint and reviewed
+        before it too, and not the red holding its queue. Everything else carries forward."""
+        cp, fin, rev = self.checkpoint, self.finishes.get(item_id), self.reviews.get(item_id)
+        if cp is None or fin is None or rev is None or fin.id > cp.id or rev.id > cp.id:
+            return False
+        return not any(ev.item == item_id for ev in self.red_hold.values())
+
 
 def read_run(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def scan(cfg: Config, log: EventLog) -> View:
-    view = View(read_mark=log.read_mark())
+    view = View(read_mark=log.read_mark(), checkpoint=log.last("checkpoint"))
     qroot = cfg.path("queue")
     if qroot.is_dir():
         for d in sorted(p for p in qroot.iterdir() if p.is_dir()):

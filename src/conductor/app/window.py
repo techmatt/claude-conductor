@@ -7,11 +7,12 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox,
+    QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox,
     QPushButton, QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
 )
 
 from .. import config as config_mod
+from ..inbox import checkpoint_name
 from ..util import clock
 from . import actions, theme
 from .model import PRIORITY, Project, Snapshot, overall
@@ -61,6 +62,10 @@ class ProjectView(QWidget):
         self.start_btn.clicked.connect(self.start_daemon)
         self.stop_btn = QPushButton("Stop daemon…")
         self.stop_btn.clicked.connect(self.stop_daemon)
+        self.checkpoint_btn = QPushButton("New checkpoint…")
+        self.checkpoint_btn.setToolTip("A session boundary: finished, reviewed items from before it drop out of "
+                                       "Repos, Events and the inbox (a `checkpoint:` signal)")
+        self.checkpoint_btn.clicked.connect(self.new_checkpoint)
         for w in (self.state_label, self.daemon_label, self.pending_label):
             head.addWidget(w)
         head.addStretch(1)
@@ -68,6 +73,7 @@ class ProjectView(QWidget):
         self.run_bar = QHBoxLayout()
         head.addLayout(self.run_bar)
         self.run_buttons: dict[str, QPushButton] = {}
+        head.addWidget(self.checkpoint_btn)
         head.addWidget(self.start_btn)
         head.addWidget(self.stop_btn)
         lay.addLayout(head)
@@ -139,7 +145,12 @@ class ProjectView(QWidget):
         self.start_btn.setEnabled(not d.alive)
         self.stop_btn.setEnabled(d.alive)
         self._update_run_buttons(snap)
-        sdir = self.project.control / "signals"
+        cp = snap.checkpoint
+        self.checkpoint_btn.setToolTip(
+            (f"Current: {checkpoint_name(cp)}, {clock(cp.ts)}. " if cp else "No checkpoint yet. ")
+            + "A new one is a session boundary: finished, reviewed items from before it drop out of "
+              "Repos, Events and the inbox (a `checkpoint:` signal)")
+        sdir =self.project.control / "signals"
         pending = sorted(sdir.glob("app-*.signal")) if sdir.is_dir() else []
         bad = sorted(sdir.glob("app-*.signal.bad")) if sdir.is_dir() else []
         bits = []
@@ -177,6 +188,18 @@ class ProjectView(QWidget):
     def run_target(self, name: str) -> None:
         path = actions.run_target(self.project.control, name)
         self.notify(f"run {name}: wrote signals/{path.name}; the daemon starts it if needed and opens it")
+
+    def new_checkpoint(self, label: str | None = None) -> None:
+        if label is None:
+            label, ok = QInputDialog.getText(
+                self, "New checkpoint",
+                "Label for the new checkpoint (a session boundary).\n\nFinished items reviewed before it drop "
+                "out of the current view; unreviewed reports, holds, questions and queued work carry forward.",
+                text="session start")
+            if not ok:
+                return
+        path = actions.checkpoint(self.project.control, label)
+        self.notify(f"new checkpoint: wrote signals/{path.name}; the daemon logs it")
 
     def start_daemon(self) -> None:
         p = actions.start_daemon(self.project.control)

@@ -19,7 +19,7 @@ from .. import config as config_mod
 from .. import git, items, procs, questions, state, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
-from ..inbox import describe, progress_line
+from ..inbox import checkpoint_name, describe, progress_line
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
 
 # Overall state, most urgent first: the tray shows the first that applies anywhere.
@@ -161,6 +161,8 @@ class RepoState:
     red: Event | None = None    # the red event holding the queue until `clear`
     finished: list[Finished] = field(default_factory=list)     # newest first
     finished_total: int = 0
+    earlier: list[Finished] = field(default_factory=list)      # settled by a checkpoint, newest first
+    earlier_total: int = 0
 
     @property
     def unreviewed(self) -> int:
@@ -190,6 +192,7 @@ class Snapshot:
     why: str
     error: str | None = None
     targets: dict[str, str] = field(default_factory=dict)      # run target → up | starting | down
+    checkpoint: Event | None = None                            # the latest `checkpoint` event
 
 
 TARGET_PROBE_SECONDS = 0.3      # per target per refresh, on the UI thread: a local server answers at once
@@ -218,20 +221,33 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
     return sorted(out, key=lambda x: (x.num, x.name))
 
 
+def _finished(view: state.View, e: Event) -> Finished:
+    return Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
+                    e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id"))
+
+
 def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> tuple[list[Finished], int]:
-    """A repo's `recent` latest finished items plus every older unreviewed one, newest
-    first; and how many finished items the repo has in all."""
-    evs = sorted((e for e in view.finishes.values() if e.repo == repo), key=lambda e: e.id, reverse=True)
+    """A repo's current finished items (not settled by a checkpoint): the `recent` latest
+    plus every older unreviewed one, newest first; and how many current ones it has."""
+    evs = sorted((e for e in view.finishes.values() if e.repo == repo and not view.settled(e.item)),
+                 key=lambda e: e.id, reverse=True)
     shown = [e for n, e in enumerate(evs) if n < recent or e.item not in view.reviews]
-    return [Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
-                     e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id")) for e in shown], len(evs)
+    return [_finished(view, e) for e in shown], len(evs)
+
+
+def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> tuple[list[Finished], int]:
+    """A repo's items settled by a checkpoint (finished and reviewed before the latest
+    one): the `recent` latest, newest first; and how many there are."""
+    evs = sorted((e for e in view.finishes.values() if e.repo == repo and view.settled(e.item)),
+                 key=lambda e: e.id, reverse=True)
+    return [_finished(view, e) for e in evs[:recent]], len(evs)
 
 
 # ---------------------------------------------------------------- Activity
 # Workflow-level kinds the Events tab shows by default; every other kind (worktree,
 # stage, merge, commit, hold, enqueue, read, ...) only with Advanced. A red, a warning
 # or an invalid event is always activity, whatever its kind.
-ACTIVITY_KINDS = {"start", "finish", "reviewed", "ask", "answer", "default", "late", "question_closed",
+ACTIVITY_KINDS = {"start", "finish", "reviewed", "checkpoint", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "request", "request_failed",
                   "daemon_start", "daemon_stop", "progress", "tell", "delivered",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed"}
@@ -259,6 +275,8 @@ def activity_text(ev: Event) -> str:
             return text
         case "reviewed":
             return f"report {name} reviewed{by}"
+        case "checkpoint":
+            return f"new {checkpoint_name(ev)}{by}"
         case "progress":
             return f"{name}: {progress_line(ev)}"
         case "tell":
@@ -321,6 +339,7 @@ class Project:
         self.last_id = 0
         self.generation = 0                    # bumped when the log was replaced: views reset
         self._kinds: set[str] = set()
+        self.checkpoint: Event | None = None   # the latest `checkpoint` event seen so far
         self._qcache: dict[Path, tuple[tuple, questions.Question | None]] = {}
 
     @property
@@ -354,23 +373,27 @@ class Project:
         if top is None:
             return []
         if top < self.last_id:                  # the log really was replaced: start over
-            self.events, self.last_id, self._kinds = [], 0, set()
+            self.events, self.last_id, self._kinds, self.checkpoint = [], 0, set(), None
             self.generation += 1
         new = self.log.query(since_id=self.last_id)
         if new:
             self.events += new
             self.last_id = new[-1].id
             self._kinds |= {e.kind for e in new}
+            self.checkpoint = next((e for e in reversed(new) if e.kind == "checkpoint"), self.checkpoint)
         return new
 
     def filter_events(self, repo: str | None = None, item: str | None = None,
                       kinds: list[str] | None = None, since: datetime | None = None,
                       until: datetime | None = None, reds: bool = False, advanced: bool = True,
-                      events: list[Event] | None = None) -> list[Event]:
-        """`advanced=False` keeps only Activity events (`is_activity`)."""
+                      events: list[Event] | None = None, from_id: int | None = None) -> list[Event]:
+        """`advanced=False` keeps only Activity events (`is_activity`); `from_id` keeps
+        events from that id on (a checkpoint's own event included)."""
         from ..events import item_matches
         out = []
         for ev in self.events if events is None else events:
+            if from_id is not None and ev.id < from_id:
+                continue
             if not advanced and not is_activity(ev):
                 continue
             if repo and ev.repo != repo:
@@ -424,10 +447,12 @@ class Project:
             if d := decisions.get(repo):
                 rs.action, rs.reason = d.action, d.reason
             rs.finished, rs.finished_total = finished_items(view, repo)
+            rs.earlier, rs.earlier_total = earlier_items(view, repo)
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
         run = {name: targets.status(cfg, t, TARGET_PROBE_SECONDS) for name, t in cfg.targets.items()}
-        return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run)
+        return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
+                        view.checkpoint)
 
     def scan_questions(self) -> list[questions.Question]:
         """`questions.scan`, re-parsing only files whose question or result changed:

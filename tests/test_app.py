@@ -554,6 +554,45 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     win.close()
 
 
+def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    env.queue("001_old", "FAKE report done")
+    env.queue("002_new", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/002_new"))
+    env.d.log.append("reviewed", item="code/001_old", status="done")
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    ev = view.events_panel
+    assert ev.current.isChecked() and ev.current.text() == "since checkpoint (none yet)"
+    everything = len(ev.model.rows)
+    view.new_checkpoint("session start")
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\ncheckpoint: session start\n"
+    env.tick_until(lambda: env.events("checkpoint"))
+    [cp] = env.events("checkpoint")
+    win.refresh()
+    # Events: from the checkpoint on by default (its own line and the warning for 002).
+    assert ev.current.text() == f"since checkpoint #{cp.id}"
+    assert [e.kind for e in ev.model.rows] == ["checkpoint", "warning"]
+    assert model.activity_text(ev.model.rows[0]) == f'new checkpoint #{cp.id} "session start" (by app)'
+    ev.current.setChecked(False)
+    assert len(ev.model.rows) == everything + 2
+    # Repos: 002 (unreviewed) is current; 001 sits in the collapsed Earlier group.
+    panel = view.repos_panel
+    group = panel._rows[("earlier", "code")]
+    assert ("done", "code/002_new") in panel._rows and ("done", "code/001_old") not in panel._rows
+    assert panel._rows[("old", "code/001_old")].parent() is group and not group.isExpanded()
+    assert group.text(1) == "1 settled"
+    group.setExpanded(True)
+    env.d.log.append("reviewed", item="code/002_new", status="done")
+    win.refresh()                                      # a rebuild keeps the group open
+    assert panel._rows[("earlier", "code")].isExpanded()
+    assert f"Current: checkpoint #{cp.id}" in view.checkpoint_btn.toolTip()
+    win._quitting = True
+    win.close()
+
+
 def test_run_buttons_in_the_header(qapp, env, tmp_path):
     from conductor.app.window import MainWindow
     toml = env.control / "conductor.toml"

@@ -20,6 +20,7 @@ uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--
 uv run conductor questions [<control folder>] [--all]      # open asks (--all: resolved too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
+uv run conductor checkpoint [<label…>] [--control <folder>]   # a new checkpoint (see Checkpoints)
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
@@ -33,7 +34,8 @@ One daemon per control folder: a second `run` refuses while the first is alive
 (`.conductor/daemon.json` holds its pid and process creation time).
 
 `--since` takes an event id (`#12` or `12`, exclusive), a relative age (`30m`, `2h`,
-`1d`), a clock time today (`5:25pm`), or an ISO time. `--item` takes `sandbox/001_x`,
+`1d`), a clock time today (`5:25pm`), an ISO time, `checkpoint` (from the latest
+checkpoint's own event on) or `checkpoint N` (from checkpoint #N on). `--item` takes `sandbox/001_x`,
 `001_x` or `001`.
 
 Stopping the daemon (Ctrl+C, or killing it) does **not** stop executors: they run
@@ -56,7 +58,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
                                .stage.prompt.md for a stage
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, run, stop
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
@@ -481,6 +483,10 @@ of a closed local port can take up to its timeout (1s; the app's header probe us
 0.3s per target per refresh). The planner adds or changes targets with a
 `conductor.toml` request.
 
+A repo's main checkout has no installed dependencies: executors install them in their
+worktrees, which are removed after the merge. So a target whose server needs them
+installs them first, e.g. `command = "npm install && npm run dev -- --port 5173"`.
+
 ## Toasts
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
@@ -548,6 +554,9 @@ message: Optional one-line commit message
 Commit message (used when `message:` is absent; first line is the subject).
 ```
 
+The front-matter is YAML: a `message:` containing a colon must be quoted
+(`message: "state: v0.2"`). Unquoted, the YAML fails and the request lands `.failed`.
+
 Conductor waits until nothing in the folder has changed for 2 seconds, checks the
 guard, copies the files in (UTF-8 text is written with LF endings; anything else byte
 for byte), stages and commits exactly the targets, logs `request` and `commit`, removes
@@ -557,7 +566,7 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read, clear, approve, cancel, reorder, reviewed, tell, run, stop
+## Signals: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, stop
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -573,6 +582,7 @@ cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
 reviewed: sandbox/003        # the planner has acted on that finished item's report
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see Progress and messages)
+checkpoint: session start    # a session boundary (see Checkpoints)
 run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
@@ -617,6 +627,8 @@ value is ignored.
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
   waits on the read mark. Several `reviewed:` lines may share a file.
 - **tell** — `tell: <item> <message>`: see *Progress and messages*.
+- **checkpoint** — `checkpoint: <label>` (any text, a ` # ` included, or none): see
+  *Checkpoints*.
 - **run** — `run: <target>` or `run: <target> stop`: see *Run targets*. An unknown
   target is refused.
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
@@ -638,10 +650,41 @@ Files are applied in name order. The app writes
 `signals/app-<YYYYmmdd-HHMMSS>-<nnnnnn>.tmp` (a zero-padded counter, so clicks in one
 second keep their order), then renames it to `.signal`, always with `by: app`.
 
+## Checkpoints
+
+A checkpoint is a session boundary, so each planner session starts with a clean view.
+`checkpoint: <label>` (planner, usually `checkpoint: session start` with `by: planner`;
+the app's **New checkpoint…**; `conductor checkpoint [label]`, `by: cli`) logs a
+`checkpoint` event (label, by). **Its number is its event id**: nobody keeps a counter.
+Only the latest checkpoint matters to the views.
+
+- **Hidden:** a finished item whose `finish` event and first `reviewed` event both come
+  before the latest checkpoint, unless its red still holds its queue (`clear:` not yet
+  sent). Such an item is *settled*.
+- **Carried forward, whatever their age:** unreviewed reports, an item reviewed only
+  after the checkpoint (until the next one), red holds, open questions, and anything
+  queued, staged, running or proposed. None of these is a finished-and-reviewed item,
+  so none is ever hidden.
+- **Warning:** at the checkpoint, every report still unreviewed gets a `warning` naming
+  it (item, `checkpoint`, `finish`, `note`), so the new session raises it first.
+
+Nothing is deleted or moved: reports, `done/` and `events.db` stay as they are, and
+`conductor events`, a postmortem, the app's trail and `conductor open` reach any item.
+What changes is only the default views:
+- `inbox.md` names the current checkpoint (number, label, time, by) under its header
+  and how many settled items it hides; an unreviewed report older than the checkpoint
+  is tagged *carried from before checkpoint #N*.
+- The app's Repos tab lists only current finished items, with the settled ones in a
+  collapsed *earlier checkpoints* group per repo. The Events tab starts at the latest
+  checkpoint (*since checkpoint #N*, on by default; off shows the whole log).
+- `conductor events --since checkpoint` (or `checkpoint N`) starts at a checkpoint;
+  `conductor status` names the latest one.
+
 ## Inbox
 
 `inbox.md` is regenerated whenever the log or the read mark changes (and every 30s
-for the *Now* section). First **Questions**: every open ask, regardless of the read
+for the *Now* section). Its header names the current checkpoint (see *Checkpoints*).
+First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status, finish time, finish event id, report path and `carry:`
 line; it shows on every inbox, read mark or not, until a `reviewed:` signal names the
@@ -696,6 +739,8 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
 Each run target gets a **Run <name>** button beside them, reading `● up`, `● starting`
 or `● down` (green, amber, grey; probed each refresh); a click writes `run: <name>`,
 which opens the URL (starting the target first when it is down).
+**New checkpoint…** asks for a label (default `session start`) and writes
+`checkpoint: <label>`; its tooltip names the current checkpoint.
 
 **Panels.**
 
@@ -707,7 +752,8 @@ which opens the URL (starting the target first when it is down).
   `cancel: <repo>/<NNN_name>`). A staged item is the queue head, so it is one row whose
   state carries both: `staging` (with elapsed) or `staged (plan ready)`, then `· head`
   or `· blocked by hold`.
-  Under the queue, a *finished* row heads the repo's finished items, newest first: the
+  Under the queue, a *finished* row heads the repo's current finished items (those not
+  settled by a checkpoint), newest first: the
   10 most recent plus every unreviewed one however old, each with its status, finish
   time, carry and a *reviewed* / *unreviewed* mark (unreviewed bold, coloured by
   status; reviewed muted). Double-click opens the trail, as for live items. Each
@@ -718,7 +764,9 @@ which opens the URL (starting the target first when it is down).
   when it was sent); while it executes it has **Tell…**, a text box whose message goes
   out as a `tell:` signal (`by: app`). Every finished row has **Open in terminal**
   (`claude --resume`, see *Progress and messages*), beside **Mark reviewed** while
-  unreviewed.
+  unreviewed. Items settled by the latest checkpoint sit below in an *earlier
+  checkpoints* group (the 10 newest), collapsed until opened; it stays open across
+  refreshes once opened.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
@@ -736,7 +784,9 @@ which opens the URL (starting the target first when it is down).
   separate entry. Everything else (`worktree`, `stage`, `staged`, `merge`, `commit`,
   `hold`, `enqueue`, `queue_empty`, `read`, …) appears only with **Advanced** checked
   (off by default), which also shows each event in the log's own wording. The *Kind*
-  list offers only the kinds the current mode shows. In both modes: the whole log, filterable by repo, item (`001`, `001_x`, `repo/001_x`, or
+  list offers only the kinds the current mode shows. `new checkpoint #N "label"` is an
+  Activity line. **since checkpoint #N** (on by default) starts the list at the latest
+  checkpoint's own event; off, it is the whole log. In both modes: filterable by repo, item (`001`, `001_x`, `repo/001_x`, or
   any substring of the id), kind, a from/to time range and *reds only*. Selecting an
   event shows its item's trail beside it: every event of the item (the selected one
   expanded with its full detail; wrapped lines hang under the event's text, or under the
@@ -821,6 +871,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through / repo |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
+| `checkpoint` | a `checkpoint:` signal started a new session view (its id is its number) | label, by |
 | `progress` | the executor called `progress` | seq, at, note, eta, done, remaining |
 | `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id) | text, by |
 | `delivered` | the message reached the executor | tell, via (`hook`/`progress`), text, waited_seconds |
@@ -836,7 +887,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `late` | an answer file after a default or close | question, text, outcome; by |
 | `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
-| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a stage discarded; a shared folder missing or not ignored | note |
+| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a stage discarded; a shared folder missing or not ignored; a report still unreviewed at a checkpoint | note; checkpoint, finish (the unreviewed-at-checkpoint warning) |
 
 ## Restart rule
 

@@ -207,6 +207,9 @@ class ReposPanel(Panel):
         self._sig: tuple | None = None
         self._rows: dict[tuple, QTreeWidgetItem] = {}
         self._sessions: dict[str, str | None] = {}      # finished item → its session id
+        self._earlier_open: set[str] = set()            # repos whose Earlier checkpoints group is open
+        self.tree.itemExpanded.connect(lambda w: self._expanded(w, True))
+        self.tree.itemCollapsed.connect(lambda w: self._expanded(w, False))
 
     def _plan(self, snap: Snapshot) -> list[tuple[str, str, str, list[tuple[tuple, list[str], str | None, str]]]]:
         """Per repo: (repo, header note, path, rows of (key, texts, item id, look))."""
@@ -265,6 +268,16 @@ class ReposPanel(Panel):
                 note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
                 rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item,
                              f"done:{f.status}:{mark}"))
+            if rs.earlier:
+                # Settled by a checkpoint: one collapsed group, its rows children of this one.
+                cp = f"checkpoint #{snap.checkpoint.id}" if snap.checkpoint else "the checkpoint"
+                more = f"; newest {len(rs.earlier)} shown" if rs.earlier_total > len(rs.earlier) else ""
+                rows.append((("earlier", rs.name), ["earlier checkpoints", f"{rs.earlier_total} settled", "",
+                                                    f"finished and reviewed before {cp}{more}"], None, "earlier"))
+            for f in rs.earlier:
+                note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
+                rows.append((("old", f.item), [f.name, f"{f.status} · reviewed", "", note], f.item,
+                             f"done:{f.status}:reviewed"))
             busy = len(rs.running) + len(rs.staged)     # a staged head counts as queued too
             head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
             if rs.unreviewed:
@@ -273,7 +286,7 @@ class ReposPanel(Panel):
         return out
 
     def update_snapshot(self, snap: Snapshot) -> None:
-        self._sessions = {f.item: f.session_id for rs in snap.repos for f in rs.finished}
+        self._sessions = {f.item: f.session_id for rs in snap.repos for f in (*rs.finished, *rs.earlier)}
         plan = self._plan(snap)
         sig = tuple((repo, tuple((k, look) for k, _, _, look in rows)) for repo, _, _, rows in plan)
         if sig != self._sig:
@@ -300,7 +313,7 @@ class ReposPanel(Panel):
                  "queued": (theme.MUTED, None, None, False), "idle": (theme.MUTED, None, None, False),
                  "blocked": (theme.AMBER, None, None, True),
                  "red": (None, theme.RED, theme.RED_BG, True), "hold": (None, theme.AMBER, theme.AMBER_BG, True),
-                 "section": (theme.AMBER, theme.MUTED, None, True)}
+                 "section": (theme.AMBER, theme.MUTED, None, True), "earlier": (None, theme.MUTED, None, False)}
         status_fg = {"done": theme.GREEN, "partial": theme.AMBER, "red": theme.RED}
         for status, fg in status_fg.items():
             # A finished item: its state coloured by outcome, bold until reviewed; a
@@ -329,7 +342,7 @@ class ReposPanel(Panel):
                     w.setForeground(1, QBrush(QColor(state)))
                 if strong:
                     w.setFont(1, bold)
-                top.addChild(w)
+                (self._rows[("earlier", repo)] if key[0] == "old" else top).addChild(w)
                 self._rows[key] = w
                 if key[0] == "red":
                     # The one action that releases the hold: drawn as the row's main action.
@@ -339,7 +352,7 @@ class ReposPanel(Panel):
                     self.tree.setItemWidget(w, 4, compact_button("Cancel", lambda _=False, i=key[1]: self._cancel(i)))
                 elif key[0] == "run" and look == "run":
                     self.tree.setItemWidget(w, 4, compact_button("Tell…", lambda _=False, i=key[1]: self._tell(i)))
-                elif key[0] == "done":
+                elif key[0] in ("done", "old"):
                     specs = [("Open in terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
                     if look.endswith(":unreviewed"):
                         specs.insert(0, ("Mark reviewed", None, None))
@@ -348,7 +361,18 @@ class ReposPanel(Panel):
                         b.clicked.connect(lambda _=False, i=key[1], b=b: self._reviewed(i, b))
                     holder.buttons["Open in terminal"].setEnabled(bool(self._sessions.get(key[1])))
                     self.tree.setItemWidget(w, 4, holder)
+        self.tree.blockSignals(True)            # not a click: the remembered set stays
         self.tree.expandAll()
+        for key, w in self._rows.items():
+            if key[0] == "earlier":
+                w.setExpanded(key[1] in self._earlier_open)
+        self.tree.blockSignals(False)
+
+    def _expanded(self, w: QTreeWidgetItem, on: bool) -> None:
+        """Remember which repos' Earlier checkpoints group is open across rebuilds."""
+        for key, row in self._rows.items():
+            if row is w and key[0] == "earlier":
+                (self._earlier_open.add if on else self._earlier_open.discard)(key[1])
 
     def _double(self, w: QTreeWidgetItem, _col: int) -> None:
         if item_id := w.data(0, Qt.ItemDataRole.UserRole):
@@ -978,8 +1002,12 @@ class EventsPanel(Panel):
         self.advanced = QCheckBox("Advanced")
         self.advanced.setToolTip("Every event kind (worktree, stage, merge, commit, hold, enqueue, read, ...), "
                                  "worded as the log has it. Off: Activity, the workflow-level lines only.")
+        self.current = QCheckBox("since checkpoint")
+        self.current.setChecked(True)
+        self.current.setToolTip("Only events from the latest checkpoint on (a session boundary). "
+                                "Off: every event in the log.")
         for w in (QLabel("Repo"), self.repo, self.item, QLabel("Kind"), self.kind,
-                  self.since_on, self.since, self.until_on, self.until, self.reds, self.advanced):
+                  self.since_on, self.since, self.until_on, self.until, self.reds, self.current, self.advanced):
             bar.addWidget(w)
         bar.addStretch(1)
         lay.addLayout(bar)
@@ -1025,7 +1053,7 @@ class EventsPanel(Panel):
         self.table.selectionModel().currentRowChanged.connect(lambda *_: self._debounce.start())
         for sig in (self.repo.currentIndexChanged, self.kind.currentIndexChanged, self.item.textChanged,
                     self.since_on.toggled, self.until_on.toggled, self.since.dateTimeChanged,
-                    self.until.dateTimeChanged, self.reds.toggled):
+                    self.until.dateTimeChanged, self.reds.toggled, self.current.toggled):
             sig.connect(self.refilter)
         self.advanced.toggled.connect(self._set_advanced)
         QShortcut(QKeySequence("Ctrl+F"), self, activated=lambda: (self.item.setFocus(), self.item.selectAll()))
@@ -1037,12 +1065,20 @@ class EventsPanel(Panel):
         self.item.returnPressed.connect(self.table.setFocus)
         self._kinds: list[str] = []
         self._generation = project.generation
+        self._checkpoint = project.checkpoint
+        self._label_checkpoint()
         self.refilter()
+
+    def _label_checkpoint(self) -> None:
+        cp = self.project.checkpoint
+        self.current.setText(f"since checkpoint #{cp.id}" if cp else "since checkpoint (none yet)")
 
     def _filters(self) -> dict:
         def dt(edit) -> datetime:
             return edit.dateTime().toPython().astimezone()
-        return dict(repo=self.repo.currentData(), item=self.item.text().strip() or None,
+        cp = self.project.checkpoint
+        return dict(from_id=cp.id if cp and self.current.isChecked() else None,
+                    repo=self.repo.currentData(), item=self.item.text().strip() or None,
                     kinds=[self.kind.currentData()] if self.kind.currentData() else None,
                     since=dt(self.since) if self.since_on.isChecked() else None,
                     until=dt(self.until) if self.until_on.isChecked() else None,
@@ -1085,6 +1121,8 @@ class EventsPanel(Panel):
 
     def _update_count(self) -> None:
         what = "event(s)" if self.advanced.isChecked() else "event(s) shown as Activity (Advanced: all)"
+        if self.current.isChecked() and self.project.checkpoint:
+            what += f" since checkpoint #{self.project.checkpoint.id}"
         self.count.setText(f"{len(self.model.rows)} of {len(self.project.events)} {what} · "
                            "↑/↓ PgUp/PgDn Home/End move · Ctrl+F item · Ctrl+R reds · Alt+1…6 trail tabs")
 
@@ -1093,9 +1131,17 @@ class EventsPanel(Panel):
         if self.project.generation != self._generation:
             # The log was replaced: rows already shown belong to the old one.
             self._generation = self.project.generation
+            self._checkpoint = self.project.checkpoint
+            self._label_checkpoint()
             self.refilter()
             return
         if not new:
+            return
+        if self.project.checkpoint is not self._checkpoint:
+            # A new session boundary: the rows before it drop out of the default view.
+            self._checkpoint = self.project.checkpoint
+            self._label_checkpoint()
+            self.refilter()
             return
         sb = self.table.verticalScrollBar()
         at_bottom = sb.value() >= sb.maximum() - 2

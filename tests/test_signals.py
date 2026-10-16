@@ -469,3 +469,62 @@ def test_reviewed_refusals(env):
     assert "has not finished" in errors[0] and "has not finished" in errors[1]
     assert not env.events("reviewed")
     env.tick_until(lambda: env.finished("code/002_q"))
+
+
+# ---------------------------------------------------------------- checkpoints
+def test_a_checkpoint_hides_settled_items_and_carries_the_rest(env):
+    from conductor import inbox, state
+    from conductor.app import model
+    env.queue("001_old", "FAKE report done")
+    env.queue("002_unrev", "FAKE report partial")
+    env.queue("003_bad", "FAKE report red")
+    env.tick_until(lambda: env.finished("code/003_bad"))
+    env.queue("004_next", "FAKE report done")                # held behind the red
+    send(env, "by: planner\nreviewed: 001\nreviewed: 003", "rev")
+    send(env, "by: planner\ncheckpoint: session start # two", "cp")
+    [cp] = env.events("checkpoint")
+    assert (cp.detail["label"], cp.detail["by"]) == ("session start # two", "planner")
+    # Only the unreviewed report gets a warning, naming it.
+    warned = [e for e in env.events("warning") if e.detail.get("checkpoint") == cp.id]
+    assert [e.item for e in warned] == ["code/002_unrev"] and "unreviewed" in warned[0].detail["note"]
+    view = state.scan(env.d.cfg, env.d.log)
+    assert view.checkpoint.id == cp.id
+    # 001 settled; 002 unreviewed and 003 (its red still holds the queue) carry forward.
+    assert [i for i in view.finishes if view.settled(i)] == ["code/001_old"]
+    current, _ = model.finished_items(view, "code")
+    earlier, total = model.earlier_items(view, "code")
+    assert [f.name for f in current] == ["003_bad", "002_unrev"]
+    assert [f.name for f in earlier] == ["001_old"] and total == 1
+    assert [i.name for i in view.queued["code"]] == ["004_next"]
+    env.d.write_inbox(force=True)
+    text = (env.control / "inbox.md").read_text(encoding="utf-8")
+    assert f'Current checkpoint: checkpoint #{cp.id} "session start # two"' in text.splitlines()[4]
+    unrev = text.split("## Unreviewed reports", 1)[1].split("\n## ", 1)[0]
+    assert "code/002_unrev" in unrev and f"carried from before checkpoint #{cp.id}" in unrev
+    # Reviewed after the checkpoint: still this session's, until the next checkpoint.
+    send(env, "reviewed: 002", "rev2")
+    assert not state.scan(env.d.cfg, env.d.log).settled("code/002_unrev")
+    send(env, "checkpoint:", "cp2")
+    cp2 = env.events("checkpoint")[-1]
+    assert cp2.detail["label"] == "" and cp2.detail["by"] == "unknown"
+    assert not [e for e in env.events("warning") if e.detail.get("checkpoint") == cp2.id]
+    view = state.scan(env.d.cfg, env.d.log)
+    assert sorted(i for i in view.finishes if view.settled(i)) == ["code/001_old", "code/002_unrev"]
+    send(env, "clear: code", "clr")                            # the red no longer holds: it settles too
+    assert state.scan(env.d.cfg, env.d.log).settled("code/003_bad")
+
+
+def test_events_since_checkpoint_on_the_cli(env, capsys):
+    from conductor import cli
+    send(env, "checkpoint: one", "cp")
+    first = env.events("checkpoint")[0].id
+    send(env, "checkpoint: two", "cp2")
+    assert cli.main(["events", str(env.control), "--since", "checkpoint"]) == 0
+    out = capsys.readouterr().out
+    assert '"two"' in out and '"one"' not in out
+    assert cli.main(["events", str(env.control), "--since", f"checkpoint {first}"]) == 0
+    out = capsys.readouterr().out
+    assert out.splitlines()[0].startswith(f"#{first} ") and '"two"' in out
+    assert cli.main(["checkpoint", "next", "session", "--control", str(env.control)]) == 0
+    [sig] = (env.control / "signals").glob("cli-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: cli\ncheckpoint: next session\n"
