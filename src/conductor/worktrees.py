@@ -69,7 +69,7 @@ def link_shared(cfg: Config, repo: str, path: Path) -> tuple[list[str], list[str
         if link.exists() or procs.is_link_dir(link):
             warnings.append(f"shared {rel!r}: already present in the worktree (tracked?); not linked")
             continue
-        if subprocess.run(["git", "-C", str(repo_path), "check-ignore", "-q", rel]).returncode:
+        if subprocess.run(["git", "-C", str(repo_path), "check-ignore", "-q", rel], **git.NO_WINDOW).returncode:
             warnings.append(f"shared {rel!r} is not git-ignored in {repo}; an executor could commit it")
         procs.link_dir(target, link)
         linked.append(rel)

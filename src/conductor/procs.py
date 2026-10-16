@@ -41,6 +41,43 @@ def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path) ->
                                 env=child_env(), **kwargs)
 
 
+def console_python() -> str:
+    """The console interpreter: `python.exe` beside `pythonw.exe` when this process is
+    the GUI one (the `conductor-app` gui script). A pythonw daemon has no console, so
+    every console child it starts (git) would open a window of its own."""
+    exe = Path(sys.executable)
+    if WINDOWS and exe.name.lower() == "pythonw.exe" and (exe.parent / "python.exe").is_file():
+        return str(exe.parent / "python.exe")
+    return sys.executable
+
+
+def spawn_daemon(control: Path, log: Path) -> subprocess.Popen:
+    """Start `python -m conductor run <control>` detached from the caller (the app):
+    no console window, its own process group, out of any job object that allows it,
+    output appended to `log`, unbuffered (`-u`: a file is block-buffered, so the log
+    would otherwise stay empty for hours). Quitting the app never takes the daemon down."""
+    cmd = [console_python(), "-u", "-m", "conductor", "run", str(control)]
+    log.parent.mkdir(parents=True, exist_ok=True)
+    kwargs: dict = {}
+    if WINDOWS:
+        base = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        flags = [base | subprocess.CREATE_BREAKAWAY_FROM_JOB, base]
+    else:
+        flags = [0]
+        kwargs["start_new_session"] = True
+    with open(log, "ab") as out:
+        for i, extra in enumerate(flags):
+            if WINDOWS:
+                kwargs["creationflags"] = extra
+            try:
+                return subprocess.Popen(cmd, cwd=str(control), stdin=subprocess.DEVNULL, stdout=out,
+                                        stderr=subprocess.STDOUT, env=child_env(), **kwargs)
+            except OSError:
+                if i == len(flags) - 1:     # breakaway refused by a job: retry without it
+                    raise
+    raise AssertionError("unreachable")
+
+
 def link_dir(target: Path, link: Path) -> None:
     """A directory link at `link` → `target`: a junction on Windows (no privilege
     needed), a symlink elsewhere."""
@@ -95,9 +132,11 @@ def remove_tree(root: Path) -> None:
         return
     unlink_all_links(root)
     import shutil
-    def onerror(func, path, exc):     # git marks object files read-only
-        os.chmod(path, 0o700)
-        func(path)
+    from .util import retry_io
+
+    def onerror(func, path, exc):     # git marks object files read-only; a killed
+        os.chmod(path, 0o700)         # process's files can stay locked for a moment
+        retry_io(func, path)
     shutil.rmtree(root, onexc=onerror)
 
 

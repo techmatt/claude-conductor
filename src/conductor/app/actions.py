@@ -1,0 +1,100 @@
+"""Everything the app writes. No Qt.
+
+The app changes nothing in the queue itself: approve, cancel, reorder, clear and stop
+are `signals/` files the daemon carries out and logs. Besides those it writes only an
+answer file (the same function `conductor answer` uses) and starts the daemon.
+"""
+
+from __future__ import annotations
+
+import itertools
+import os
+from datetime import datetime
+from pathlib import Path
+
+from .. import procs, questions
+
+BY = "app"
+_counter = itertools.count(1)
+
+
+def write_signal(control: Path, *lines: str) -> Path:
+    """`signals/app-<YYYYmmdd-HHMMSS>-<nnnnnn>.signal`, written as `.tmp` then renamed, so
+    the daemon (which skips `.tmp`) never reads half a file. Every event it produces
+    carries `by: app`. The daemon applies files in name order, so the counter is
+    zero-padded: two clicks in one second stay in click order."""
+    sdir = Path(control) / "signals"
+    sdir.mkdir(parents=True, exist_ok=True)
+    text = "".join(f"{ln}\n" for ln in (f"by: {BY}", *lines))
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    while True:
+        base = f"app-{stamp}-{next(_counter):06d}"
+        final = sdir / f"{base}.signal"
+        tmp = sdir / f"{base}.tmp"
+        if not final.exists() and not tmp.exists():
+            break
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+    os.replace(tmp, final)
+    return final
+
+
+def approve(control: Path, name: str) -> Path:
+    return write_signal(control, f"approve: {name}")
+
+
+def cancel(control: Path, ref: str) -> Path:
+    """`ref`: a proposed item's `proposed/NNN_name`, or a queued item's `repo/NNN_name`."""
+    return write_signal(control, f"cancel: {ref}")
+
+
+def reorder(control: Path, where: str, names: list[str]) -> Path:
+    """`where`: a repo or `proposed`; `names` take their own sorted NNNs in this order."""
+    return write_signal(control, f"reorder: {where} {' '.join(names)}")
+
+
+def swap(control: Path, where: str, names: list[str], index: int, delta: int) -> Path | None:
+    """Move `names[index]` up (-1) or down (+1) by swapping it with its neighbour."""
+    j = index + delta
+    if not (0 <= index < len(names) and 0 <= j < len(names)):
+        return None
+    return reorder(control, where, [names[j], names[index]] if delta > 0 else [names[index], names[j]])
+
+
+def clear(control: Path, repo: str) -> Path:
+    return write_signal(control, f"clear: {repo}")
+
+
+def stop_daemon(control: Path) -> Path:
+    return write_signal(control, "stop: daemon")
+
+
+def start_daemon(control: Path):
+    """Spawn the daemon detached; its output goes to `.conductor/daemon.out.log`."""
+    control = Path(control).resolve()
+    return procs.spawn_daemon(control, control / ".conductor" / "daemon.out.log")
+
+
+class AnswerError(ValueError):
+    pass
+
+
+def answer(control: Path, qid: str, text: str) -> questions.Question:
+    """Write `questions/<id>.answer.md` as `conductor answer` does, plus `by: app`
+    front-matter (dropped before the executor sees it; put on the `answer` event)."""
+    if not text.strip():
+        raise AnswerError("the answer is empty")
+    q = questions.find(Path(control), qid)      # loaded now: `is_open` is current
+    if q is None:
+        raise AnswerError(f"no single question matches {qid!r}")
+    if q.answer_path.exists():
+        raise AnswerError(f"{q.id} already has an answer file; not overwriting it")
+    questions.write_answer(q, text, by=BY)
+    return questions.load(q.path) or q          # resolved meanwhile? then it is late
+
+
+def answer_note(q: questions.Question) -> str:
+    """What answering `q` did, worded as `conductor answer` words it."""
+    if q.is_open:
+        return f"answered {q.id}; the executor gets it within a few seconds"
+    return f"{q.id} was already {q.result.get('outcome')}; the answer is logged as late and changes nothing"

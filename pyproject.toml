@@ -8,12 +8,16 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "psutil>=5.9",
+    "pyside6>=6.12.0",
     "pyyaml>=6.0",
     "windows-toasts>=1.3 ; sys_platform == 'win32'",
 ]
 
 [project.scripts]
 conductor = "conductor.cli:main"
+
+[project.gui-scripts]
+conductor-app = "conductor.app:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

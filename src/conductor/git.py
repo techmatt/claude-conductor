@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+# git is a console program: started from a process with no console (the app, or a
+# daemon the app started under pythonw), each call would open a console window.
+NO_WINDOW: dict = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
 
 
 class GitError(RuntimeError):
@@ -15,7 +20,7 @@ def run(repo: Path, *args: str, check: bool = True, input: bytes | None = None) 
     # GIT_EDITOR: a rebase or merge must never wait on an editor nobody sees.
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], input=input, capture_output=True,
-        env={**os.environ, "GIT_EDITOR": "true", "GIT_TERMINAL_PROMPT": "0"},
+        env={**os.environ, "GIT_EDITOR": "true", "GIT_TERMINAL_PROMPT": "0"}, **NO_WINDOW,
     )
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {proc.stderr.decode('utf-8', 'replace').strip()}")
@@ -24,7 +29,7 @@ def run(repo: Path, *args: str, check: bool = True, input: bytes | None = None) 
 
 def is_repo(path: Path) -> bool:
     return path.is_dir() and subprocess.run(
-        ["git", "-C", str(path), "rev-parse", "--git-dir"], capture_output=True,
+        ["git", "-C", str(path), "rev-parse", "--git-dir"], capture_output=True, **NO_WINDOW,
     ).returncode == 0
 
 
@@ -64,7 +69,7 @@ def rev(repo: Path, ref: str) -> str | None:
 
 def is_ancestor(repo: Path, a: str, b: str) -> bool:
     return subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", a, b],
-                          capture_output=True).returncode == 0
+                          capture_output=True, **NO_WINDOW).returncode == 0
 
 
 def changed_files(repo: Path, before: str, after: str) -> list[str]:

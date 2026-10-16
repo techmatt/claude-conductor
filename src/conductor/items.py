@@ -105,6 +105,42 @@ def parse(path: Path, repo: str) -> Item:
     return item
 
 
+def front_repo(path: Path) -> str | None:
+    """The `repo:` front-matter field of an item file (e.g. one in `proposed/`), or None."""
+    try:
+        meta, _ = split_front_matter(read_text(path))
+    except (FrontMatterError, OSError, UnicodeDecodeError):
+        return None
+    repo = (meta or {}).get("repo")
+    return str(repo) if repo is not None else None
+
+
+def number_matches(name: str, ref: str) -> bool:
+    """`ref` (`NNN_name` or `NNN`, numerically) names the item `name`."""
+    num = name.split("_", 1)[0]
+    return name == ref or num == ref or (ref.isdigit() and num.isdigit() and int(num) == int(ref))
+
+
+def find(folder: Path, ref: str) -> list[Path]:
+    """The item files in `folder` (`*.md`) that `ref` names."""
+    if not folder.is_dir():
+        return []
+    return [p for p in sorted(folder.glob("*.md")) if number_matches(p.stem, ref)]
+
+
+# A reorder renames `NNN_name.md` to `NNN_name<REORDER_TEMP><new name>` first, then to
+# `<new name>.md`: the temp name is not `*.md`, so a crash never leaves a half-renamed
+# file that looks like an item, and it names its own target for recovery.
+REORDER_TEMP = ".reorder~"
+
+
+def renumber(names: list[str]) -> list[str]:
+    """New names for `names`, given in their new order: they take the sorted numbers they
+    already hold (each number string keeps its own zero padding); the rest of each name stays."""
+    nums = sorted((n.split("_", 1)[0] for n in names), key=int)
+    return [f"{num}_{n.split('_', 1)[1]}" for num, n in zip(nums, names)]
+
+
 def resolve_ref(ref: str, repo: str, known: list[str]) -> str | None:
     """`001_x`, `001`, `repo/001_x` or `repo/001` → a known item id, or None.
 

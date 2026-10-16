@@ -156,10 +156,24 @@ def cmd_events(args) -> int:
     return 0
 
 
+def cmd_app(args) -> int:
+    from .app import main as app_main     # PySide6 is imported only here
+    folders = [_control(f) for f in args.folders]
+    if not folders:
+        # The usual default, but the current folder only when it is a control folder:
+        # the app opens on its remembered projects either way.
+        default = _control(None)
+        if os.environ.get("CONDUCTOR_CONTROL") or (default / config_mod.CONFIG_NAME).is_file():
+            folders = [default]
+    return app_main([str(f) for f in folders])
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
-        # Redirected output on Windows defaults to the ANSI code page.
-        stream.reconfigure(encoding="utf-8", errors="replace")
+        # Redirected output on Windows defaults to the ANSI code page; under pythonw
+        # there is no stream at all.
+        if stream is not None:
+            stream.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(prog="conductor")
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, fn, help_ in (("run", cmd_run, "run the daemon in the foreground"),
@@ -189,6 +203,9 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--project", required=True)
     sp.add_argument("--repo", action="append", metavar="NAME=PATH", help="repeatable")
     sp.set_defaults(fn=cmd_init)
+    sp = sub.add_parser("app", help="the desktop app (tray icon, one tab per control folder)")
+    sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
+    sp.set_defaults(fn=cmd_app)
     args = p.parse_args(argv)
     try:
         return args.fn(args)

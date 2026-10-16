@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -61,13 +62,36 @@ def parse_since(text: str) -> tuple[int | None, datetime | None]:
     return None, dt if dt.tzinfo else dt.astimezone()
 
 
+RETRY_SECONDS = 3.0
+
+
+def retry_io(fn, *args, seconds: float = RETRY_SECONDS):
+    """`fn(*args)`, retried while it raises PermissionError, for up to `seconds`.
+
+    On Windows a rename, replace or unlink fails while another process has the file
+    open without FILE_SHARE_DELETE, which is how Python (and so the app, the CLI, an
+    editor or a virus scanner) opens files. Those reads are short; waiting them out
+    beats failing the operation.
+    """
+    end = time.monotonic() + seconds
+    delay = 0.02
+    while True:
+        try:
+            return fn(*args)
+        except PermissionError:
+            if time.monotonic() >= end:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.25)
+
+
 def write_text(path: Path, text: str) -> None:
     """Atomic UTF-8 / LF write: temp file in the same folder, then replace."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
-    os.replace(tmp, path)
+    retry_io(os.replace, tmp, path)
 
 
 def read_text(path: Path) -> str:

@@ -86,7 +86,14 @@ def describe(ev: Event) -> str:
         case "daemon_start":
             text = f"daemon started (pid {d.get('pid')})"
         case "daemon_stop":
-            text = "daemon stopped" + (f"; still running: {', '.join(d['running'])}" if d.get("running") else "")
+            text = "daemon stopped" + (" by a `stop: daemon` signal" if d.get("reason") == "signal" else "")
+            text += f"; still running: {', '.join(d['running'])}" if d.get("running") else ""
+        case "approve":
+            text = f"{who} approved from {d.get('from')}"
+        case "cancel":
+            text = f"{who} cancelled from {d.get('from')}; file kept at {d.get('kept')}"
+        case "reorder":
+            text = f"{ev.repo} reordered: {', '.join(d.get('before', []))} → {', '.join(d.get('after', []))}"
         case "drift":
             text = f"control folder changed outside an executor window (accepted): {'; '.join(d.get('changes', []))}"
         case "ask":
@@ -107,6 +114,8 @@ def describe(ev: Event) -> str:
         case _:
             extras = ", ".join(f"{k}={v}" for k, v in d.items())
             text = f"{ev.kind} {who} {extras}".strip()
+    if d.get("by"):
+        text += f" (by {d['by']})"
     return text
 
 
@@ -122,10 +131,15 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     top = log.max_id()
     mark_ev = log.last("read")
     red = sorted((e for e in events if e.kind in RED_KINDS), key=lambda e: (e.kind != "tamper", e.id))
-    # Only holds still in effect: the item has not started or finished since.
+    # Only holds still in effect: the item has not started, finished, merged, been
+    # cancelled or been renamed by a reorder (which retires its old id) since.
     moved: dict[str, int] = {}
-    for e in log.query(kinds=["start", "finish", "merge"]):
-        moved[e.item] = e.id
+    for e in log.query(kinds=["start", "finish", "merge", "cancel", "reorder"]):
+        if e.kind != "reorder":
+            moved[e.item] = e.id
+        elif e.repo != "proposed":
+            for name in set(e.detail.get("before", [])) - set(e.detail.get("after", [])):
+                moved[f"{e.repo}/{name}"] = e.id
     holds = [e for e in events if e.kind == "hold" and moved.get(e.item, 0) < e.id]
     finished = [e for e in events if e.kind == "finish"]
     changes = [e for e in events if e.kind in ("request", "commit")]

@@ -6,7 +6,7 @@ queues as headless `claude -p` sessions (each in its own git worktree, merged in
 `main` when it finishes; one at a time per repo unless items declare disjoint
 `paths`), and records
 everything in an append-only event log from which the inbox and every other view is
-derived. `matt-controller-workflow.md` is how a project uses it; this file is how it
+derived. `claude-ai-new-project.md` is how a project uses it; this file is how it
 works and is the canon for commands, file formats, fields and event kinds.
 
 ## Install and run
@@ -20,9 +20,12 @@ uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--
 uv run conductor questions [<control folder>] [--all]      # open asks (--all: resolved too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
+uv run conductor app [<control folder> …]                  # the desktop app (see The app)
 ```
 
 The control folder argument defaults to `$CONDUCTOR_CONTROL`, then the current folder.
+`conductor app` with no folder adds `$CONDUCTOR_CONTROL` if set, else the current folder
+only when it holds a `conductor.toml`; it always opens its remembered projects too.
 One daemon per control folder: a second `run` refuses while the first is alive
 (`.conductor/daemon.json` holds its pid and process creation time).
 
@@ -49,11 +52,13 @@ reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
                                .setup.log, and .stage.log / .stage.prompt.md for a stage
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner → conductor: read mark, queue clears
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
-.conductor/                    daemon lock and the guard snapshot
+.conductor/                    daemon lock (daemon.json), guard snapshot, cancelled/ (kept
+                               cancelled items), reorder.json and signal.json (crash journals),
+                               daemon.out.log (a daemon started by the app)
 ```
 
 Conductor creates the runtime folders on start and logs a `warning` event if any of
@@ -355,7 +360,8 @@ Options:
 
 - **Answer.** The planner (or `conductor answer <id> <text>`) writes
   `questions/<id>.answer.md`: the answer as plain text (front-matter, if any, is
-  dropped). It is read once it has been unchanged for 1 second. The tool returns
+  dropped; a `by:` field in it — the app writes `by: app` — goes on the `answer` or
+  `late` event). It is read once it has been unchanged for 1 second. The tool returns
   `Answer to <id>:` and the text.
 - **Default.** With a default and `block: false`, an unanswered question returns the
   default at its `deadline`; the tool result says nobody answered and the default was
@@ -451,19 +457,70 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read mark and queue clears
+## Signals: read, clear, approve, cancel, reorder, stop
 
-The planner writes a small file (any name) into `signals/` with `key: value` lines:
+Every change to the queue that is not a new item goes through `signals/`, so the daemon
+carries it out between launches and logs it. The planner (or the app) writes a small
+file (any name; `*.tmp` and `*.bad` are skipped) with `key: value` lines, applied in
+order:
 
 ```
-read: 42        # inbox read through event #42 (`latest` = everything so far)
-clear: sandbox  # release the sandbox queue after a red
+by: planner                  # optional: every event this file causes carries detail `by`
+read: 42                     # inbox read through event #42 (`latest` = everything so far)
+clear: sandbox               # release the sandbox queue after a red
+approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
+cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
+reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
+stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
 
-Conductor processes it about a second after it stops changing, logs `read` / `clear`
-and deletes the file. A bad signal is logged `invalid` and renamed `<name>.bad`. The
-read mark only moves forward. Use the id printed at the top of `inbox.md` so events
-that arrived after reading stay unread.
+Items are named `NNN_name` or `NNN` (numerically: `7` is `007`). A ` # comment` after a
+value is ignored.
+
+- **approve** — the `proposed/` file must parse as a valid item whose `repo:` is
+  configured, and `<repo>/NNN_name` must not already be queued, running, staged or done.
+  It moves by one rename; `approve` is logged (item `<repo>/NNN_name`, `from`), then
+  the usual `enqueue`.
+- **cancel** — a name without a repo is looked up in `proposed/` first, then across
+  every queue (a name found in two queues is ambiguous: refused). A running item is
+  refused: cancel never kills an executor. A staged head has its stage discarded
+  first (process tree killed, worktree removed, the usual `warning`). The file is
+  moved, not deleted, to `.conductor/cancelled/<YYYYmmdd-HHMMSS>__<repo|proposed>__NNN_name.md`;
+  `cancel` is logged with `from` (`queue`/`proposed`) and `kept`. A cancelled proposal's
+  event has item `proposed/NNN_name` and the repo its front-matter names (or `proposed`
+  when that repo is missing or not configured).
+- **reorder** — `reorder: <repo|proposed> <item> ...`: the listed items take the sorted
+  numbers they already hold, in the listed order (each number keeps its zero padding;
+  the name after it is unchanged). Refused when an item is unknown, listed twice or
+  running, when a new name is taken by an unlisted item, when a new queue name is the
+  id of an item that ran or is running (`done/`, `running/`: ids are never reused),
+  when any item in `queue/` or `proposed/` has a `depends_on` that names a renumbered
+  item, when a renumbered queue item would come before an item of its own queue it
+  depends on (it would hold forever), or while an earlier reorder is unfinished. A
+  renumbered staged item loses its stage first. A renamed queue item is a new id, so
+  it is enqueued again. Renames go through temp names (`NNN_name.reorder~<new name>`,
+  not `*.md`), journalled in `.conductor/reorder.json`. A rename that fails (a file
+  held open) leaves the journal: a `warning` is logged, every tick rolls it forward
+  until it completes (`reorder` logged with `note`), and that queue launches nothing
+  meanwhile. A restart finishes an interrupted reorder the same way.
+- **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
+  (`reason: signal`), releases its lock and exits. Executors and stages keep running;
+  the next start adopts them.
+
+Conductor processes a file about a second after it stops changing and deletes it. The
+whole file is syntax-checked first: an unknown key or malformed line rejects it with
+nothing applied. Each verb then checks what it acts on before changing anything; a
+verb that fails there stops the file, and the lines before it stay applied (the
+`invalid` event lists them as `applied`). A rejected file is logged `invalid` and
+renamed `<name>.bad`. While a file's lines apply, `.conductor/signal.json` records it
+and the lines done so far; if the daemon dies before the file is gone, the next start
+sets the file aside as `.bad` and logs a `warning` naming what applied, so no line
+ever applies twice (re-send what is still wanted). The read mark only moves forward. Use the id printed at the top
+of `inbox.md` so events that arrived after reading stay unread.
+
+Files are applied in name order. The app writes
+`signals/app-<YYYYmmdd-HHMMSS>-<nnnnnn>.tmp` (a zero-padded counter, so clicks in one
+second keep their order), then renames it to `.signal`, always with `by: app`.
 
 ## Inbox
 
@@ -475,11 +532,114 @@ then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`),
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
 included), **Other**; then **Now**: per repo, what is running (or merging), staged
 (`staging`/`staged`), queued, waiting or held, plus proposed items. A hold stays in
-the Holds section until the item starts, merges or finishes. `enqueue`, `start`,
+the Holds section until the item starts, merges, finishes or is cancelled, or a
+reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
 `stage` and `worktree` events are left out of the inbox (they are in
 `conductor events`). `conductor status` lists the same per repo: running (pid, branch,
 kill time), merging (with the reason it waits), staging/staged, queued.
 `conductor inbox` prints the same thing without moving the mark.
+
+## The app
+
+`uv run conductor app [<control folder> …]` (or the `conductor-app` gui script, no
+console) opens a PySide6 window with one tab per control folder. Folders named on the
+command line are added; the list is remembered across launches (QSettings, org
+`conductor`, app `conductor-app`, key `controls`) and edited with *Add project…* /
+*Remove project*. A remembered folder that fails to load (drive not mounted,
+`conductor.toml` broken) is reported in the status bar and stays remembered. Qt is
+imported only by this command; the daemon and CLI never need it.
+Code: `src/conductor/app/` — `model.py` and `actions.py` have no Qt (they reuse
+`state.scan`, `state.decide`, `questions`, `config`); `panels.py` and `window.py` are
+the widgets.
+
+**What it reads and writes.** It opens `events.db` with a `file:…?mode=ro` URI, so it
+can neither create nor write it; a missing `events.db` reads as an empty log and stays
+missing. (Opening a WAL database read-only while no daemon has it open leaves an empty
+`events.db-wal` and an `events.db-shm` beside it — SQLite's, harmless, git-ignored.)
+The URI keeps a mapped drive as is and puts a UNC server in the path
+(`file:////server/share/…`), which SQLite accepts. Every 1.5s it re-reads only events
+with `id >` the last one seen, and rescans the control folder; a read that fails for a
+moment (database busy) counts as no change, and only a log with fewer events than seen
+(replaced) resets the Events table. New events reach the table before anything else
+refreshes, and each panel refreshes on its own, so one bad file cannot freeze the rest.
+On Windows its reads can briefly block the daemon's renames; the daemon retries those
+(`util.retry_io`, up to 3s). It never moves a queue file. Its only writes are signal files, answer
+files, its own settings, and starting the daemon.
+
+**Header.** The project's state, whether its daemon is alive (`.conductor/daemon.json`,
+pid + creation time), and a count of the app's signals still waiting in `signals/` (or
+rejected as `.bad`). *Start daemon* spawns `<python> -m conductor run <folder>` (the
+console `python.exe` even when the app runs under `pythonw.exe`; git calls pass
+`CREATE_NO_WINDOW` too, so nothing flashes a console window)
+detached (no window, its own process group, out of the caller's job object when
+allowed), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log`; *Stop daemon…* asks first,
+then writes a `stop: daemon` signal. Executors and stages keep running either way.
+
+**Panels.**
+
+- *Repos* — per repo: the running item with its phase (`running`, `merging`,
+  `concluding`) and elapsed time, the staged item (`staging`, or `staged` with its plan
+  ready), the queue in order with the head's decision (`wait`, `hold`, …) and any
+  invalid item, and a hold row, listed first under its repo (the head item then reads
+  *blocked by hold*): a red hold has a **Clear hold** button (`clear: <repo>`);
+  each queued item has **Cancel** (asks first; `cancel: <repo>/<NNN_name>`).
+- *Questions* — open asks, blocking ones first, then by soonest default; each shows
+  *BLOCKING* or the default and a live countdown to it, its options as buttons that
+  fill the answer box (the default's marked *(default)*), and **Answer**, which writes
+  `questions/<id>.answer.md` through the same function as `conductor answer` (never
+  overwriting one), with `by: app` front-matter so the `answer` event names the app. An answer to a question that resolved meanwhile (its default taken)
+  is reported as late, as the CLI does. Resolved questions are listed beneath, newest
+  first. Question files are re-parsed only when they or their result change.
+- *Events* — the whole log, filterable by repo, item (`001`, `001_x`, `repo/001_x`, or
+  any substring of the id), kind, a from/to time range and *reds only*. Selecting an
+  event shows its item's trail beside it: every event of the item (the selected one
+  expanded with its full detail), the prompt as sent (`.prompt.md`, else the item
+  file), the report, the executor log and the stage log rendered from stream-json (text,
+  `→ tool: input`, `← result`, the final result line with turns, time and cost), and
+  *Git*: the item's commits with diffs from `conductor/<NNN_name>` while that branch
+  exists, else the last `commits` commits ending at the `merge` event's `sha` (the
+  rebased commits on main), else (an item run without a worktree) `git show` of the
+  shas in its `commit` events. Git runs on a worker thread, only when its tab is shown,
+  and again only when the item has new events. Moving to another event of the same
+  item only refocuses the Events tab; new events for the open item update each tab in
+  place (scroll position kept; a log being read at its end follows it). Rendered logs
+  are cached per file version. A cancelled item's prompt comes from its kept copy in
+  `.conductor/cancelled/` (the `cancel` event's `kept`). Keys: ↑/↓, PgUp/PgDn,
+  Home/End move (the trail follows after a 120ms pause); Ctrl+F item filter (Enter
+  returns to the list); Ctrl+R reds only; Ctrl+L the list; Alt+1…6 the trail tabs.
+  Double-clicking an item in any other panel opens its trail here.
+- *Proposed* — `proposed/*.md` with its repo, first line and any problem (bad
+  front-matter, unknown repo); **Approve** (`approve: NNN_name`; enabled only for a
+  selected item without problems), **Cancel** (asks
+  first), **Move up / Move down** (`reorder: proposed <a> <b>` swapping the two
+  neighbours' numbers; the selection follows the moved item to its new name, and a
+  second move waits until the first has landed).
+
+The *Questions* and *Proposed* tab labels carry their counts and are coloured from any
+panel: red with `N blocking` while a question blocks, amber while only defaults are
+pending or items await approval. The app always draws light (Fusion style and an
+explicit palette, so a dark Windows theme cannot flip it); its colours are named tokens
+in `app/theme.py`, each text colour at least 4.5:1 on the backgrounds it is drawn on.
+
+Every action is a signal file `signals/app-<YYYYmmdd-HHMMSS>-<nnnnnn>.signal` (written as
+`.tmp`, then renamed) starting `by: app`, so the daemon carries it out, logs it, and
+nothing races a launch. With the daemon down, actions wait in `signals/`.
+
+**Tray.** A coloured disc drawn at runtime shows the most urgent state across all
+projects: red (a repo held after a red, or a project's daemon down while it has items
+queued or running) > asking (an open question) > running (an item running or staged)
+> idle (grey). Its tooltip lists each project's state; clicking opens the window.
+Closing the window hides it to the tray; *Quit* in the tray menu exits. Neither touches
+a daemon or an executor. Without a system tray, closing the window quits.
+
+**Toast click.** Not wired. Toasts are raised under Command Prompt's app id, so a plain
+click is delivered to that app id, never to this app. `windows-toasts` can
+make a toast *protocol*-activated (`Toast(launch_action="scheme:…")`), which Windows
+honours for unpackaged apps; opening the app on an item would need a URI scheme
+(e.g. `conductor-app:`) registered under `HKCU\Software\Classes` pointing at
+`conductor-app`, plus a single-instance hand-off to a running app. Unverified and left
+for later; the toast's tag (`<project>#<event id>`) names the event, and *Events* lists
+ids in its first column.
 
 ## Event log
 
@@ -489,7 +649,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 
 | kind | when | notable detail |
 |---|---|---|
-| `daemon_start` / `daemon_stop` | daemon lifecycle | pid; running items at stop |
+| `daemon_start` / `daemon_stop` | daemon lifecycle | pid; running items at stop; stop `reason` (`signal`: a `stop: daemon` signal, `interrupt`: Ctrl+C, `error`: three ticks in a row failed on an `OSError`) |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields |
 | `invalid` | bad item, signal, stray queue folder, bad config | error |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
@@ -511,18 +671,25 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `request` / `request_failed` | a request applied or rejected | request, message, targets / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through / repo |
+| `approve` | a `proposed/` item moved into its queue | item, from |
+| `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
+| `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
+| any signal-caused event | a signal file had `by:` | by |
 | `ask` | a question file appeared | question (id), text, block, default, deadline |
-| `answer` | answered before it resolved | question, text, waited_seconds, deadline (moved, when blocking) |
+| `answer` | answered before it resolved | question, text, waited_seconds, deadline (moved, when blocking); by (the answer file's `by:`) |
 | `default` | the default deadline passed unanswered | question, text (the default) |
-| `late` | an answer file after a default or close | question, text, outcome |
+| `late` | an answer file after a default or close | question, text, outcome; by |
 | `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
 | `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a stage discarded; a shared folder missing or not ignored | note |
 
 ## Restart rule
 
-A restart never loses an item and never runs one twice. For each item left in
-`running/`:
+A restart never loses an item and never runs one twice. A tick that dies on an
+`OSError` (a file another process holds open, past the 3s retry) is treated as a
+restart without letting go of the lock: a `warning` is logged, the daemon drops what it
+holds in memory and runs the same recovery; three such ticks in a row stop it
+(`daemon_stop`, `reason: error`). For each item left in `running/`:
 
 1. its `finish` event is already logged → only the move to `done/` was lost; finish it;
 2. its `.run.json` has no pid and no live process carries its session id → it never

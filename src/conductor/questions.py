@@ -176,8 +176,21 @@ def read_answer(q: Question, settle: float = ANSWER_SETTLE_SECONDS) -> str | Non
     return text.strip() or None
 
 
-def write_answer(q: Question, text: str) -> None:
-    _write(q.answer_path, text.strip() + "\n")
+def write_answer(q: Question, text: str, by: str | None = None) -> None:
+    """`by` (the app writes `app`) goes in a front-matter line the executor never sees;
+    the daemon puts it on the `answer` (or `late`) event."""
+    head = "---\n" + yaml.safe_dump({"by": by}, allow_unicode=True) + "---\n" if by else ""
+    _write(q.answer_path, head + text.strip() + "\n")
+
+
+def answer_by(q: Question) -> str | None:
+    """Who wrote the answer file, when its front-matter says (`by:`)."""
+    try:
+        meta, _ = split_front_matter(read_text(q.answer_path))
+    except (FrontMatterError, OSError, UnicodeDecodeError):
+        return None
+    by = meta.get("by") if isinstance(meta, dict) else None
+    return str(by) if by else None
 
 
 def resolve(q: Question, outcome: str, text: str | None, by: str, **extra) -> bool:
