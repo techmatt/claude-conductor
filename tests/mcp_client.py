@@ -3,7 +3,7 @@
     python tests/mcp_client.py <mcp-config.json> '<ask arguments as JSON>'
 
 Starts the server named in the config, initializes, lists tools, calls `ask` and prints
-the result text. The fake executor uses `call_ask` for its `FAKE ask` lines.
+the result text. The fake executor uses `call_tool` for its `FAKE ask` and `FAKE progress` lines.
 """
 
 import json
@@ -47,15 +47,19 @@ class Client:
         self.proc.wait(timeout=10)
 
 
-def call_ask(mcp_config: Path, arguments: dict) -> tuple[str, bool]:
+def call_tool(mcp_config: Path, name: str, arguments: dict) -> tuple[str, bool]:
     c = Client(mcp_config)
     try:
         tools = c.start()
-        assert [t["name"] for t in tools] == ["ask"], tools
-        result = c.request("tools/call", {"name": "ask", "arguments": arguments})
+        assert [t["name"] for t in tools] == ["ask", "progress"], tools
+        result = c.request("tools/call", {"name": name, "arguments": arguments})
         return result["content"][0]["text"], result.get("isError", False)
     finally:
         c.close()
+
+
+def call_ask(mcp_config: Path, arguments: dict) -> tuple[str, bool]:
+    return call_tool(mcp_config, "ask", arguments)
 
 
 if __name__ == "__main__":

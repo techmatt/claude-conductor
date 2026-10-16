@@ -9,6 +9,17 @@ from .state import View, decide
 from .util import clock, now
 
 
+def progress_line(ev: Event) -> str:
+    """A `progress` event as one line: `note (ETA 5:40pm, 3 done, 4 to go)`."""
+    d = ev.detail
+    bits = [f"ETA {d['eta']}"] if d.get("eta") else []
+    if d.get("done") is not None:
+        bits.append(f"{d['done']:g} done")
+    if d.get("remaining") is not None:
+        bits.append(f"{d['remaining']:g} to go")
+    return str(d.get("note", "")) + (f" ({', '.join(bits)})" if bits else "")
+
+
 def describe(ev: Event) -> str:
     """One line for an event, used by the inbox and `conductor events`."""
     d = ev.detail
@@ -22,6 +33,13 @@ def describe(ev: Event) -> str:
                 text += f" · blocks: {d['blocks']}"
             if d.get("carry") not in (None, "none"):
                 text += f" · carry: {d['carry']}"
+        case "progress":
+            text = f"{who} progress: {progress_line(ev)}"
+        case "tell":
+            text = f"message #{ev.id} for {who}: {d.get('text')}"
+        case "delivered":
+            waited = f" after {d['waited_seconds']}s" if d.get("waited_seconds") is not None else ""
+            text = f"{who} got message #{d.get('tell')}{waited} (via {d.get('via')})"
         case "reviewed":
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
         case "red":
@@ -151,7 +169,7 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
              and not (e.kind == "ask" and e.detail.get("question") in open_ids)]
     changes += [e for e in events if e.kind == "merge"]
     other = [e for e in events if e not in red + holds + finished + changes + asked
-             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree")]
+             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress")]
 
     out = [f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
@@ -188,8 +206,14 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     for repo in cfg.repos:
         d = decisions[repo]
         queued = [i.name for i in view.queued.get(repo, [])]
-        running = [rec["name"] + (" (merging)" if rec.get("phase") == "merge" else "")
-                   for rec in view.running.values() if rec["repo"] == repo]
+        running = []
+        for item_id, rec in view.running.items():
+            if rec["repo"] != repo:
+                continue
+            text = rec["name"] + (" (merging)" if rec.get("phase") == "merge" else "")
+            if rec.get("phase", "exec") == "exec" and (p := log.last("progress", item=item_id)):
+                text += f" — {progress_line(p)}, at {clock(p.ts)}"
+            running.append(text)
         staged = [f"{rec['name']} ({rec.get('phase')})" for rec in view.staged.values() if rec["repo"] == repo]
         parts = []
         if running:

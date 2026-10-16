@@ -3,9 +3,11 @@
 
     python -m conductor.ask_server --control <folder> --item <repo/NNN_name> --default-minutes 10
 
-One tool, `ask(question, options?, default?, block?)`. A call writes the question file,
-then holds the tool call open until the question resolves: an answer file appears, or
-(with a default and `block` false) the default deadline passes. JSON-RPC 2.0 over
+Two tools. `ask(question, options?, default?, block?)` writes the question file, then
+holds the tool call open until the question resolves: an answer file appears, or (with
+a default and `block` false) the default deadline passes. `progress(note, eta?, done?,
+remaining?)` appends a progress line (`talk.record_progress`) and returns at once, with
+any message waiting for the executor that the PostToolUse hook has not delivered yet. JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
 `notifications/cancelled` are still served while one waits.
 """
@@ -20,7 +22,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import questions
+from . import questions, talk
 
 POLL_SECONDS = 1.0
 # Claude Code aborts a tool call that sends no response or progress for 30 minutes
@@ -28,6 +30,7 @@ POLL_SECONDS = 1.0
 PROGRESS_SECONDS = 60.0
 SERVER_NAME = "conductor"
 TOOL_NAME = "ask"
+PROGRESS_NAME = "progress"
 
 TOOL = {
     "name": TOOL_NAME,
@@ -49,6 +52,26 @@ TOOL = {
             "block": {"type": "boolean", "description": "Wait until answered instead of falling back to the default.", "default": False},
         },
         "required": ["question"],
+    },
+}
+
+PROGRESS_TOOL = {
+    "name": PROGRESS_NAME,
+    "description": (
+        "Tell Matt how this item is going, in one short line; returns at once. Call it at "
+        "the start (with a first `eta` as soon as you can estimate one), at real milestones, "
+        "and whenever your estimate changes materially; never as chatter. Also the way to "
+        "answer a message Matt sent you while you work."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "note": {"type": "string", "description": "What is happening, one line."},
+            "eta": {"type": "string", "description": "When you expect to finish: a clock time (5:40pm) or a duration (25m)."},
+            "done": {"type": "number", "description": "Units done so far, when the work has countable units."},
+            "remaining": {"type": "number", "description": "Units still to do."},
+        },
+        "required": ["note"],
     },
 }
 
@@ -83,7 +106,13 @@ class Server:
                 "serverInfo": {"name": SERVER_NAME, "version": "1"},
             })
         elif method == "tools/list":
-            self.reply(mid, {"tools": [TOOL]})
+            self.reply(mid, {"tools": [TOOL, PROGRESS_TOOL]})
+        elif method == "tools/call" and params.get("name") == PROGRESS_NAME:
+            try:
+                text, is_error = self.progress(params.get("arguments") or {})
+            except Exception as exc:      # never leave a call hanging on a bug
+                text, is_error = f"progress failed: {exc}", True
+            self.reply(mid, {"content": [{"type": "text", "text": text}], "isError": is_error})
         elif method == "tools/call":
             if params.get("name") != TOOL_NAME:
                 self.error(mid, -32602, f"unknown tool {params.get('name')!r}")
@@ -111,7 +140,25 @@ class Server:
         if text is not None:
             self.reply(mid, {"content": [{"type": "text", "text": text}], "isError": is_error})
 
-    # ------------------------------------------------------------- the tool
+    # ------------------------------------------------------------- the tools
+    def progress(self, args: dict) -> tuple[str, bool]:
+        note = args.get("note")
+        if not isinstance(note, str) or not note.strip():
+            return "`note` must be a non-empty string", True
+        entry = {"note": " ".join(note.split())[:500]}
+        if args.get("eta") not in (None, ""):
+            entry["eta"] = str(args["eta"]).strip()[:80]
+        for key in ("done", "remaining"):
+            if args.get(key) is not None:
+                if isinstance(args[key], bool) or not isinstance(args[key], (int, float)):
+                    return f"`{key}` must be a number", True
+                entry[key] = args[key]
+        talk.record_progress(self.control, self.item, entry)
+        text = "Logged; carry on."
+        if messages := talk.take(self.control, self.item, "progress"):
+            text += "\n\n" + talk.context_text(messages)
+        return text, False
+
     def ask(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
         question = args.get("question")
         if not isinstance(question, str) or not question.strip():

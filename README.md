@@ -19,6 +19,8 @@ uv run conductor inbox  [<control folder>]
 uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--kind K] [--paths]
 uv run conductor questions [<control folder>] [--all]      # open asks (--all: resolved too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
+uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
+uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
 uv run conductor app [<control folder> …]                  # the desktop app (see The app)
 ```
@@ -50,15 +52,17 @@ running/<repo>/NNN_name.stage.json   a staged queue head (the item itself stays 
 done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
-                               .setup.log, and .stage.log / .stage.prompt.md for a stage
+                               .mcp.json, .settings.json, .setup.log, and .stage.log /
+                               .stage.prompt.md for a stage
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, stop
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
 .conductor/                    daemon lock (daemon.json), guard snapshot, cancelled/ (kept
                                cancelled items), reorder.json and signal.json (crash journals),
-                               daemon.out.log (a daemon started by the app)
+                               daemon.out.log (a daemon started by the app), progress/ and
+                               mail/ (progress lines, messages to executors: see *Progress and messages*)
 ```
 
 Conductor creates the runtime folders on start and logs a `warning` event if any of
@@ -265,7 +269,7 @@ Each item runs as
 
 ```
 claude -p --dangerously-skip-permissions --output-format stream-json --verbose --session-id <uuid>
-       --mcp-config reports/<repo>__NNN_name.mcp.json
+       --mcp-config reports/<repo>__NNN_name.mcp.json --settings reports/<repo>__NNN_name.settings.json
 ```
 
 with cwd = the item's worktree (the repo itself when `worktrees = false`) and the
@@ -276,14 +280,19 @@ worktree, its branch and cut point, shared folders, the commit rule) and any dec
 `paths`; gives the asking
 rule (ask only when a wrong guess would waste real work or be hard to undo, give a
 default whenever one exists, block only when every default is worse than waiting;
-everything else is a branch); the time limit and kill time; the **absolute report
+everything else is a branch); the progress rule (a `progress` line at the start, with a
+first ETA once it can estimate, at real milestones, and when the estimate changes
+materially; not chatter); that a message from Matt may arrive after a tool call,
+outranks the prompt where they conflict, and is answered through `progress`; the time limit and kill time; the **absolute report
 path** (the only file the executor may write outside its repo); the report header and
 what each status means; and that the final message ends `Report written to <path>`.
 The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
 
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
 (`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …`);
-its one tool is `ask` (see *Questions*).
+its tools are `ask` (see *Questions*) and `progress` (see *Progress and messages*). The
+`--settings` file holds one PostToolUse hook, the message hook (same section). A stage
+gets neither file.
 
 **Long tool calls.** Claude Code (2.1.301) aborts an MCP tool call that sends no
 response or progress for 1800s ("sent no response or progress for 1800s; aborting"),
@@ -381,6 +390,59 @@ read mark says, each with the answer file to write. `conductor questions` lists 
 `conductor answer` takes the full id or an unambiguous short form (`012_ask_block__1`,
 `012__1`).
 
+## Progress and messages
+
+**Progress.** The executor's second tool, `progress` (`mcp__conductor__progress`):
+
+```
+progress(note, eta?, done?, remaining?)     # eta: free text (5:40pm, 25m); done/remaining: numbers
+```
+
+It returns at once (`Logged; carry on.`). The ask server appends a line (`seq`, `at`,
+`note` — whitespace collapsed, 500 chars — and the rest) to
+`.conductor/progress/<repo>__<NNN_name>.jsonl`; the daemon logs one `progress` event
+per new line (`seq` dedupes across restarts). The latest line of a running item shows
+in the inbox's *Now*, `conductor status`, the app's Repos tab and the Activity view;
+`progress` events are left out of the inbox's *Other* section.
+
+**Messages.** `tell: <item> <message>` is a signal verb (the app's **Tell…**, `conductor
+tell` — which writes `signals/cli-….signal` with `by: cli` — and the planner all use
+it). The message is the rest of the line, ` # ` included (it is not a comment there);
+the app joins a multi-line message with ` / `. It applies only to an executing item
+(`running/`, phase `exec`, process not exited): a queued or staged item is refused as
+not started, a merging or finished one as exited, an unknown one as no running item.
+The daemon logs `tell` (text, by) and writes `.conductor/mail/<repo>__<NNN_name>/<tell
+id>.json`.
+
+Delivery is a Claude Code **PostToolUse hook**. The executor's `--settings` file
+(`reports/<repo>__NNN_name.settings.json`) names one hook on every tool (`matcher: ""`):
+`<python> -m conductor.talk hook --control … --item …` (the `command` + `args` form, so
+no shell quoting; 15s timeout). After each tool call it claims every waiting message
+by renaming `<id>.json` → `<id>.delivered.json` and prints
+`{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": …}}`:
+`MESSAGE #<id> from Matt via <by> …`, the text, and that it is an instruction from
+Matt that wins over the prompt and is answered with `progress`. With no mail it prints
+nothing. A `progress` call also hands over any message still waiting (the rename makes
+either path deliver it once). The daemon logs `delivered` (tell, via `hook` or
+`progress`, text, waited_seconds). An item that exits with messages still waiting has
+them renamed `.undelivered.json`, and a `warning` names each.
+
+Proven with Claude Code 2.1.301 headless (`-p`, stream-json): a message sent while a
+real executor worked through a run of `sleep 25` Bash calls reached it after the call
+in progress, and it changed course (see `reports/07_heads_report.md`). **Limits:** a
+message arrives only after a tool call ends, so not during one long command, not while
+a blocking `ask` waits, and never once the executor has made its last tool call (then
+it is undelivered). The injected context is not written to the stream-json log; the
+`delivered` event is the record. The user's own `~/.claude/settings.json` hooks still
+run beside it (`--settings` adds to them).
+
+**Open a finished session.** `conductor open <item>` (and **Open in terminal** in the
+app) opens a new console window running `<executor command> --resume <session id>`
+(the session id from the item's `finish` event) in the item's worktree while it exists,
+else the repo's main checkout: `--resume` finds a session from any folder. Refused
+while the item is running or staged (resuming a live session forks it). Windows only;
+elsewhere the error prints the command to run.
+
 ## Toasts
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
@@ -457,7 +519,7 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read, clear, approve, cancel, reorder, reviewed, stop
+## Signals: read, clear, approve, cancel, reorder, reviewed, tell, stop
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -472,6 +534,7 @@ approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
 reviewed: sandbox/003        # the planner has acted on that finished item's report
+tell: sandbox/005 use sqlite # a message to running sandbox/005 (see Progress and messages)
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
 
@@ -514,6 +577,7 @@ value is ignored.
   `reviewed` event names it), so it survives restarts, and it is independent of the
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
   waits on the read mark. Several `reviewed:` lines may share a file.
+- **tell** — `tell: <item> <message>`: see *Progress and messages*.
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
   (`reason: signal`), releases its lock and exits. Executors and stages keep running;
   the next start adopts them.
@@ -578,7 +642,7 @@ moment (database busy) counts as no change, and only a log with fewer events tha
 refreshes, and each panel refreshes on its own, so one bad file cannot freeze the rest.
 On Windows its reads can briefly block the daemon's renames; the daemon retries those
 (`util.retry_io`, up to 3s). It never moves a queue file. Its only writes are signal files, answer
-files, its own settings, and starting the daemon.
+files, its own settings, starting the daemon, and opening a console on a finished session.
 
 **Header.** The project's state, whether its daemon is alive (`.conductor/daemon.json`,
 pid + creation time), and a count of the app's signals still waiting in `signals/` (or
@@ -606,6 +670,11 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
   unreviewed row has **Mark reviewed** (`reviewed: <repo>/<NNN_name>`, `by: app`; the
   button disables once clicked and the row turns *reviewed* when the daemon logs it).
   The tab label reads *Repos (N unreviewed)*, in amber, while any report is unreviewed.
+  A running item's note shows its latest progress line (note, ETA, done / to go, and
+  when it was sent); while it executes it has **Tell…**, a text box whose message goes
+  out as a `tell:` signal (`by: app`). Every finished row has **Open in terminal**
+  (`claude --resume`, see *Progress and messages*), beside **Mark reviewed** while
+  unreviewed.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
@@ -615,7 +684,8 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
   first. Question files are re-parsed only when they or their result change.
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
-  `report X reviewed`, questions asked / answered / default taken (and late answers and
+  `report X reviewed`, `X: <progress line>`, `message #n to X: …` and `message #n
+  reached X`, questions asked / answered / default taken (and late answers and
   closes), approved, cancelled, reordered, cleared, `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
   or `invalid` event whatever its kind. A `finish` is the *report written* line, not a
@@ -640,7 +710,9 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
   `.conductor/cancelled/` (the `cancel` event's `kept`). Keys: ↑/↓, PgUp/PgDn,
   Home/End move (the trail follows after a 120ms pause); Ctrl+F item filter (Enter
   returns to the list); Ctrl+R reds only; Ctrl+L the list; Alt+1…6 the trail tabs.
-  Double-clicking an item in any other panel opens its trail here.
+  Double-clicking an item in any other panel opens its trail here. The trail's
+  **Open in terminal** is enabled for an item that has finished (and is not queued or
+  running again).
 - *Proposed* — `proposed/*.md` with its repo, first line and any problem (bad
   front-matter, unknown repo); **Approve** (`approve: NNN_name`; enabled only for a
   selected item without problems), **Cancel** (asks
@@ -705,6 +777,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through / repo |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
+| `progress` | the executor called `progress` | seq, at, note, eta, done, remaining |
+| `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id) | text, by |
+| `delivered` | the message reached the executor | tell, via (`hook`/`progress`), text, waited_seconds |
 | `approve` | a `proposed/` item moved into its queue | item, from |
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |

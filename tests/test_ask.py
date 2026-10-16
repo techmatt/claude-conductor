@@ -3,7 +3,7 @@ import sys
 import time
 from datetime import datetime
 
-from conductor import cli, config, procs, questions, scaffold
+from conductor import cli, config, procs, questions, scaffold, talk
 from conductor.daemon import Daemon
 
 from pathlib import Path
@@ -102,14 +102,25 @@ def test_ask_server_protocol(env, tmp_path):
         encoding="utf-8")
     c = Client(cfg)
     try:
-        [tool] = c.start()
+        tool, prog = c.start()
         assert tool["name"] == "ask" and tool["inputSchema"]["required"] == ["question"]
+        assert prog["name"] == "progress" and prog["inputSchema"]["required"] == ["note"]
         bad = c.request("tools/call", {"name": "ask", "arguments": {"question": ""}})
         assert bad["isError"]
         assert c.request("ping") == {}
+        # progress returns at once, and hands over a message the hook has not delivered.
+        assert c.request("tools/call", {"name": "progress", "arguments": {"note": "x", "done": "two"}})["isError"]
+        talk.post(env.control, "code/009_x", 41, "use sqlite", "app")
+        got = c.request("tools/call", {"name": "progress", "arguments": {"note": "  reading   the code ",
+                                                                         "eta": "25m", "done": 1, "remaining": 3}})
+        text = got["content"][0]["text"]
+        assert not got["isError"] and text.startswith("Logged") and "MESSAGE #41" in text and "use sqlite" in text
     finally:
         c.close()
     assert not questions.scan(env.control)
+    [line] = talk.read_progress(env.control, "code/009_x")
+    assert (line["seq"], line["note"], line["eta"], line["done"], line["remaining"]) == (1, "reading the code", "25m", 1, 3)
+    assert talk.delivered(env.control)[0]["via"] == "progress"
 
 
 def test_ask_server_sends_progress_while_waiting(env, monkeypatch):

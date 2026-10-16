@@ -78,6 +78,16 @@ def spawn_daemon(control: Path, log: Path) -> subprocess.Popen:
     raise AssertionError("unreachable")
 
 
+def open_console(argv: list[str], cwd: Path) -> subprocess.Popen:
+    """Run `argv` in a new, visible console window (an interactive `claude --resume`).
+    Windows only: elsewhere there is no one terminal to ask for."""
+    if not WINDOWS:
+        raise OSError(f"opening a terminal is implemented for Windows only; run it yourself: "
+                      f"cd {cwd} && {subprocess.list2cmdline(argv)}")
+    return subprocess.Popen(argv, cwd=str(cwd), env=child_env(),
+                            creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP)
+
+
 def link_dir(target: Path, link: Path) -> None:
     """A directory link at `link` → `target`: a junction on Windows (no privilege
     needed), a symlink elsewhere."""

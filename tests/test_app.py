@@ -506,7 +506,7 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
     win.refresh()
     assert view.tabs.tabText(0) == "Repos"
     row = panel._rows[("done", "code/001_x")]
-    assert row.text(1) == "done · reviewed" and panel.tree.itemWidget(row, 4) is None
+    assert row.text(1) == "done · reviewed" and set(panel.tree.itemWidget(row, 4).buttons) == {"Open in terminal"}
     # Events: Activity by default; Advanced shows every kind.
     ev = view.events_panel
     assert not ev.advanced.isChecked()
@@ -514,5 +514,41 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
     assert "worktree" not in activity and {"start", "finish", "reviewed"} <= activity
     ev.advanced.setChecked(True)
     assert "worktree" in {e.kind for e in ev.model.rows}
+    win._quitting = True
+    win.close()
+
+
+def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, monkeypatch):
+    from conductor import procs
+    from conductor.app import panels
+    from conductor.app.window import MainWindow
+    env.queue("001_x", 'FAKE progress {"note": "reading", "eta": "5m"}\nFAKE until-message 30')
+    env.tick_until(lambda: env.events("progress"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    repos = view.repos_panel
+    row = repos._rows[("run", "code/001_x")]
+    assert row.text(3).startswith("reading (ETA 5m) · ")
+    tell = repos.tree.itemWidget(row, 4).button
+    assert tell.text() == "Tell…"
+    monkeypatch.setattr(panels.QInputDialog, "getMultiLineText", lambda *a, **k: ("finish now\nplease", True))
+    tell.click()
+    env.tick_until(lambda: env.finished("code/001_x"))
+    assert env.events("tell")[0].detail["text"] == "finish now / please"
+    assert env.events("delivered")
+    win.refresh()
+    holder = repos.tree.itemWidget(repos._rows[("done", "code/001_x")], 4)
+    assert set(holder.buttons) == {"Mark reviewed", "Open in terminal"}
+    opened = []
+    monkeypatch.setattr(procs, "open_console", lambda argv, cwd: opened.append((argv, cwd)))
+    holder.buttons["Open in terminal"].click()
+    sid = env.finished("code/001_x").detail["session_id"]
+    assert opened and opened[0][0][-2:] == ["--resume", sid]
+    view.open_item("code/001_x")
+    trail = view.events_panel.trail
+    assert trail.open_btn.isEnabled() and trail.session_id() == sid
+    trail.show_event(env.events("daemon_start")[0])         # not an item: nothing to open
+    assert not trail.open_btn.isEnabled()
     win._quitting = True
     win.close()

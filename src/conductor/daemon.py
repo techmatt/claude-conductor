@@ -23,7 +23,7 @@ from pathlib import Path
 import psutil
 
 from . import config as config_mod
-from . import executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, worktrees
+from . import executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, talk, worktrees
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, now, parse_stamp, read_text, retry_io, stamp, write_text
@@ -102,6 +102,9 @@ class Daemon:
         self.enqueued = self._live_enqueued()
         self.holds = {e.item: e.detail.get("reason") for e in self.log.query(kinds=["hold"])}
         self.q_seen = {(e.kind, e.detail.get("question")) for e in self.log.query(kinds=QUESTION_KINDS)}
+        self.progress_seen = {(e.item, e.detail.get("seq")) for e in self.log.query(kinds=["progress"])}
+        self.delivered_seen = {e.detail.get("tell") for e in self.log.query(kinds=["delivered"])}
+        self._progress_sizes: dict[str, int] = {}
         self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
         self._inbox_key: tuple | None = None
@@ -246,6 +249,7 @@ class Daemon:
             return                  # `stop: daemon`: nothing more starts; run_forever exits
         self.process_requests()
         self.process_questions()
+        self.process_talk()
         self.check_stages()
         self.check_runs()
         self.process_merges()
@@ -463,7 +467,9 @@ class Daemon:
             if not s or s.startswith("#"):
                 continue
             key, sep, value = s.partition(":")
-            key, value = key.strip().lower(), _strip_comment(value)
+            key = key.strip().lower()
+            # A message is free text: a ` # ` in it is part of it, not a comment.
+            value = value.strip() if key == "tell" else _strip_comment(value)
             if not sep or not key:
                 raise ValueError(f"line {n}: expected `key: value`, got {s!r}")
             if key == "by":
@@ -481,6 +487,9 @@ class Daemon:
                 parts = value.split()
                 if len(parts) < 2 or (parts[0] != "proposed" and parts[0] not in self.cfg.repos):
                     raise ValueError(f"line {n}: reorder: expects `<repo|proposed> <item> <item> ...`, got {value!r}")
+            elif key == "tell":
+                if len(value.split(None, 1)) != 2:
+                    raise ValueError(f"line {n}: tell: expects `<item> <message>`, got {value!r}")
             elif key == "stop":
                 if value.lower() != "daemon":
                     raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
@@ -506,6 +515,8 @@ class Daemon:
             self._cancel(value, rel)
         elif key == "reviewed":
             self._reviewed(value, rel)
+        elif key == "tell":
+            self._tell(value, rel)
         elif key == "reorder":
             where, *refs = value.split()
             self._reorder(where, refs, rel)
@@ -598,6 +609,31 @@ class Daemon:
         fin = view.finishes[item_id]
         self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
                         status=fin.detail.get("status"), by=self._by or "unknown")
+
+    def _tell(self, value: str, rel: str) -> None:
+        """A message for a running executor: logged `tell`, then left in its mailbox for
+        the PostToolUse hook (or its next `progress` call) to deliver."""
+        ref, text = value.split(None, 1)
+        prefix, slash, name_ref = ref.rpartition("/")
+        if slash and prefix not in self.cfg.repos:
+            raise ValueError(f"tell: {prefix!r} is not a repo")
+        repos = [prefix] if slash else list(self.cfg.repos)
+        hits = [f"{r}/{p.stem}" for r in repos if (p := self._running_file(r, name_ref))]
+        if len(hits) > 1:
+            raise ValueError(f"tell: {ref!r} is ambiguous: {hits}")
+        run = self.runs.get(hits[0]) if hits else None
+        if run is None or run.rec.get("phase", "exec") != "exec" or run.exited():
+            view = state.scan(self.cfg, self.log)
+            ids = [i for i in [*view.finishes, *view.running, *(it.id for q in view.queued.values() for it in q)]
+                   if i.split("/", 1)[0] in repos and items.number_matches(i.split("/", 1)[1], name_ref)]
+            if not ids:
+                raise ValueError(f"tell: no running item {ref!r}")
+            started = ids[0] in view.finishes or ids[0] in view.running
+            raise ValueError(f"tell: {ids[0]} " + ("has exited; a message reaches only a running executor"
+                                                   if started else "has not started; a message reaches only a running executor"))
+        item_id = hits[0]
+        ev = self.log.append("tell", item=item_id, paths=[rel], text=text, by=self._by or "unknown")
+        talk.post(self.cfg.control, item_id, ev.id, text, self._by)
 
     def _cancel_file(self, src: Path, origin: str, item_id: str, repo: str, rel: str) -> None:
         cdir = self.cfg.state_dir / "cancelled"
@@ -861,6 +897,32 @@ class Daemon:
                                 note="answered after the question resolved; the executor never saw it")
         self.blocked = blocked
 
+    def process_talk(self) -> None:
+        """Log what the executors' progress tool and message hook wrote: one `progress`
+        per new progress line, one `delivered` per delivered message."""
+        control = self.cfg.control
+        for item_id in talk.progress_items(control):
+            path = talk.progress_file(control, item_id)
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
+            if self._progress_sizes.get(item_id) == size:
+                continue
+            self._progress_sizes[item_id] = size
+            for line in talk.read_progress(control, item_id):
+                if (item_id, line["seq"]) in self.progress_seen:
+                    continue
+                self.progress_seen.add((item_id, line["seq"]))
+                self.log.append("progress", item=item_id, paths=[self.cfg.rel(path)],
+                                **{k: v for k, v in line.items() if k in ("seq", "at", "note", "eta", "done", "remaining")})
+        for msg in talk.delivered(control):
+            if msg.get("id") in self.delivered_seen:
+                continue
+            self.delivered_seen.add(msg.get("id"))
+            self.log.append("delivered", item=msg.get("item"), tell=msg.get("id"), via=msg.get("via"),
+                            text=msg.get("text"), waited_seconds=talk.waited(msg))
+
     def _q_log(self, kind: str, q: questions.Question, paths: list[str], **detail) -> None:
         self.q_seen.add((kind, q.id))
         self.log.append(kind, item=q.item, paths=paths, question=q.id, **detail)
@@ -1017,8 +1079,10 @@ class Daemon:
             return
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
+        write_text(paths.settings, executor.hook_settings(cfg, item))
         try:
-            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage)),
+            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
+                                                     settings=paths.settings),
                                     cwd, paths.prompt, paths.log, paths.stderr)
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
@@ -1301,6 +1365,10 @@ class Daemon:
             extra["merged"] = out["merged"]
         # `red` before `finish`: a restart that finds the finish logged only moves the
         # item, so the red hold must already be on record.
+        self.process_talk()
+        for msg in talk.set_aside(cfg.control, item_id):
+            self.log.append("warning", item=item_id, tell=msg.get("id"),
+                            note=f"message #{msg.get('id')} was never delivered: the executor exited first")
         if out["status"] == "red":
             self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
                             reasons=out["reasons"], after_red=rec.get("after_red", "stop"))

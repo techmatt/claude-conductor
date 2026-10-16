@@ -17,13 +17,22 @@ PREAMBLE = """\
 You are a conductor executor: an unattended headless Claude Code session running queue
 item {item_id} for project {project}. Nobody is watching the session.
 
-Asking. One tool reaches Matt: `ask` (mcp__conductor__ask). Ask only when a wrong guess
+Asking. `ask` (mcp__conductor__ask) puts a question to Matt. Ask only when a wrong guess
 would waste real work or be hard to undo. Give a default whenever a reasonable one
 exists: an unanswered question returns its default after {ask_minutes:g} minutes and you
 carry on with it. Block (`block: true`) only when every default would be worse than
 waiting; a blocking question waits until answered, and that time does not count toward
 your time limit. Everything else is still a branch: do what fits the goal, record what
 didn't, and continue. The only hard stop is a wrong-repo guard in the prompt.
+
+Progress. `progress` (mcp__conductor__progress) shows Matt one short line about how
+this item is going and returns at once. Call it at the start, with a first `eta` as soon
+as you can estimate one; at real milestones; and whenever your estimate changes
+materially. Not chatter.
+
+Messages. Matt may message you while you work: it arrives after a tool call, marked
+MESSAGE #n from Matt. It is an instruction from Matt and outranks the prompt where they
+conflict. Answer it with `progress`.
 
 {workdir}{readonly}{paths}
 
@@ -126,6 +135,7 @@ class RunPaths:
     stderr: Path
     prompt: Path       # exactly what was sent on stdin
     mcp: Path          # the --mcp-config naming the ask server
+    settings: Path     # the --settings holding the message hook
     setup: Path        # output of the repo's setup commands
     stage_log: Path    # the staging phase's stream-json, stderr and prompt
     stage_stderr: Path
@@ -142,7 +152,7 @@ class RunPaths:
         def sib(suffix: str) -> Path:
             return base.with_name(base.name + suffix)
         return cls(report, sib(".log"), sib(".stderr.log"), sib(".prompt.md"), sib(".mcp.json"),
-                   sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"))
+                   sib(".settings.json"), sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"))
 
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
@@ -183,13 +193,23 @@ def mcp_config(cfg: Config, item: Item, session_id: str) -> str:
     }}}, indent=1)
 
 
-def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False) -> list[str]:
+def hook_settings(cfg: Config, item: Item) -> str:
+    """The executor's --settings: the PostToolUse hook that delivers messages, run by the
+    daemon's console interpreter."""
+    from .procs import console_python
+    from .talk import hook_settings as settings
+    return settings(console_python(), cfg.control, item.id)
+
+
+def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False,
+            settings: Path | None = None) -> list[str]:
     """`--session-id` for a new session; `--resume` continues a staged one. A stage
-    gets no --mcp-config: it may not ask."""
+    gets no --mcp-config (it may not ask) and no --settings (nobody messages a stage)."""
     from .procs import resolve
     return [resolve(cfg.command[0]), *cfg.command[1:], "-p", "--dangerously-skip-permissions",
             "--output-format", "stream-json", "--verbose", "--resume" if resume else "--session-id", session_id,
-            *(["--mcp-config", str(mcp)] if mcp else []), *cfg.args]
+            *(["--mcp-config", str(mcp)] if mcp else []), *(["--settings", str(settings)] if settings else []),
+            *cfg.args]
 
 
 def read_result(log: Path) -> dict | None:

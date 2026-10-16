@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | answer | init`."""
+"""`conductor run | status | inbox | events | questions | answer | tell | open | init | app`."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 from . import config as config_mod
-from . import questions, state
+from . import items, questions, state
 from .events import EventLog
-from .inbox import describe, render
+from .inbox import describe, progress_line, render
 from .util import clock, duration, now, parse_since, parse_stamp
 
 
@@ -66,6 +66,8 @@ def cmd_status(args) -> int:
             kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
                     else f"kill at {clock(rec['deadline'])}")
             print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}, {kill}")
+            if p := log.last("progress", item=item_id):
+                print(f"           progress {clock(p.ts)}: {progress_line(p)}")
         for item_id, rec in view.staged.items():
             if rec["repo"] == repo:
                 age = (now() - parse_stamp(rec["started"])).total_seconds()
@@ -124,6 +126,56 @@ def cmd_answer(args) -> int:
         print(f"answered {q.id}; the executor gets it within a few seconds")
     else:
         print(f"{q.id} was already {q.result.get('outcome')}; the answer is logged as late and changes nothing")
+    return 0
+
+
+def _named(ids, ref: str) -> list[str]:
+    """The ids `ref` names: `repo/NNN_name`, `repo/NNN`, `NNN_name` or `NNN`."""
+    repo, slash, name = ref.rpartition("/")
+    return [i for i in ids if (not slash or i.split("/", 1)[0] == repo)
+            and items.number_matches(i.split("/", 1)[1], name)]
+
+
+def cmd_tell(args) -> int:
+    from .app import actions             # Qt-free: the app's signal writer
+    cfg, log = _open(args.control)
+    view = state.scan(cfg, log)
+    hits = _named([i for i, rec in view.running.items() if rec.get("phase", "exec") == "exec"], args.item)
+    if len(hits) != 1:
+        what = "no running item" if not hits else f"{args.item!r} is ambiguous among"
+        print(f"conductor: {what} {args.item!r}" if not hits else f"conductor: {what} {hits}", file=sys.stderr)
+        return 1
+    try:
+        path = actions.tell(cfg.control, hits[0], " ".join(args.text), by="cli")
+    except ValueError as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+    print(f"wrote signals/{path.name}: the daemon logs `tell`, and the executor gets the message "
+          "after its next tool call (`delivered`)")
+    return 0
+
+
+def cmd_open(args) -> int:
+    from .app import actions
+    cfg, log = _open(args.control)
+    view = state.scan(cfg, log)
+    hits = _named(view.finishes, args.item)
+    live = _named([*view.running, *view.staged], args.item)
+    if live or len(hits) != 1:
+        why = (f"{live[0]} is running or staged; resuming a live session would fork it" if live
+               else f"no finished item {args.item!r}" if not hits else f"{args.item!r} is ambiguous among {hits}")
+        print(f"conductor: {why}", file=sys.stderr)
+        return 1
+    sid = view.finishes[hits[0]].detail.get("session_id")
+    if not sid:
+        print(f"conductor: {hits[0]}'s finish event names no session", file=sys.stderr)
+        return 1
+    try:
+        cwd, argv = actions.open_session(cfg, hits[0], sid)
+    except OSError as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+    print(f"opened a console in {cwd}: {' '.join(argv)}")
     return 0
 
 
@@ -198,6 +250,15 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("text", nargs="+", help="the answer")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_answer)
+    sp = sub.add_parser("tell", help="send a message to a running executor")
+    sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
+    sp.add_argument("text", nargs="+", help="the message")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_tell)
+    sp = sub.add_parser("open", help="open a finished item's session in a new console (claude --resume)")
+    sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_open)
     sp = sub.add_parser("init", help="create a new control folder and commit it")
     sp.add_argument("folder")
     sp.add_argument("--project", required=True)

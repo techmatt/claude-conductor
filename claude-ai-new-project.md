@@ -22,7 +22,7 @@ C:\Code\<project>-control\        git; the planner's world
   reports\<repo>__NNN_name.md      executor reports
   questions\                       open asks and their answers
   requests\                        planner → conductor (apply + commit)
-  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, stop
+  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, stop
   inbox.md                         generated digest since the planner's last read
   events.db                        append-only event log (SQLite)
 C:\Code\<repo>\                    code repos; executors work here
@@ -93,6 +93,12 @@ An executor's `ask` lands in `questions\<repo>__<NNN_name>__<n>.md`. It leads th
 - An answer written after the default was taken is logged `late` and changes nothing. If the late answer matters, the fix is a new queue item.
 - A blocking question holds its executor for as long as it stays open, and that time doesn't count toward `max_hours`. A blocking question is the first thing to raise when Matt opens a session.
 
+## Progress and messages
+
+Every executor posts short **progress lines** with an ETA: at its start, at real milestones, and whenever its estimate changes. The latest one for each running item shows in `inbox.md` (*Now*), in `conductor status`, and in the app; the full run of them is in `events.db` (`progress` events). "ETA on X?" is answered from X's latest progress line and when it was sent, never from a guess.
+
+Matt or the planner can **message a running executor**: signal `tell: <repo>/<NNN_name> <message>` (one line; `by: planner`). The executor gets it after its next tool call, treats it as an instruction from Matt that outranks the prompt, and answers through a progress line. A message to an item that isn't running is refused. It can't reach an executor in the middle of one long command or one waiting on a blocking question until that ends, and one sent after its last tool call is never delivered (the inbox shows a warning). A correction to work already finished is still a new queue item. Matt can also use **Tell…** in the app or `conductor tell <item> <text>`. In the app or with `conductor open <item>`, he can open a finished item's session in a terminal (`claude --resume`) to ask it things.
+
 ## Reading a report
 
 Every CC session that writes a report ends its final message with `Report written to <full path>` (each repo's `CLAUDE.md` carries this; conductor's executor preamble repeats it). Every report opens with a header conductor can parse:
@@ -135,7 +141,9 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **mark reviewed X** | Signal `reviewed: <repo>/<NNN_name>` without processing, e.g. for a report Matt and the planner already went through. Refused if X hasn't finished. |
 | **check questions** | Lists open asks in `questions\` (they also lead `inbox.md`): the asking item, which ones block, and for the others the default and when it is taken. Blocking ones come first. |
 | **answer Q: …** | Writes Matt's words as plain text to `questions\<id>.answer.md` (Q may be the short form, e.g. `012__1`). It is never edited afterwards. Once the default has been taken, says so: the answer will be logged `late` and changes nothing, so if it matters it needs a new queue item. |
-| **queue status** | Every repo: running item and elapsed time, queued items in order, proposed items awaiting approval. |
+| **queue status** | Every repo: running item with its elapsed time and latest progress line (note, ETA, when sent), queued items in order, proposed items awaiting approval. |
+| **ETA on X?** | X's latest progress line from `inbox.md` (*Now*) or its `progress` events: the ETA and when it was given. If X has posted none, says so. |
+| **tell X: …** | Signal `tell: <repo>/<NNN_name> <Matt's words>` (one line, `by: planner`): a message to running item X, delivered after its next tool call. The answer comes back as a progress line; the planner reports it on the next check. Refused if X isn't running. |
 | **show events** [since X / for Y] | Stages `events.db` and queries it: a timeline, filtered by time, repo or item. |
 | **postmortem Y** | Walks item Y's event trail, prompt and report, and says where it went wrong. |
 | **propose** / **enqueue** | Writes a new prompt into `proposed\` (needs approval) or `queue\<repo>\` (Matt approved it here). |

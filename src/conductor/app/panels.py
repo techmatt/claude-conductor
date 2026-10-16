@@ -21,7 +21,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateTimeEdit, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
+    QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
     QSplitter, QStyle, QStyledItemDelegate, QTableView, QTableWidget, QTableWidgetItem, QTabWidget,
     QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -91,19 +91,28 @@ class KeepColourDelegate(QStyledItemDelegate):
 
 
 def compact_button(text: str, slot, tone: str | None = None) -> QWidget:
-    """A small button for a tree cell, centred instead of filling the column."""
+    """A small button for a tree cell, left-aligned instead of filling the column."""
+    return compact_buttons((text, slot, tone))
+
+
+def compact_buttons(*specs: tuple) -> QWidget:
+    """Small buttons side by side for one tree cell: each spec is (text, slot, tone).
+    `holder.buttons` maps text → button; `holder.button` is the first."""
     holder = QWidget()
     lay = QHBoxLayout(holder)
     lay.setContentsMargins(4, 1, 4, 1)
-    b = QPushButton(text)
-    b.setProperty("role", "compact")
-    if tone:
-        b.setProperty("tone", tone)
-    if slot is not None:
-        b.clicked.connect(slot)
-    lay.addWidget(b)
+    holder.buttons = {}
+    for text, slot, tone in specs:
+        b = QPushButton(text)
+        b.setProperty("role", "compact")
+        if tone:
+            b.setProperty("tone", tone)
+        if slot is not None:
+            b.clicked.connect(slot)
+        lay.addWidget(b)
+        holder.buttons[text] = b
     lay.addStretch(1)
-    holder.button = b
+    holder.button = next(iter(holder.buttons.values()))
     return holder
 
 
@@ -136,6 +145,20 @@ def confirm(parent: QWidget, title: str, text: str) -> bool:
     return QMessageBox.question(parent, title, text,
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
+
+
+def open_session(parent: QWidget, project: Project, item_id: str, session_id: str | None) -> None:
+    """Open in terminal: `claude --resume` of a finished item, in a new console."""
+    if not session_id:
+        QMessageBox.warning(parent, "Open in terminal", f"{item_id}'s finish event names no session.")
+        return
+    try:
+        cwd, _ = actions.open_session(project.cfg, item_id, session_id)
+    except OSError as exc:
+        QMessageBox.warning(parent, "Open in terminal", str(exc))
+        return
+    if hasattr(parent, "notify"):
+        parent.notify(f"opened {item_id}'s session ({session_id}) in a new console, in {cwd}")
 
 
 class Panel(QWidget):
@@ -173,7 +196,7 @@ class ReposPanel(Panel):
             h.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        h.resizeSection(4, 140)
+        h.resizeSection(4, 250)
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
@@ -183,6 +206,7 @@ class ReposPanel(Panel):
         lay.addWidget(self.tree)
         self._sig: tuple | None = None
         self._rows: dict[tuple, QTreeWidgetItem] = {}
+        self._sessions: dict[str, str | None] = {}      # finished item → its session id
 
     def _plan(self, snap: Snapshot) -> list[tuple[str, str, str, list[tuple[tuple, list[str], str | None, str]]]]:
         """Per repo: (repo, header note, path, rows of (key, texts, item id, look))."""
@@ -199,8 +223,10 @@ class ReposPanel(Panel):
                 rows.append((("hold", rs.name), ["hold", "held", "", rs.reason], None, "hold"))
             held = bool(rs.red) or rs.action == "hold"
             for a in rs.running:
-                rows.append((("run", a.item), [a.name, a.phase, duration(a.elapsed(at)),
-                                               f"on {a.detail}" if a.detail else ""], a.item, "run"))
+                note = " · ".join(x for x in (a.progress, f"on {a.detail}" if a.detail else "") if x)
+                # Only an executing item takes a message: merging and concluding ones have exited.
+                rows.append((("run", a.item), [a.name, a.phase, duration(a.elapsed(at)), note], a.item,
+                             "run" if a.phase == "running" else "run:after"))
             # A staged item stays in queue/ (it is the head): it gets one row, its queue
             # row, whose state carries the stage too.
             queued_ids = {it.id for it in rs.queued}
@@ -247,6 +273,7 @@ class ReposPanel(Panel):
         return out
 
     def update_snapshot(self, snap: Snapshot) -> None:
+        self._sessions = {f.item: f.session_id for rs in snap.repos for f in rs.finished}
         plan = self._plan(snap)
         sig = tuple((repo, tuple((k, look) for k, _, _, look in rows)) for repo, _, _, rows in plan)
         if sig != self._sig:
@@ -269,7 +296,7 @@ class ReposPanel(Panel):
         bold.setBold(True)
         band = QBrush(QColor(theme.BAND))
         # Per row look: (state-column colour, whole-row colour, row background, bold).
-        looks = {"run": (theme.BLUE, None, None, True), "stage": (theme.TEAL, None, None, True),
+        looks = {"run": (theme.BLUE, None, None, True), "run:after": (theme.BLUE, None, None, True), "stage": (theme.TEAL, None, None, True),
                  "queued": (theme.MUTED, None, None, False), "idle": (theme.MUTED, None, None, False),
                  "blocked": (theme.AMBER, None, None, True),
                  "red": (None, theme.RED, theme.RED_BG, True), "hold": (None, theme.AMBER, theme.AMBER_BG, True),
@@ -310,9 +337,16 @@ class ReposPanel(Panel):
                                                                  tone="danger"))
                 elif key[0] == "queued":
                     self.tree.setItemWidget(w, 4, compact_button("Cancel", lambda _=False, i=key[1]: self._cancel(i)))
-                elif key[0] == "done" and look.endswith(":unreviewed"):
-                    holder = compact_button("Mark reviewed", None)
-                    holder.button.clicked.connect(lambda _=False, i=key[1], b=holder.button: self._reviewed(i, b))
+                elif key[0] == "run" and look == "run":
+                    self.tree.setItemWidget(w, 4, compact_button("Tell…", lambda _=False, i=key[1]: self._tell(i)))
+                elif key[0] == "done":
+                    specs = [("Open in terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
+                    if look.endswith(":unreviewed"):
+                        specs.insert(0, ("Mark reviewed", None, None))
+                    holder = compact_buttons(*specs)
+                    if b := holder.buttons.get("Mark reviewed"):
+                        b.clicked.connect(lambda _=False, i=key[1], b=b: self._reviewed(i, b))
+                    holder.buttons["Open in terminal"].setEnabled(bool(self._sessions.get(key[1])))
                     self.tree.setItemWidget(w, 4, holder)
         self.tree.expandAll()
 
@@ -322,6 +356,17 @@ class ReposPanel(Panel):
 
     def _clear(self, repo: str) -> None:
         self.signal_sent(f"clear {repo}", actions.clear(self.control, repo))
+
+    def _tell(self, item_id: str) -> None:
+        text, ok = QInputDialog.getMultiLineText(
+            self, f"Message to {item_id}",
+            f"Message for the running executor of {item_id}.\nIt arrives after its next tool call; "
+            "it answers through a progress line.")
+        if ok and text.strip():
+            self.signal_sent(f"message to {item_id}", actions.tell(self.control, item_id, text))
+
+    def _open_session(self, item_id: str) -> None:
+        open_session(self, self.project, item_id, self._sessions.get(item_id))
 
     def _reviewed(self, item_id: str, button: QPushButton | None = None) -> None:
         if button is not None:
@@ -651,7 +696,16 @@ class TrailView(QWidget):
         self.title.setWordWrap(True)
         self.title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.title.setStyleSheet(f"font-size: {theme.BASE_POINT_SIZE + 0.5}pt; padding: 2px 0 4px 0")
-        lay.addWidget(self.title)
+        head = QHBoxLayout()
+        head.addWidget(self.title, 1)
+        # A finished item's session, resumed interactively; never a live one (it would fork).
+        self.open_btn = QPushButton("Open in terminal")
+        self.open_btn.setToolTip("claude --resume <session> in a new console: in the item's worktree if it "
+                                 "still exists, else the repo's main checkout")
+        self.open_btn.setEnabled(False)
+        self.open_btn.clicked.connect(self._open_session)
+        head.addWidget(self.open_btn, 0, Qt.AlignmentFlag.AlignTop)
+        lay.addLayout(head)
         self.tabs = QTabWidget()
         self.text: dict[str, QPlainTextEdit | QTextEdit] = {}
         for name in self.TABS:
@@ -695,6 +749,7 @@ class TrailView(QWidget):
             self.show_item(ev.item, focus=ev)
             return
         self.item, self.focus_id, self._trail = None, None, None
+        self.open_btn.setEnabled(False)
         self.title.setText(f"<b>#{ev.id}</b> {clock(ev.ts)} <b>{ev.kind}</b> — not tied to an item")
         self.text["Events"].setPlainText(self._event_text(ev, full=True))
         self._indent()
@@ -722,6 +777,7 @@ class TrailView(QWidget):
         if reds:
             bits.append(f"<b style='color:{theme.RED}'>{len(reds)} red</b>")
         self.title.setText(" · ".join(bits))
+        self.open_btn.setEnabled(self.session_id() is not None)
         self._render_events(center=fresh)
         self._set("Prompt", tr.prompt or "(no prompt file: not launched and not in any queue folder)", fresh)
         self._set("Report", tr.report or "(no report)", fresh)
@@ -838,6 +894,18 @@ class TrailView(QWidget):
                 text += f"\n{pad}paths {', '.join(e.paths)}"
             text += f"\n{pad}" + json.dumps(e.detail, indent=1, ensure_ascii=False).replace("\n", f"\n{pad}")
         return text
+
+    def session_id(self) -> str | None:
+        """The open item's session, once it has finished and is not running or queued again."""
+        tr = self._trail
+        if tr is None or tr.where not in ("done", "gone"):
+            return None
+        fin = next((e for e in reversed(tr.events) if e.kind == "finish"), None)
+        return fin.detail.get("session_id") if fin else None
+
+    def _open_session(self) -> None:
+        if self.item:
+            open_session(self.window(), self.project, self.item, self.session_id())
 
     def _tab_changed(self, index: int) -> None:
         # Git is the one slow part: computed only when its tab is looked at, again only

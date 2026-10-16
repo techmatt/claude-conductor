@@ -19,8 +19,8 @@ from .. import config as config_mod
 from .. import git, items, procs, questions, state
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
-from ..inbox import describe
-from ..util import FrontMatterError, now, parse_stamp, read_text, split_front_matter
+from ..inbox import describe, progress_line
+from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
 
 # Overall state, most urgent first: the tray shows the first that applies anywhere.
 PRIORITY = ("red", "asking", "running", "idle")
@@ -128,6 +128,8 @@ class Activity:
     phase: str                  # running | merging | concluding | staging | staged
     started: str | None
     detail: str = ""
+    progress: str = ""          # the latest `progress` line, with its time
+    session_id: str | None = None
 
     def elapsed(self, at: datetime | None = None) -> float:
         if not self.started:
@@ -144,6 +146,7 @@ class Finished:
     ts: str                     # its `finish` event's time
     reviewed: bool
     carry: str | None = None
+    session_id: str | None = None
 
 
 @dataclass
@@ -217,7 +220,7 @@ def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) ->
     evs = sorted((e for e in view.finishes.values() if e.repo == repo), key=lambda e: e.id, reverse=True)
     shown = [e for n, e in enumerate(evs) if n < recent or e.item not in view.reviews]
     return [Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
-                     e.item in view.reviews, e.detail.get("carry")) for e in shown], len(evs)
+                     e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id")) for e in shown], len(evs)
 
 
 # ---------------------------------------------------------------- Activity
@@ -226,7 +229,7 @@ def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) ->
 # or an invalid event is always activity, whatever its kind.
 ACTIVITY_KINDS = {"start", "finish", "reviewed", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "request", "request_failed",
-                  "daemon_start", "daemon_stop"}
+                  "daemon_start", "daemon_stop", "progress", "tell", "delivered"}
 ALWAYS_KINDS = RED_KINDS | {"warning"}
 
 
@@ -251,6 +254,12 @@ def activity_text(ev: Event) -> str:
             return text
         case "reviewed":
             return f"report {name} reviewed{by}"
+        case "progress":
+            return f"{name}: {progress_line(ev)}"
+        case "tell":
+            return f"message #{ev.id} to {name}{by}: {d.get('text')}"
+        case "delivered":
+            return f"message #{d.get('tell')} reached {name}"
         case "ask":
             how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
             return f"question asked by {name} ({how}): {d.get('text')}"
@@ -390,8 +399,11 @@ class Project:
             rs = RepoState(repo, path, queued=view.queued.get(repo, []), red=view.red_hold.get(repo))
             for rec in view.running.values():
                 if rec.get("repo") == repo:
-                    rs.running.append(Activity(rec.get("item", "?"), rec.get("name", "?"), PHASES.get(rec.get("phase", "exec"), rec.get("phase")),
-                                               rec.get("started"), rec.get("branch") or ""))
+                    a = Activity(rec.get("item", "?"), rec.get("name", "?"), PHASES.get(rec.get("phase", "exec"), rec.get("phase")),
+                                 rec.get("started"), rec.get("branch") or "", session_id=rec.get("session_id"))
+                    if a.phase == "running" and (p := self.log.last("progress", item=a.item)):
+                        a.progress = f"{progress_line(p)} · {clock(p.ts)}"
+                    rs.running.append(a)
             for rec in view.staged.values():
                 if rec.get("repo") == repo:
                     rs.staged.append(Activity(rec.get("item", "?"), rec.get("name", "?"), rec.get("phase", "staging"),
