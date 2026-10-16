@@ -22,7 +22,7 @@ C:\Code\<project>-control\        git; the planner's world
   reports\<repo>__NNN_name.md      executor reports
   questions\                       open asks and their answers
   requests\                        planner → conductor (apply + commit)
-  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, stop
+  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, run, stop
   inbox.md                         generated digest since the planner's last read
   events.db                        append-only event log (SQLite)
 C:\Code\<repo>\                    code repos; executors work here
@@ -47,7 +47,7 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
    It writes the layout, `conductor.toml`, a stub `state.md` and the `.gitignore`, then makes the first commit. It refuses a folder that already has files in it. Matt creates any code repo that doesn't exist yet.
 3. The planner asks for folder access to the control folder and to each repo. Access can only be granted to a folder that exists.
-4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, or `worktrees = false`), as one request. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
+4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, or `worktrees = false`; and a `[run.<name>]` target once there is something to run), as one request. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
    - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
    - "commit to the branch you are on";
    - local 12-hour clock times;
@@ -98,6 +98,10 @@ An executor's `ask` lands in `questions\<repo>__<NNN_name>__<n>.md`. It leads th
 Every executor posts short **progress lines** with an ETA: at its start, at real milestones, and whenever its estimate changes. The latest one for each running item shows in `inbox.md` (*Now*), in `conductor status`, and in the app; the full run of them is in `events.db` (`progress` events). "ETA on X?" is answered from X's latest progress line and when it was sent, never from a guess.
 
 Matt or the planner can **message a running executor**: signal `tell: <repo>/<NNN_name> <message>` (one line; `by: planner`). The executor gets it after its next tool call, treats it as an instruction from Matt that outranks the prompt, and answers through a progress line. A message to an item that isn't running is refused. It can't reach an executor in the middle of one long command or one waiting on a blocking question until that ends, and one sent after its last tool call is never delivered (the inbox shows a warning). A correction to work already finished is still a new queue item. Matt can also use **Tell…** in the app or `conductor tell <item> <text>`. In the app or with `conductor open <item>`, he can open a finished item's session in a terminal (`claude --resume`) to ask it things.
+
+## Run targets
+
+A project's runnable thing (a dev server, the game) is a **run target**: a `[run.<name>]` table in `conductor.toml` with the repo (or folder) it runs in, the server command, the URL to open, and optionally a different URL to wait on and how long to wait (conductor's README, *Run targets*). The planner sets a project's targets through a `conductor.toml` request, with the command and URL the repo's README gives. "run X" is the signal `run: X`. Conductor starts the server if it isn't already answering, waits for it, and opens the URL in Matt's browser. A server that never comes up is a red `run_failed` event carrying the end of its log; the planner reads it and says what broke. `run: X stop` stops it. Matt can also use the app's **Run X** button, which shows whether X is up. Matt never types the commands.
 
 ## Reading a report
 
@@ -151,6 +155,7 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **cancel X** | Signal `cancel: <item>` for a proposed or queued item. Conductor moves the file to `.conductor\cancelled\` (kept, not deleted). A running item cannot be cancelled; a staged one loses its stage. |
 | **reorder R: X Y Z** | Signal `reorder: <repo or proposed> X Y Z`. The listed items swap their own numbers into the listed order; unlisted items keep theirs. Refused if any item is running, if something `depends_on` a renumbered item, if a renumbered item would come before an item it depends on, or if a new name is the id of an item that already ran. |
 | **clear R** | Signal `clear: <repo>`: releases a red hold on that repo's queue, after the planner has read the red report with Matt. |
+| **run X** / **run game** | Signal `run: X`: conductor starts target X if it isn't up, waits until it answers, and opens it in Matt's browser. With one target, plain "run game" (or "run it") means that one; with several and no match, the planner asks which. If no target exists yet, the planner proposes one as a `conductor.toml` request. On a `run_failed` event, it reports the error and the log tail. **stop X** is `run: X stop`. |
 | **stop conductor** | Signal `stop: daemon`: the daemon exits cleanly; running executors carry on and are picked up when it restarts. Matt restarts it with `uv run conductor run <control folder>` or the app's Start button. |
 | **context estimate** | Token estimate for this session; ~150k is the warn point. |
 | **prepare for closeout** | Open questions for Matt, items still expecting a report, parked edits that should ride the next prompt. |

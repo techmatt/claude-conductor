@@ -56,9 +56,15 @@ def spawn_daemon(control: Path, log: Path) -> subprocess.Popen:
     no console window, its own process group, out of any job object that allows it,
     output appended to `log`, unbuffered (`-u`: a file is block-buffered, so the log
     would otherwise stay empty for hours). Quitting the app never takes the daemon down."""
-    cmd = [console_python(), "-u", "-m", "conductor", "run", str(control)]
+    return spawn_detached([console_python(), "-u", "-m", "conductor", "run", str(control)], control, log)
+
+
+def spawn_detached(cmd: list[str] | str, cwd: Path, log: Path) -> subprocess.Popen:
+    """Start a long-running process detached from the caller: no console window, its own
+    process group, out of the caller's job object when that is allowed, stdin closed,
+    stdout and stderr appended to `log`. A string runs through the platform shell."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    kwargs: dict = {}
+    kwargs: dict = {"shell": isinstance(cmd, str)}
     if WINDOWS:
         base = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
         flags = [base | subprocess.CREATE_BREAKAWAY_FROM_JOB, base]
@@ -70,7 +76,7 @@ def spawn_daemon(control: Path, log: Path) -> subprocess.Popen:
             if WINDOWS:
                 kwargs["creationflags"] = extra
             try:
-                return subprocess.Popen(cmd, cwd=str(control), stdin=subprocess.DEVNULL, stdout=out,
+                return subprocess.Popen(cmd, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=out,
                                         stderr=subprocess.STDOUT, env=child_env(), **kwargs)
             except OSError:
                 if i == len(flags) - 1:     # breakaway refused by a job: retry without it

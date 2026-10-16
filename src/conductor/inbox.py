@@ -40,6 +40,19 @@ def describe(ev: Event) -> str:
         case "delivered":
             waited = f" after {d['waited_seconds']}s" if d.get("waited_seconds") is not None else ""
             text = f"{who} got message #{d.get('tell')}{waited} (via {d.get('via')})"
+        case "run_start":
+            how = "already starting" if d.get("reused") else "started"
+            text = f"run target `{d.get('target')}` {how} (pid {d.get('pid')})"
+        case "run_ready":
+            text = f"run target `{d.get('target')}` ready after {d.get('waited_seconds')}s"
+        case "run_open":
+            text = f"opened {d.get('url')} (run target `{d.get('target')}`)"
+        case "run_stop":
+            text = f"run target `{d.get('target')}` stopped" + (f": {d['note']}" if d.get("note") else "")
+        case "run_failed":
+            text = f"run target `{d.get('target')}` failed: {d.get('error')}"
+            if d.get("log_tail"):
+                text += " — log tail: " + " ⏎ ".join(d["log_tail"].splitlines()[-5:])
         case "reviewed":
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
         case "red":

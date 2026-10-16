@@ -21,6 +21,7 @@ uv run conductor questions [<control folder>] [--all]      # open asks (--all: r
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
+uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
 uv run conductor app [<control folder> …]                  # the desktop app (see The app)
 ```
@@ -55,7 +56,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
                                .stage.prompt.md for a stage
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, stop
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, run, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
@@ -443,10 +444,47 @@ else the repo's main checkout: `--resume` finds a session from any folder. Refus
 while the item is running or staged (resuming a live session forks it). Windows only;
 elsewhere the error prints the command to run.
 
+## Run targets
+
+A project's long-running thing (a dev server, a game) is a **run target** in
+`conductor.toml`:
+
+```
+[run.game]
+repo = "game"                  # run in this repo's main checkout; or cwd = "<folder>" (relative to the control folder)
+command = "npm run dev"        # a string runs through the shell; or a list: ["python", "-m", "http.server", "8765"]
+url = "http://localhost:5173/" # opened in the default browser
+ready = "http://localhost:5173/health"   # optional: what must answer first (default: url)
+ready_seconds = 60             # optional: how long to wait for it
+```
+
+The signal `run: <name>` (planner, app) or `conductor run-target <name>` (CLI):
+- **Already up** (the ready URL answers HTTP, any status): the URL opens at once,
+  `run_open`.
+- **Down:** the command starts detached (as the app starts the daemon: no window, its
+  own process group, out of the caller's job; a daemon stop leaves it running), output
+  appended to `.conductor/run-<name>.log`, pid and creation time in
+  `.conductor/run-<name>.json`; `run_start`. When the ready URL answers, `run_ready`
+  (waited_seconds) and the URL opens, `run_open`.
+- **Starting already:** its recorded process is alive but not answering yet, so nothing
+  new starts (`run_start` with `reused`). One process per target: a dead recorded
+  process is simply started again.
+- **Never comes up:** the process exits first, or `ready_seconds` pass (the process is
+  then left running): `run_failed`, a red kind, with `error` and the log's last 20 lines
+  (`log_tail`). It leads the inbox's Red section and toasts, but holds no queue.
+
+`run: <name> stop` (`conductor run-target <name> --stop`) kills the recorded process
+tree; `run_stop`. The daemon never blocks on a start: it checks pending targets every
+tick. A daemon restart forgets a start it was waiting on (run it again: it opens at
+once if up). The CLI waits in the foreground and prints the events. On Windows a probe
+of a closed local port can take up to its timeout (1s; the app's header probe uses
+0.3s per target per refresh). The planner adds or changes targets with a
+`conductor.toml` request.
+
 ## Toasts
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
-`ask`, `red`, `tamper`, `hold` and `queue_empty` events. Each title names the project and
+`ask`, `red`, `tamper`, `hold`, `run_failed` and `queue_empty` events. Each title names the project and
 the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
 history records. Toasts use Command Prompt's registered app id, with "Conductor" as
 the attribution line, so nothing has to be installed. A toast that fails is logged as a
@@ -519,7 +557,7 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read, clear, approve, cancel, reorder, reviewed, tell, stop
+## Signals: read, clear, approve, cancel, reorder, reviewed, tell, run, stop
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -535,6 +573,7 @@ cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
 reviewed: sandbox/003        # the planner has acted on that finished item's report
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see Progress and messages)
+run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
 
@@ -578,6 +617,8 @@ value is ignored.
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
   waits on the read mark. Several `reviewed:` lines may share a file.
 - **tell** — `tell: <item> <message>`: see *Progress and messages*.
+- **run** — `run: <target>` or `run: <target> stop`: see *Run targets*. An unknown
+  target is refused.
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
   (`reason: signal`), releases its lock and exits. Executors and stages keep running;
   the next start adopts them.
@@ -605,7 +646,7 @@ mark. Then **Unreviewed reports**: every finished item without a `reviewed` even
 oldest first, with its status, finish time, finish event id, report path and `carry:`
 line; it shows on every inbox, read mark or not, until a `reviewed:` signal names the
 item. Then every event after the read mark, grouped **Red** (tamper first,
-then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`),
+then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`),
 **Holds**, **Finished** (status, blocks, carry, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
 included), **Other**; then **Now**: per repo, what is running (or merging), staged
@@ -652,6 +693,9 @@ console `python.exe` even when the app runs under `pythonw.exe`; git calls pass
 detached (no window, its own process group, out of the caller's job object when
 allowed), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log`; *Stop daemon…* asks first,
 then writes a `stop: daemon` signal. Executors and stages keep running either way.
+Each run target gets a **Run <name>** button beside them, reading `● up`, `● starting`
+or `● down` (green, amber, grey; probed each refresh); a click writes `run: <name>`,
+which opens the URL (starting the target first when it is down).
 
 **Panels.**
 
@@ -685,7 +729,7 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
   `report X reviewed`, `X: <progress line>`, `message #n to X: …` and `message #n
-  reached X`, questions asked / answered / default taken (and late answers and
+  reached X`, run targets starting / up / opened / stopped, questions asked / answered / default taken (and late answers and
   closes), approved, cancelled, reordered, cleared, `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
   or `invalid` event whatever its kind. A `finish` is the *report written* line, not a
@@ -780,6 +824,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `progress` | the executor called `progress` | seq, at, note, eta, done, remaining |
 | `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id) | text, by |
 | `delivered` | the message reached the executor | tell, via (`hook`/`progress`), text, waited_seconds |
+| `run_start` / `run_ready` / `run_open` / `run_stop` | a run target started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url / note |
+| `run_failed` | a run target never came up, or its URL could not be opened (red; holds no queue) | target, error, log_tail |
 | `approve` | a `proposed/` item moved into its queue | item, from |
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |

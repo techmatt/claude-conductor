@@ -23,7 +23,8 @@ from pathlib import Path
 import psutil
 
 from . import config as config_mod
-from . import executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, talk, worktrees
+from . import (executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, talk, targets,
+               worktrees)
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, now, parse_stamp, read_text, retry_io, stamp, write_text
@@ -105,6 +106,7 @@ class Daemon:
         self.progress_seen = {(e.item, e.detail.get("seq")) for e in self.log.query(kinds=["progress"])}
         self.delivered_seen = {e.detail.get("tell") for e in self.log.query(kinds=["delivered"])}
         self._progress_sizes: dict[str, int] = {}
+        self.runner = targets.Runner(cfg, self.log)
         self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
         self._inbox_key: tuple | None = None
@@ -250,6 +252,7 @@ class Daemon:
         self.process_requests()
         self.process_questions()
         self.process_talk()
+        self.runner.poll()
         self.check_stages()
         self.check_runs()
         self.process_merges()
@@ -490,6 +493,10 @@ class Daemon:
             elif key == "tell":
                 if len(value.split(None, 1)) != 2:
                     raise ValueError(f"line {n}: tell: expects `<item> <message>`, got {value!r}")
+            elif key == "run":
+                parts = value.split()
+                if not 1 <= len(parts) <= 2 or (len(parts) == 2 and parts[1].lower() != "stop"):
+                    raise ValueError(f"line {n}: run: expects `<target>` or `<target> stop`, got {value!r}")
             elif key == "stop":
                 if value.lower() != "daemon":
                     raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
@@ -517,6 +524,9 @@ class Daemon:
             self._reviewed(value, rel)
         elif key == "tell":
             self._tell(value, rel)
+        elif key == "run":
+            name, *stop = value.split()
+            (self.runner.stop if stop else self.runner.request)(name, self._by)
         elif key == "reorder":
             where, *refs = value.split()
             self._reorder(where, refs, rel)
@@ -856,7 +866,7 @@ class Daemon:
                     busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
                     if gone := sorted(busy - set(new.repos)):
                         raise config_mod.ConfigError(f"repos {gone} still have items in running/")
-                    self.cfg = new
+                    self.cfg = self.runner.cfg = new
                     self.log.append("config_reload", paths=["conductor.toml"])
                 except config_mod.ConfigError as exc:
                     self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",

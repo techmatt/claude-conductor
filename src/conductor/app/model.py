@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import config as config_mod
-from .. import git, items, procs, questions, state
+from .. import git, items, procs, questions, state, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
 from ..inbox import describe, progress_line
@@ -189,6 +189,10 @@ class Snapshot:
     state: str
     why: str
     error: str | None = None
+    targets: dict[str, str] = field(default_factory=dict)      # run target → up | starting | down
+
+
+TARGET_PROBE_SECONDS = 0.3      # per target per refresh, on the UI thread: a local server answers at once
 
 
 def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
@@ -229,7 +233,8 @@ def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) ->
 # or an invalid event is always activity, whatever its kind.
 ACTIVITY_KINDS = {"start", "finish", "reviewed", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "request", "request_failed",
-                  "daemon_start", "daemon_stop", "progress", "tell", "delivered"}
+                  "daemon_start", "daemon_stop", "progress", "tell", "delivered",
+                  "run_start", "run_ready", "run_open", "run_stop", "run_failed"}
 ALWAYS_KINDS = RED_KINDS | {"warning"}
 
 
@@ -288,6 +293,14 @@ def activity_text(ev: Event) -> str:
             return "daemon started"
         case "daemon_stop":
             return "daemon stopped" + by
+        case "run_start":
+            return f"{d.get('target')} starting{by}"
+        case "run_ready":
+            return f"{d.get('target')} is up (after {d.get('waited_seconds')}s)"
+        case "run_open":
+            return f"{d.get('target')} opened in the browser: {d.get('url')}{by}"
+        case "run_stop":
+            return f"{d.get('target')} stopped{by}"
     return describe(ev)
 
 
@@ -413,7 +426,8 @@ class Project:
             rs.finished, rs.finished_total = finished_items(view, repo)
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
-        return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error)
+        run = {name: targets.status(cfg, t, TARGET_PROBE_SECONDS) for name, t in cfg.targets.items()}
+        return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run)
 
     def scan_questions(self) -> list[questions.Question]:
         """`questions.scan`, re-parsing only files whose question or result changed:

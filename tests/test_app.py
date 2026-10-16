@@ -552,3 +552,20 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     assert not trail.open_btn.isEnabled()
     win._quitting = True
     win.close()
+
+
+def test_run_buttons_in_the_header(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    toml = env.control / "conductor.toml"
+    toml.write_text(toml.read_text(encoding="utf-8") + '\n[run.game]\nrepo = "code"\ncommand = "x"\n'
+                    'url = "http://127.0.0.1:9/"\n', encoding="utf-8", newline="\n")
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    b = view.run_buttons["game"]
+    assert b.text() == "Run game ● down" and view.snap.targets == {"game": "down"}
+    b.click()
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\nrun: game\n"
+    win._quitting = True
+    win.close()

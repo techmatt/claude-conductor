@@ -64,6 +64,10 @@ class ProjectView(QWidget):
         for w in (self.state_label, self.daemon_label, self.pending_label):
             head.addWidget(w)
         head.addStretch(1)
+        # One Run button per `[run.<name>]` target, rebuilt when the targets change.
+        self.run_bar = QHBoxLayout()
+        head.addLayout(self.run_bar)
+        self.run_buttons: dict[str, QPushButton] = {}
         head.addWidget(self.start_btn)
         head.addWidget(self.stop_btn)
         lay.addLayout(head)
@@ -134,6 +138,7 @@ class ProjectView(QWidget):
                                   if d.alive else f"· daemon <b style='color:{theme.RED}'>not running</b>")
         self.start_btn.setEnabled(not d.alive)
         self.stop_btn.setEnabled(d.alive)
+        self._update_run_buttons(snap)
         sdir = self.project.control / "signals"
         pending = sorted(sdir.glob("app-*.signal")) if sdir.is_dir() else []
         bad = sorted(sdir.glob("app-*.signal.bad")) if sdir.is_dir() else []
@@ -146,6 +151,32 @@ class ProjectView(QWidget):
             bits.append(snap.error)
         self.pending_label.setText(" · ".join(bits))
         return snap
+
+    def _update_run_buttons(self, snap: Snapshot) -> None:
+        if list(snap.targets) != list(self.run_buttons):
+            for b in self.run_buttons.values():
+                self.run_bar.removeWidget(b)
+                b.deleteLater()
+            self.run_buttons = {}
+            for name in snap.targets:
+                b = QPushButton()
+                b.clicked.connect(lambda _=False, n=name: self.run_target(n))
+                self.run_bar.addWidget(b)
+                self.run_buttons[name] = b
+        colours = {"up": theme.GREEN, "starting": theme.AMBER, "down": theme.MUTED}
+        for name, st in snap.targets.items():
+            b = self.run_buttons[name]
+            t = self.project.cfg.targets.get(name)
+            text = f"Run {name} ● {st}"
+            if b.text() != text:
+                b.setText(text)
+                b.setStyleSheet(f"QPushButton {{ color: {colours.get(st, theme.MUTED)}; font-weight: bold; }}")
+            b.setToolTip(f"{'Open' if st == 'up' else 'Start, then open'} {t.url if t else ''} "
+                         "(a `run:` signal; the daemon must be running)")
+
+    def run_target(self, name: str) -> None:
+        path = actions.run_target(self.project.control, name)
+        self.notify(f"run {name}: wrote signals/{path.name}; the daemon starts it if needed and opens it")
 
     def start_daemon(self) -> None:
         p = actions.start_daemon(self.project.control)

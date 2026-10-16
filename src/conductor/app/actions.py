@@ -1,6 +1,6 @@
 """Everything the app writes. No Qt.
 
-The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell and stop
+The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, run and stop
 are `signals/` files the daemon carries out and logs. Besides those it writes only an
 answer file (the same function `conductor answer` uses), starts the daemon, and opens a
 console on a finished item's session.
@@ -85,6 +85,10 @@ def open_session(cfg, item_id: str, session_id: str, spawn=None):
     argv = [procs.resolve(cfg.command[0]), *cfg.command[1:], "--resume", session_id]
     (spawn or procs.open_console)(argv, cwd)
     return cwd, argv
+
+
+def run_target(control: Path, name: str, stop: bool = False, by: str = BY) -> Path:
+    return write_signal(control, f"run: {name}" + (" stop" if stop else ""), by=by)
 
 
 def clear(control: Path, repo: str) -> Path:

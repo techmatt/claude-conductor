@@ -34,6 +34,21 @@ class RepoOptions:
 
 
 @dataclass
+class RunTarget:
+    """A `[run.<name>]` table: a long-running server conductor starts on request (the
+    `run:` signal) and whose URL it opens in the default browser."""
+    name: str
+    cwd: Path
+    command: list[str] | str     # a string runs through the platform shell
+    url: str
+    ready: str                   # the URL that must answer before `url` opens (default: url)
+    ready_seconds: float = 60.0
+
+
+RUN_KEYS = {"repo", "cwd", "command", "url", "ready", "ready_seconds"}
+
+
+@dataclass
 class Config:
     control: Path
     project: str
@@ -49,6 +64,7 @@ class Config:
     toasts: bool = True
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
+    targets: dict[str, RunTarget] = field(default_factory=dict)
 
     # Layout ---------------------------------------------------------------
     def path(self, *parts: str) -> Path:
@@ -118,6 +134,48 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
     return opts
 
 
+def _targets(control: Path, repos: dict[str, Path], raw) -> dict[str, RunTarget]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or not all(isinstance(t, dict) for t in raw.values()):
+        raise ConfigError(f"{CONFIG_NAME}: `run` must be tables `[run.<name>]`")
+    out = {}
+    for name, table in raw.items():
+        where = f"{CONFIG_NAME}: run.{name}"
+        if not name or any(c in name for c in " /\\:"):
+            raise ConfigError(f"{where}: a target name may not be empty or hold spaces, slashes or colons")
+        if unknown := set(table) - RUN_KEYS:
+            raise ConfigError(f"{where}: unknown keys {sorted(unknown)}")
+        if ("repo" in table) == ("cwd" in table):
+            raise ConfigError(f"{where}: give exactly one of `repo` (a repo name) or `cwd` (a folder)")
+        if "repo" in table:
+            if table["repo"] not in repos:
+                raise ConfigError(f"{where}.repo: {table['repo']!r} is not in [repos]")
+            cwd = repos[table["repo"]]
+        elif isinstance(table["cwd"], str) and table["cwd"]:
+            cwd = _resolve(control, table["cwd"])
+        else:
+            raise ConfigError(f"{where}.cwd must be a path string")
+        command = table.get("command")
+        if not (isinstance(command, str) and command.strip()) and not (
+                isinstance(command, list) and command and all(isinstance(x, str) and x for x in command)):
+            raise ConfigError(f"{where}.command must be a shell command string or a list of strings")
+        urls = {}
+        for key in ("url", "ready"):
+            value = table.get(key, table.get("url"))
+            if not isinstance(value, str) or not value.startswith(("http://", "https://")):
+                raise ConfigError(f"{where}.{key} must be an http(s) URL")
+            urls[key] = value
+        try:
+            ready_seconds = float(table.get("ready_seconds", 60))
+            if ready_seconds <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ConfigError(f"{where}.ready_seconds must be a positive number") from None
+        out[name] = RunTarget(name, cwd, command, urls["url"], urls["ready"], ready_seconds)
+    return out
+
+
 def load(control: Path) -> Config:
     control = Path(control).resolve()
     cfg_file = control / CONFIG_NAME
@@ -182,4 +240,5 @@ def load(control: Path) -> Config:
         toasts=bool(defaults.get("toasts", True)),
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],
+        targets=_targets(control, repos, data.get("run")),
     )

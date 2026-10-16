@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | answer | tell | open | init | app`."""
+"""`conductor run | status | inbox | events | questions | answer | tell | open | run-target | init | app`."""
 
 from __future__ import annotations
 
@@ -179,6 +179,33 @@ def cmd_open(args) -> int:
     return 0
 
 
+def cmd_run_target(args) -> int:
+    """Start (or stop) a run target here and now, waiting until it is ready and opened;
+    the same events as the `run:` signal, with `by: cli`. No daemon needed."""
+    import time
+    from .targets import Runner
+    cfg, log = _open(args.control)
+    runner = Runner(cfg, log)
+    first = log.max_id()
+    try:
+        if args.stop:
+            runner.stop(args.name, by="cli")
+        else:
+            runner.request(args.name, by="cli")
+            while runner.pending:
+                time.sleep(0.5)
+                runner.poll()
+    except ValueError as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+    failed = False
+    for ev in log.query(since_id=first):
+        if ev.kind.startswith("run_") and ev.detail.get("target") == args.name:
+            print(describe(ev))
+            failed |= ev.kind == "run_failed"
+    return 1 if failed else 0
+
+
 def cmd_init(args) -> int:
     from .scaffold import InitError, init
     try:
@@ -259,6 +286,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_open)
+    sp = sub.add_parser("run-target", help="start a [run.<name>] target if needed and open its URL")
+    sp.add_argument("name")
+    sp.add_argument("--stop", action="store_true", help="stop it instead")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_run_target)
     sp = sub.add_parser("init", help="create a new control folder and commit it")
     sp.add_argument("folder")
     sp.add_argument("--project", required=True)

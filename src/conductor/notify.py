@@ -43,6 +43,8 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
                     "Reverted. " + "; ".join(detail.get("changes", []))[:200])
         case "hold":
             return f"{project}: {who} held", str(detail.get("reason", ""))[:250]
+        case "run_failed":
+            return f"{project}: `{detail.get('target')}` did not come up", str(detail.get("error", ""))[:250]
         case "queue_empty":
             return f"{project}: queue `{repo}` is empty", f"last item {detail.get('last')}"
     return None
