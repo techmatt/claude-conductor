@@ -1,4 +1,4 @@
-"""Signal verbs: approve, cancel, reorder, stop: daemon, and `by:` attribution."""
+"""Signal verbs: approve, cancel, reorder, reviewed, stop: daemon, and `by:` attribution."""
 
 import pytest
 
@@ -424,3 +424,48 @@ def test_a_tick_that_fails_on_a_locked_file_recovers(env, monkeypatch):
     env.d = env.new_daemon()
     assert any("a tick failed" in e.detail.get("note", "") for e in env.events("warning"))
     assert env.events("daemon_stop")[-1].detail["reason"] == "signal"
+
+
+# ---------------------------------------------------------------- reviewed
+def test_reviewed_marks_a_finished_report_and_survives_restart(env):
+    from conductor import inbox, state
+    env.queue("001_a", "FAKE report done")
+    env.queue("002_b", "FAKE report partial")
+    env.tick_until(lambda: env.finished("code/002_b"))
+    send(env, "read: latest", "read")                       # the read mark reviews nothing
+    view = state.scan(env.d.cfg, env.d.log)
+    assert [e.item for e in view.unreviewed()] == ["code/001_a", "code/002_b"]
+    text = inbox.render(env.d.cfg, env.d.log, view)
+    section = text.split("## Unreviewed reports", 1)[1].split("\n## ", 1)[0]
+    assert section.index("code/001_a") < section.index("code/002_b")
+    assert "reports/code__001_a.md" in section and "carry:" in section and "**partial**" in section
+    send(env, "by: planner\nreviewed: 001")
+    [r] = env.events("reviewed")
+    assert (r.item, r.detail["by"], r.detail["status"]) == ("code/001_a", "planner", "done")
+    assert r.detail["finish"] == env.finished("code/001_a").id
+    # Derived from the log: a new daemon sees the same.
+    env.d.log.close()
+    env.d = env.new_daemon()
+    assert [e.item for e in state.scan(env.d.cfg, env.d.log).unreviewed()] == ["code/002_b"]
+    send(env, "reviewed: code/001_a", "again")              # already reviewed: a no-op with a note
+    assert not bad(env, "again") and len(env.events("reviewed")) == 1
+    assert "already reviewed" in env.events("warning")[-1].detail["note"]
+    send(env, "reviewed: code/002", "last")
+    env.d.write_inbox(force=True)
+    assert "## Unreviewed reports" not in (env.control / "inbox.md").read_text(encoding="utf-8")
+
+
+def test_reviewed_refusals(env):
+    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("002_q", "FAKE report done", stage="false")
+    env.tick_until(lambda: env.events("start"))
+    for n, text in enumerate(["reviewed: 001",              # running
+                              "reviewed: code/002_q",       # queued
+                              "reviewed: 009",              # unknown
+                              "reviewed: nowhere/001"]):    # not a repo
+        send(env, text, f"r{n}")
+        assert bad(env, f"r{n}"), text
+    errors = [e.detail["error"] for e in env.events("invalid")]
+    assert "has not finished" in errors[0] and "has not finished" in errors[1]
+    assert not env.events("reviewed")
+    env.tick_until(lambda: env.finished("code/002_q"))

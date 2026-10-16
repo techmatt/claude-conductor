@@ -52,7 +52,7 @@ reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
                                .setup.log, and .stage.log / .stage.prompt.md for a stage
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, stop
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
@@ -457,7 +457,7 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read, clear, approve, cancel, reorder, stop
+## Signals: read, clear, approve, cancel, reorder, reviewed, stop
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -471,6 +471,7 @@ clear: sandbox               # release the sandbox queue after a red
 approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
+reviewed: sandbox/003        # the planner has acted on that finished item's report
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
 
@@ -503,6 +504,16 @@ value is ignored.
   held open) leaves the journal: a `warning` is logged, every tick rolls it forward
   until it completes (`reorder` logged with `note`), and that queue launches nothing
   meanwhile. A restart finishes an interrupted reorder the same way.
+- **reviewed** — `reviewed: <repo>/<NNN_name>` (or `NNN_name`, `NNN`; a name without a
+  repo is looked up across every repo, and one found in two is ambiguous: refused).
+  It marks one finished item's report as reviewed and logs `reviewed` (item, `finish`:
+  the finish event's id, `status`, `by`: the file's `by:` or `unknown`). Refused for an
+  item that has not finished (queued, staged or running) or is unknown. An item already
+  reviewed is a no-op: a `warning` names the earlier `reviewed` event and the file is
+  not rejected. Reviewed state is derived from the event log (an item is reviewed once a
+  `reviewed` event names it), so it survives restarts, and it is independent of the
+  read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
+  waits on the read mark. Several `reviewed:` lines may share a file.
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
   (`reason: signal`), releases its lock and exits. Executors and stages keep running;
   the next start adopts them.
@@ -526,7 +537,10 @@ second keep their order), then renames it to `.signal`, always with `by: app`.
 
 `inbox.md` is regenerated whenever the log or the read mark changes (and every 30s
 for the *Now* section). First **Questions**: every open ask, regardless of the read
-mark. Then every event after the read mark, grouped **Red** (tamper first,
+mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
+oldest first, with its status, finish time, finish event id, report path and `carry:`
+line; it shows on every inbox, read mark or not, until a `reviewed:` signal names the
+item. Then every event after the read mark, grouped **Red** (tamper first,
 then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`),
 **Holds**, **Finished** (status, blocks, carry, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
@@ -585,6 +599,13 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
   `cancel: <repo>/<NNN_name>`). A staged item is the queue head, so it is one row whose
   state carries both: `staging` (with elapsed) or `staged (plan ready)`, then `· head`
   or `· blocked by hold`.
+  Under the queue, a *finished* row heads the repo's finished items, newest first: the
+  10 most recent plus every unreviewed one however old, each with its status, finish
+  time, carry and a *reviewed* / *unreviewed* mark (unreviewed bold, coloured by
+  status; reviewed muted). Double-click opens the trail, as for live items. Each
+  unreviewed row has **Mark reviewed** (`reviewed: <repo>/<NNN_name>`, `by: app`; the
+  button disables once clicked and the row turns *reviewed* when the daemon logs it).
+  The tab label reads *Repos (N unreviewed)*, in amber, while any report is unreviewed.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
@@ -592,7 +613,16 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
   overwriting one), with `by: app` front-matter so the `answer` event names the app. An answer to a question that resolved meanwhile (its default taken)
   is reported as late, as the CLI does. Resolved questions are listed beneath, newest
   first. Question files are re-parsed only when they or their result change.
-- *Events* — the whole log, filterable by repo, item (`001`, `001_x`, `repo/001_x`, or
+- *Events* — by default the **Activity** view: workflow-level lines only, worded
+  plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
+  `report X reviewed`, questions asked / answered / default taken (and late answers and
+  closes), approved, cancelled, reordered, cleared, `doc update committed: <message>`
+  (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
+  or `invalid` event whatever its kind. A `finish` is the *report written* line, not a
+  separate entry. Everything else (`worktree`, `stage`, `staged`, `merge`, `commit`,
+  `hold`, `enqueue`, `queue_empty`, `read`, …) appears only with **Advanced** checked
+  (off by default), which also shows each event in the log's own wording. The *Kind*
+  list offers only the kinds the current mode shows. In both modes: the whole log, filterable by repo, item (`001`, `001_x`, `repo/001_x`, or
   any substring of the id), kind, a from/to time range and *reds only*. Selecting an
   event shows its item's trail beside it: every event of the item (the selected one
   expanded with its full detail; wrapped lines hang under the event's text, or under the
@@ -674,6 +704,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `request` / `request_failed` | a request applied or rejected | request, message, targets / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through / repo |
+| `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
 | `approve` | a `proposed/` item moved into its queue | item, from |
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |

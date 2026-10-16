@@ -31,7 +31,7 @@ from ..events import RED_KINDS, Event
 from ..inbox import describe
 from ..util import clock, duration, now, parse_stamp
 from . import actions, theme
-from .model import Project, Snapshot, git_trail
+from .model import ACTIVITY_KINDS, ALWAYS_KINDS, Project, Snapshot, activity_text, git_trail
 
 RED = QColor(theme.RED)
 AMBER = QColor(theme.AMBER)
@@ -68,6 +68,11 @@ def summary(ev: Event) -> str:
     return short_paths(text)
 
 
+def plain_summary(ev: Event) -> str:
+    """The Activity view's wording of an event (`summary` for kinds it does not reword)."""
+    return short_paths(activity_text(ev)) if ev.kind in ACTIVITY_KINDS else summary(ev)
+
+
 def finish_status(ev: Event) -> str | None:
     return ev.detail.get("status") if ev.kind == "finish" else None
 
@@ -94,7 +99,8 @@ def compact_button(text: str, slot, tone: str | None = None) -> QWidget:
     b.setProperty("role", "compact")
     if tone:
         b.setProperty("tone", tone)
-    b.clicked.connect(slot)
+    if slot is not None:
+        b.clicked.connect(slot)
     lay.addWidget(b)
     lay.addStretch(1)
     holder.button = b
@@ -167,11 +173,12 @@ class ReposPanel(Panel):
             h.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        h.resizeSection(4, 120)
+        h.resizeSection(4, 140)
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
-        hint = muted(QLabel("Double-click an item to open its trail. Clear and Cancel are signals the daemon carries out."))
+        hint = muted(QLabel("Double-click an item to open its trail. Clear, Cancel and Mark reviewed are signals "
+                            "the daemon carries out."))
         lay.addWidget(hint)
         lay.addWidget(self.tree)
         self._sig: tuple | None = None
@@ -222,8 +229,20 @@ class ReposPanel(Panel):
                 rows.append((("queued", it.id), [it.name, state, elapsed, note], it.id, look))
             if not rows:
                 rows.append((("idle", rs.name), ["", "idle", "", ""], None, "idle"))
+            if rs.finished:
+                older = rs.finished_total - len(rs.finished)
+                rows.append((("finished", rs.name), ["finished", f"{rs.unreviewed} unreviewed" if rs.unreviewed else "",
+                                                     "", f"newest first; {older} older, all reviewed" if older else
+                                                     "newest first"], None, "section"))
+            for f in rs.finished:
+                mark = "reviewed" if f.reviewed else "unreviewed"
+                note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
+                rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item,
+                             f"done:{f.status}:{mark}"))
             busy = len(rs.running) + len(rs.staged)     # a staged head counts as queued too
             head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
+            if rs.unreviewed:
+                head += f", {rs.unreviewed} unreviewed"
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
@@ -253,7 +272,14 @@ class ReposPanel(Panel):
         looks = {"run": (theme.BLUE, None, None, True), "stage": (theme.TEAL, None, None, True),
                  "queued": (theme.MUTED, None, None, False), "idle": (theme.MUTED, None, None, False),
                  "blocked": (theme.AMBER, None, None, True),
-                 "red": (None, theme.RED, theme.RED_BG, True), "hold": (None, theme.AMBER, theme.AMBER_BG, True)}
+                 "red": (None, theme.RED, theme.RED_BG, True), "hold": (None, theme.AMBER, theme.AMBER_BG, True),
+                 "section": (theme.AMBER, theme.MUTED, None, True)}
+        status_fg = {"done": theme.GREEN, "partial": theme.AMBER, "red": theme.RED}
+        for status, fg in status_fg.items():
+            # A finished item: its state coloured by outcome, bold until reviewed; a
+            # reviewed one reads as history (muted).
+            looks[f"done:{status}:unreviewed"] = (fg, None, None, True)
+            looks[f"done:{status}:reviewed"] = (None, theme.MUTED, None, False)
         for repo, note, path, rows in plan:
             top = QTreeWidgetItem([repo, "", "", note])
             for c in range(len(self.COLS)):
@@ -284,6 +310,10 @@ class ReposPanel(Panel):
                                                                  tone="danger"))
                 elif key[0] == "queued":
                     self.tree.setItemWidget(w, 4, compact_button("Cancel", lambda _=False, i=key[1]: self._cancel(i)))
+                elif key[0] == "done" and look.endswith(":unreviewed"):
+                    holder = compact_button("Mark reviewed", None)
+                    holder.button.clicked.connect(lambda _=False, i=key[1], b=holder.button: self._reviewed(i, b))
+                    self.tree.setItemWidget(w, 4, holder)
         self.tree.expandAll()
 
     def _double(self, w: QTreeWidgetItem, _col: int) -> None:
@@ -292,6 +322,11 @@ class ReposPanel(Panel):
 
     def _clear(self, repo: str) -> None:
         self.signal_sent(f"clear {repo}", actions.clear(self.control, repo))
+
+    def _reviewed(self, item_id: str, button: QPushButton | None = None) -> None:
+        if button is not None:
+            button.setEnabled(False)            # the row turns reviewed once the daemon logs it
+        self.signal_sent(f"mark {item_id} reviewed", actions.reviewed(self.control, item_id))
 
     def _cancel(self, item_id: str) -> None:
         if confirm(self, "Cancel queued item",
@@ -494,6 +529,7 @@ class EventModel(QAbstractTableModel):
         self.rows: list[Event] = []
         self._looks: dict[str, tuple] = {}
         self._bold = None                   # the view's font, bold; set by the panel
+        self.plain = True                   # Activity wording; False (Advanced): `describe`
 
     def _look(self, kind: str, status: str | None = None) -> tuple:
         """(foreground brush or None, background brush or None, bold, whole row) per kind
@@ -523,7 +559,7 @@ class EventModel(QAbstractTableModel):
         col = index.column()
         if role == Qt.ItemDataRole.DisplayRole:
             if col == len(self.HEAD) - 1:
-                return summary(ev)
+                return plain_summary(ev) if self.plain else summary(ev)
             return (str(ev.id), clock(ev.ts), ev.kind, ev.item or ev.repo or "")[col]
         if role in (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.BackgroundRole, Qt.ItemDataRole.FontRole):
             fg, bg, bold, whole = self._look(ev.kind, finish_status(ev))
@@ -871,8 +907,11 @@ class EventsPanel(Panel):
             w.setCalendarPopup(True)
             w.setDisplayFormat("MMM d h:mmap")
         self.reds = QCheckBox("reds only (Ctrl+R)")
+        self.advanced = QCheckBox("Advanced")
+        self.advanced.setToolTip("Every event kind (worktree, stage, merge, commit, hold, enqueue, read, ...), "
+                                 "worded as the log has it. Off: Activity, the workflow-level lines only.")
         for w in (QLabel("Repo"), self.repo, self.item, QLabel("Kind"), self.kind,
-                  self.since_on, self.since, self.until_on, self.until, self.reds):
+                  self.since_on, self.since, self.until_on, self.until, self.reds, self.advanced):
             bar.addWidget(w)
         bar.addStretch(1)
         lay.addLayout(bar)
@@ -920,6 +959,7 @@ class EventsPanel(Panel):
                     self.since_on.toggled, self.until_on.toggled, self.since.dateTimeChanged,
                     self.until.dateTimeChanged, self.reds.toggled):
             sig.connect(self.refilter)
+        self.advanced.toggled.connect(self._set_advanced)
         QShortcut(QKeySequence("Ctrl+F"), self, activated=lambda: (self.item.setFocus(), self.item.selectAll()))
         QShortcut(QKeySequence("Ctrl+R"), self, activated=self.reds.toggle)
         QShortcut(QKeySequence("Ctrl+L"), self, activated=self.table.setFocus)
@@ -938,7 +978,7 @@ class EventsPanel(Panel):
                     kinds=[self.kind.currentData()] if self.kind.currentData() else None,
                     since=dt(self.since) if self.since_on.isChecked() else None,
                     until=dt(self.until) if self.until_on.isChecked() else None,
-                    reds=self.reds.isChecked())
+                    reds=self.reds.isChecked(), advanced=self.advanced.isChecked())
 
     def refilter(self, *_) -> None:
         current = self._current_event()
@@ -953,22 +993,35 @@ class EventsPanel(Panel):
         elif rows:
             self.table.scrollToBottom()
 
+    def _set_advanced(self, on: bool) -> None:
+        self.model.plain = not on
+        self._kinds = []                    # the Kind list differs per mode
+        self._fill_kinds()
+        self.refilter()
+
+    def _fill_kinds(self) -> None:
+        kinds = self.project.kinds()
+        if not self.advanced.isChecked():
+            kinds = [k for k in kinds if k in ACTIVITY_KINDS or k in ALWAYS_KINDS]
+        if kinds == self._kinds:
+            return
+        self._kinds = kinds
+        cur = self.kind.currentData()
+        self.kind.blockSignals(True)
+        self.kind.clear()
+        self.kind.addItem("all kinds", None)
+        for k in kinds:
+            self.kind.addItem(k, k)
+        self.kind.setCurrentIndex(max(self.kind.findData(cur), 0) if cur else 0)
+        self.kind.blockSignals(False)
+
     def _update_count(self) -> None:
-        self.count.setText(f"{len(self.model.rows)} of {len(self.project.events)} event(s) · "
+        what = "event(s)" if self.advanced.isChecked() else "event(s) shown as Activity (Advanced: all)"
+        self.count.setText(f"{len(self.model.rows)} of {len(self.project.events)} {what} · "
                            "↑/↓ PgUp/PgDn Home/End move · Ctrl+F item · Ctrl+R reds · Alt+1…6 trail tabs")
 
     def add_events(self, new: list[Event]) -> None:
-        kinds = self.project.kinds()
-        if kinds != self._kinds:
-            self._kinds = kinds
-            cur = self.kind.currentData()
-            self.kind.blockSignals(True)
-            self.kind.clear()
-            self.kind.addItem("all kinds", None)
-            for k in kinds:
-                self.kind.addItem(k, k)
-            self.kind.setCurrentIndex(max(self.kind.findData(cur), 0) if cur else 0)
-            self.kind.blockSignals(False)
+        self._fill_kinds()
         if self.project.generation != self._generation:
             # The log was replaced: rows already shown belong to the old one.
             self._generation = self.project.generation

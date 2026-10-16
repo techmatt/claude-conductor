@@ -22,6 +22,8 @@ def describe(ev: Event) -> str:
                 text += f" · blocks: {d['blocks']}"
             if d.get("carry") not in (None, "none"):
                 text += f" · carry: {d['carry']}"
+        case "reviewed":
+            text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
         case "red":
             text = f"{who} red: {'; '.join(d.get('reasons', []))}"
             if d.get("after_red", "stop") == "stop":
@@ -164,6 +166,15 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
             out.append(f"- {clock(q.asked)} `{q.id}` from {q.item} — {how}")
             out += [f"  > {ln}" if ln else "  >" for ln in q.body.rstrip().splitlines()]
             out.append(f"  Answer: write `questions/{q.id}.answer.md`.")
+    if unreviewed := view.unreviewed():
+        # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
+        out += ["", "## Unreviewed reports"]
+        for ev in unreviewed:
+            d = ev.detail
+            report = f" — {ev.paths[0]}" if ev.paths else ""
+            carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
+            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){report}{carry}")
+        out.append("  Mark one reviewed once acted on: signal `reviewed: <repo>/<NNN_name>`.")
     sections = [("Red", red), ("Holds", holds), ("Finished", finished), ("Questions resolved", asked),
                 ("Requests and commits", changes), ("Other", other)]
     for title, evs in sections:

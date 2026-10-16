@@ -22,7 +22,7 @@ C:\Code\<project>-control\        git; the planner's world
   reports\<repo>__NNN_name.md      executor reports
   questions\                       open asks and their answers
   requests\                        planner → conductor (apply + commit)
-  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, stop
+  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, stop
   inbox.md                         generated digest since the planner's last read
   events.db                        append-only event log (SQLite)
 C:\Code\<repo>\                    code repos; executors work here
@@ -64,7 +64,7 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 - Design and scoping decisions are made in conversation with Matt, not handed to an executor. What an executor adds is facts: comparisons, audits, prototypes to look at. Those are usually `readonly` items, which the planner may queue without approval when they take no shared lock (see *Approval*).
 - For a trivial outcome, two sentences and no write-up.
 - If this file turns out to be wrong or missing something during a project, tell Matt in a line. Then, when no conductor prompt is running, add a line to *Open* in `C:\Code\claude-conductor\HANDOFF.md` so the next conductor prompt fixes it.
-- Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos, questions, the event trail, and proposed items. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
+- Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos (with finished items and a Mark reviewed button), questions, the event trail (Activity by default; Advanced for every event), and proposed items. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
 
 ## Writing a prompt
 
@@ -107,7 +107,9 @@ carry: <what state.md should change, or none>
 - `partial`: part of the goal was met, nothing is broken, and the rest is follow-up work. This includes an executor declining an instruction for a stated reason.
 - `red`: something is broken or unsafe, and this repo's queue should not continue without a look. With `after_red: stop` (the default) conductor holds the queue until the planner clears it.
 
-The planner does not summarize a report back. It says what the report changes, what the planner got wrong, and what (if anything) blocks — then folds the carry into `state.md` through a request. Spec deviations with stated reasons are usually right; read before overriding. Trivial outcomes get two sentences. No list of "unreviewed by Matt" items is kept; only decisions that block upcoming work are flagged. A micro-task is assumed handled once queued.
+The planner does not summarize a report back. It says what the report changes, what the planner got wrong, and what (if anything) blocks — then folds the carry into `state.md` through a request. Spec deviations with stated reasons are usually right; read before overriding. Trivial outcomes get two sentences. Only decisions that block upcoming work are flagged. A micro-task is assumed handled once queued.
+
+**Reviewed reports.** Conductor tracks which reports the planner has acted on; the planner keeps no list of its own. Once the planner has acted on a report (said what it changes, flagged blockers, sent its carry through a request), it sends the signal `reviewed: <repo>/<NNN_name>` for that item (several lines may share a file, with `by: planner`). Until then the item is listed under **Unreviewed reports** at the top of every `inbox.md` (after open questions), whatever the read mark says, and in the app's Repos tab. Marking the inbox read never marks a report reviewed. `reviewed:` is refused for an item that hasn't finished, and does nothing (logging a warning) for one already reviewed. Matt can also mark one reviewed in the app.
 
 ## state.md and closeout
 
@@ -124,7 +126,13 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 
 | Phrase | What the planner does |
 |---|---|
-| **check inbox** | Reads `inbox.md` (everything since the last read): what finished, what's red, what's asking. Says what changed, not a summary. Marks it read: signal `read: <id>`, the id printed at the top of `inbox.md`. |
+| **check inbox** | Reads `inbox.md` (everything since the last read): what finished, what's red, what's asking. Leads with open questions, then the unreviewed reports. Says what changed, not a summary. Marks it read: signal `read: <id>`, the id printed at the top of `inbox.md`. Reading never marks a report reviewed. |
+| **check reports** / **show reports** | One compact table and nothing else: every finished report not yet reviewed (item, status, finish time), oldest first, then every running or staged item with its elapsed time as "not in yet". In the same turn, the planner reviews each unreviewed report (as **process X**) and marks it reviewed. |
+| **check reports verbose** | The same, plus a few lines per report on what it changes and anything blocking. |
+| **process X** | Acts on report X: says what it changes, what the planner got wrong, and anything blocking; sends its carry through a request; then signals `reviewed: <repo>/<NNN_name>`. |
+| **process next** | **process X** for the first unreviewed report in logical order (dependencies first, then finish order). |
+| **process all** / **process all reports** | **process X** for every unreviewed report, in logical order: dependencies first, then finish order. |
+| **mark reviewed X** | Signal `reviewed: <repo>/<NNN_name>` without processing, e.g. for a report Matt and the planner already went through. Refused if X hasn't finished. |
 | **check questions** | Lists open asks in `questions\` (they also lead `inbox.md`): the asking item, which ones block, and for the others the default and when it is taken. Blocking ones come first. |
 | **answer Q: …** | Writes Matt's words as plain text to `questions\<id>.answer.md` (Q may be the short form, e.g. `012__1`). It is never edited afterwards. Once the default has been taken, says so: the answer will be logged `late` and changes nothing, so if it matters it needs a new queue item. |
 | **queue status** | Every repo: running item and elapsed time, queued items in order, proposed items awaiting approval. |

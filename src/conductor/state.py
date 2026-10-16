@@ -27,6 +27,7 @@ class View:
     staged: dict[str, dict] = field(default_factory=dict)      # item id → stage record (item still queued)
     done: set[str] = field(default_factory=set)
     finishes: dict[str, Event] = field(default_factory=dict)   # item id → last finish event
+    reviews: dict[str, Event] = field(default_factory=dict)    # item id → its `reviewed` event
     read_mark: int = 0
     red_hold: dict[str, Event] = field(default_factory=dict)   # repo → red event holding it
     planner_hold: dict[str, Event] = field(default_factory=dict)  # repo → unread finish
@@ -43,6 +44,10 @@ class View:
             ev = self.finishes.get(item_id)
             return ev.detail.get("status", "unknown") if ev else "unknown"
         return "queued"
+
+    def unreviewed(self) -> list[Event]:
+        """The finish events of items whose report has no `reviewed` event, oldest first."""
+        return sorted((ev for i, ev in self.finishes.items() if i not in self.reviews), key=lambda e: e.id)
 
 
 def read_run(path: Path) -> dict:
@@ -71,6 +76,8 @@ def scan(cfg: Config, log: EventLog) -> View:
             view.done |= {f"{repo}/{p.stem}" for p in ddir.glob("*.md")}
     for ev in log.query(kinds=["finish"]):
         view.finishes[ev.item] = ev
+    for ev in log.query(kinds=["reviewed"]):
+        view.reviews.setdefault(ev.item, ev)
     clears = {ev.repo: ev.id for ev in log.query(kinds=["clear"])}
     for ev in log.query(kinds=["red"]):
         if ev.detail.get("after_red", "stop") == "stop" and ev.id > clears.get(ev.repo, 0):

@@ -441,3 +441,78 @@ def test_a_remembered_project_that_fails_to_load_stays_remembered(qapp, env, tmp
     assert str(missing) in win.remembered() and str(env.control.resolve()) in win.remembered()
     win._quitting = True
     win.close()
+
+
+# ---------------------------------------------------------------- reviewed reports, Activity
+def test_finished_items_keep_every_unreviewed_one(env):
+    from conductor import state
+    log = env.d.log
+    for n in range(1, 14):
+        log.append("finish", item=f"code/{n:03d}_x", status="done" if n % 2 else "partial", carry="none")
+    for n in range(3, 14):
+        log.append("reviewed", item=f"code/{n:03d}_x", status="done")
+    got, total = model.finished_items(state.scan(env.cfg, log), "code")
+    # The ten newest (013 … 004), then the older unreviewed ones (002, 001); 003 is reviewed.
+    assert total == 13
+    assert [f.name for f in got] == [f"{n:03d}_x" for n in range(13, 3, -1)] + ["002_x", "001_x"]
+    assert [f.name for f in got if not f.reviewed] == ["002_x", "001_x"]
+    p = Project(env.control)
+    [rs] = p.snapshot().repos
+    assert rs.unreviewed == 2 and rs.finished_total == 13
+    p.close()
+
+
+def test_activity_view_hides_mechanics(env):
+    log = env.d.log
+    for kind, detail in (("enqueue", {}), ("worktree", {"action": "created"}), ("start", {"pid": 1}),
+                         ("merge", {"sha": "abc"}), ("commit", {"sha": "abc", "scope": "code"}),
+                         ("finish", {"status": "partial", "carry": "x moves"}), ("hold", {"reason": "r"}),
+                         ("reviewed", {"by": "planner"}), ("red", {"reasons": ["boom"]})):
+        log.append(kind, item="code/004_x", **detail)
+    log.append("warning", note="something")
+    log.append("request", request="r1", message="state: v0.1\n\nbody", targets=["state.md"])
+    p = Project(env.control)
+    p.poll_events()
+    shown = p.filter_events(advanced=False)
+    assert "daemon_start" in {e.kind for e in shown}
+    kinds = [e.kind for e in shown if e.kind != "daemon_start"]
+    assert kinds == ["start", "finish", "reviewed", "red", "warning", "request"]
+    assert [e.kind for e in p.filter_events(advanced=False, item="004")] == ["start", "finish", "reviewed", "red"]
+    assert len(p.filter_events()) > len(shown)
+    text = {e.kind: model.activity_text(e) for e in shown}
+    assert text["start"] == "prompt 004_x started"
+    assert text["finish"] == "report 004_x written — partial (carry: x moves)"
+    assert text["reviewed"] == "report 004_x reviewed (by planner)"
+    assert text["request"] == "doc update committed: state: v0.1"
+    p.close()
+
+
+def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    env.queue("001_x", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/001_x"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    assert view.tabs.tabText(0) == "Repos (1 unreviewed)"
+    panel = view.repos_panel
+    row = panel._rows[("done", "code/001_x")]
+    assert row.text(1) == "done · unreviewed"
+    button = panel.tree.itemWidget(row, 4).button
+    button.click()
+    assert not button.isEnabled()
+    env.tick_until(lambda: env.events("reviewed"))
+    assert env.events("reviewed")[0].detail["by"] == "app"
+    win.refresh()
+    assert view.tabs.tabText(0) == "Repos"
+    row = panel._rows[("done", "code/001_x")]
+    assert row.text(1) == "done · reviewed" and panel.tree.itemWidget(row, 4) is None
+    # Events: Activity by default; Advanced shows every kind.
+    ev = view.events_panel
+    assert not ev.advanced.isChecked()
+    activity = {e.kind for e in ev.model.rows}
+    assert "worktree" not in activity and {"start", "finish", "reviewed"} <= activity
+    ev.advanced.setChecked(True)
+    assert "worktree" in {e.kind for e in ev.model.rows}
+    win._quitting = True
+    win.close()

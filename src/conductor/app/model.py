@@ -19,12 +19,14 @@ from .. import config as config_mod
 from .. import git, items, procs, questions, state
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
+from ..inbox import describe
 from ..util import FrontMatterError, now, parse_stamp, read_text, split_front_matter
 
 # Overall state, most urgent first: the tray shows the first that applies anywhere.
 PRIORITY = ("red", "asking", "running", "idle")
 PHASES = {"exec": "running", "merge": "merging", "concluding": "concluding", "done": "done"}
 TEXT_LIMIT = 400_000          # characters of a log, report or diff shown at once
+FINISHED_SHOWN = 10           # finished items per repo in Repos (every unreviewed one besides)
 
 
 def sqlite_uri(path: Path, mode: str = "ro") -> str:
@@ -134,6 +136,17 @@ class Activity:
 
 
 @dataclass
+class Finished:
+    """A finished item, as the Repos panel lists it under its queue."""
+    item: str
+    name: str
+    status: str
+    ts: str                     # its `finish` event's time
+    reviewed: bool
+    carry: str | None = None
+
+
+@dataclass
 class RepoState:
     name: str
     path: Path
@@ -143,6 +156,12 @@ class RepoState:
     action: str = "idle"        # state.decide's action for the queue head
     reason: str = ""
     red: Event | None = None    # the red event holding the queue until `clear`
+    finished: list[Finished] = field(default_factory=list)     # newest first
+    finished_total: int = 0
+
+    @property
+    def unreviewed(self) -> int:
+        return sum(1 for f in self.finished if not f.reviewed)
 
 
 @dataclass
@@ -190,6 +209,77 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
         out.append(ProposedItem(p.stem, p, int(m.group(1)) if m else 0,
                                 None if repo is None else str(repo), summary[:200], errors))
     return sorted(out, key=lambda x: (x.num, x.name))
+
+
+def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> tuple[list[Finished], int]:
+    """A repo's `recent` latest finished items plus every older unreviewed one, newest
+    first; and how many finished items the repo has in all."""
+    evs = sorted((e for e in view.finishes.values() if e.repo == repo), key=lambda e: e.id, reverse=True)
+    shown = [e for n, e in enumerate(evs) if n < recent or e.item not in view.reviews]
+    return [Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
+                     e.item in view.reviews, e.detail.get("carry")) for e in shown], len(evs)
+
+
+# ---------------------------------------------------------------- Activity
+# Workflow-level kinds the Events tab shows by default; every other kind (worktree,
+# stage, merge, commit, hold, enqueue, read, ...) only with Advanced. A red, a warning
+# or an invalid event is always activity, whatever its kind.
+ACTIVITY_KINDS = {"start", "finish", "reviewed", "ask", "answer", "default", "late", "question_closed",
+                  "approve", "cancel", "reorder", "clear", "request", "request_failed",
+                  "daemon_start", "daemon_stop"}
+ALWAYS_KINDS = RED_KINDS | {"warning"}
+
+
+def is_activity(ev: Event) -> bool:
+    return ev.kind in ACTIVITY_KINDS or ev.kind in ALWAYS_KINDS
+
+
+def activity_text(ev: Event) -> str:
+    """An activity event worded plainly; any other kind falls back to `describe`."""
+    d = ev.detail
+    name = (ev.item or "").split("/", 1)[-1] or ev.repo or ""
+    by = f" (by {d['by']})" if d.get("by") else ""
+    match ev.kind:
+        case "start":
+            if d.get("error"):
+                return f"prompt {name} failed to launch: {d['error']}"
+            return f"prompt {name} started" + (" (resuming its staged session)" if d.get("resumed") else "")
+        case "finish":
+            text = f"report {name} written — {d.get('status')}"
+            if d.get("carry") not in (None, "none"):
+                text += f" (carry: {d['carry']})"
+            return text
+        case "reviewed":
+            return f"report {name} reviewed{by}"
+        case "ask":
+            how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
+            return f"question asked by {name} ({how}): {d.get('text')}"
+        case "answer":
+            return f"question answered{by}: {d.get('text')}"
+        case "default":
+            return f"default taken (nobody answered): {d.get('text')}"
+        case "late":
+            return f"late answer, ignored: {d.get('text')}"
+        case "question_closed":
+            return f"question closed unanswered: {d.get('reason') or d.get('outcome')}"
+        case "approve":
+            return f"{name} approved{by}"
+        case "cancel":
+            return f"{name} cancelled{by}"
+        case "reorder":
+            return f"{ev.repo} reordered: {', '.join(d.get('after', []))}{by}"
+        case "clear":
+            return f"queue {ev.repo} cleared{by}"
+        case "request":
+            msg = (d.get("message") or "").splitlines()[0] if d.get("message") else d.get("request")
+            return f"request applied, nothing changed: {msg}" if d.get("no_change") else f"doc update committed: {msg}"
+        case "request_failed":
+            return f"request failed: {d.get('error')}"
+        case "daemon_start":
+            return "daemon started"
+        case "daemon_stop":
+            return "daemon stopped" + by
+    return describe(ev)
 
 
 def overall(states: list[str]) -> str:
@@ -253,11 +343,14 @@ class Project:
 
     def filter_events(self, repo: str | None = None, item: str | None = None,
                       kinds: list[str] | None = None, since: datetime | None = None,
-                      until: datetime | None = None, reds: bool = False,
+                      until: datetime | None = None, reds: bool = False, advanced: bool = True,
                       events: list[Event] | None = None) -> list[Event]:
+        """`advanced=False` keeps only Activity events (`is_activity`)."""
         from ..events import item_matches
         out = []
         for ev in self.events if events is None else events:
+            if not advanced and not is_activity(ev):
+                continue
             if repo and ev.repo != repo:
                 continue
             if item and not (ev.item and (item in ev.item or item_matches(ev.item, item))):
@@ -305,6 +398,7 @@ class Project:
                                               rec.get("started"), rec.get("branch") or ""))
             if d := decisions.get(repo):
                 rs.action, rs.reason = d.action, d.reason
+            rs.finished, rs.finished_total = finished_items(view, repo)
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error)

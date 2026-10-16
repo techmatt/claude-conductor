@@ -1,6 +1,6 @@
 """Everything the app writes. No Qt.
 
-The app changes nothing in the queue itself: approve, cancel, reorder, clear and stop
+The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed and stop
 are `signals/` files the daemon carries out and logs. Besides those it writes only an
 answer file (the same function `conductor answer` uses) and starts the daemon.
 """
@@ -59,6 +59,11 @@ def swap(control: Path, where: str, names: list[str], index: int, delta: int) ->
     if not (0 <= index < len(names) and 0 <= j < len(names)):
         return None
     return reorder(control, where, [names[j], names[index]] if delta > 0 else [names[index], names[j]])
+
+
+def reviewed(control: Path, item_id: str) -> Path:
+    """`item_id`: a finished item's `repo/NNN_name`."""
+    return write_signal(control, f"reviewed: {item_id}")
 
 
 def clear(control: Path, repo: str) -> Path:

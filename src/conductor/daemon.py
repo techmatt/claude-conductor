@@ -474,7 +474,7 @@ class Daemon:
             elif key == "clear":
                 if value not in self.cfg.repos:
                     raise ValueError(f"line {n}: clear: {value!r} is not a repo")
-            elif key in ("approve", "cancel"):
+            elif key in ("approve", "cancel", "reviewed"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reorder":
@@ -504,6 +504,8 @@ class Daemon:
             self._approve(value, rel)
         elif key == "cancel":
             self._cancel(value, rel)
+        elif key == "reviewed":
+            self._reviewed(value, rel)
         elif key == "reorder":
             where, *refs = value.split()
             self._reorder(where, refs, rel)
@@ -568,6 +570,34 @@ class Daemon:
         self._drop_stage(repo, src.stem, "the item was cancelled")
         self._cancel_file(src, "queue", item_id, repo, rel)
         self._forget(item_id)
+
+    def _reviewed(self, ref: str, rel: str) -> None:
+        """Mark one finished item's report reviewed. Reviewed state is the event log's:
+        an item is reviewed once a `reviewed` event names it."""
+        prefix, slash, name_ref = ref.rpartition("/")
+        if slash and prefix not in self.cfg.repos:
+            raise ValueError(f"reviewed: {prefix!r} is not a repo")
+        view = state.scan(self.cfg, self.log)
+        repos = [prefix] if slash else list(self.cfg.repos)
+        def named(ids) -> list[str]:
+            return [i for i in ids if i.split("/", 1)[0] in repos and items.number_matches(i.split("/", 1)[1], name_ref)]
+
+        hits = named(view.finishes)
+        if not hits:
+            if live := named([it.id for q in view.queued.values() for it in q] + list(view.running)):
+                raise ValueError(f"reviewed: {live[0]} has not finished; only a finished item's report "
+                                 "can be reviewed")
+            raise ValueError(f"reviewed: no finished item {ref!r}")
+        if len(hits) > 1:
+            raise ValueError(f"reviewed: {ref!r} is ambiguous: {sorted(hits)}")
+        item_id = hits[0]
+        if prior := view.reviews.get(item_id):
+            self.log.append("warning", item=item_id, paths=[rel],
+                            note=f"{item_id} was already reviewed (#{prior.id}, {clock(prior.ts)}); nothing changed")
+            return
+        fin = view.finishes[item_id]
+        self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
+                        status=fin.detail.get("status"), by=self._by or "unknown")
 
     def _cancel_file(self, src: Path, origin: str, item_id: str, repo: str, rel: str) -> None:
         cdir = self.cfg.state_dir / "cancelled"
