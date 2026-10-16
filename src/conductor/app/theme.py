@@ -120,10 +120,10 @@ QLabel[pill="block"] {{ color: {RED}; background: {RED_BG}; border: 1px solid {R
 QLabel[pill="default"] {{ color: {AMBER}; background: {AMBER_BG}; border: 1px solid {AMBER}; }}
 QLabel[pill="answered"] {{ color: {GREEN}; background: {GREEN_BG}; border: 1px solid {GREEN}; }}
 
-QLineEdit, QComboBox, QDateTimeEdit, QPlainTextEdit {{ background: {BASE}; color: {TEXT};
+QLineEdit, QComboBox, QDateTimeEdit, QPlainTextEdit, QTextEdit {{ background: {BASE}; color: {TEXT};
     border: 1px solid {INPUT_BORDER}; border-radius: 3px; padding: 3px 5px;
     selection-background-color: {SELECT}; selection-color: {TEXT}; }}
-QLineEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QPlainTextEdit:focus {{ border-color: {ACCENT}; }}
+QLineEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{ border-color: {ACCENT}; }}
 
 QTreeView, QTableView {{ background: {BASE}; alternate-background-color: {ALT_BASE}; color: {TEXT};
     border: 1px solid {BORDER}; gridline-color: #e1e5ea;

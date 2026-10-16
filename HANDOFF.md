@@ -8,6 +8,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 - Matt pastes or names the prompt in a Claude Code session in this repo. Conductor never runs its own queue: its prompts always go this way, by hand.
 - CC writes `reports/NN_name_report.md` (git-ignored) and ends with `Report written to <path>`. Matt says "report's in", and the session reads it.
 - Testing uses the sandbox only: `C:\Code\conductor-sandbox` and `C:\Code\conductor-sandbox-control`.
+- This replaced the fractal project's relay through Google Drive and hand-placed files. Drive is not part of this workflow, and nothing should reintroduce it.
 
 ## Design decisions (settled 2026-10-15)
 
@@ -26,11 +27,11 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 2. The ask tool, toasts, `conductor init`, and status definitions. **Done** (`reports/02_ask_report.md`). A blocking ask outlives Claude Code's 30-minute silent-call abort through a per-server timeout and 60-second progress pings (README *Long tool calls*).
 3. Worktrees and staging: per-item worktrees, serial merges, `paths:` concurrency, stage-then-resume. **Done** (`reports/03_worktrees_report.md`).
 4. The app: a PySide6 tray app with Repos, Questions, Events and Proposed panels, reading `events.db`. **Done** (`reports/04_app_report.md`).
-5. Anything still missing for the first real project.
+5. The first real project, a roguelike deckbuilder, started from a fresh claude.ai session with `claude-ai-new-project.md` alone. Its first sessions are the test of that file. Gaps it finds come back here as *Open* lines and become conductor prompts.
 
 ## Status
 
-Phases 1–4 done. Phase 5 (whatever the first real project still needs) is next.
+Phases 1–4 done, and the closeout before the first real project is done (`reports/05_closeout_report.md`). The session that designed conductor has ended; `claude-ai-new-project.md` and this file carry everything it knew. Phase 5 is next.
 
 ## Open
 

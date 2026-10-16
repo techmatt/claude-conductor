@@ -278,12 +278,16 @@ def test_git_trail_from_commit_events(env):
 
 
 def test_trail_of_a_cancelled_item_has_its_prompt(env):
-    env.queue("001_x", "FAKE report done UNIQUE-PROMPT", stage="false")
-    env.signal("c.signal", "cancel: code/001_x")
+    # A red hold first, so the item cannot launch before the cancel is read (under load
+    # a tick could start it, and cancel never kills an executor).
+    env.queue("001_bad", "FAKE report red")
+    env.tick_until(lambda: env.finished("code/001_bad"))
+    env.queue("002_x", "FAKE report done UNIQUE-PROMPT", stage="false")
+    env.signal("c.signal", "cancel: code/002_x")
     env.tick_until(lambda: env.events("cancel"))
     p = Project(env.control)
     p.poll_events()
-    tr = p.trail("code/001_x")
+    tr = p.trail("code/002_x")
     assert tr.where == "cancelled" and "UNIQUE-PROMPT" in tr.prompt
     p.close()
 
@@ -291,6 +295,12 @@ def test_trail_of_a_cancelled_item_has_its_prompt(env):
 def test_an_app_answer_is_logged_by_app(env):
     """Found proving phase 4 live: the app's answer event had no `by`, unlike every
     signal it writes. The executor still gets the bare answer text."""
+    # The suite's 1.8s default can expire before the answer lands under full-suite load
+    # (then the answer is logged `late`): give this question a minute.
+    toml = env.control / "conductor.toml"
+    toml.write_text(toml.read_text(encoding="utf-8").replace("ask_default_minutes = 0.03", "ask_default_minutes = 1"),
+                    encoding="utf-8", newline="\n")
+    env.configure('[repos]\ncode = "../code"\n')
     env.queue("001_ask", 'FAKE ask {"question": "Which?", "default": "a"}')
     env.tick_until(lambda: questions.scan(env.control))
     [q] = questions.scan(env.control)
@@ -375,7 +385,17 @@ def test_window_renders_every_panel(qapp, env, tmp_path):
     win.refresh()
     trail.tabs.setCurrentIndex(0)
     trail.show_event(last)
-    assert trail.text["Events"].textCursor().block().text().startswith("▶")
+    focus = trail.text["Events"].textCursor().block()
+    assert focus.text().startswith("▶")
+    # Wrapped lines hang under the `what` column: a header's own wrap, and the extra
+    # lines of a multi-line answer, start where its text does.
+    column = focus.blockFormat().leftMargin()
+    assert column > 0 and focus.blockFormat().textIndent() == -column
+    doc = trail.text["Events"].document()
+    two = next(b for b in (doc.findBlockByNumber(n) for n in range(doc.blockCount())) if b.text() == "line two")
+    assert two.blockFormat().leftMargin() > 0 and two.blockFormat().textIndent() == 0
+    detail = focus.next()
+    assert detail.text().startswith(trail.INDENT) and detail.blockFormat().textIndent() == -detail.blockFormat().leftMargin() < 0
     view.events_panel.reds.setChecked(True)
     assert {e.kind for e in view.events_panel.model.rows} <= {"red", "invalid", "tamper", "kill",
                                                                "conflict", "paths_violation", "request_failed"}
@@ -386,6 +406,28 @@ def test_window_renders_every_panel(qapp, env, tmp_path):
         w._quitting = True
         w.close()
     assert not (bare / "events.db").exists()
+
+
+def test_a_staged_head_is_one_repos_row(qapp, tmp_path):
+    from types import SimpleNamespace
+    from conductor.app.panels import ReposPanel
+    from conductor.items import Item
+
+    def plan(**kw):
+        head, nxt = (Item("code", n, tmp_path / f"{n}.md") for n in ("002_b", "003_c"))
+        stage = model.Activity("code/002_b", "002_b", "staged", None)
+        rs = model.RepoState("code", tmp_path, staged=[stage], queued=[head, nxt], **kw)
+        [(_, _, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs]))
+        return [(key, texts[1], look) for key, texts, _, look in rows]
+
+    # Once, as its queue row (so it keeps Cancel), its state naming both facts.
+    assert plan(action="wait", reason="repo busy") == [
+        (("queued", "code/002_b"), "staged (plan ready) · head", "stage"),
+        (("queued", "code/003_c"), "queued", "queued")]
+    held = plan(action="hold", reason="lock busy")
+    assert held[0][0][0] == "hold"
+    assert held[1:] == [(("queued", "code/002_b"), "staged (plan ready) · blocked by hold", "blocked"),
+                        (("queued", "code/003_c"), "queued", "queued")]
 
 
 def test_a_remembered_project_that_fails_to_load_stays_remembered(qapp, env, tmp_path):

@@ -14,16 +14,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QAbstractTableModel, QDateTime, QModelIndex, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractTableModel, QDateTime, QEvent, QModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import (
-    QBrush, QColor, QKeySequence, QPalette, QShortcut, QSyntaxHighlighter, QTextCharFormat,
-    QTextCursor,
+    QBrush, QColor, QFont, QFontMetricsF, QKeySequence, QPalette, QShortcut, QSyntaxHighlighter,
+    QTextCharFormat, QTextCursor,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateTimeEdit, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
     QSplitter, QStyle, QStyledItemDelegate, QTableView, QTableWidget, QTableWidgetItem, QTabWidget,
-    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .. import items
@@ -194,22 +194,35 @@ class ReposPanel(Panel):
             for a in rs.running:
                 rows.append((("run", a.item), [a.name, a.phase, duration(a.elapsed(at)),
                                                f"on {a.detail}" if a.detail else ""], a.item, "run"))
+            # A staged item stays in queue/ (it is the head): it gets one row, its queue
+            # row, whose state carries the stage too.
+            queued_ids = {it.id for it in rs.queued}
+            stages = {a.item: a for a in rs.staged}
             for a in rs.staged:
-                what = "staging" if a.phase == "staging" else "staged (plan ready)"
-                rows.append((("stage", a.item), [a.name, what, duration(a.elapsed(at)) if a.phase == "staging" else "",
-                                                 "resumes when it can run" if a.phase != "staging" else ""], a.item, "stage"))
+                if a.item not in queued_ids:        # a stage whose item left the queue
+                    what = "staging" if a.phase == "staging" else "staged (plan ready)"
+                    rows.append((("stage", a.item), [a.name, what, duration(a.elapsed(at)) if a.phase == "staging" else "",
+                                                     "resumes when it can run" if a.phase != "staging" else ""], a.item, "stage"))
             for i, it in enumerate(rs.queued):
-                note, state, look = "", "queued" if i else "queued (head)", "queued"
+                note, state, look, elapsed = "", "queued" if i else "queued (head)", "queued", ""
+                if a := stages.get(it.id):
+                    staging = a.phase == "staging"
+                    state, look = ("staging" if staging else "staged (plan ready)"), "stage"
+                    elapsed = duration(a.elapsed(at)) if staging else ""
+                    note = "" if staging else "resumes when it can run"
+                    if i == 0 and not held:
+                        state += " · head"
                 if i == 0 and held:
-                    state, look = "blocked by hold", "blocked"     # the hold row above says why
+                    # the hold row above says why
+                    state, look = (f"{state} · blocked by hold" if it.id in stages else "blocked by hold"), "blocked"
                 elif i == 0 and rs.action in ("wait", "stage", "run", "resume"):
                     note = rs.action + (f": {rs.reason}" if rs.reason else "")
                 if it.errors:
                     note = "invalid: " + "; ".join(it.errors)
-                rows.append((("queued", it.id), [it.name, state, "", note], it.id, look))
+                rows.append((("queued", it.id), [it.name, state, elapsed, note], it.id, look))
             if not rows:
                 rows.append((("idle", rs.name), ["", "idle", "", ""], None, "idle"))
-            busy = len(rs.running) + len(rs.staged)
+            busy = len(rs.running) + len(rs.staged)     # a staged head counts as queued too
             head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
             out.append((rs.name, head, str(rs.path), rows))
         return out
@@ -604,15 +617,22 @@ class TrailView(QWidget):
         self.title.setStyleSheet(f"font-size: {theme.BASE_POINT_SIZE + 0.5}pt; padding: 2px 0 4px 0")
         lay.addWidget(self.title)
         self.tabs = QTabWidget()
-        self.text: dict[str, QPlainTextEdit] = {}
+        self.text: dict[str, QPlainTextEdit | QTextEdit] = {}
         for name in self.TABS:
-            t = QPlainTextEdit()
+            # Events is a QTextEdit: its layout honours block margins, which give each
+            # wrapped line a hanging indent (`_indent`). The rest stay plain (fast on big logs).
+            t = QTextEdit() if name == "Events" else QPlainTextEdit()
             t.setReadOnly(True)
             t.setFont(mono())
-            t.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap if name in ("Git",) else QPlainTextEdit.LineWrapMode.WidgetWidth)
+            if name == "Events":
+                t.setAcceptRichText(False)
+                t.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            else:
+                t.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap if name in ("Git",) else QPlainTextEdit.LineWrapMode.WidgetWidth)
             self.tabs.addTab(t, name)
             self.text[name] = t
         self._highlighter = TrailHighlighter(self.text["Events"].document())
+        self.text["Events"].installEventFilter(self)
         self.tabs.currentChanged.connect(self._tab_changed)
         lay.addWidget(self.tabs)
         self.item: str | None = None
@@ -623,6 +643,12 @@ class TrailView(QWidget):
         self._git_timer = QTimer(self)
         self._git_timer.setInterval(50)
         self._git_timer.timeout.connect(self._poll_git)
+
+    def eventFilter(self, obj, event) -> bool:
+        # A resize can cross the width at which hanging under `what` gives way.
+        if event.type() == QEvent.Type.Resize and obj is self.text["Events"]:
+            self._indent()
+        return False
 
     def show_event(self, ev: Event) -> None:
         if ev.item:
@@ -635,6 +661,7 @@ class TrailView(QWidget):
         self.item, self.focus_id, self._trail = None, None, None
         self.title.setText(f"<b>#{ev.id}</b> {clock(ev.ts)} <b>{ev.kind}</b> — not tied to an item")
         self.text["Events"].setPlainText(self._event_text(ev, full=True))
+        self._indent()
         for name in self.TABS[1:]:
             self.text[name].setPlainText("")
         self._git_for = None
@@ -669,18 +696,23 @@ class TrailView(QWidget):
             self._git_for = None
         self._tab_changed(self.tabs.currentIndex())
 
-    def _set(self, name: str, text: str, fresh: bool) -> None:
+    def _set(self, name: str, text: str, fresh: bool, after: Callable[[], None] | None = None) -> None:
         """Replace a tab's text; unless `fresh`, keep its scroll position (or stay at the
-        bottom of a growing log), and leave it alone when nothing changed."""
+        bottom of a growing log), and leave it alone when nothing changed. `after` runs
+        once new text is in, before the scroll position is restored."""
         w = self.text[name]
         if fresh:
             w.setPlainText(text)
+            if after:
+                after()
             return
         if w.toPlainText() == text:
             return
         sb = w.verticalScrollBar()
         value, bottom = sb.value(), sb.maximum() > 0 and sb.value() >= sb.maximum() - 2
         w.setPlainText(text)
+        if after:
+            after()
         sb.setValue(sb.maximum() if bottom else value)
 
     def _render_events(self, center: bool) -> None:
@@ -699,13 +731,60 @@ class TrailView(QWidget):
             blocks += t.count("\n") + 2
             lines.append(t)
         text = "\n\n".join(lines) or "no events for this item yet"
-        if not (center and focus_block is not None):
-            self._set("Events", text, fresh=center)
-            return
         w = self.text["Events"]
+        if not (center and focus_block is not None):
+            self._set("Events", text, fresh=center, after=self._indent)
+            return
         w.setPlainText(text)
+        self._indent()
         w.setTextCursor(QTextCursor(w.document().findBlockByNumber(focus_block)))
-        w.centerCursor()
+        # QTextEdit has no centerCursor(): scroll so the ▶ line sits mid-view.
+        sb = w.verticalScrollBar()
+        sb.setValue(sb.value() + w.cursorRect().center().y() - w.viewport().height() // 2)
+
+    def _indent(self) -> None:
+        """Hanging indents for the Events tab: a header's wrapped lines start under its
+        `what` text, a detail line's under its own text, and the extra lines of a
+        multi-line answer or reason under the `what` column too. When the pane is too
+        narrow to leave ~20 characters beside that column, wrapped lines hang under the
+        detail indent instead (re-applied on resize)."""
+        w = self.text["Events"]
+        doc = w.document()
+        plain = QFontMetricsF(w.font())
+        bold_font = QFont(w.font())
+        bold_font.setBold(True)
+        bold = QFontMetricsF(bold_font)
+        # Measured as if the scroll bar were shown, so the choice cannot flip the bar on
+        # and off.
+        room = (w.contentsRect().width() - w.verticalScrollBar().sizeHint().width()
+                - 2 * doc.documentMargin() - 20 * plain.horizontalAdvance("0"))
+        fallback = plain.horizontalAdvance(self.INDENT)
+        column = 0.0                                # the current entry's `what` column
+        cursor = QTextCursor(doc)
+        cursor.beginEditBlock()
+        block = doc.begin()
+        while block.isValid():
+            text = block.text()
+            margin, indent = 0.0, 0.0
+            if m := TrailHighlighter.HEAD.match(text):
+                what = len(text) - len(text[m.end(1):].lstrip(" "))
+                column = bold.horizontalAdvance(text[:m.end(1)]) + plain.horizontalAdvance(text[m.end(1):what])
+                if column > room:
+                    column = fallback
+                margin, indent = column, -column
+            elif text.startswith(self.INDENT):
+                margin = plain.horizontalAdvance(self.INDENT)
+                indent = -margin
+            elif text:
+                margin = column                     # a free-text line break inside an entry
+            fmt = block.blockFormat()
+            if fmt.leftMargin() != margin or fmt.textIndent() != indent:
+                fmt.setLeftMargin(margin)
+                fmt.setTextIndent(indent)
+                cursor.setPosition(block.position())
+                cursor.setBlockFormat(fmt)
+            block = block.next()
+        cursor.endEditBlock()
 
     @classmethod
     def _event_text(cls, e: Event, full: bool = False, width: int = 0, kinds: int = 15,

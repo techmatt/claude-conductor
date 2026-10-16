@@ -578,11 +578,13 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
 **Panels.**
 
 - *Repos* — per repo: the running item with its phase (`running`, `merging`,
-  `concluding`) and elapsed time, the staged item (`staging`, or `staged` with its plan
-  ready), the queue in order with the head's decision (`wait`, `hold`, …) and any
-  invalid item, and a hold row, listed first under its repo (the head item then reads
-  *blocked by hold*): a red hold has a **Clear hold** button (`clear: <repo>`);
-  each queued item has **Cancel** (asks first; `cancel: <repo>/<NNN_name>`).
+  `concluding`) and elapsed time, the queue in order with the head's decision (`wait`,
+  `hold`, …) and any invalid item, and a hold row, listed first under its repo (the head
+  item then reads *blocked by hold*): a red hold has a **Clear hold** button
+  (`clear: <repo>`); each queued item has **Cancel** (asks first;
+  `cancel: <repo>/<NNN_name>`). A staged item is the queue head, so it is one row whose
+  state carries both: `staging` (with elapsed) or `staged (plan ready)`, then `· head`
+  or `· blocked by hold`.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
@@ -593,7 +595,8 @@ then writes a `stop: daemon` signal. Executors and stages keep running either wa
 - *Events* — the whole log, filterable by repo, item (`001`, `001_x`, `repo/001_x`, or
   any substring of the id), kind, a from/to time range and *reds only*. Selecting an
   event shows its item's trail beside it: every event of the item (the selected one
-  expanded with its full detail), the prompt as sent (`.prompt.md`, else the item
+  expanded with its full detail; wrapped lines hang under the event's text, or under the
+  detail indent when the pane is too narrow to leave ~20 characters there), the prompt as sent (`.prompt.md`, else the item
   file), the report, the executor log and the stage log rendered from stream-json (text,
   `→ tool: input`, `← result`, the final result line with turns, time and cost), and
   *Git*: the item's commits with diffs from `conductor/<NNN_name>` while that branch

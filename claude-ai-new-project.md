@@ -2,6 +2,8 @@
 
 Read this at the start of a claude.ai session that opens a NEW project, or when Matt (the user) says "read the workflow". It is the whole method; nothing from earlier projects is assumed. Every rule here would still be true if the project were about something else. How conductor itself works is in its `README.md`; the phrases Matt uses are in **Vocab** at the end.
 
+**This workflow replaces an older one.** It uses no Google Drive, no prompt or report folders outside the control folder, no "CLOSEOUT apply" prompts, and no files for Matt to place by hand. If memory or saved preferences describe Drive delivery, folder-resolution rules, apply-scripts or checkpoint numbering, those belong to the earlier fractal project and do not apply here. Where a saved preference and this file disagree about mechanics, this file wins. Matt's own stated preferences about content and judgement still apply.
+
 ## The three roles
 
 - **Planner — this claude.ai session**, linked to Matt's Windows box through the desktop app. It works on files only: it reads and writes the project's control folder through the bridge (stage a file to read it, commit a file to write it). It has no shell on the box and never needs one. Sessions are bounded (~150k tokens is the warn point; Matt decides when to close out) and every session can end at any moment, because the planner keeps `state.md` current as it goes.
@@ -30,6 +32,14 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 
 **The tracked control files change only through conductor.** The planner writes a request (`requests\<stamp>\` holding whole replacement files plus `request.md` with a commit message); conductor copies them over, commits, and logs it. Conductor snapshots the control folder around every executor run and reverts any change it finds to a tracked file there, logging a red event — so an errant prompt cannot damage the docs. The planner never hand-patches a tracked file in place, and never uses hunks: it stages the current file, edits in its workspace, and sends the whole file.
 
+## The bridge
+
+- The planner must be in a claude.ai chat **linked to the box**: Matt opens the chat in the Claude desktop app's Chat tab and sends a message. The Code tab is a separate thing. If the device tools are missing, say so and ask Matt to link the chat; don't work around it.
+- Folder access can be requested only for a folder that already exists. Ask once, for exactly the folders needed.
+- Reading a file means staging a snapshot of it into the workspace. Re-stage before relying on a file that may have changed. Writing means committing a file from the workspace; pass the staged `mtimeMs` as `expectedMtimeMs` when replacing a file someone else may have touched.
+- The bridge cannot delete files or run commands on the box. Anything that needs either is a signal (queue changes; `cancel` keeps the file), a request (adds or replaces tracked control files, never deletes one), a queue item (anything in a code repo), or one command Matt runs himself (including deleting a tracked control file).
+- Write every file with LF line endings.
+
 ## Starting a new project
 
 1. Matt names the project and its code repos. Nothing is authored before every name is fixed.
@@ -37,7 +47,13 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
    It writes the layout, `conductor.toml`, a stub `state.md` and the `.gitignore`, then makes the first commit. It refuses a folder that already has files in it. Matt creates any code repo that doesn't exist yet.
 3. The planner asks for folder access to the control folder and to each repo. Access can only be granted to a folder that exists.
-4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, or `worktrees = false`), as one request. It also writes each code repo's `CLAUDE.md` standing contract (report shape, commit rules — "commit to the branch you are on" — how to background long steps, the `Report written to` sign-off) as a first queued prompt for that repo.
+4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, or `worktrees = false`), as one request. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
+   - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
+   - "commit to the branch you are on";
+   - local 12-hour clock times;
+   - steps over ~30 seconds backgrounded, with a completion waiter on the real process, never on a launcher wrapper;
+   - LF line endings (`.gitattributes` `* text=auto eol=lf`);
+   - operational facts learned while working promoted into the repo's README, never left only in a report.
 5. Matt starts conductor for the project (`uv run conductor run C:\Code\<project>-control`). From then on, work flows through the queue.
 
 ## Every session
@@ -45,6 +61,9 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 - Start: read `state.md` and the **Vocab** section below, then "check inbox" unless Matt opens with something else. Open questions lead the inbox; raise blocking ones first.
 - Matt raises every next step. The planner answers what is asked and lists open questions; it never assumes or schedules the next leg.
 - `remind me the vocab` prints the **Vocab** table.
+- Design and scoping decisions are made in conversation with Matt, not handed to an executor. What an executor adds is facts: comparisons, audits, prototypes to look at. Those are usually `readonly` items, which the planner may queue without approval when they take no shared lock (see *Approval*).
+- For a trivial outcome, two sentences and no write-up.
+- If this file turns out to be wrong or missing something during a project, tell Matt in a line. Then, when no conductor prompt is running, add a line to *Open* in `C:\Code\claude-conductor\HANDOFF.md` so the next conductor prompt fixes it.
 - Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos, questions, the event trail, and proposed items. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
 
 ## Writing a prompt
