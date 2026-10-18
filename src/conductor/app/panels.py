@@ -282,6 +282,8 @@ class ReposPanel(Panel):
             head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
             if rs.unreviewed:
                 head += f", {rs.unreviewed} unreviewed"
+            if rs.audit_notes:
+                head += f", {rs.audit_notes} audit note(s)"
             out.append((rs.name, head, str(rs.path), rows))
         return out
 

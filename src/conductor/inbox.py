@@ -123,7 +123,8 @@ def describe(ev: Event) -> str:
             text = f"queue `{ev.repo}` cleared"
         case "enqueue":
             extras = [f"{k}: {d[k]}" for k in ("depends_on", "locks") if d.get(k)]
-            extras += [k for k in ("needs_planner", "readonly", "ultracode") if d.get(k)]
+            extras += [k for k in ("needs_planner", "readonly", "ultracode", "audit") if d.get(k)]
+            extras += [f"template: {d['template']}"] if d.get("template") else []
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
         case "adopt":
             text = f"{who} {'stage ' if d.get('stage') else ''}adopted after restart (pid {d.get('pid')})"
@@ -155,6 +156,8 @@ def describe(ev: Event) -> str:
             text = f"late answer to `{d.get('question')}` ignored ({d.get('outcome')} already): {d.get('text')}"
         case "question_closed":
             text = f"`{d.get('question')}` closed unanswered: {d.get('reason') or d.get('outcome')}"
+        case "audit_used":
+            text = f"{who} used {len(d.get('notes', []))} audit note(s): {', '.join(d.get('notes', []))}"
         case "queue_empty":
             text = f"queue `{ev.repo}` is empty (last: {d.get('last')})"
         case "warning" | "config_reload":
@@ -263,6 +266,8 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
             parts.append(f"{d.action}: {d.reason}")
         elif ev := view.red_hold.get(repo):
             parts.append(f"held after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
+        if notes := view.unused_notes(cfg, repo):
+            parts.append(f"{len(notes)} unused audit note(s) ({', '.join(n.item.split('/', 1)[1] for n in notes)})")
         out.append(f"- `{repo}`: {'; '.join(parts) or 'idle'}")
     for d in view.stray:
         out.append(f"- `queue/{d.name}` is not a repo in conductor.toml; its items never run")

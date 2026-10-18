@@ -163,6 +163,7 @@ class RepoState:
     finished_total: int = 0
     earlier: list[Finished] = field(default_factory=list)      # settled by a checkpoint, newest first
     earlier_total: int = 0
+    audit_notes: int = 0        # audit notes no cleanup has used yet
 
     @property
     def unreviewed(self) -> int:
@@ -247,7 +248,7 @@ def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> 
 # Workflow-level kinds the Events tab shows by default; every other kind (worktree,
 # stage, merge, commit, hold, enqueue, read, ...) only with Advanced. A red, a warning
 # or an invalid event is always activity, whatever its kind.
-ACTIVITY_KINDS = {"start", "finish", "reviewed", "checkpoint", "ask", "answer", "default", "late", "question_closed",
+ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "request", "request_failed",
                   "daemon_start", "daemon_stop", "progress", "tell", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed"}
@@ -275,6 +276,8 @@ def activity_text(ev: Event) -> str:
             return text
         case "reviewed":
             return f"report {name} reviewed{by}"
+        case "audit_used":
+            return f"{name} used {len(d.get('notes', []))} audit note(s)"
         case "checkpoint":
             return f"new {checkpoint_name(ev)}{by}"
         case "progress":
@@ -448,6 +451,7 @@ class Project:
                 rs.action, rs.reason = d.action, d.reason
             rs.finished, rs.finished_total = finished_items(view, repo)
             rs.earlier, rs.earlier_total = earlier_items(view, repo)
+            rs.audit_notes = len(view.unused_notes(cfg, repo))
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
         run = {name: targets.status(cfg, t, TARGET_PROBE_SECONDS) for name, t in cfg.targets.items()}

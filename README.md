@@ -18,6 +18,7 @@ uv run conductor status [<control folder>]
 uv run conductor inbox  [<control folder>]
 uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--kind K] [--paths]
 uv run conductor questions [<control folder>] [--all]      # open asks (--all: resolved too)
+uv run conductor audits [<control folder>] [--all]         # unused audit notes per repo (--all: used too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
 uv run conductor checkpoint [<label…>] [--control <folder>]   # a new checkpoint (see Checkpoints)
@@ -56,7 +57,7 @@ done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
-                               .stage.prompt.md for a stage
+                               .stage.prompt.md for a stage; .audit.md (audit notes)
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
@@ -140,12 +141,14 @@ max_hours: 1             # hard-kill deadline; default from conductor.toml
 paths: ['src/ui/**']     # globs the item may change; enables concurrency (see `paths:`)
 stage: false             # override the repo's `stage` setting for this item
 ultracode: true          # launch with Claude Code's ultracode on (see Executors, *Ultracode*)
+audit: true              # keep audit notes beside the report (see Audits and templates)
+template: cleanup        # cleanup | general_audit | test_perf: a conductor-owned prompt (same section)
 ---
 Prompt body.
 ```
 
-Unknown fields, a mismatched `repo`, bad values or an empty body make the item
-**invalid**: logged once (and again whenever the file changes) and its queue holds
+Unknown fields, a mismatched `repo`, bad values or an empty body (allowed with
+`template:`, whose text is the prompt) make the item **invalid**: logged once (and again whenever the file changes) and its queue holds
 until the file is fixed — an item not yet started may be rewritten freely.
 
 An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numbers
@@ -294,7 +297,9 @@ launches a session with a stage preamble — read the prompt and what it points 
 read-only commands only, nothing long or heavy, no edits, no asks (no `--mcp-config`),
 write a plan as the final message, stop. The item stays in `queue/`; its record is
 `running/<repo>/NNN_name.stage.json` (`stage` event, then `staged` with the plan's
-first 500 characters). At most one staged item per repo.
+first 500 characters). At most one staged item per repo. A `template: cleanup` item
+never stages: the audit notes it is handed are fixed at launch, and the item it waits
+on may still add some.
 
 When the head can run, conductor checks the worktree is still exactly as cut (HEAD,
 tracked files, and no untracked files beyond what setup made), moves it to current
@@ -406,6 +411,56 @@ item that changed its repo, a launch failure (worktree or setup included), a
 `paths` violation, uncommitted changes left in the worktree, or a rebase conflict
 (including a prose conflict its merge executor failed to resolve).
 The reasons are listed in the `finish` and `red` events.
+
+## Audits and templates
+
+Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
+live in `src/conductor/templates/` (`audit.md`, `cleanup.md`, `general_audit.md`,
+`test_perf.md`) and are versioned with this repo: the `start` event of a template item
+carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
+`git log` on the file finds the exact text sent. Executors never see the control
+folder, so whatever a template needs is inlined into the prompt (kept, as always, in
+`.prompt.md`). The texts use `{{name}}` placeholders.
+
+- **`audit: true`** (any item; explicit, never automatic). The preamble gains an
+  *Audit notes* paragraph (`audit.md`) naming an absolute path,
+  `reports/<repo>__NNN_name.audit.md`, as the second file the executor may write
+  outside its working directory. It keeps a running notes file there while it works,
+  covering every task, under four headings: what was poorly structured, what took
+  longer than expected and why, what should be refactored or cleaned up, and what
+  CLAUDE.md or README should say. Nobody reviews notes per item. The item's `finish`
+  event carries `audit: true` and lists the notes file among its paths.
+- **`template: cleanup`**. The prompt after the preamble is `cleanup.md` with every
+  *unused* note of the repo inlined, oldest first, each headed `### Notes from <item>,
+  finished <status> <time>`; then, after `---` and "The planner adds, for this item:",
+  the item's own body, if any. The executor carries out what is clear and well
+  defined and defers every design-level call (its report lists them under
+  **Deferred**, with options and a recommendation). A cleanup never stages.
+- **`template: general_audit`**. The same, with no notes to go on: it behaves as
+  `audit: true` (it writes its own notes file), audits the whole repo, then carries out
+  the clear items and defers the design calls.
+- **`template: test_perf`**. Set up or tighten a fast/slow lane split and speed tests
+  up generally; a small loss of thoroughness or moving a slow test to the slow lane is
+  allowed; the report gives before/after timings per lane (the one report where test
+  detail belongs). It uses no notes.
+
+**Which notes are unused.** A note is a finished item whose `finish` event has
+`audit: true` and whose `.audit.md` exists and is not blank, in any status (a red
+item's notes are still notes). It is *used* once an `audit_used` event names it, and
+*claimed* while a running cleanup's `.run.json` lists it under `notes`. A cleanup takes
+every note neither used nor claimed at the moment it launches (they are in its `start`
+event as `notes`). When it concludes, unless it ended red, conductor logs
+`audit_used` (`notes`, and their files as `paths`) before its `finish`, so the next
+cleanup sees only newer notes. A red cleanup uses none: they stay for the next one. A
+general audit that does not end red uses its own notes the same way. A cleanup that
+could run but has no unused notes holds (`hold`: *cleanup: no unused audit notes*)
+until an audit item finishes or it is cancelled. While something else still blocks
+it, it only waits, since the item it waits on may add notes.
+
+`conductor audits [<control>]` lists each repo's unused notes (item, status, finish
+time, file, line count); `--all` adds the used ones with the cleanup that used them.
+The inbox's *Now* line per repo says `N unused audit note(s) (NNN_x, …)`, and the app's
+Repos tab adds `N audit note(s)` to the repo's header.
 
 **max_hours** is enforced by the daemon: past the deadline (stored in `.run.json`, so
 it survives restarts) the executor's whole process tree is killed (`kill` event). Time
@@ -550,8 +605,8 @@ The signal `run: <name>` (planner, app) or `conductor run-target <name>` (CLI):
   then left running): `run_failed`, a red kind, with `error` and the log's last 20 lines
   (`log_tail`). It leads the inbox's Red section and toasts, but holds no queue.
 
-`run: <name> stop` (`conductor run-target <name> --stop`) kills the recorded process
-tree; `run_stop`. The daemon never blocks on a start: it checks pending targets every
+`run: <name> stop` (`conductor run-target <name> --stop`, the app's **Stop <name>**)
+kills the recorded process tree; `run_stop`. The daemon never blocks on a start: it checks pending targets every
 tick. A daemon restart forgets a start it was waiting on (run it again: it opens at
 once if up). The CLI waits in the foreground and prints the events. On Windows a probe
 of a closed local port can take up to its timeout (1s; the app's header probe uses
@@ -768,7 +823,8 @@ then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, 
 **Holds**, **Finished** (status, blocks, carry, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
 included), **Other**; then **Now**: per repo, what is running (or merging), staged
-(`staging`/`staged`), queued, waiting or held, plus proposed items. A hold stays in
+(`staging`/`staged`), queued, waiting or held, and how many audit notes are unused,
+plus proposed items. A hold stays in
 the Holds section until the item starts, merges, finishes or is cancelled, or a
 reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
 `stage` and `worktree` events are left out of the inbox (they are in
@@ -820,7 +876,9 @@ allowed), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log
 then writes a `stop: daemon` signal. Executors and stages keep running either way.
 Each run target gets a **Run <name>** button beside them, reading `● up`, `● starting`
 or `● down` (green, amber, grey; probed each refresh); a click writes `run: <name>`,
-which opens the URL (starting the target first when it is down).
+which opens the URL (starting the target first when it is down). While a target is
+up or starting, a **Stop <name>** button beside its Run button writes `run: <name>
+stop` (no confirmation: a click is cheap to undo with Run).
 **New checkpoint…** asks for a label (default `session start`) and writes
 `checkpoint: <label>`; its tooltip names the current checkpoint.
 
@@ -858,7 +916,7 @@ which opens the URL (starting the target first when it is down).
   first. Question files are re-parsed only when they or their result change.
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
-  `report X reviewed`, `X: <progress line>`, `message #n to X: …` and `message #n
+  `report X reviewed`, `X used N audit note(s)`, `X: <progress line>`, `message #n to X: …` and `message #n
   reached X`, run targets starting / up / opened / stopped, questions asked / answered / default taken (and late answers and
   closes), approved, cancelled, reordered, cleared, `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
@@ -934,7 +992,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields |
 | `invalid` | bad item, signal, stray queue folder, bad config | error |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
-| `start` | executor launched | session_id, pid, deadline, worktree, branch; resumed, landed (a staged item); error (launch failed) |
+| `start` | executor launched | session_id, pid, deadline, worktree, branch; resumed, landed (a staged item); template, template_version, notes (a template item; a cleanup's notes); error (launch failed) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline |
 | `staged` | the stage finished cleanly | session_id, plan (first 500 chars), cost_usd |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
@@ -946,7 +1004,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
 | `requeue` | restart found it never launched | reason |
 | `kill` | max_hours reached | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, session_id, exit_code, cost_usd, turns, branch, merged |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, session_id, exit_code, cost_usd, turns, branch, merged; audit (it kept notes), template |
+| `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window | changes, concurrent |
 | `drift` | control folder changed with no executor running | changes |

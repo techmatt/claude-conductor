@@ -69,10 +69,12 @@ class ProjectView(QWidget):
         for w in (self.state_label, self.daemon_label, self.pending_label):
             head.addWidget(w)
         head.addStretch(1)
-        # One Run button per `[run.<name>]` target, rebuilt when the targets change.
+        # One Run button per `[run.<name>]` target, rebuilt when the targets change, each
+        # with a Stop button beside it, shown while the target is up or starting.
         self.run_bar = QHBoxLayout()
         head.addLayout(self.run_bar)
         self.run_buttons: dict[str, QPushButton] = {}
+        self.stop_buttons: dict[str, QPushButton] = {}
         head.addWidget(self.checkpoint_btn)
         head.addWidget(self.start_btn)
         head.addWidget(self.stop_btn)
@@ -165,15 +167,21 @@ class ProjectView(QWidget):
 
     def _update_run_buttons(self, snap: Snapshot) -> None:
         if list(snap.targets) != list(self.run_buttons):
-            for b in self.run_buttons.values():
+            for b in [*self.run_buttons.values(), *self.stop_buttons.values()]:
                 self.run_bar.removeWidget(b)
                 b.deleteLater()
-            self.run_buttons = {}
+            self.run_buttons, self.stop_buttons = {}, {}
             for name in snap.targets:
                 b = QPushButton()
                 b.clicked.connect(lambda _=False, n=name: self.run_target(n))
                 self.run_bar.addWidget(b)
                 self.run_buttons[name] = b
+                s = QPushButton(f"Stop {name}")
+                s.setToolTip(f"Stop run target {name}: kills its process tree (a `run: {name} stop` signal; "
+                             "the daemon must be running)")
+                s.clicked.connect(lambda _=False, n=name: self.stop_target(n))
+                self.run_bar.addWidget(s)
+                self.stop_buttons[name] = s
         colours = {"up": theme.GREEN, "starting": theme.AMBER, "down": theme.MUTED}
         for name, st in snap.targets.items():
             b = self.run_buttons[name]
@@ -184,10 +192,15 @@ class ProjectView(QWidget):
                 b.setStyleSheet(f"QPushButton {{ color: {colours.get(st, theme.MUTED)}; font-weight: bold; }}")
             b.setToolTip(f"{'Open' if st == 'up' else 'Start, then open'} {t.url if t else ''} "
                          "(a `run:` signal; the daemon must be running)")
+            self.stop_buttons[name].setVisible(st in ("up", "starting"))
 
     def run_target(self, name: str) -> None:
         path = actions.run_target(self.project.control, name)
         self.notify(f"run {name}: wrote signals/{path.name}; the daemon starts it if needed and opens it")
+
+    def stop_target(self, name: str) -> None:
+        path = actions.run_target(self.project.control, name, stop=True)
+        self.notify(f"stop {name}: wrote signals/{path.name}; the daemon stops it")
 
     def new_checkpoint(self, label: str | None = None) -> None:
         if label is None:

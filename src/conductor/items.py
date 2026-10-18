@@ -7,11 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import globs
+from .audits import TEMPLATES
 from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage", "ultracode"}
+          "paths", "stage", "ultracode", "audit", "template"}
 
 
 @dataclass
@@ -29,6 +30,8 @@ class Item:
     paths: list[str] = field(default_factory=list)     # globs the item may change; [] = undeclared
     stage: bool | None = None                           # None: the repo's `stage` setting
     ultracode: bool = False                             # launch with Claude Code's ultracode on
+    audit: bool = False                                 # keep audit notes beside the report
+    template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -40,7 +43,7 @@ class Item:
         return {"locks": self.locks, "depends_on": self.depends_on, "after_red": self.after_red,
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
-                "ultracode": self.ultracode}
+                "ultracode": self.ultracode, "audit": self.audit, "template": self.template}
 
 
 def _list(value, what: str, errors: list[str]) -> list[str]:
@@ -81,7 +84,7 @@ def parse(path: Path, repo: str) -> Item:
     item.after_red = str(meta.get("after_red", "stop"))
     if item.after_red not in ("stop", "continue"):
         item.errors.append("`after_red` must be stop or continue")
-    for flag in ("needs_planner", "readonly", "ultracode"):
+    for flag in ("needs_planner", "readonly", "ultracode", "audit"):
         value = meta.get(flag, False)
         if not isinstance(value, bool):
             item.errors.append(f"`{flag}` must be true or false")
@@ -102,7 +105,12 @@ def parse(path: Path, repo: str) -> Item:
             item.errors.append("`stage` must be true or false")
         else:
             item.stage = meta["stage"]
-    if not body.strip():
+    if meta.get("template") is not None:
+        if meta["template"] not in TEMPLATES:
+            item.errors.append(f"`template` must be one of {', '.join(TEMPLATES)}")
+        else:
+            item.template = meta["template"]
+    if not body.strip() and item.template is None:          # a template is a whole prompt
         item.errors.append("the prompt body is empty")
     return item
 

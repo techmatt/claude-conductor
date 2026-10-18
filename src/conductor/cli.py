@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | answer | tell | checkpoint | open | run-target | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | checkpoint | open | run-target | init | app`."""
 
 from __future__ import annotations
 
@@ -111,6 +111,25 @@ def cmd_questions(args) -> int:
         for ln in q.body.rstrip().splitlines():
             print(f"    {ln}")
         print()
+    return 0
+
+
+def cmd_audits(args) -> int:
+    from . import audits
+    cfg, log = _open(args.control)
+    view = state.scan(cfg, log)
+    claimed = view.claimed_notes()
+    for repo in cfg.repos:
+        notes = audits.notes(cfg, repo, view.finishes, view.audit_used, include_used=True)
+        free = [n for n in notes if n.used_by is None and n.item not in claimed]
+        print(f"{repo}: {len(free)} unused audit note(s)")
+        for n in notes:
+            if n in free or args.all:
+                lines = len(n.path.read_text(encoding="utf-8", errors="replace").splitlines())
+                how = (f"used by {n.used_by.item} (#{n.used_by.id})" if n.used_by else
+                       "claimed by a running cleanup" if n.item in claimed else "unused")
+                print(f"  {n.item}  finished {n.finish.detail.get('status')} {clock(n.finish.ts)} — "
+                      f"{cfg.rel(n.path)} ({lines} lines) · {how}")
     return 0
 
 
@@ -302,6 +321,10 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.add_argument("--all", action="store_true", help="include resolved questions")
     sp.set_defaults(fn=cmd_questions)
+    sp = sub.add_parser("audits", help="audit notes per repo not yet used by a cleanup")
+    sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.add_argument("--all", action="store_true", help="include notes already used or claimed")
+    sp.set_defaults(fn=cmd_audits)
     sp = sub.add_parser("answer", help="answer a question (writes its answer file)")
     sp.add_argument("id", help="question id, e.g. sandbox__001_x__1 or 001__1")
     sp.add_argument("text", nargs="+", help="the answer")

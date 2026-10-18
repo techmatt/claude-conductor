@@ -23,7 +23,7 @@ from pathlib import Path
 import psutil
 
 from . import config as config_mod
-from . import (executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, talk, targets,
+from . import (audits, executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, talk, targets,
                worktrees)
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
@@ -1068,6 +1068,11 @@ class Daemon:
             "worktree": None, "branch": None, "base": None, "shared": [], "staged": bool(stage),
             "pid": None, "create_time": None,
         }
+        if item.template:
+            rec["template_version"] = audits.template_version(item.template)
+        if item.template == "cleanup":
+            # Claimed in the run record from the first save, so no other cleanup takes them.
+            rec["notes"] = self._free_notes(item.repo)        # a cleanup never stages
         run = Run(rec, rec_path, md_path)
         # Durable order: record, then worktree, then move, then launch, then the pid. A
         # restart that finds no pid and no live process with this session id requeues it.
@@ -1086,6 +1091,8 @@ class Daemon:
             self._worktree_event(rec, "moved", f"{stage['base'][:10]} → {(rec['base'] or '?')[:10]}")
         elif cfg.opts(item.repo).worktrees:
             error = self._make_worktree(item, rec, paths.setup)
+        if item.template == "cleanup" and not rec["notes"] and not error:
+            error = f"cleanup: no unused audit notes for {item.repo}"
         cwd = Path(rec["worktree"]) if rec["worktree"] else repo_path
         rec["repo_head"] = rec["base"] or git.head(repo_path)
         rec["repo_status"] = git.tracked_status(cwd) if item.readonly and not error else None
@@ -1103,7 +1110,8 @@ class Daemon:
                             pid=None, error=error)
             self.finish(run, launch_error=error)
             return
-        write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume))
+        write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume,
+                                                       notes=self._notes_text(rec)))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         try:
@@ -1119,6 +1127,10 @@ class Daemon:
         rec["create_time"] = procs.create_time(run.popen.pid)
         self._save(run)
         extra = {"worktree": rec["worktree"], "branch": rec["branch"]} if rec["worktree"] else {}
+        if item.template:
+            extra |= {"template": item.template, "template_version": rec["template_version"]}
+        if rec.get("notes"):
+            extra["notes"] = rec["notes"]
         if resume:
             extra |= {"resumed": True, "landed": resume["landed"]}
         self.log.append("start", item=item.id,
@@ -1223,6 +1235,16 @@ class Daemon:
             self._worktree_op(rec, "discarded", "stage discarded")
         retry_io(run.rec_path.unlink, True)
         self.log.append("warning", item=rec["item"], note=f"stage discarded: {reason}; the item launches fresh")
+
+    def _free_notes(self, repo: str) -> list[str]:
+        """The ids of `repo`'s audit notes no cleanup has used or claimed, oldest first."""
+        return [n.item for n in state.scan(self.cfg, self.log).unused_notes(self.cfg, repo)]
+
+    def _notes_text(self, rec: dict) -> str:
+        if not rec.get("notes"):
+            return ""
+        finishes = {i: ev for i in rec["notes"] if (ev := self.log.last("finish", item=i))}
+        return audits.render_notes(self.cfg, rec["notes"], finishes)
 
     def resume(self, item: items.Item, srec: dict) -> None:
         if self._stage_dirty(srec):
@@ -1494,7 +1516,7 @@ class Daemon:
         stopped = git.run(wt, "log", "-1", "--format=%h %s", "REBASE_HEAD", check=False).strip()
         main_sha = git.rev(cfg.repos[repo], cfg.opts(repo).main)
         upstream = git.commits_between(cfg.repos[repo], rec["base"], main_sha)
-        body = items.parse(run.md_path, repo).body if run.md_path.is_file() else ""
+        body = executor.body(cfg, items.parse(run.md_path, repo)) if run.md_path.is_file() else ""
         write_text(paths.merge_prompt, executor.build_merge_prompt(cfg, rec["item"], rec, m.files, upstream,
                                                                    stopped, body))
         for stale in (paths.merge_log, paths.merge_stderr):
@@ -1573,6 +1595,23 @@ class Daemon:
         extra = {k: rec[k] for k in ("branch",) if rec.get(k)}
         if out.get("merged"):
             extra["merged"] = out["merged"]
+        if rec.get("template"):
+            extra["template"] = rec["template"]
+        report_paths = [cfg.rel(Path(rec["report"])), cfg.rel(Path(rec["log"])), done_md]
+        notes = executor.RunPaths.for_name(cfg, repo, rec["name"]).audit
+        if audits.writes_notes(rec):
+            extra["audit"] = True
+            if notes.is_file():
+                report_paths.append(cfg.rel(notes))
+        if rec.get("template") in audits.USES_NOTES and out["status"] != "red":
+            # What this cleanup (or general audit, its own notes) acted on: the next
+            # cleanup sees only newer notes. A red one uses none.
+            used = list(rec.get("notes") or [])
+            if rec["template"] == "general_audit" and notes.is_file():
+                used.append(item_id)
+            if used:
+                self.log.append("audit_used", item=item_id, notes=used,
+                                paths=[cfg.rel(audits.note_path(cfg, *n.split("/", 1))) for n in used])
         # `red` before `finish`: a restart that finds the finish logged only moves the
         # item, so the red hold must already be on record.
         self.process_talk()
@@ -1583,7 +1622,7 @@ class Daemon:
             self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
                             reasons=out["reasons"], after_red=rec.get("after_red", "stop"))
         self.log.append(
-            "finish", item=item_id, paths=[cfg.rel(Path(rec["report"])), cfg.rel(Path(rec["log"])), done_md],
+            "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
             blocks=out["blocks"], carry=out["carry"],
             session_id=rec["session_id"], exit_code=out["exit_code"],

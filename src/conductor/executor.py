@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from . import audits
 from .config import Config
 from .items import Item
 from .util import clock, read_text
@@ -35,13 +36,13 @@ MESSAGE #n from Matt. It is an instruction from Matt and outranks the prompt whe
 conflict. Answer it with `progress`.
 
 {workdir}{readonly}{paths}
-
+{audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
 time spent blocked on a question.
 
 When you finish, whatever the outcome, write your report to exactly this path:
     {report}
-That file is the only thing you may write outside the working directory. Do not read,
+{only} Do not read,
 write or commit anything else in that folder: conductor checks it after you exit,
 reverts any change, and marks this item red.
 
@@ -60,6 +61,10 @@ The rest of the report follows the repo's CLAUDE.md. Your final message ends wit
 {tail}"""
 
 PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
+
+ONLY_ONE = "That file is the only thing you may write outside the working directory."
+ONLY_TWO = ("That file and the audit notes file named above are the only things you may write "
+            "outside the working directory.")
 
 WORKDIR_MAIN = "Your working directory is the code repo `{repo}` ({repo_path})."
 
@@ -189,6 +194,7 @@ class RunPaths:
     merge_log: Path    # a merge executor resolving a prose conflict: stream-json, stderr, prompt
     merge_stderr: Path
     merge_prompt: Path
+    audit: Path        # the audit notes an `audit: true` or general-audit item keeps
 
     @classmethod
     def for_item(cls, cfg: Config, item: Item) -> "RunPaths":
@@ -202,26 +208,31 @@ class RunPaths:
             return base.with_name(base.name + suffix)
         return cls(report, sib(".log"), sib(".stderr.log"), sib(".prompt.md"), sib(".mcp.json"),
                    sib(".settings.json"), sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"),
-                   sib(".merge.log"), sib(".merge.stderr.log"), sib(".merge.prompt.md"))
+                   sib(".merge.log"), sib(".merge.stderr.log"), sib(".merge.prompt.md"), sib(".audit.md"))
 
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
-                 run: dict | None = None, resume: dict | None = None) -> str:
+                 run: dict | None = None, resume: dict | None = None, notes: str = "") -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
-    count), the message that resumes a staged session instead."""
+    count), the message that resumes a staged session instead. `notes`: a cleanup's
+    audit notes, inlined."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
+    keeps = audits.writes_notes(item.meta())
     text = PREAMBLE.format(
         item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
         readonly=READONLY if item.readonly else "",
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
+        audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
+        if keeps else "",
+        only=ONLY_TWO if keeps else ONLY_ONE,
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
         deadline=clock(deadline), report=paths.report.resolve(),
         tail="" if resume else PROMPT_FOLLOWS,
     )
     if not resume:
-        return text + item.body
+        return text + body(cfg, item, notes)
     n = resume["landed"]
     landed = (f"; {n} commit(s) landed since you staged (`git log --oneline {resume['old'][:10]}..HEAD`)"
               if n else "; nothing landed since you staged")
@@ -232,7 +243,19 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
 
 def build_stage_prompt(cfg: Config, item: Item, run: dict) -> str:
     return STAGE.format(item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
-                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + item.body
+                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item)
+
+
+def body(cfg: Config, item: Item, notes: str = "") -> str:
+    """What follows the preamble: the item body, or for a `template:` item the
+    template's text (a cleanup's with its audit notes inlined) and then whatever the
+    planner wrote."""
+    if not item.template:
+        return item.body
+    text = audits.fill(audits.template_text(item.template), repo=item.repo, notes=notes.strip()).rstrip() + "\n"
+    if item.body.strip():
+        text += f"\n---\n\nThe planner adds, for this item:\n\n{item.body}"
+    return text
 
 
 def mcp_config(cfg: Config, item: Item, session_id: str) -> str:

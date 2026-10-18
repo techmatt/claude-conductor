@@ -3,6 +3,7 @@
     FAKE sleep <seconds>
     FAKE report <done|partial|red|none>      (default done)
     FAKE write <path> <text>                 write a file (absolute, or relative to cwd)
+    FAKE audit <text>                        append a line to the audit notes file the preamble names
     FAKE commit <file> <text>                write <file> in cwd and commit it
     FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
     FAKE check <path>                        the report is red unless <path> exists
@@ -140,6 +141,10 @@ for ln in lines:
             status = parts[2]
         case "write":
             Path(parts[2]).write_text(parts[3] + "\n", encoding="utf-8")
+        case "audit":
+            notes = Path(lines[lines.index(next(ln for ln in lines if "running notes file at exactly" in ln)) + 1].strip())
+            with open(notes, "a", encoding="utf-8", newline="\n") as fh:
+                fh.write(ln.split(" ", 2)[2] + "\n")
         case "commit":
             Path(parts[2]).parent.mkdir(parents=True, exist_ok=True)
             Path(parts[2]).write_text(parts[3] + "\n", encoding="utf-8")

@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import git, globs, items
+from . import audits, git, globs, items
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
@@ -33,6 +33,7 @@ class View:
     planner_hold: dict[str, Event] = field(default_factory=dict)  # repo → unread finish
     stray: list[Path] = field(default_factory=list)            # queue folders for unknown repos
     checkpoint: Event | None = None                            # the latest `checkpoint` event
+    audit_used: dict[str, Event] = field(default_factory=dict) # note's item id → `audit_used` event
 
     def known(self) -> list[str]:
         ids = [i.id for q in self.queued.values() for i in q]
@@ -57,6 +58,13 @@ class View:
         if cp is None or fin is None or rev is None or fin.id > cp.id or rev.id > cp.id:
             return False
         return not any(ev.item == item_id for ev in self.red_hold.values())
+
+    def claimed_notes(self) -> set[str]:
+        """Notes handed to a cleanup that is running: not free for another."""
+        return {n for rec in self.running.values() for n in rec.get("notes") or []}
+
+    def unused_notes(self, cfg: Config, repo: str) -> list[audits.Note]:
+        return audits.notes(cfg, repo, self.finishes, self.audit_used, self.claimed_notes())
 
 
 def read_run(path: Path) -> dict:
@@ -87,6 +95,9 @@ def scan(cfg: Config, log: EventLog) -> View:
         view.finishes[ev.item] = ev
     for ev in log.query(kinds=["reviewed"]):
         view.reviews.setdefault(ev.item, ev)
+    for ev in log.query(kinds=["audit_used"]):
+        for note in ev.detail.get("notes", []):
+            view.audit_used.setdefault(note, ev)
     clears = {ev.repo: ev.id for ev in log.query(kinds=["clear"])}
     for ev in log.query(kinds=["red"]):
         if ev.detail.get("after_red", "stop") == "stop" and ev.id > clears.get(ev.repo, 0):
@@ -111,7 +122,9 @@ def may_stage(cfg: Config, view: View, head: Item) -> bool:
     opts = cfg.opts(head.repo)
     wanted = head.stage if head.stage is not None else opts.stage
     others = [i for i, rec in view.staged.items() if rec["repo"] == head.repo and i != head.id]
-    return opts.worktrees and wanted and not others
+    # A cleanup never stages: the notes it gets are fixed at launch, and an item running
+    # meanwhile may still add some.
+    return opts.worktrees and wanted and not others and head.template != "cleanup"
 
 
 def decide(cfg: Config, view: View) -> dict[str, Decision]:
@@ -169,6 +182,10 @@ def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str
         if stage is not None:
             reason += f"; {'staging' if stage.get('phase') == 'staging' else 'staged'}"
         return Decision(repo, "wait", head, reason)
+    # Checked only once nothing else blocks it: an audit item running ahead may add notes.
+    if head.template == "cleanup" and not view.unused_notes(cfg, repo):
+        return Decision(repo, "hold", head, f"cleanup: no unused audit notes for {repo}; it runs once an "
+                                            "`audit: true` item finishes, or cancel it")
     if stage is not None:
         if stage.get("phase") == "staging":
             return Decision(repo, "wait", head, "staging; executes when the stage finishes")
