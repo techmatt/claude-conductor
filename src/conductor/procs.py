@@ -30,6 +30,15 @@ def child_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in _PARENT_SESSION_VARS}
 
 
+def allow_foreground() -> None:
+    """Let another process (the running app) take the foreground. Windows only grants
+    that to the process the user just started, so a second launch passes it on."""
+    if WINDOWS:
+        import ctypes
+        ASFW_ANY = -1
+        ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY)
+
+
 def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path) -> subprocess.Popen:
     kwargs: dict = {}
     if WINDOWS:

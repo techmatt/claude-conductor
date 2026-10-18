@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 
 import psutil
@@ -606,5 +607,35 @@ def test_run_buttons_in_the_header(qapp, env, tmp_path):
     b.click()
     [sig] = (env.control / "signals").glob("app-*.signal")
     assert sig.read_text(encoding="utf-8") == "by: app\nrun: game\n"
+    win._quitting = True
+    win.close()
+
+
+def test_a_second_launch_hands_its_folders_to_the_running_app(qapp, env, tmp_path):
+    import time
+    from conductor.app import single
+    from conductor.app.window import MainWindow
+    name = f"conductor-app-test-{os.getpid()}-{time.monotonic_ns()}"
+    assert not single.forward([env.control], name=name)       # nobody listening yet
+    settings = _settings(tmp_path)
+    win = MainWindow([], settings=settings, tray=False, interval_ms=60_000)
+    win.server = single.listen(win.open_forwarded, name=name)
+    assert win.server is not None
+    bare = bare_control(tmp_path / "b")
+    # The second launch is its own process, as it is for real: the server only accepts
+    # from the event loop, which this test pumps meanwhile.
+    code = ("import sys; from pathlib import Path; from PySide6.QtCore import QCoreApplication; "
+            "from conductor.app import single; app = QCoreApplication([]); "
+            "sys.exit(0 if single.forward([Path(a) for a in sys.argv[2:]], name=sys.argv[1]) else 3)")
+    second = subprocess.Popen([sys.executable, "-c", code, name, str(env.control), str(bare)])
+    deadline = time.monotonic() + 20
+    while (second.poll() is None or len(win.views) < 2) and time.monotonic() < deadline:
+        qapp.processEvents()
+    assert second.wait(5) == 0
+    assert set(win.views) == {env.control.resolve(), bare.resolve()}
+    assert win.tabs.currentWidget() is win.views[bare.resolve()]
+    assert set(win.remembered()) == {str(env.control.resolve()), str(bare.resolve())}
+    assert win.isVisible()
+    win.server.close()
     win._quitting = True
     win.close()

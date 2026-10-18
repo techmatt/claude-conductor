@@ -18,14 +18,18 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError as exc:          # pragma: no cover - PySide6 is a dependency
         print(f"conductor app: PySide6 is not available ({exc})", file=sys.stderr)
         return 1
-    from . import theme
+    from . import single, theme
     from .window import MainWindow
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Conductor")
+    folders = [f.resolve() for f in folders]   # the running app has its own cwd
+    if single.forward(folders):
+        return 0                              # an app is already running: it has them now
     theme.apply(app)                          # light, whatever the system theme says
     app.setQuitOnLastWindowClosed(False)      # closing the window hides it to the tray
     win = MainWindow(folders)
+    win.server = single.listen(win.open_forwarded)
     win.show()
     if not win.has_tray():
         app.setQuitOnLastWindowClosed(True)

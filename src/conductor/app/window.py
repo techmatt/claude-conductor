@@ -295,6 +295,15 @@ class MainWindow(QMainWindow):
         self._show_empty()
         return view
 
+    def open_forwarded(self, folders: list[Path]) -> None:
+        """A second `conductor app` launch: add its folders, then come forward on the
+        last one named."""
+        for f in folders:
+            if view := self.add_project(Path(f), remember=True, quiet=True):
+                self.tabs.setCurrentWidget(view)
+        self.refresh()
+        self.show_window()
+
     def choose_project(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Control folder (holds conductor.toml)")
         if folder and self.add_project(Path(folder)):
