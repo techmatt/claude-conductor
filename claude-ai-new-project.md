@@ -2,7 +2,7 @@
 
 Read this at the start of a claude.ai session that opens a NEW project, or when Matt (the user) says "read the workflow". It is the whole method; nothing from earlier projects is assumed. Every rule here would still be true if the project were about something else. How conductor itself works is in its `README.md`; the phrases Matt uses are in **Vocab** at the end.
 
-**This workflow replaces an older one.** It uses no Google Drive, no prompt or report folders outside the control folder, no "CLOSEOUT apply" prompts, and no files for Matt to place by hand. If memory or saved preferences describe Drive delivery, folder-resolution rules, apply-scripts or checkpoint numbering, those belong to the earlier fractal project and do not apply here. Conductor's own checkpoints (see *Every session*) are numbered by conductor, never by the planner. Where a saved preference and this file disagree about mechanics, this file wins. Matt's own stated preferences about content and judgement still apply.
+**This workflow replaces an older one.** It uses no Google Drive relay (Drive is only a home for some project files: see *Storage*), no prompt or report folders outside the control folder, no "CLOSEOUT apply" prompts, and no files for Matt to place by hand. If memory or saved preferences describe Drive delivery, folder-resolution rules, apply-scripts or checkpoint numbering, those belong to the earlier fractal project and do not apply here. Conductor's own checkpoints (see *Every session*) are numbered by conductor, never by the planner. Where a saved preference and this file disagree about mechanics, this file wins. Matt's own stated preferences about content and judgement still apply.
 
 ## The three roles
 
@@ -40,13 +40,25 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 - The bridge cannot delete files or run commands on the box. Anything that needs either is a signal (queue changes; `cancel` keeps the file), a request (adds or replaces tracked control files, never deletes one), a queue item (anything in a code repo), or one command Matt runs himself (including deleting a tracked control file).
 - Write every file with LF line endings.
 
+## Storage
+
+`C:\Code\gdrive-sync` is a Google Drive sync folder. Every project file has exactly **one home**:
+
+- **git:** source, data, small chosen outputs, and anything hand-made (recordings).
+- **Drive:** `C:\Code\gdrive-sync\<project>\<folder>`, for files that are expensive, irreplaceable or private but don't belong in git: full-res generated originals, reference photos, slow or fragile generated media.
+- **Nowhere:** anything a command rebuilds cheaply.
+
+A Drive-homed folder appears in the repo's main checkout as a directory junction to its Drive folder, git-ignored in the repo. The repo's `shared` setting in `conductor.toml` links it into every worktree, so there is one copy, not two; Drive's own version history is the backup.
+
+A new Drive-homed folder starts with the queue item that creates it. That item also makes the main-checkout junction, and its prompt says so explicitly, because conductor's preamble otherwise forbids touching the main checkout. The `shared` entry is added by request only after that item merges; added earlier, conductor would create an empty real folder at that path in the main checkout first.
+
 ## Starting a new project
 
 1. Matt names the project and its code repos. Nothing is authored before every name is fixed.
 2. The planner gives Matt the one command that creates the control folder, and Matt runs it in `C:\Code\claude-conductor`:
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
    It writes the layout, `conductor.toml`, a stub `state.md` and the `.gitignore`, then makes the first commit. It refuses a folder that already has files in it. Matt creates any code repo that doesn't exist yet.
-3. The planner asks for folder access to the control folder and to each repo. Access can only be granted to a folder that exists.
+3. The planner asks for folder access to the control folder, to each repo, and to `C:\Code\gdrive-sync` (see *Storage*). Access can only be granted to a folder that exists.
 4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, its `prose` globs if the default `CLAUDE.md`/`README.md`/`docs/**/*.md` doesn't fit, or `worktrees = false`; and a `[run.<name>]` target once there is something to run), as one request. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
    - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
    - "commit to the branch you are on";
@@ -58,7 +70,7 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 
 ## Every session
 
-- Start (Matt says **start a new <project> session**): if folder access isn't granted yet, request access to the control folder and the code repos first. Read this file (the **Vocab** section included), then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Send `checkpoint: session start` (`by: planner`), then do **check inbox**. Open questions lead the inbox; raise blocking ones first, then any report the checkpoint's warnings name as still unreviewed.
+- Start (Matt says **start a new <project> session**): if folder access isn't granted yet, request access to the control folder, the code repos and `C:\Code\gdrive-sync` first. Read this file (the **Vocab** section included), then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Send `checkpoint: session start` (`by: planner`), then do **check inbox**. Open questions lead the inbox; raise blocking ones first, then any report the checkpoint's warnings name as still unreviewed.
 - **Checkpoints.** A checkpoint is a session boundary. Finished items reviewed before the latest one drop out of the inbox's counts, the app's Repos tab (into a collapsed *earlier checkpoints* group) and its Events tab (which starts at the checkpoint). Unreviewed reports, red holds, open questions and anything queued, staged, running or proposed always carry forward, and nothing is deleted. Conductor numbers checkpoints by their event id, so the planner never keeps a counter. `inbox.md` names the current one at the top.
 - Matt raises every next step. The planner answers what is asked and lists open questions; it never assumes or schedules the next leg.
 - `remind me the vocab` prints the **Vocab** table.
@@ -150,7 +162,7 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 
 | Phrase | What the planner does |
 |---|---|
-| **start a new <project> session** | If folder access isn't granted yet, requests access to the control folder and the code repos first. Reads this file, then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Signals `checkpoint: session start` (`by: planner`), then does **check inbox**. |
+| **start a new <project> session** | If folder access isn't granted yet, requests access to the control folder, the code repos and `C:\Code\gdrive-sync` first. Reads this file, then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Signals `checkpoint: session start` (`by: planner`), then does **check inbox**. |
 | **checkpoint** [label] | Signal `checkpoint: <label>` (`by: planner`) mid-session, when Matt asks: finished, reviewed items drop out of the current view. Its number is the event id `inbox.md` then names. |
 | **check inbox** | Reads `inbox.md` (everything since the last read): what finished, what's red, what's asking. Leads with open questions, then the unreviewed reports. Says what changed, not a summary. Marks it read: signal `read: <id>`, the id printed at the top of `inbox.md`. Reading never marks a report reviewed. |
 | **check reports** / **show reports** | One compact table and nothing else: every finished report not yet reviewed (item, status, finish time), oldest first, then every running or staged item with its elapsed time as "not in yet". In the same turn, the planner reviews each unreviewed report (as **process X**) and marks it reviewed. |
