@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from conductor import cli, procs, talk
 from conductor.app import actions, model
 from conductor.app.model import Project
@@ -52,8 +54,10 @@ def test_a_message_reaches_a_busy_executor_and_changes_what_it_does(env):
     assert got.id < answer.id < env.finished("code/001_busy").id
 
 
+@pytest.mark.slow
 def test_tell_refusals_and_undelivered(env):
-    env.queue("001_long", "FAKE report done\nFAKE sleep 8")
+    go = env.root / "go"
+    env.queue("001_long", f"FAKE report done\nFAKE wait-for {go.as_posix()} 30")
     env.queue("002_q", "FAKE report done", stage="false")
     env.tick_until(lambda: env.events("start"))
     for n, text in enumerate(["tell: 002 hello",            # queued
@@ -65,7 +69,9 @@ def test_tell_refusals_and_undelivered(env):
     errors = [e.detail["error"] for e in env.events("invalid")]
     assert "has not started" in errors[0] and "no running item" in errors[1]
     # Sent after its last tool call: it exits without seeing it.
+    env.tick_until(lambda: (env.root / "go.waiting").exists())
     send(env, "tell: 001 too late", "late")
+    go.touch()                              # only now may it exit, its last tool call long past
     env.tick_until(lambda: env.finished("code/001_long"))
     warn = [e for e in env.events("warning") if "never delivered" in e.detail.get("note", "")]
     assert warn and warn[0].item == "code/001_long" and not env.events("delivered")

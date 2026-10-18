@@ -39,6 +39,7 @@ def send(env, text: str, name: str = "r.signal") -> None:
     env.tick_until(lambda: not (env.control / "signals" / name).exists())
 
 
+@pytest.mark.slow
 def test_run_starts_waits_opens_and_reuses(env):
     port = free_port()
     url = f"http://127.0.0.1:{port}/"
@@ -64,6 +65,7 @@ def test_run_starts_waits_opens_and_reuses(env):
             procs.kill_tree(rec["pid"])
 
 
+@pytest.mark.slow
 def test_a_target_that_never_comes_up_is_red_with_its_log(env):
     port = free_port()
     add_target(env, "broken", f'"{sys.executable}" -c "print(\'boom: no config\'); raise SystemExit(3)"',
@@ -77,6 +79,7 @@ def test_a_target_that_never_comes_up_is_red_with_its_log(env):
     assert not env.d.log.query(kinds=["red"])          # a red event of its own kind: no queue is held
 
 
+@pytest.mark.slow
 def test_ready_timeout_leaves_the_process_running(env):
     add_target(env, "slow", serve(free_port()), f"http://127.0.0.1:{free_port()}/", ready_seconds=1.5)
     try:

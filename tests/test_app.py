@@ -293,6 +293,7 @@ def test_trail_of_a_cancelled_item_has_its_prompt(env):
     p.close()
 
 
+@pytest.mark.slow
 def test_an_app_answer_is_logged_by_app(env):
     """Found proving phase 4 live: the app's answer event had no `by`, unlike every
     signal it writes. The executor still gets the bare answer text."""
@@ -354,6 +355,7 @@ def _settings(tmp_path):
     return QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
 
 
+@pytest.mark.slow
 def test_window_renders_every_panel(qapp, env, tmp_path):
     from conductor.app.window import MainWindow
     env.queue("001_x", "FAKE commit a.txt hello")
@@ -555,6 +557,7 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     win.close()
 
 
+@pytest.mark.slow
 def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
     from conductor.app.window import MainWindow
     env.queue("001_old", "FAKE report done")

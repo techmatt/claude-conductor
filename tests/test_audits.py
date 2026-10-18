@@ -1,6 +1,8 @@
 import subprocess
 import sys
 
+import pytest
+
 from conductor import audits, items
 
 ROOT_CLI = [sys.executable, "-m", "conductor"]
@@ -14,6 +16,7 @@ def notes_file(env, name: str):
     return env.control / "reports" / f"code__{name}.audit.md"
 
 
+@pytest.mark.slow
 def test_audit_item_keeps_notes_beside_its_report(env):
     env.queue("001_a", "FAKE audit slow: the build script\nFAKE commit a.txt a", audit="true")
     env.queue("002_plain", "FAKE commit b.txt b")
@@ -33,6 +36,7 @@ def test_audit_item_keeps_notes_beside_its_report(env):
     assert "code: 1 unused audit note(s)" in out and "code/001_a" in out and "unused" in out
 
 
+@pytest.mark.slow
 def test_cleanup_gets_unused_notes_and_records_them(env):
     env.queue("001_a", "FAKE audit note one", audit="true")
     env.queue("002_b", "FAKE audit note two", audit="true")
@@ -62,6 +66,7 @@ def test_cleanup_gets_unused_notes_and_records_them(env):
     assert "note one" not in prompt(env, "006_clean")
 
 
+@pytest.mark.slow
 def test_a_red_cleanup_uses_no_notes(env):
     env.queue("001_a", "FAKE audit note one", audit="true")
     env.queue("002_clean", "FAKE report red", template="cleanup", after_red="continue")

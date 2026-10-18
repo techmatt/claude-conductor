@@ -1,6 +1,8 @@
 """Stand-in for `claude -p` in tests. Reads the prompt on stdin and obeys `FAKE` lines:
 
     FAKE sleep <seconds>
+    FAKE wait-for <path> <seconds>           # touch <path>.waiting, then wait until <path> exists
+                                             # (at most <seconds>); not a tool call
     FAKE report <done|partial|red|none>      (default done)
     FAKE write <path> <text>                 write a file (absolute, or relative to cwd)
     FAKE audit <text>                        append a line to the audit notes file the preamble names
@@ -98,6 +100,14 @@ def post_tool_use(tool: str) -> str | None:
     got = []
     for group in settings.get("hooks", {}).get("PostToolUse", []):
         for h in group.get("hooks", []):
+            # The hook is a whole Python process: run it only when a message waits for it
+            # (what it would find otherwise is nothing). Tests that send messages still
+            # run the real hook end to end.
+            a = h.get("args", [])
+            if "--control" in a and "--item" in a:
+                from conductor import talk
+                if not talk.pending(Path(a[a.index("--control") + 1]), a[a.index("--item") + 1]):
+                    continue
             out = subprocess.run([h["command"], *h.get("args", [])], capture_output=True, text=True,
                                  input=json.dumps({"hook_event_name": "PostToolUse", "tool_name": tool}),
                                  encoding="utf-8", timeout=h.get("timeout", 60)).stdout
@@ -127,6 +137,12 @@ for ln in lines:
             answers.append(text)
         case "sleep":
             time.sleep(float(parts[2]))
+        case "wait-for":
+            # `<path>.waiting` says every earlier tool call (and its hooks) is over.
+            Path(parts[2] + ".waiting").touch()
+            end = time.time() + float(parts[3])
+            while not Path(parts[2]).exists() and time.time() < end:
+                time.sleep(0.05)
         case "progress":
             progress(json.loads(ln.split(" ", 2)[2]))
         case "until-message":
@@ -162,7 +178,7 @@ for ln in lines:
                 memory += f"MISSING: {parts[2]}\n"
         case "error":
             is_error = True
-    if parts[1] != "sleep":                 # a sleep is thinking, not a tool call
+    if parts[1] not in ("sleep", "wait-for"):   # waiting is thinking, not a tool call
         post_tool_use(parts[1])
 if status != "none":
     report.write_text(f"status: {status}\nblocks: none\ncarry: none\n\nFake report.\n" + memory

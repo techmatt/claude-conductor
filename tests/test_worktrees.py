@@ -1,3 +1,5 @@
+import pytest
+
 from conductor import globs
 
 from conftest import git
@@ -54,6 +56,7 @@ def test_item_runs_in_worktree_and_merges(env):
     assert [e.detail["action"] for e in env.events("worktree")] == ["created", "removed"]
 
 
+@pytest.mark.slow
 def test_disjoint_paths_run_at_once_overlapping_in_turn(env):
     env.queue("001_a", "FAKE sleep 2\nFAKE commit a/x.txt a", paths="['a/**']")
     env.queue("002_b", "FAKE commit b/y.txt b", paths="['b/**']")
@@ -81,6 +84,7 @@ def test_paths_violation_is_red_and_unmerged(env):
     assert not env.events("merge")
 
 
+@pytest.mark.slow
 def test_commit_to_main_during_run_conflicts(env):
     before = main_head(env)
     env.queue("001_c", "FAKE sleep 1.5\nFAKE commit app.txt from the item")
@@ -112,15 +116,20 @@ def test_prose_globs_are_outside_disjointness():
 
 
 def two_concurrent(env, a_lines: str, b_lines: str) -> None:
-    """001 (slow) and 002 run at once in disjoint code paths; 002 merges first."""
-    env.queue("001_a", "FAKE sleep 1.5\nFAKE commit a/x.txt a\n" + a_lines, paths="['a/**']")
+    """001 and 002 run at once in disjoint code paths; 002 merges first: 001 goes on only
+    once 002 has finished (merged), whatever the machine's load."""
+    go = env.root / "go"
+    env.queue("001_a", f"FAKE wait-for {go.as_posix()} 60\nFAKE commit a/x.txt a\n" + a_lines, paths="['a/**']")
     env.queue("002_b", "FAKE commit b/y.txt b\n" + b_lines, paths="['b/**']", stage="false")
-    env.tick_until(lambda: env.finished("code/001_a") and env.finished("code/002_b"))
+    env.tick_until(lambda: env.finished("code/002_b"))
+    go.touch()
+    env.tick_until(lambda: env.finished("code/001_a"))
     start = {e.item: e.id for e in env.events("start")}
     fin = {e.item: e.id for e in env.events("finish")}
     assert start["code/002_b"] < fin["code/001_a"]            # README edits did not serialise them
 
 
+@pytest.mark.slow
 def test_prose_edits_merge_textually_beside_disjoint_code(env):
     (env.repo / "README.md").write_text("top\ncode\nbottom\n", encoding="utf-8", newline="\n")
     git(env.repo, "commit", "-qam", "longer readme")
@@ -130,6 +139,7 @@ def test_prose_edits_merge_textually_beside_disjoint_code(env):
     assert not env.events("resolve") and not env.events("paths_violation")
 
 
+@pytest.mark.slow
 def test_prose_conflict_is_resolved_by_a_merge_executor(env):
     two_concurrent(env, "FAKE commit README.md from a", "FAKE commit README.md from b")
     fin = env.finished("code/001_a")
@@ -144,6 +154,7 @@ def test_prose_conflict_is_resolved_by_a_merge_executor(env):
     assert (env.control / "reports" / "code__001_a.merge.log").is_file()
 
 
+@pytest.mark.slow
 def test_failed_merge_executor_is_red_with_both_versions_kept(env):
     two_concurrent(env, "FAKE merge-fail\nFAKE commit README.md from a", "FAKE commit README.md from b")
     fin = env.finished("code/001_a")
@@ -156,6 +167,7 @@ def test_failed_merge_executor_is_red_with_both_versions_kept(env):
     assert wt.is_dir() and not git(wt, "status", "--porcelain").strip()                  # rebase aborted
 
 
+@pytest.mark.slow
 def test_merge_executor_touching_other_files_is_red(env):
     two_concurrent(env, "FAKE merge-stray\nFAKE commit README.md from a", "FAKE commit README.md from b")
     fin = env.finished("code/001_a")
@@ -163,6 +175,7 @@ def test_merge_executor_touching_other_files_is_red(env):
     assert "untracked" in env.d.log.last("conflict", item="code/001_a").detail["error"]
 
 
+@pytest.mark.slow
 def test_prose_and_code_conflict_together_is_a_plain_conflict(env):
     two_concurrent(env, "FAKE commit README.md from a\nFAKE commit c.txt a",
                    "FAKE commit README.md from b\nFAKE commit c.txt b")
@@ -197,6 +210,7 @@ def flaky_discard(monkeypatch, failing: set[str]):
     monkeypatch.setattr(worktrees, "discard", discard)
 
 
+@pytest.mark.slow
 def test_failed_removal_is_retried_on_queue_empty_and_at_start(env, monkeypatch):
     failing = {"001_a"}
     flaky_discard(monkeypatch, failing)
@@ -232,6 +246,7 @@ def test_missing_shared_folder_is_created_in_the_main_checkout(env):
     assert any("not git-ignored" in e.detail["note"] for e in env.events("warning"))
 
 
+@pytest.mark.slow
 def test_ultracode_item_launches_with_the_settings_key(env):
     import json
     env.queue("001_u", "FAKE report done", ultracode="true")
@@ -244,6 +259,7 @@ def test_ultracode_item_launches_with_the_settings_key(env):
     assert env.d.log.last("enqueue", item="code/001_u").detail["ultracode"] is True
 
 
+@pytest.mark.slow
 def test_dirty_main_holds_merge_until_clean(env):
     env.queue("001_a", "FAKE sleep 0.5\nFAKE commit a.txt a")
     env.tick_until(lambda: env.events("start"))
@@ -324,6 +340,7 @@ def test_readonly_worktree_is_discarded(env):
     assert "conductor/001_ro" not in branches(env)
 
 
+@pytest.mark.slow
 def test_worktrees_off_runs_in_main_checkout(env):
     env.configure('[repos.code]\npath = "../code"\nworktrees = false\n')
     env.queue("001_a", "FAKE sleep 1\nFAKE commit a.txt a", paths="['a.txt']")
@@ -336,6 +353,7 @@ def test_worktrees_off_runs_in_main_checkout(env):
 
 
 # ---------------------------------------------------------------- staging
+@pytest.mark.slow
 def test_head_is_staged_then_resumed(env):
     env.queue("001_long", "FAKE sleep 3\nFAKE commit a.txt a")
     env.queue("002_next", "FAKE commit b.txt b")
@@ -354,6 +372,7 @@ def test_head_is_staged_then_resumed(env):
     assert env.finished("code/002_next").detail["status"] == "done"
 
 
+@pytest.mark.slow
 def test_stage_that_writes_is_discarded_and_launched_fresh(env):
     env.queue("001_long", "FAKE sleep 2\nFAKE report done")
     env.queue("002_bad", "FAKE stage-write scratch.txt oops\nFAKE commit b.txt b")
@@ -365,6 +384,7 @@ def test_stage_that_writes_is_discarded_and_launched_fresh(env):
     assert env.finished("code/002_bad").detail["status"] == "done"
 
 
+@pytest.mark.slow
 def test_restart_while_staging_adopts_the_stage(env):
     env.queue("001_long", "FAKE sleep 4\nFAKE report done")
     env.queue("002_next", "FAKE stage-sleep 2\nFAKE commit b.txt b")
@@ -379,6 +399,7 @@ def test_restart_while_staging_adopts_the_stage(env):
     assert len(env.events("stage")) == 1
 
 
+@pytest.mark.slow
 def test_restart_after_stage_died_discards_it(env):
     from conductor import procs
     env.queue("001_long", "FAKE sleep 3\nFAKE report done")

@@ -194,9 +194,11 @@ class Daemon:
 
     def _check_ignores(self) -> None:
         probes = [n if "." in n and n != ".conductor" else f"{n}/probe" for n in RUNTIME]
-        missing = [p.split("/")[0] for p in probes
-                   if subprocess.run(["git", "-C", str(self.cfg.control), "check-ignore", "-q", p],
-                                                     **git.NO_WINDOW).returncode]
+        # One call for every probe: it prints the ones that are ignored.
+        out = subprocess.run(["git", "-C", str(self.cfg.control), "check-ignore", *probes],
+                             capture_output=True, text=True, **git.NO_WINDOW).stdout
+        ignored = set(out.splitlines())
+        missing = [p.split("/")[0] for p in probes if p not in ignored]
         if missing:
             self.log.append("warning", note=f"not git-ignored in the control folder: {missing}")
 

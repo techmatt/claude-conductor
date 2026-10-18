@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 import sys
 import time
@@ -39,19 +40,27 @@ def init_repo(path: Path, files: dict[str, str]) -> None:
     git(path, "commit", "-q", "-m", "init")
 
 
+def build_template(root: Path) -> Path:
+    """The code repo and control folder every `Env` starts from: built once per test
+    process and copied per test, since each git call costs ~30ms on Windows."""
+    init_repo(root / "code", {"README.md": "code\n"})
+    toml = (
+        'project = "test"\nlocks = ["gpu"]\n\n[defaults]\nmax_hours = 1\npoll_seconds = 0.1\n'
+        'ask_default_minutes = 0.03\n\n'
+        f'[repos]\ncode = "../code"\n\n[executor]\ncommand = {[sys.executable, str(FAKE)]!r}\n'
+    ).replace("'", '"').replace("\\", "/")
+    init_repo(root / "control", {"conductor.toml": toml, "state.md": "# state\n",
+                                 ".gitignore": CONTROL_GITIGNORE, ".gitattributes": "* text=auto eol=lf\n"})
+    return root
+
+
 class Env:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, template: Path):
         self.root = root
         self.control = root / "control"
         self.repo = root / "code"
-        init_repo(self.repo, {"README.md": "code\n"})
-        toml = (
-            'project = "test"\nlocks = ["gpu"]\n\n[defaults]\nmax_hours = 1\npoll_seconds = 0.1\n'
-            'ask_default_minutes = 0.03\n\n'
-            f'[repos]\ncode = "../code"\n\n[executor]\ncommand = {[sys.executable, str(FAKE)]!r}\n'
-        ).replace("'", '"').replace("\\", "/")
-        init_repo(self.control, {"conductor.toml": toml, "state.md": "# state\n",
-                                 ".gitignore": CONTROL_GITIGNORE, ".gitattributes": "* text=auto eol=lf\n"})
+        for name in ("code", "control"):
+            shutil.copytree(template / name, root / name)
         self.cfg = config.load(self.control)
         self.lines: list[str] = []
         self.toasts: list[tuple[str, str, str]] = []
@@ -84,6 +93,14 @@ class Env:
         p.write_text(f"---\n{fm}\n---\n{body}\n", encoding="utf-8")
         return p
 
+    def hold(self) -> str:
+        """A FAKE line that keeps an executor running until `release()`: a test holds an
+        item exactly as long as it needs, not a fixed sleep that races a loaded machine."""
+        return f"FAKE wait-for {(self.root / 'go').as_posix()} 60"
+
+    def release(self) -> None:
+        (self.root / "go").touch()
+
     def signal(self, name: str, text: str) -> None:
         (self.control / "signals" / name).write_text(text, encoding="utf-8")
 
@@ -103,11 +120,16 @@ class Env:
         return self.d.log.last("finish", item=item)
 
 
+@pytest.fixture(scope="session")
+def env_template(tmp_path_factory) -> Path:
+    return build_template(tmp_path_factory.mktemp("template"))
+
+
 @pytest.fixture
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, env_template):
     monkeypatch.setattr(request, "SETTLE_SECONDS", 0)
     monkeypatch.setattr(daemon, "SIGNAL_SETTLE_SECONDS", 0)
-    e = Env(tmp_path)
+    e = Env(tmp_path, env_template)
     yield e
     for run in list(e.d.runs.values()):
         if run.pid():

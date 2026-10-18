@@ -1,11 +1,14 @@
 import subprocess
 
+import pytest
+
 from conductor import executor, procs
 from conductor.daemon import Daemon
 
 from conftest import git
 
 
+@pytest.mark.slow
 def test_items_run_in_order_one_at_a_time(env):
     env.queue("001_a", "FAKE sleep 0.5\nFAKE commit a.txt a")
     env.queue("002_b", "FAKE commit b.txt b")
@@ -21,6 +24,7 @@ def test_items_run_in_order_one_at_a_time(env):
     assert len([e for e in env.events("commit") if e.detail["scope"] == "code"]) == 3
 
 
+@pytest.mark.slow
 def test_red_holds_queue_until_cleared(env):
     env.queue("001_bad", "FAKE report red")
     env.queue("002_next", "FAKE report done")
@@ -33,12 +37,25 @@ def test_red_holds_queue_until_cleared(env):
     env.tick_until(lambda: env.finished("code/002_next"))
 
 
+def test_start_warns_about_runtime_paths_not_ignored(env):
+    gi = env.control / ".gitignore"
+    gi.write_text(gi.read_text(encoding="utf-8").replace("inbox.md\n", "").replace("signals/\n", ""),
+                  encoding="utf-8", newline="\n")
+    git(env.control, "commit", "-qam", "ignore less")
+    assert not [e for e in env.events("warning") if "not git-ignored" in e.detail["note"]]
+    env.d.log.close()
+    env.d = env.new_daemon()
+    [w] = [e for e in env.events("warning") if "not git-ignored" in e.detail["note"]]
+    assert w.detail["note"] == "not git-ignored in the control folder: ['signals', 'inbox.md']"
+
+
 def test_missing_report_is_red(env):
     env.queue("001_quiet", "FAKE report none")
     env.tick_until(lambda: env.finished("code/001_quiet"))
     assert "no report written" in env.finished("code/001_quiet").detail["reasons"]
 
 
+@pytest.mark.slow
 def test_after_red_continue_does_not_hold(env):
     env.queue("001_bad", "FAKE report red", after_red="continue")
     env.queue("002_next", "FAKE report done")
@@ -100,6 +117,7 @@ def test_bad_request_fails(env):
     assert (env.control / "requests" / "bad.failed").is_dir()
 
 
+@pytest.mark.slow
 def test_needs_planner_holds_until_read(env):
     env.queue("001_plan", "FAKE report done", needs_planner="true")
     env.queue("002_after", "FAKE report done")
@@ -132,6 +150,7 @@ def test_unknown_lock_and_invalid_hold(env):
     assert env.events("invalid")
 
 
+@pytest.mark.slow
 def test_restart_adopts_live_executor(env):
     env.queue("001_long", "FAKE sleep 3\nFAKE report done")
     env.tick_until(lambda: env.events("start"))
@@ -146,6 +165,7 @@ def test_restart_adopts_live_executor(env):
     assert not procs.alive(pid, None)
 
 
+@pytest.mark.slow
 def test_restart_with_dead_executor_is_red_never_rerun(env):
     env.queue("001_long", "FAKE sleep 30")
     env.queue("002_next", "FAKE report done")
@@ -160,6 +180,7 @@ def test_restart_with_dead_executor_is_red_never_rerun(env):
     assert len(env.events("start")) == 1
 
 
+@pytest.mark.slow
 def test_restart_harvests_finished_executor(env):
     env.queue("001_quick", "FAKE report done")
     env.tick_until(lambda: env.events("start"))
@@ -173,6 +194,7 @@ def test_restart_harvests_finished_executor(env):
     assert env.finished("code/001_quick").detail["status"] == "done"
 
 
+@pytest.mark.slow
 def test_restart_requeues_never_launched(env):
     item = env.queue("001_x", "FAKE report done")
     env.d.log.close()

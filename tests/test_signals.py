@@ -89,8 +89,9 @@ def test_cancel_queued_and_proposed_keeps_the_file(env):
     assert "code/002_a cancelled from queue" in inbox and "(by app)" in inbox
 
 
+@pytest.mark.slow
 def test_cancel_refuses_running_and_ambiguous(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.tick_until(lambda: env.events("start"))
     send(env, "cancel: 001", "a")
     assert bad(env, "a") and "is running" in env.events("invalid")[-1].detail["error"]
@@ -99,12 +100,14 @@ def test_cancel_refuses_running_and_ambiguous(env):
     env.queue("002_y", "FAKE report done", stage="false")
     send(env, "cancel: 002", "b")
     assert bad(env, "b") and "ambiguous" in env.events("invalid")[-1].detail["error"]
+    env.release()
     env.tick_until(lambda: env.finished("code/001_long"))
     assert env.finished("code/001_long").detail["status"] == "done"
 
 
+@pytest.mark.slow
 def test_cancel_staged_head_discards_its_stage(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.queue("002_next", "FAKE stage-sleep 30\nFAKE report done")
     env.tick_until(lambda: env.events("stage"))
     pid = env.events("stage")[0].detail["pid"]
@@ -115,6 +118,7 @@ def test_cancel_staged_head_discards_its_stage(env):
     assert env.events("cancel")[0].item == "code/002_next"
     assert not env.worktree("002_next").exists()
     assert not list((env.control / "running" / "code").glob("*.stage.json"))
+    env.release()
     env.tick_until(lambda: env.finished("code/001_long"))
     for _ in range(5):
         env.d.tick()
@@ -122,6 +126,7 @@ def test_cancel_staged_head_discards_its_stage(env):
 
 
 # ---------------------------------------------------------------- reorder
+@pytest.mark.slow
 def test_reorder_queue(env):
     held(env)
     env.queue("002_a", "FAKE report done")
@@ -172,17 +177,20 @@ def test_reorder_refusals(env):
     assert queue_names(env) == ["002_a", "003_b", "004_c"] and not env.events("reorder")
 
 
+@pytest.mark.slow
 def test_reorder_refuses_running_item(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.queue("002_a", "FAKE report done", stage="false")
     env.tick_until(lambda: env.events("start"))
     send(env, "reorder: code 002 001")
     assert bad(env) and "running" in env.events("invalid")[-1].detail["error"]
+    env.release()
     env.tick_until(lambda: env.finished("code/002_a"))
 
 
+@pytest.mark.slow
 def test_reorder_renumbered_stage_is_discarded(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.queue("002_s", "FAKE stage-sleep 30\nFAKE report done")
     env.queue("003_t", "FAKE report done", stage="false")
     env.tick_until(lambda: env.events("stage"))
@@ -191,6 +199,7 @@ def test_reorder_renumbered_stage_is_discarded(env):
     assert not procs.alive(pid, None)
     assert any("renumbered" in e.detail.get("note", "") for e in env.events("warning"))
     assert queue_names(env) == ["002_t", "003_s"]
+    env.release()
     try:
         env.tick_until(lambda: env.finished("code/002_t"))
         assert [e.item for e in env.events("start")] == ["code/001_long", "code/002_t"]
@@ -212,6 +221,7 @@ class Crash(BaseException):
     pass
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("survive", [1, 3])        # mid temp phase; mid final phase
 def test_reorder_finishes_after_a_crash(env, monkeypatch, survive):
     held(env)
@@ -271,8 +281,9 @@ def test_a_failing_verb_keeps_earlier_lines(env):
 
 
 # ---------------------------------------------------------------- stop
+@pytest.mark.slow
 def test_stop_daemon_leaves_executors_running(env):
-    env.queue("001_long", "FAKE sleep 4\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.tick_until(lambda: env.events("start"))
     pid = env.events("start")[0].detail["pid"]
     env.d.runs.clear()
@@ -286,6 +297,7 @@ def test_stop_daemon_leaves_executors_running(env):
     assert stop.detail["running"] == ["code/001_long"]
     assert procs.alive(pid, None) and not (env.control / ".conductor" / "daemon.json").exists()
     assert not (env.control / "signals" / "stop.signal").exists()
+    env.release()
     env.tick_until(lambda: env.finished("code/001_long"))
     assert env.finished("code/001_long").detail["status"] == "done"
 
@@ -374,8 +386,9 @@ def test_reorder_never_reuses_an_id_that_ran(env):
     assert queue_names(env) == ["001_a", "004_bad"]
 
 
+@pytest.mark.slow
 def test_a_stage_discard_that_cannot_remove_the_worktree_still_drops_the_stage(env, monkeypatch):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.queue("002_next", "FAKE stage-sleep 30\nFAKE report done")
     env.tick_until(lambda: env.events("stage"))
     real = daemon.worktrees.discard
@@ -390,6 +403,7 @@ def test_a_stage_discard_that_cannot_remove_the_worktree_still_drops_the_stage(e
     assert not list((env.control / "running" / "code").glob("*.stage.json"))
     assert any("not discarded" in e.detail.get("note", "") for e in env.events("warning"))
     real(env.d.cfg, "code", env.worktree("002_next"), "conductor/002_next")
+    env.release()
     env.tick_until(lambda: env.finished("code/001_long"))
 
 
@@ -427,6 +441,7 @@ def test_a_tick_that_fails_on_a_locked_file_recovers(env, monkeypatch):
 
 
 # ---------------------------------------------------------------- reviewed
+@pytest.mark.slow
 def test_reviewed_marks_a_finished_report_and_survives_restart(env):
     from conductor import inbox, state
     env.queue("001_a", "FAKE report done")
@@ -455,8 +470,9 @@ def test_reviewed_marks_a_finished_report_and_survives_restart(env):
     assert "## Unreviewed reports" not in (env.control / "inbox.md").read_text(encoding="utf-8")
 
 
+@pytest.mark.slow
 def test_reviewed_refusals(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", env.hold() + "\nFAKE report done")
     env.queue("002_q", "FAKE report done", stage="false")
     env.tick_until(lambda: env.events("start"))
     for n, text in enumerate(["reviewed: 001",              # running
@@ -468,10 +484,12 @@ def test_reviewed_refusals(env):
     errors = [e.detail["error"] for e in env.events("invalid")]
     assert "has not finished" in errors[0] and "has not finished" in errors[1]
     assert not env.events("reviewed")
+    env.release()
     env.tick_until(lambda: env.finished("code/002_q"))
 
 
 # ---------------------------------------------------------------- checkpoints
+@pytest.mark.slow
 def test_a_checkpoint_hides_settled_items_and_carries_the_rest(env):
     from conductor import inbox, state
     from conductor.app import model

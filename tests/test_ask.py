@@ -1,10 +1,13 @@
 import json
 import sys
 import time
-from datetime import datetime
+
+import pytest
+from datetime import timedelta
 
 from conductor import cli, config, procs, questions, scaffold, talk
 from conductor.daemon import Daemon
+from conductor.util import now, stamp
 
 from pathlib import Path
 
@@ -20,9 +23,9 @@ def report(env, name: str) -> str:
     return (env.control / "reports" / f"code__{name}.md").read_text(encoding="utf-8")
 
 
+@pytest.mark.slow
 def test_blocking_question_answered_by_file(env):
-    env.queue("001_ask", ask_line(question="Which store?", options=["sqlite", "postgres"], block=True),
-              max_hours=0.003)
+    env.queue("001_ask", ask_line(question="Which store?", options=["sqlite", "postgres"], block=True))
     env.tick_until(lambda: env.events("ask"))
     [q] = questions.scan(env.control)
     assert q.item == "code/001_ask" and q.block and q.deadline is None and "- postgres" in q.body
@@ -30,9 +33,12 @@ def test_blocking_question_answered_by_file(env):
     inbox = (env.control / "inbox.md").read_text(encoding="utf-8")
     assert inbox.index("## Questions") < inbox.index("## Now") and q.id in inbox
     assert env.toasts[0][0] == "test: question from code/001_ask"
-    # Past max_hours (10.8s) while blocked: no kill.
-    deadline = datetime.fromisoformat(env.events("start")[0].detail["deadline"]).timestamp()
-    time.sleep(max(0.0, deadline - time.time()) + 1.5)
+    # Past its deadline while blocked: no kill. The deadline is pulled in to 3s from now
+    # rather than waited out; the answer then moves it later by the time spent blocked.
+    run = env.d.runs["code/001_ask"]
+    run.rec["deadline"] = stamp(now() + timedelta(seconds=3))
+    moved = run.rec["deadline"]
+    time.sleep(3.5)
     for _ in range(3):
         env.d.tick()
     assert not env.events("kill")
@@ -41,12 +47,13 @@ def test_blocking_question_answered_by_file(env):
     assert env.finished("code/001_ask").detail["status"] == "done"
     [ans] = env.events("answer")
     assert ans.detail["text"] == "Use sqlite." and ans.detail["waited_seconds"] >= 4
-    assert ans.detail["deadline"] > env.events("start")[0].detail["deadline"]
+    assert ans.detail["deadline"] > moved
     assert "Answer to code__001_ask__1:\nUse sqlite." in report(env, "001_ask")
     env.d.write_inbox(force=True)
     assert "## Questions\n" not in (env.control / "inbox.md").read_text(encoding="utf-8")
 
 
+@pytest.mark.slow
 def test_default_taken_then_late_answer(env):
     env.queue("001_def", ask_line(question="Name the table?", default="items"))
     env.tick_until(lambda: env.finished("code/001_def"))
@@ -74,6 +81,7 @@ def test_question_closed_when_item_dies(env):
     assert questions.scan(env.control)[0].result["by"] == "daemon"
 
 
+@pytest.mark.slow
 def test_toasts_for_red_hold_and_empty_queue(env):
     env.queue("001_bad", "FAKE report red")
     env.queue("002_next", "FAKE report done")
@@ -145,6 +153,7 @@ def test_ask_server_sends_progress_while_waiting(env, monkeypatch):
     assert msgs[-1]["result"]["content"][0]["text"].endswith("go")
 
 
+@pytest.mark.slow
 def test_cli_questions_and_answer(env, capsys):
     env.queue("001_cli", ask_line(question="Proceed?", options=["yes", "no"], block=True))
     env.tick_until(lambda: env.events("ask"))

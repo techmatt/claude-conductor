@@ -7,6 +7,7 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 - Python 3.12+, managed with `uv`. Windows-first, cross-platform by construction: `pathlib` only, no absolute paths in tracked code. Process handling specific to Windows lives in one module.
 - Every file conductor writes is UTF-8 with LF line endings (`newline="\n"`); `.gitattributes` holds `* text=auto eol=lf`.
 - `README.md` is the canon for how conductor works. Facts learned while working — commands, file formats, front-matter fields, event kinds — are promoted there as you pass them, never left only in a report.
+- Tests: `uv run pytest` is the fast lane (~30s) for after each change; `uv run pytest -m ""` runs everything (~65s) and is what must be green before a commit. A test that takes 2.5s or more serially gets `@pytest.mark.slow` (README *Development*).
 - Never touch a real project's control folder or code repo. Testing uses the sandbox (`C:\Code\conductor-sandbox` and `C:\Code\conductor-sandbox-control`) only.
 
 ## "Launch the conductor"

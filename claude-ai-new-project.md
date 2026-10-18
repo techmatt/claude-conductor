@@ -30,7 +30,17 @@ C:\Code\<repo>\                    code repos; executors work here
 
 Everything except the tracked docs and `conductor.toml` is git-ignored runtime state.
 
-**The tracked control files change only through conductor.** The planner writes a request (`requests\<stamp>\` holding whole replacement files plus `request.md` with a commit message); conductor copies them over, commits, and logs it. `request.md`'s front-matter is YAML: quote `message:` when it contains a colon (`message: "state: v0.2"`). An unquoted colon fails the YAML, and the request lands `.failed`. Conductor snapshots the control folder around every executor run and reverts any change it finds to a tracked file there, logging a red event — so an errant prompt cannot damage the docs. The planner never hand-patches a tracked file in place, and never uses hunks: it stages the current file, edits in its workspace, and sends the whole file.
+**The tracked control files change only through conductor.** The planner writes a request (`requests\<stamp>\` holding whole replacement files at their paths relative to the control folder, plus `request.md`, **written last**); conductor copies them over, commits, and logs it. `request.md` is YAML front-matter with a required `targets:` list naming every file in the request, and an optional `message:`, then the commit message as its body:
+
+```
+---
+targets: [state.md, docs/plan.md]
+message: "state: v0.2"
+---
+Commit message (used when `message:` is absent).
+```
+
+Every file in the folder must be a target and every target present, or the request lands `.failed`. Quote `message:` when it contains a colon; an unquoted colon fails the YAML, and the request lands `.failed`. Conductor snapshots the control folder around every executor run and reverts any change it finds to a tracked file there, logging a red event — so an errant prompt cannot damage the docs. The planner never hand-patches a tracked file in place, and never uses hunks: it stages the current file, edits in its workspace, and sends the whole file.
 
 ## The bridge
 
