@@ -47,7 +47,7 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
    It writes the layout, `conductor.toml`, a stub `state.md` and the `.gitignore`, then makes the first commit. It refuses a folder that already has files in it. Matt creates any code repo that doesn't exist yet.
 3. The planner asks for folder access to the control folder and to each repo. Access can only be granted to a folder that exists.
-4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, or `worktrees = false`; and a `[run.<name>]` target once there is something to run), as one request. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
+4. The planner writes the first real `state.md`, plus any `conductor.toml` change (locks, `max_hours`, `ask_default_minutes`, and per repo the `shared` untracked folders and `setup` commands its worktrees need, its `prose` globs if the default `CLAUDE.md`/`README.md`/`docs/**/*.md` doesn't fit, or `worktrees = false`; and a `[run.<name>]` target once there is something to run), as one request. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
    - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
    - "commit to the branch you are on";
    - local 12-hour clock times;
@@ -69,8 +69,10 @@ Everything except the tracked docs and `conductor.toml` is git-ignored runtime s
 
 ## Writing a prompt
 
-- **Front-matter first.** `repo` (required), and as needed: `locks` (named locks beyond the repo's own), `depends_on`, `after_red` (`stop`, the default, or `continue`), `needs_planner` (the next item can't be written until this report is read), `readonly`, `max_hours`, `paths` (globs the item may change), `stage` (`false` to skip staging this item).
+- **Front-matter first.** `repo` (required), and as needed: `locks` (named locks beyond the repo's own), `depends_on`, `after_red` (`stop`, the default, or `continue`), `needs_planner` (the next item can't be written until this report is read), `readonly`, `max_hours`, `paths` (globs the item may change), `stage` (`false` to skip staging this item), `ultracode` (`true` to run the executor with Claude Code's ultracode on: it orchestrates subagents through workflows on every substantive task, which is more thorough and costs much more; worth it for broad audits, large refactors and hard debugging, not for routine items).
+- **Ultracode is set at launch only.** `ultracode: true` is the one route that works. A `tell:` saying "use ultracode" is delivered as an ordinary message and changes nothing, so a running item can't be switched. For a queued item that hasn't started, rewrite its front-matter. For a running one, tell Matt, and queue the remaining work as a new item with `ultracode: true`.
 - **Concurrency is declared, not judged.** Every item runs in its own worktree on `conductor/<item>` and is merged into `main` when it finishes `done` or `partial`. Two items in one repo run at the same time only when both declare `paths`, the globs are disjoint, and they share no named lock; anything else waits its turn. Declare `paths` only when the work really is confined. Touching a file outside them makes the item red and unmerged, and the check is conservative, so a doubtful pair runs serially. A dependent item starts only after its dependency has merged.
+- **Prose files are outside `paths`.** Each repo's `prose` setting in `conductor.toml` (default `["CLAUDE.md", "README.md", "docs/**/*.md"]`) names the shared docs nearly every item touches. An item may edit them without declaring them, and two items that both edit them still run together when their code `paths` are disjoint. Leave prose out of `paths`. At merge, the two items' prose edits merge textually. If they conflict, conductor runs a short merge executor that keeps both sides' intent. If that fails, the item ends red like any conflict, with both versions kept: the branch has the item's version and `main` has the other. A repo whose docs are generated, or must never be merged automatically, sets `prose = []` through a `conductor.toml` request; a project adds its own prose globs the same way.
 - **Staging is automatic.** A queue head that is waiting only on a busy lock or a running dependency gets a read-only head start in its worktree, then resumes in the same session when it gets the lock. Set `stage: false` when that reading would be wasted, or when the item's plan depends on what the running item produces.
 - **A code repo's `CLAUDE.md` says "commit to the branch you are on"**, never "commit to `main`" and never names a branch. Executors work on `conductor/<item>`, and conductor does the merge.
 - **Approval.** An item goes into `queue\` only when Matt has approved it in the conversation; otherwise it goes to `proposed\`. A `readonly` item (writes nothing tracked, no commit, no shared lock) may go straight to the queue — Matt sees it but doesn't approve it. Once an item exists, the planner never moves, renames or deletes it: approving, cancelling and reordering are `signals\` verbs conductor carries out and logs (see **Vocab**).
@@ -129,6 +131,17 @@ The planner does not summarize a report back. It says what the report changes, w
 - **Closeout** = the planner writes the final `state.md` (and any doc the session changed) as one request, conductor commits it, and the next session starts from it. No apply scripts, no files for Matt to place. "Prepare for closeout" = list open questions for Matt, items still expecting a report, and parked edits that should ride the next prompt.
 - A mistake the planner repeats becomes one line in the project's docs; a one-off mistake is said in the chat and not carried.
 
+**Park / resume a project.** Parking puts a project away whole (to free the box, or to move its folders), with nothing left running or half-done.
+
+1. Nothing is in flight. No item is running, staged or merging, and no question is open. Cancel or let finish what's queued; anything still queued stays queued and runs on resume.
+2. **Closeout** (above) as a request, **while the daemon still runs**: requests apply only through the daemon.
+3. `run: <target> stop` for every run target that is up.
+4. `stop: daemon` (**stop conductor**).
+5. Matt clears what's left in `C:\Code\<project>-worktrees\`. A worktree's git link is an absolute path, so a worktree can't move with the folders. A kept red worktree gives its branch `conductor/<NNN_name>` to the repo, so deleting the folder loses no commit. A leftover that conductor couldn't remove (a dev server held it) goes too. The steps are in conductor's README, *Worktrees and merges*: delete the folder, then run `git worktree prune` in the repo.
+6. In the app, **Remove project**. This only forgets the folder; nothing on disk changes.
+
+The control folder and the code repos may then move, as a set, keeping their relative layout: `conductor.toml` names the repos and `worktree_root` by relative path. To resume: move them back (or keep the same layout elsewhere), start the daemon (`uv run conductor run <control folder>` in `C:\Code\claude-conductor`, or the app's Start), **Add project…** in the app, then **start a new <project> session**.
+
 ## Vocab
 
 What Matt can say to the planner. The planner reads this at session start; "remind me the vocab" prints the table.
@@ -160,6 +173,9 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **clear R** | Signal `clear: <repo>`: releases a red hold on that repo's queue, after the planner has read the red report with Matt. |
 | **run X** / **run game** | Signal `run: X`: conductor starts target X if it isn't up, waits until it answers, and opens it in Matt's browser. With one target, plain "run game" (or "run it") means that one; with several and no match, the planner asks which. If no target exists yet, the planner proposes one as a `conductor.toml` request. On a `run_failed` event, it reports the error and the log tail. **stop X** is `run: X stop`. |
 | **stop conductor** | Signal `stop: daemon`: the daemon exits cleanly; running executors carry on and are picked up when it restarts. Matt restarts it with `uv run conductor run <control folder>` or the app's Start button. |
+| **ultracode X** | For a queued item X that hasn't started: rewrite its front-matter with `ultracode: true`. For a running X: says that it can't be switched mid-run, and offers the rest of the work as a new item with `ultracode: true`. |
+| **park project** | Follows *Park / resume a project*: checks nothing is in flight, does **closeout** while the daemon runs, stops every run target, signals `stop: daemon`, then tells Matt which worktree folders are left to clear and to use **Remove project** in the app. |
+| **resume project** | Tells Matt to start the daemon and **Add project…** in the app, then does **start a new <project> session**. |
 | **context estimate** | Token estimate for this session; ~150k is the warn point. |
 | **prepare for closeout** | Open questions for Matt, items still expecting a report, parked edits that should ride the next prompt. |
 | **closeout** | Writes the final `state.md` (and any changed doc) as one request; conductor commits it. |

@@ -33,6 +33,7 @@ class Created:
     base: str
     warnings: list[str] = field(default_factory=list)
     linked: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)       # for the `worktree` event, not warnings
 
 
 def create(cfg: Config, repo: str, name: str, setup_log: Path) -> Created:
@@ -50,7 +51,7 @@ def create(cfg: Config, repo: str, name: str, setup_log: Path) -> Created:
     except git.GitError as exc:
         raise WorktreeError(str(exc)) from exc
     made = Created(path, branch, base)
-    made.linked, made.warnings = link_shared(cfg, repo, path)
+    made.linked, made.warnings, made.notes = link_shared(cfg, repo, path)
     error = run_setup(cfg, repo, path, setup_log)
     if error:
         discard(cfg, repo, path, branch)
@@ -58,14 +59,19 @@ def create(cfg: Config, repo: str, name: str, setup_log: Path) -> Created:
     return made
 
 
-def link_shared(cfg: Config, repo: str, path: Path) -> tuple[list[str], list[str]]:
+def link_shared(cfg: Config, repo: str, path: Path) -> tuple[list[str], list[str], list[str]]:
+    """(linked, warnings, notes)."""
     repo_path = cfg.repos[repo]
-    linked, warnings = [], []
+    linked, warnings, notes = [], [], []
     for rel in cfg.opts(repo).shared:
         target, link = repo_path / rel, path / rel
-        if not target.is_dir():
-            warnings.append(f"shared {rel!r}: no such folder in the main checkout; not linked")
+        if target.exists() and not target.is_dir():
+            warnings.append(f"shared {rel!r}: a file, not a folder, in the main checkout; not linked")
             continue
+        if not target.is_dir():
+            # Not made yet (nothing has written it): make it, so every worktree shares one.
+            target.mkdir(parents=True)
+            notes.append(f"shared {rel!r} created in the main checkout")
         if link.exists() or procs.is_link_dir(link):
             warnings.append(f"shared {rel!r}: already present in the worktree (tracked?); not linked")
             continue
@@ -73,7 +79,7 @@ def link_shared(cfg: Config, repo: str, path: Path) -> tuple[list[str], list[str
             warnings.append(f"shared {rel!r} is not git-ignored in {repo}; an executor could commit it")
         procs.link_dir(target, link)
         linked.append(rel)
-    return linked, warnings
+    return linked, warnings, notes
 
 
 def unlink_shared(path: Path) -> None:
@@ -129,42 +135,82 @@ def move_to(cfg: Config, repo: str, path: Path) -> str:
 
 @dataclass
 class Merge:
-    outcome: str                 # merged | hold | conflict
+    outcome: str                 # merged | hold | conflict | resolve
     sha: str | None = None       # main after the merge
     reason: str = ""
     files: list[str] = field(default_factory=list)
 
 
+def _main_ready(repo_path: Path, main: str) -> Merge | None:
+    """A hold while the main checkout cannot be fast-forwarded."""
+    if git.symbolic_head(repo_path) != f"refs/heads/{main}":
+        return Merge("hold", reason=f"the main checkout is on {git.symbolic_head(repo_path) or 'a detached HEAD'}, "
+                                    f"not {main}")
+    if git.tracked_status(repo_path):
+        return Merge("hold", reason="the main checkout has uncommitted changes")
+    return None
+
+
 def merge(cfg: Config, repo: str, path: Path, branch: str) -> Merge:
-    """Rebase `branch` onto main in its worktree, then fast-forward the main checkout."""
+    """Rebase `branch` onto main in its worktree, then fast-forward the main checkout.
+    A rebase that stops on conflicts in prose files only is left stopped (`resolve`)."""
     repo_path, main = cfg.repos[repo], cfg.opts(repo).main
     tip = git.rev(repo_path, f"refs/heads/{branch}")
     if tip is None:
         return Merge("merged", git.rev(repo_path, main), "branch already gone (merged before a restart)")
     if git.is_ancestor(repo_path, tip, main):
         return Merge("merged", git.rev(repo_path, main))
-    if git.symbolic_head(repo_path) != f"refs/heads/{main}":
-        return Merge("hold", reason=f"the main checkout is on {git.symbolic_head(repo_path) or 'a detached HEAD'}, "
-                                    f"not {main}")
-    if git.tracked_status(repo_path):
-        return Merge("hold", reason="the main checkout has uncommitted changes")
+    if hold := _main_ready(repo_path, main):
+        return hold
     if not path.is_dir():
         return Merge("conflict", reason=f"worktree {path} is gone; cannot rebase")
     if git.rebase_in_progress(path):
         git.run(path, "rebase", "--abort", check=False)
     if git.symbolic_head(path) != f"refs/heads/{branch}":
         return Merge("conflict", reason=f"the worktree is not on {branch} (HEAD {git.symbolic_head(path) or 'detached'})")
-    try:
-        git.run(path, "rebase", "-q", main, branch)
-    except git.GitError as exc:
-        files = [f for f in git.run(path, "diff", "--name-only", "--diff-filter=U", check=False).splitlines() if f]
+    return _rebase(cfg, repo, path, branch, ["rebase", "-q", main, branch])
+
+
+def continue_rebase(cfg: Config, repo: str, path: Path, branch: str, files: list[str]) -> Merge:
+    """Stage the resolved prose `files` and carry the stopped rebase on (it may stop
+    again: `resolve` once more, or `conflict`)."""
+    repo_path, main = cfg.repos[repo], cfg.opts(repo).main
+    if hold := _main_ready(repo_path, main):
+        return hold
+    if not git.rebase_in_progress(path):
+        return Merge("conflict", reason="the stopped rebase is gone; cannot continue it")
+    git.run(path, "add", "--", *files)
+    staged = git.run(path, "diff", "--cached", "--name-only", check=False).strip()
+    # A resolution identical to main leaves the replayed commit empty: skip it.
+    return _rebase(cfg, repo, path, branch, ["rebase", "--continue"] if staged else ["rebase", "--skip"])
+
+
+def abort_rebase(path: Path) -> None:
+    """Back to the item's own branch tip: both versions kept, main untouched."""
+    if path.is_dir() and git.rebase_in_progress(path):
         git.run(path, "rebase", "--abort", check=False)
+
+
+def conflicted(path: Path) -> list[str]:
+    return [f for f in git.run(path, "diff", "--name-only", "--diff-filter=U", check=False).splitlines() if f]
+
+
+def _rebase(cfg: Config, repo: str, path: Path, branch: str, args: list[str]) -> Merge:
+    repo_path, opts = cfg.repos[repo], cfg.opts(repo)
+    try:
+        git.run(path, *args)
+    except git.GitError as exc:
+        files = conflicted(path)
         reason = str(exc).strip()[:300]
+        if files and all(opts.is_prose(f) for f in files):
+            return Merge("resolve", reason=reason.splitlines()[0], files=files)
+        git.run(path, "rebase", "--abort", check=False)
         if not files:
             # Not a content conflict (a stale lock, an untracked file in the way, a file
             # held open): try again next tick.
             return Merge("hold", reason=f"rebase failed: {reason}")
         return Merge("conflict", reason=reason.splitlines()[0], files=files)
+    main = opts.main
     try:
         git.run(repo_path, "merge", "-q", "--ff-only", branch)
     except git.GitError as exc:

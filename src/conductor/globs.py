@@ -62,6 +62,17 @@ def may_overlap(a: str, b: str) -> bool:
     return True                          # one is a prefix of the other: the shorter covers the longer
 
 
-def disjoint(a: list[str], b: list[str]) -> bool:
-    """Two declared `paths` lists are disjoint only if every pair of globs is."""
-    return bool(a) and bool(b) and not any(may_overlap(x, y) for x in a for y in b)
+def only_prose(glob: str, prose: list[str]) -> bool:
+    """Does `glob` name nothing but prose: a prose glob itself, or a literal path one covers?"""
+    segs = _segs(glob)
+    return any(segs == _segs(p) for p in prose) or (
+        not any(_wild(s) for s in segs) and any(_covers(segs, _segs(p)) for p in prose))
+
+
+def disjoint(a: list[str], b: list[str], prose: list[str] = ()) -> bool:
+    """Two declared `paths` lists are disjoint only if every pair of globs is. Globs that
+    name only `prose` files never count: those files merge textually."""
+    if not a or not b:
+        return False
+    a, b = [g for g in a if not only_prose(g, prose)], [g for g in b if not only_prose(g, prose)]
+    return not any(may_overlap(x, y) for x in a for y in b)

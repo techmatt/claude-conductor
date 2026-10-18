@@ -77,7 +77,10 @@ READONLY = ("\nThis item is readonly: commit nothing and change no tracked file.
             "Conductor checks the repo afterwards and marks a change red.")
 
 PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: conductor "
-         "checks what the branch changed and marks anything else red, unmerged.")
+         "checks what the branch changed and marks anything else red, unmerged.{prose}")
+
+PROSE = (" Prose files ({globs}) are exempt: update them as the work needs; another item may "
+         "edit them at the same time, and conductor merges them textually.")
 
 STAGE = """\
 You are a conductor executor in its staging phase: an unattended headless Claude Code
@@ -111,6 +114,49 @@ the prompt you read while staging. Everything below now applies.
 """
 
 
+MERGE = """\
+You are a conductor merge executor: an unattended headless Claude Code session for
+project {project}. Nobody is watching. Your one job is to resolve a textual conflict in
+prose files, then stop.
+
+Your working directory is the worktree of item {item_id} ({cwd}), stopped part-way
+through rebasing its branch `{branch}` onto `{main}`. These files hold conflict markers:
+{files}
+
+In each conflict block, the side between `<<<<<<<` and `=======` is what is on `{main}`
+now (other work that landed meanwhile); the side between `=======` and `>>>>>>>` is
+this item's change. Replace every block with text that keeps the intent of both sides:
+keep both sides' additions, and where both rewrote the same lines, combine them so
+neither change is lost. Leave no conflict marker.
+
+Touch nothing else: no other file, no git command (no add, commit, rebase, checkout,
+stash), no build, no tests. Conductor checks the files, stages them and continues the
+rebase. If the two sides truly cannot be reconciled, leave the markers in place and say
+why in your final message: the item then ends red with both versions kept.
+
+For intent only. Commits on `{main}` since the item was cut:
+{upstream}
+The item's commit being replayed: {commit}
+The item's prompt, which you must not carry out:
+
+---
+
+{body}"""
+
+
+def build_merge_prompt(cfg: Config, item_id: str, run: dict, files: list[str], upstream: list[tuple[str, str]],
+                       commit: str, body: str) -> str:
+    repo = run["repo"]
+    ups = "\n".join(f"- {sha[:10]} {subject}" for sha, subject in upstream) or "- (none listed)"
+    return MERGE.format(project=cfg.project, item_id=item_id, cwd=run["worktree"], branch=run["branch"],
+                        main=cfg.opts(repo).main, files="\n".join(f"- {f}" for f in files), upstream=ups,
+                        commit=commit or "(unknown)", body=body.strip() + "\n")
+
+
+def _ticks(names: list[str]) -> str:
+    return ", ".join(f"`{n}`" for n in names)
+
+
 def _workdir(cfg: Config, item: Item, run: dict) -> str:
     if not run.get("worktree"):
         return WORKDIR_MAIN.format(repo=item.repo, repo_path=cfg.repos[item.repo])
@@ -140,6 +186,9 @@ class RunPaths:
     stage_log: Path    # the staging phase's stream-json, stderr and prompt
     stage_stderr: Path
     stage_prompt: Path
+    merge_log: Path    # a merge executor resolving a prose conflict: stream-json, stderr, prompt
+    merge_stderr: Path
+    merge_prompt: Path
 
     @classmethod
     def for_item(cls, cfg: Config, item: Item) -> "RunPaths":
@@ -152,7 +201,8 @@ class RunPaths:
         def sib(suffix: str) -> Path:
             return base.with_name(base.name + suffix)
         return cls(report, sib(".log"), sib(".stderr.log"), sib(".prompt.md"), sib(".mcp.json"),
-                   sib(".settings.json"), sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"))
+                   sib(".settings.json"), sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"),
+                   sib(".merge.log"), sib(".merge.stderr.log"), sib(".merge.prompt.md"))
 
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
@@ -160,10 +210,12 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead."""
     run = run or {}
+    prose = cfg.opts(item.repo).prose
     text = PREAMBLE.format(
         item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
         readonly=READONLY if item.readonly else "",
-        paths=PATHS.format(globs=", ".join(f"`{g}`" for g in item.paths)) if item.paths else "",
+        paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
+        if item.paths else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
         deadline=clock(deadline), report=paths.report.resolve(),
         tail="" if resume else PROMPT_FOLLOWS,
@@ -195,10 +247,15 @@ def mcp_config(cfg: Config, item: Item, session_id: str) -> str:
 
 def hook_settings(cfg: Config, item: Item) -> str:
     """The executor's --settings: the PostToolUse hook that delivers messages, run by the
-    daemon's console interpreter."""
+    daemon's console interpreter, and `"ultracode": true` for an `ultracode` item. The
+    settings key is what turns ultracode on in `-p`: the keyword in the prompt does not,
+    and neither does a message (hook context) or a later edit of this file."""
     from .procs import console_python
     from .talk import hook_settings as settings
-    return settings(console_python(), cfg.control, item.id)
+    data = json.loads(settings(console_python(), cfg.control, item.id))
+    if item.ultracode:
+        data["ultracode"] = True
+    return json.dumps(data, indent=1)
 
 
 def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False,

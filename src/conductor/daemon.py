@@ -49,6 +49,7 @@ class Run:
     popen: subprocess.Popen | None = None
     proc: psutil.Process | None = None          # adopted after a restart
     tamper: list[str] = field(default_factory=list)
+    resolver: subprocess.Popen | None = None    # a merge executor resolving a prose conflict
 
     @property
     def item_id(self) -> str:
@@ -182,6 +183,7 @@ class Daemon:
         self._recover_reorder()
         self._recover_signal()
         self.recover()
+        self._retry_leftovers("daemon start")
         if not self._active():
             if self.snapshot and (changes := guard.diff(self.cfg.control, self.snapshot)):
                 self.log.append("drift", paths=guard.changed_paths(changes), changes=changes,
@@ -261,7 +263,8 @@ class Daemon:
 
     def _active(self) -> dict[str, Run]:
         """Executor processes that may be running: guard attribution covers these."""
-        active = {i: r for i, r in self.runs.items() if r.rec.get("phase", "exec") == "exec"}
+        active = {i: r for i, r in self.runs.items() if r.rec.get("phase", "exec") == "exec"
+                  or (r.rec.get("resolve") or {}).get("state") == "running"}
         return {**active, **self.stages}
 
     # ---------------------------------------------------------------- recovery
@@ -1035,7 +1038,7 @@ class Daemon:
         except (worktrees.WorktreeError, git.GitError, OSError) as exc:
             return f"worktree: {exc}"
         rec.update(worktree=str(made.path), branch=made.branch, base=made.base, shared=made.linked)
-        self._worktree_event(rec, "created", "; ".join(made.warnings))
+        self._worktree_event(rec, "created", "; ".join(made.notes + made.warnings))
         for w in made.warnings:
             self.log.append("warning", item=item.id, note=w)
         return None
@@ -1284,7 +1287,9 @@ class Daemon:
             for sha, subject in reversed(git.commits_between(cwd, rec.get("repo_head"), after_head)):
                 self.log.append("commit", item=item_id, scope=repo, sha=sha, subject=subject, **branch)
             if rec.get("paths") and rec.get("repo_head") and after_head != rec["repo_head"]:
-                outside = globs.outside(git.changed_files(cwd, rec["repo_head"], after_head), rec["paths"])
+                changed = [f for f in git.changed_files(cwd, rec["repo_head"], after_head)
+                           if not cfg.opts(repo).is_prose(f)]          # prose is outside `paths`
+                outside = globs.outside(changed, rec["paths"])
                 if outside:
                     reasons.append(f"paths violation: changed {len(outside)} file(s) outside `paths`")
                     self.log.append("paths_violation", item=item_id, files=outside[:50],
@@ -1331,8 +1336,71 @@ class Daemon:
             else:
                 self._discard_worktree(rec, note, action=action)
         except (OSError, git.GitError, KeyError) as exc:
-            self.log.append("warning", item=rec["item"],
-                            note=f"worktree {rec['worktree']} not {action}: {exc!r}; remove it by hand")
+            if action == "kept":
+                self.log.append("warning", item=rec["item"],
+                                note=f"worktree {rec['worktree']} not {action}: {exc!r}; remove it by hand")
+                return
+            # Usually a file another process still holds (a dev server, an editor).
+            rows = [r for r in self._leftovers() if r["worktree"] != rec["worktree"]]
+            rows.append({"item": rec["item"], "repo": rec["repo"], "worktree": rec["worktree"],
+                         "branch": rec.get("branch"), "base": rec.get("base"), "action": action, "note": note,
+                         "failed": stamp(), "error": repr(exc)})
+            self._save_leftovers(rows)
+            self.log.append("warning", item=rec["item"], paths=[Path(rec["worktree"]).as_posix()],
+                            note=f"worktree {rec['worktree']} not {action}: {exc!r}; retried when the "
+                                 f"{rec['repo']} queue next empties and at the next daemon start")
+
+    # ---------------------------------------------------------------- leftover worktrees
+    @property
+    def _leftovers_file(self) -> Path:
+        return self.cfg.state_dir / "leftovers.json"
+
+    def _leftovers(self) -> list[dict]:
+        try:
+            rows = json.loads(self._leftovers_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [r for r in rows if isinstance(r, dict) and r.get("worktree")] if isinstance(rows, list) else []
+
+    def _save_leftovers(self, rows: list[dict]) -> None:
+        if rows:
+            write_text(self._leftovers_file, json.dumps(rows, indent=1))
+        else:
+            self._leftovers_file.unlink(missing_ok=True)
+
+    def _retry_leftovers(self, context: str, repo: str | None = None, skip: str | None = None) -> None:
+        """Remove worktrees an earlier removal left behind (`leftovers.json`): at daemon
+        start and when a repo's queue empties. A `warning` only while one still fails."""
+        rows = self._leftovers()
+        if not rows:
+            return
+        in_use = {str(Path(r.rec["worktree"])) for r in [*self.runs.values(), *self.stages.values()]
+                  if r.rec.get("worktree")}
+        for rec_path in self.cfg.path("running").glob("*/*.json"):
+            try:
+                if wt := state.read_run(rec_path).get("worktree"):
+                    in_use.add(str(Path(wt)))
+            except (OSError, ValueError):
+                continue
+        keep = []
+        for row in rows:
+            if (repo and row["repo"] != repo) or row["item"] == skip or row["repo"] not in self.cfg.repos:
+                keep.append(row)
+                continue
+            if str(Path(row["worktree"])) in in_use:
+                continue                # a later launch of the same name took the path over
+            try:
+                worktrees.discard(self.cfg, row["repo"], Path(row["worktree"]), row.get("branch"))
+            except (OSError, git.GitError) as exc:
+                row["tries"], row["error"] = row.get("tries", 1) + 1, repr(exc)
+                keep.append(row)
+                self.log.append("warning", item=row["item"], paths=[Path(row["worktree"]).as_posix()],
+                                note=f"leftover worktree {row['worktree']} still not removed ({context}): {exc!r}; "
+                                     "retried again later")
+                continue
+            self._worktree_event(row, row["action"],
+                                 f"leftover removed on retry ({context}); first failed {clock(row['failed'])}")
+        self._save_leftovers(keep)
 
     def process_merges(self) -> None:
         """Merge finished items into main, per repo serially in finish order."""
@@ -1346,13 +1414,35 @@ class Daemon:
                     break
 
     def _merge(self, run: Run) -> bool:
-        """One merge attempt; False when it holds (later merges in the repo wait too)."""
+        """One merge attempt; False when it holds or a merge executor is resolving a
+        prose conflict (later merges in the repo wait too)."""
         rec = run.rec
         wt = Path(rec["worktree"])
+        res = rec.get("resolve")
         try:
-            m = worktrees.merge(self.cfg, rec["repo"], wt, rec["branch"])
+            if res and res["state"] == "running":
+                if not self._resolver_exited(run):
+                    return False
+                if problem := self._judge_resolver(run):
+                    self._conflict(run, res["files"], problem, f"prose conflict in {', '.join(res['files'])}: "
+                                   f"the merge executor failed ({problem})", resolver=res["log"],
+                                   note="rebase aborted: the branch keeps the item's version, main keeps its own; "
+                                        "worktree kept")
+                    return True
+                res["state"] = "resolved"
+                rec["resolved"] = sorted(set(rec.get("resolved", [])) | set(res["files"]))
+                self._save(run)
+            if res:
+                m = worktrees.continue_rebase(self.cfg, rec["repo"], wt, rec["branch"], res["files"])
+                if not (m.outcome == "hold" and git.rebase_in_progress(wt)):
+                    rec.pop("resolve")              # the stopped rebase is over, one way or another
+                    self._save(run)
+            else:
+                m = worktrees.merge(self.cfg, rec["repo"], wt, rec["branch"])
         except git.GitError as exc:
             m = worktrees.Merge("hold", reason=f"git failed: {str(exc)[:300]}")
+        if m.outcome == "resolve":
+            return self._start_resolver(run, m)
         if m.outcome == "hold":
             reason = f"merge waits: {m.reason}"
             if self.holds.get(rec["item"]) != reason:
@@ -1361,23 +1451,120 @@ class Daemon:
             return False
         out = rec["outcome"]
         if m.outcome == "conflict":
-            out["status"] = "red"
-            out["reasons"] = out["reasons"] + [f"rebase onto {self.cfg.opts(rec['repo']).main} conflicted"]
-            self.log.append("conflict", item=rec["item"], branch=rec["branch"], files=m.files, error=m.reason,
-                            note="branch kept; main untouched")
-            rec["phase"] = "concluding"
-            self._save(run)
-            self._worktree_op(rec, "kept", "conflict: branch and worktree kept for inspection")
-        else:
-            commits = git.commits_between(self.cfg.repos[rec["repo"]], rec["base"], m.sha) if m.sha else []
-            out["merged"] = m.sha
-            self.log.append("merge", item=rec["item"], branch=rec["branch"], sha=m.sha, commits=len(commits),
-                            note=m.reason)
-            rec["phase"] = "concluding"
-            self._save(run)
-            self._worktree_op(rec, "removed", "merged")
+            self._conflict(run, m.files, m.reason, f"rebase onto {self.cfg.opts(rec['repo']).main} conflicted",
+                           note="branch kept; main untouched")
+            return True
+        commits = git.commits_between(self.cfg.repos[rec["repo"]], rec["base"], m.sha) if m.sha else []
+        out["merged"] = m.sha
+        extra = {"resolved": rec["resolved"]} if rec.get("resolved") else {}
+        self.log.append("merge", item=rec["item"], branch=rec["branch"], sha=m.sha, commits=len(commits),
+                        note=m.reason, **extra)
+        rec["phase"] = "concluding"
+        self._save(run)
+        self._worktree_op(rec, "removed", "merged")
         self._conclude(run)
         return True
+
+    def _conflict(self, run: Run, files: list[str], error: str, reason: str, note: str, **extra) -> None:
+        """The merge failed on content: red, rebase aborted, branch and worktree kept."""
+        rec, out = run.rec, run.rec["outcome"]
+        worktrees.abort_rebase(Path(rec["worktree"]))
+        rec.pop("resolve", None)
+        out["status"] = "red"
+        out["reasons"] = out["reasons"] + [reason]
+        self.log.append("conflict", item=rec["item"], branch=rec["branch"], files=files, error=error, note=note,
+                        **extra)
+        rec["phase"] = "concluding"
+        self._save(run)
+        self._worktree_op(rec, "kept", "conflict: branch and worktree kept for inspection")
+        self._conclude(run)
+
+    # ---------------------------------------------------------------- merge executors
+    def _start_resolver(self, run: Run, m: worktrees.Merge) -> bool:
+        """The rebase stopped on prose files only: a short merge executor resolves them in
+        the item's worktree. False while it runs; True if it could not start (concluded red)."""
+        cfg, rec = self.cfg, run.rec
+        wt, repo = Path(rec["worktree"]), rec["repo"]
+        paths = executor.RunPaths.for_name(cfg, repo, rec["name"])
+        step = rec["resolve_steps"] = rec.get("resolve_steps", 0) + 1     # one per stop of the rebase
+        self._guard_check(f"before the merge executor of {rec['item']}")
+        # What the executor may change: the conflicted files, nothing else.
+        touched = [f for f in git.run(wt, "diff", "HEAD", "--name-only", "-z").split("\0") if f]
+        hashes = {f: _file_hash(wt / f) for f in touched if f not in m.files}
+        stopped = git.run(wt, "log", "-1", "--format=%h %s", "REBASE_HEAD", check=False).strip()
+        main_sha = git.rev(cfg.repos[repo], cfg.opts(repo).main)
+        upstream = git.commits_between(cfg.repos[repo], rec["base"], main_sha)
+        body = items.parse(run.md_path, repo).body if run.md_path.is_file() else ""
+        write_text(paths.merge_prompt, executor.build_merge_prompt(cfg, rec["item"], rec, m.files, upstream,
+                                                                   stopped, body))
+        for stale in (paths.merge_log, paths.merge_stderr):
+            stale.unlink(missing_ok=True)
+        session = str(uuid.uuid4())
+        res = {"state": "running", "step": step, "files": m.files, "head": git.head(wt), "hashes": hashes,
+               "touched": touched, "untracked": worktrees.untracked(wt), "session_id": session,
+               "log": str(paths.merge_log), "started": stamp(),
+               "deadline": stamp(now() + timedelta(minutes=cfg.merge_minutes)), "tamper_before": len(run.tamper),
+               "pid": None, "create_time": None}
+        rec["resolve"] = res
+        self._save(run)
+        try:
+            run.resolver = procs.spawn(executor.command(cfg, session, None), wt, paths.merge_prompt,
+                                       paths.merge_log, paths.merge_stderr)
+        except OSError as exc:
+            self._conflict(run, m.files, str(exc), f"prose conflict in {', '.join(m.files)}: the merge executor "
+                           f"did not start ({exc})", note="rebase aborted; worktree kept")
+            return True
+        res["pid"], res["create_time"] = run.resolver.pid, procs.create_time(run.resolver.pid)
+        self._save(run)
+        self.log.append("resolve", item=rec["item"], paths=[cfg.rel(paths.merge_log)], files=m.files, step=step,
+                        session_id=session, pid=res["pid"], deadline=res["deadline"], commit=stopped,
+                        note=f"prose conflict while rebasing onto {cfg.opts(repo).main}; a merge executor resolves it")
+        return False
+
+    def _resolver_exited(self, run: Run) -> bool:
+        res = run.rec["resolve"]
+        if run.resolver is not None:
+            exited = run.resolver.poll() is not None
+        else:                                       # adopted after a restart
+            exited = not procs.alive(res.get("pid"), res.get("create_time"))
+        if not exited and now() > parse_stamp(res["deadline"]):
+            procs.kill_tree(res["pid"])
+            res["killed"] = True
+            self._save(run)
+            exited = True
+        if exited:
+            run.resolver = None
+        return exited
+
+    def _judge_resolver(self, run: Run) -> str | None:
+        """What is wrong with the merge executor's work, or None: it resolved exactly the
+        conflicted files and left the stopped rebase as it found it."""
+        rec, res = run.rec, run.rec["resolve"]
+        wt = Path(rec["worktree"])
+        self._guard_check(f"after the merge executor of {rec['item']}")
+        if len(run.tamper) > res.get("tamper_before", 0):
+            return "it changed the control folder (reverted)"
+        if res.get("killed"):
+            return f"it ran past merge_minutes ({self.cfg.merge_minutes:g})"
+        result = executor.read_result(Path(res["log"]))
+        if result is None or result.get("is_error"):
+            return "it left no result" if result is None else f"it errored: {result.get('subtype')}"
+        if not wt.is_dir() or not git.rebase_in_progress(wt) or git.head(wt) != res["head"]:
+            return "it moved the stopped rebase (ran git)"
+        touched = [f for f in git.run(wt, "diff", "HEAD", "--name-only", "-z").split("\0") if f]
+        if other := sorted(set(touched) - set(res["touched"])) + sorted(
+                f for f, h in res["hashes"].items() if _file_hash(wt / f) != h):
+            return f"it changed {other[:5]}, which were not in conflict"
+        if worktrees.untracked(wt) != res["untracked"]:
+            return "it added untracked files"
+        for f in res["files"]:
+            try:
+                lines = (wt / f).read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                return f"{f} is gone"
+            if any(ln.startswith(("<<<<<<<", ">>>>>>>")) for ln in lines):
+                return f"conflict markers remain in {f}"
+        return None
 
     def _conclude(self, run: Run) -> None:
         cfg, rec = self.cfg, run.rec
@@ -1413,6 +1600,8 @@ class Daemon:
         still_running = any(r.rec["repo"] == repo for r in self.runs.values())
         if not still_running and not (qdir.is_dir() and any(qdir.glob("*.md"))):
             self.log.append("queue_empty", item=item_id, repo=repo, last=item_id)
+            # Not this item's own leftover: whatever held it a moment ago still does.
+            self._retry_leftovers("queue empty", repo=repo, skip=item_id)
 
     def _move_to_done(self, run: Run) -> None:
         ddir = self.cfg.path("done", run.rec["repo"])

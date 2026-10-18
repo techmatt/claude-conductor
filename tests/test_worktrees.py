@@ -83,19 +83,165 @@ def test_paths_violation_is_red_and_unmerged(env):
 
 def test_commit_to_main_during_run_conflicts(env):
     before = main_head(env)
-    env.queue("001_c", "FAKE sleep 1.5\nFAKE commit README.md from the item")
+    env.queue("001_c", "FAKE sleep 1.5\nFAKE commit app.txt from the item")
     env.tick_until(lambda: env.events("start"))
-    (env.repo / "README.md").write_text("from main\n", encoding="utf-8")
-    git(env.repo, "commit", "-qam", "direct")
+    (env.repo / "app.txt").write_text("from main\n", encoding="utf-8")
+    git(env.repo, "add", "app.txt")
+    git(env.repo, "commit", "-qm", "direct")
     direct = main_head(env)
     env.tick_until(lambda: env.finished("code/001_c"))
     fin = env.finished("code/001_c")
     assert fin.detail["status"] == "red" and any("conflicted" in r for r in fin.detail["reasons"])
     [c] = env.events("conflict")
-    assert c.detail["files"] == ["README.md"]
+    assert c.detail["files"] == ["app.txt"] and not env.events("resolve")
     assert main_head(env) == direct != before
     assert "conductor/001_c" in branches(env) and env.worktree("001_c").is_dir()
     assert not git(env.worktree("001_c"), "status", "--porcelain").strip()     # rebase aborted
+
+
+# ---------------------------------------------------------------- prose files
+def test_prose_globs_are_outside_disjointness():
+    prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]
+    assert globs.only_prose("README.md", prose) and globs.only_prose("docs/a/b.md", prose)
+    assert globs.only_prose("docs/**/*.md", prose)
+    assert not globs.only_prose("docs", prose) and not globs.only_prose("*.md", prose)
+    assert globs.disjoint(["a/**", "README.md"], ["b/**", "README.md"], prose)
+    assert not globs.disjoint(["a/**", "README.md"], ["b/**", "README.md"])
+    assert globs.disjoint(["README.md"], ["src/**"], prose)          # a prose-only item shares
+    assert not globs.disjoint([], ["src/**"], prose)                 # undeclared still never does
+
+
+def two_concurrent(env, a_lines: str, b_lines: str) -> None:
+    """001 (slow) and 002 run at once in disjoint code paths; 002 merges first."""
+    env.queue("001_a", "FAKE sleep 1.5\nFAKE commit a/x.txt a\n" + a_lines, paths="['a/**']")
+    env.queue("002_b", "FAKE commit b/y.txt b\n" + b_lines, paths="['b/**']", stage="false")
+    env.tick_until(lambda: env.finished("code/001_a") and env.finished("code/002_b"))
+    start = {e.item: e.id for e in env.events("start")}
+    fin = {e.item: e.id for e in env.events("finish")}
+    assert start["code/002_b"] < fin["code/001_a"]            # README edits did not serialise them
+
+
+def test_prose_edits_merge_textually_beside_disjoint_code(env):
+    (env.repo / "README.md").write_text("top\ncode\nbottom\n", encoding="utf-8", newline="\n")
+    git(env.repo, "commit", "-qam", "longer readme")
+    two_concurrent(env, "FAKE prepend README.md from a", "FAKE append README.md from b")
+    assert all(e.detail["status"] == "done" for e in env.events("finish"))
+    assert (env.repo / "README.md").read_text(encoding="utf-8") == "from a\ntop\ncode\nbottom\nfrom b\n"
+    assert not env.events("resolve") and not env.events("paths_violation")
+
+
+def test_prose_conflict_is_resolved_by_a_merge_executor(env):
+    two_concurrent(env, "FAKE commit README.md from a", "FAKE commit README.md from b")
+    fin = env.finished("code/001_a")
+    assert fin.detail["status"] == "done", fin.detail
+    [res] = env.events("resolve")
+    assert res.item == "code/001_a" and res.detail["files"] == ["README.md"]
+    merge = env.d.log.last("merge", item="code/001_a")
+    assert merge.detail["resolved"] == ["README.md"]
+    text = (env.repo / "README.md").read_text(encoding="utf-8")
+    assert "from a" in text and "from b" in text and "<<<<<<<" not in text
+    assert (env.repo / "a" / "x.txt").is_file() and not env.worktree("001_a").exists()
+    assert (env.control / "reports" / "code__001_a.merge.log").is_file()
+
+
+def test_failed_merge_executor_is_red_with_both_versions_kept(env):
+    two_concurrent(env, "FAKE merge-fail\nFAKE commit README.md from a", "FAKE commit README.md from b")
+    fin = env.finished("code/001_a")
+    assert fin.detail["status"] == "red" and any("merge executor failed" in r for r in fin.detail["reasons"])
+    [c] = env.events("conflict")
+    assert c.detail["files"] == ["README.md"] and "markers remain" in c.detail["error"] and c.detail["resolver"]
+    assert (env.repo / "README.md").read_text(encoding="utf-8") == "from b\n"           # main's version
+    wt = env.worktree("001_a")
+    assert git(wt, "show", "conductor/001_a:README.md") == "from a\n"                     # the item's
+    assert wt.is_dir() and not git(wt, "status", "--porcelain").strip()                  # rebase aborted
+
+
+def test_merge_executor_touching_other_files_is_red(env):
+    two_concurrent(env, "FAKE merge-stray\nFAKE commit README.md from a", "FAKE commit README.md from b")
+    fin = env.finished("code/001_a")
+    assert fin.detail["status"] == "red"
+    assert "untracked" in env.d.log.last("conflict", item="code/001_a").detail["error"]
+
+
+def test_prose_and_code_conflict_together_is_a_plain_conflict(env):
+    two_concurrent(env, "FAKE commit README.md from a\nFAKE commit c.txt a",
+                   "FAKE commit README.md from b\nFAKE commit c.txt b")
+    assert env.finished("code/001_a").detail["status"] == "red"
+    assert not env.events("resolve")
+
+
+def test_prose_outside_paths_is_no_violation(env):
+    env.queue("001_a", "FAKE commit a/x.txt a\nFAKE commit docs/guide/use.md how\nFAKE commit CLAUDE.md c",
+              paths="['a/**']")
+    env.tick_until(lambda: env.finished("code/001_a"))
+    assert env.finished("code/001_a").detail["status"] == "done" and not env.events("paths_violation")
+
+
+def test_prose_setting_replaces_the_default(env):
+    env.configure('[repos.code]\npath = "../code"\nprose = []\n')
+    env.queue("001_a", "FAKE commit a/x.txt a\nFAKE commit README.md r", paths="['a/**']")
+    env.tick_until(lambda: env.finished("code/001_a"))
+    assert env.finished("code/001_a").detail["status"] == "red" and env.events("paths_violation")
+
+
+# ---------------------------------------------------------------- leftover worktrees
+def flaky_discard(monkeypatch, failing: set[str]):
+    """worktrees.discard fails with PermissionError 13 for existing trees named in `failing`."""
+    from conductor import worktrees
+    real = worktrees.discard
+
+    def discard(cfg, repo, path, branch):
+        if path.name in failing and path.exists():
+            raise PermissionError(13, "The process cannot access the file", str(path / "held.log"))
+        return real(cfg, repo, path, branch)
+    monkeypatch.setattr(worktrees, "discard", discard)
+
+
+def test_failed_removal_is_retried_on_queue_empty_and_at_start(env, monkeypatch):
+    failing = {"001_a"}
+    flaky_discard(monkeypatch, failing)
+    env.queue("001_a", "FAKE commit a.txt a")
+    env.tick_until(lambda: env.finished("code/001_a"))
+    assert env.finished("code/001_a").detail["status"] == "done" and env.worktree("001_a").is_dir()
+    assert any("retried when" in e.detail["note"] for e in env.events("warning"))
+    leftovers = env.control / ".conductor" / "leftovers.json"
+    assert leftovers.is_file()
+    # The next time the queue empties, the removal is retried; still held: a warning.
+    env.queue("002_b", "FAKE commit b.txt b")
+    env.tick_until(lambda: env.finished("code/002_b"))
+    assert any("still not removed (queue empty)" in e.detail["note"] for e in env.events("warning"))
+    # Whatever held it lets go; the next daemon start removes it.
+    failing.clear()
+    env.d.log.close()
+    env.d = env.new_daemon()
+    assert not env.worktree("001_a").exists() and not leftovers.exists()
+    last = env.d.log.last("worktree", item="code/001_a")
+    assert last.detail["action"] == "removed" and "leftover removed on retry (daemon start)" in last.detail["note"]
+    assert "conductor/001_a" not in branches(env)
+
+
+# ---------------------------------------------------------------- shared folders and ultracode
+def test_missing_shared_folder_is_created_in_the_main_checkout(env):
+    env.configure('[repos.code]\npath = "../code"\nshared = ["data/cache"]\n')
+    env.queue("001_use", "FAKE write data/cache/x.bin made\nFAKE check data/cache/x.bin\nFAKE commit a.txt a")
+    env.tick_until(lambda: env.finished("code/001_use"))
+    assert env.finished("code/001_use").detail["status"] == "done", report(env, "001_use")
+    assert (env.repo / "data" / "cache" / "x.bin").is_file()            # written through the link
+    created = env.d.log.query(kinds=["worktree"])[0]
+    assert "created in the main checkout" in created.detail["note"]
+    assert any("not git-ignored" in e.detail["note"] for e in env.events("warning"))
+
+
+def test_ultracode_item_launches_with_the_settings_key(env):
+    import json
+    env.queue("001_u", "FAKE report done", ultracode="true")
+    env.queue("002_plain", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/002_plain"))
+    settings = {n: json.loads((env.control / "reports" / f"code__{n}.settings.json").read_text(encoding="utf-8"))
+                for n in ("001_u", "002_plain")}
+    assert settings["001_u"]["ultracode"] is True and "hooks" in settings["001_u"]
+    assert "ultracode" not in settings["002_plain"]
+    assert env.d.log.last("enqueue", item="code/001_u").detail["ultracode"] is True
 
 
 def test_dirty_main_holds_merge_until_clean(env):

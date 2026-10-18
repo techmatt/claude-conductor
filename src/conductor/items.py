@@ -11,7 +11,7 @@ from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage"}
+          "paths", "stage", "ultracode"}
 
 
 @dataclass
@@ -28,6 +28,7 @@ class Item:
     max_hours: float | None = None
     paths: list[str] = field(default_factory=list)     # globs the item may change; [] = undeclared
     stage: bool | None = None                           # None: the repo's `stage` setting
+    ultracode: bool = False                             # launch with Claude Code's ultracode on
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -38,7 +39,8 @@ class Item:
     def meta(self) -> dict:
         return {"locks": self.locks, "depends_on": self.depends_on, "after_red": self.after_red,
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
-                "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage}
+                "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
+                "ultracode": self.ultracode}
 
 
 def _list(value, what: str, errors: list[str]) -> list[str]:
@@ -79,7 +81,7 @@ def parse(path: Path, repo: str) -> Item:
     item.after_red = str(meta.get("after_red", "stop"))
     if item.after_red not in ("stop", "continue"):
         item.errors.append("`after_red` must be stop or continue")
-    for flag in ("needs_planner", "readonly"):
+    for flag in ("needs_planner", "readonly", "ultracode"):
         value = meta.get(flag, False)
         if not isinstance(value, bool):
             item.errors.append(f"`{flag}` must be true or false")

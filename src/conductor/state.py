@@ -99,9 +99,11 @@ def scan(cfg: Config, log: EventLog) -> View:
 
 def can_share(cfg: Config, head: Item, rec: dict) -> bool:
     """May `head` run beside the running item `rec` in the same repo? Only in worktrees,
-    when both declared `paths`, the globs are disjoint and they share no named lock."""
-    return (cfg.opts(head.repo).worktrees and bool(rec.get("worktree"))
-            and globs.disjoint(head.paths, rec.get("paths") or [])
+    when both declared `paths`, the globs are disjoint (prose aside) and they share no
+    named lock."""
+    opts = cfg.opts(head.repo)
+    return (opts.worktrees and bool(rec.get("worktree"))
+            and globs.disjoint(head.paths, rec.get("paths") or [], opts.prose)
             and not set(head.locks) & set(rec.get("locks") or []))
 
 

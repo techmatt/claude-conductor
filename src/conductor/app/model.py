@@ -249,7 +249,7 @@ def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> 
 # or an invalid event is always activity, whatever its kind.
 ACTIVITY_KINDS = {"start", "finish", "reviewed", "checkpoint", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "request", "request_failed",
-                  "daemon_start", "daemon_stop", "progress", "tell", "delivered",
+                  "daemon_start", "daemon_stop", "progress", "tell", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed"}
 ALWAYS_KINDS = RED_KINDS | {"warning"}
 

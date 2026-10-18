@@ -98,6 +98,7 @@ poll_seconds = 2              # daemon loop interval
 ask_default_minutes = 10      # an unanswered non-blocking ask returns its default after this
 stage_minutes = 30            # a stage running longer is killed and discarded
 setup_minutes = 10            # per setup command
+merge_minutes = 10            # a merge executor resolving a prose conflict is killed after this
 toasts = true                 # Windows desktop notifications (see Toasts)
 
 [repos]                       # name = path; relative paths resolve from the control folder
@@ -110,6 +111,7 @@ stage = true                  # stage the queue head while the repo is busy (nee
 main = "main"                 # the branch items are cut from and merged into
 shared = ["data", ".venv"]    # untracked folders linked into every worktree (junctions)
 setup = ["uv sync"]           # shell commands run in a new worktree before launch
+prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]   # the default: exempt from `paths`, merged textually
 
 [executor]                    # optional
 command = ["claude"]          # the executable (resolved on PATH)
@@ -137,6 +139,7 @@ readonly: false          # true: conductor checks the repo is unchanged afterwar
 max_hours: 1             # hard-kill deadline; default from conductor.toml
 paths: ['src/ui/**']     # globs the item may change; enables concurrency (see `paths:`)
 stage: false             # override the repo's `stage` setting for this item
+ultracode: true          # launch with Claude Code's ultracode on (see Executors, *Ultracode*)
 ---
 Prompt body.
 ```
@@ -183,7 +186,10 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
 - **Untracked state.** A worktree holds only tracked files. Each `shared` folder of the
   repo is linked into the worktree at the same path (a directory junction on Windows,
   a symlink elsewhere), so data, a venv or build output is shared, not copied; a change
-  there is a change everywhere. A shared folder should be git-ignored in the repo —
+  there is a change everywhere. A shared folder that does not exist yet in the main
+  checkout is created there first (noted on the `worktree` event), so every worktree
+  links the same one; a *file* at that path is a `warning` and is not linked. A shared
+  folder should be git-ignored in the repo —
   conductor logs a `warning` if it is not, since an executor could commit it. Then the
   `setup` commands run in the worktree through the shell, output to
   `reports/<repo>__NNN_name.setup.log`; a failing or timed-out command is a launch
@@ -196,6 +202,25 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   worktree and the branch (`merge`, `worktree` events), then log `finish`. So
   `finish` means merged, and a `depends_on` item never starts before its dependency's
   changes are on `main`.
+  - *Prose conflict:* when every conflicted file is prose (the repo's `prose` globs,
+    see `paths:`), the rebase is left stopped and a short **merge executor** (headless
+    Claude Code, no ask tool, no messages, at most `merge_minutes`) runs in the item's
+    worktree, logged `resolve`. Its prompt names the files, says which side of the
+    markers is `main` and which is the item, lists the commits that landed on `main`
+    and the item's commit and prompt (for intent only), and tells it to keep both
+    sides' intent, touch nothing else and run no git command. When it exits, conductor
+    checks its work: a result, no conflict marker (`<<<<<<<`/`>>>>>>>` lines) left,
+    the stopped rebase where it was, no other tracked or untracked file changed, no
+    control-folder change. Then conductor stages the files and continues the rebase
+    (`--skip` if the resolution leaves the replayed commit empty); a later stop does
+    the same again, and the merge goes on as usual. The `merge` event lists
+    `resolved` files. Output: `reports/<repo>__NNN_name.merge.log` (and
+    `.merge.prompt.md`, `.merge.stderr.log`). A merge executor that fails any check
+    is a *rebase conflict* below: the rebase is aborted, so the branch keeps the
+    item's version and `main` its own, and the `conflict` event carries `resolver`
+    (its log) and the failed check as `error`. While it runs, later merges in that
+    repo wait, and the tamper guard counts it as a running executor. A restart adopts
+    it by pid. A conflict touching any non-prose file is never handed to it.
   - *Rebase conflict:* the rebase is aborted, a `conflict` event names the files, the
     item ends red; branch and worktree are kept, `main` is untouched. A rebase that
     fails with no conflicted file (a stale lock, an untracked file in the way, a file
@@ -210,6 +235,18 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   - *Uncommitted changes* left in the worktree make the item red (they would be lost).
   - *Red item:* never merged; branch and worktree kept for inspection (links removed).
   - *readonly item:* never merged; its worktree and branch are discarded.
+
+  *Leftover worktrees.* Removing a merged, readonly or discarded item's worktree can
+  fail while another process holds a file in it (a dev server an executor left
+  running, an editor): `PermissionError 13` on Windows. The failure is a `warning` and
+  a row in `.conductor/leftovers.json`; the item concludes as usual. Conductor retries
+  each row at daemon start and whenever that repo's queue empties (`queue_empty`, but
+  not the row of the item that just emptied it, since whatever held its files a
+  moment ago still does). A retry that works logs the `worktree` event the first try
+  would have (`removed`/`discarded`, note `leftover removed on retry (...)`) and drops
+  the row; one that still fails logs a `warning` and keeps it. A row whose path a live
+  item has since taken over (a stage discarded, then the item launched fresh there) is
+  dropped without touching the path.
 
   To remove a kept worktree, delete its folder, then `git worktree prune` and
   `git branch -D conductor/<NNN_name>`. Never `git worktree remove --force` a tree
@@ -236,6 +273,17 @@ everything under a folder it matches (`docs` = `docs/**`); case is ignored.
 - **Enforcement.** After the run, every file the branch changed (`git diff` from the
   cut point) must match a declared glob. Anything else is a `paths_violation` event
   and the item ends red, unmerged. Enforced in `worktrees = false` repos too.
+- **Prose files.** Each repo's `prose` globs (default `["CLAUDE.md", "README.md",
+  "docs/**/*.md"]`; `prose = []` turns it off) name the shared prose nearly every item
+  touches. Changes to them never count against `paths`: an item may edit them without
+  declaring them, and two items that both edit `README.md` still run together when
+  their code paths are disjoint. A declared glob that names only prose (a prose glob
+  itself, or a literal path one covers, like `README.md` or `docs/a/b.md`) is left out
+  of the disjointness check, so an item whose `paths` are all prose shares with
+  anything that declared `paths`. A wildcard like `*.md` or a folder like `docs` is
+  not prose-only and still counts. At merge, prose merges textually through the
+  rebase; a real conflict there goes to a merge executor (*Worktrees and merges*,
+  *Prose conflict*). The preamble tells a `paths` item its prose files are exempt.
 
 ## Staging
 
@@ -294,8 +342,34 @@ The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
 (`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …`);
 its tools are `ask` (see *Questions*) and `progress` (see *Progress and messages*). The
-`--settings` file holds one PostToolUse hook, the message hook (same section). A stage
-gets neither file.
+`--settings` file holds one PostToolUse hook, the message hook (same section), and
+`"ultracode": true` for an `ultracode` item. A stage gets neither file.
+
+**Ultracode.** Claude Code's ultracode is a session setting: once it is on, the session
+is told "Ultracode is on" and uses the Workflow tool (multi-agent orchestration) on
+every substantive task. In 2.1.302, probed with headless `-p` runs in the sandbox
+(Opus 5.5) that quoted their own context:
+
+| route | ultracode on? |
+|---|---|
+| `"ultracode": true` in the `--settings` file | **yes** |
+| `--effort ultracode` | **yes** (also sets effort `xhigh`) |
+| the word `ultracode` in the `-p` prompt | no: the keyword triggers only in typed input, never in `-p` |
+| a message (`tell:`) saying "use ultracode", delivered by the PostToolUse hook | no: hook context is not the user's prompt |
+| the `--settings` file rewritten mid-run to add the key | no: read once at launch |
+
+So conductor uses the first route. Proven through conductor in the sandbox: an
+`ultracode: true` item's session carried the "Ultracode is on" notice. Ultracode does
+not force a workflow: the notice leaves trivial turns solo, and the executor judges
+what counts. A 23-file doc audit (`sandbox/043`) was done solo, without a workflow.
+So `ultracode: true` pays off on genuinely large work. An item with `ultracode: true` front-matter
+launches (or resumes, after staging) with the key in its `--settings` file; a stage
+never has it, nor does a merge executor. Switching an executor *mid-run* has no
+working route: a `tell:` saying "use ultracode" arrives as an ordinary message, and the
+executor treats it as one. To give running work ultracode, let the item finish (or
+cancel it while queued) and queue it, or a follow-up, with `ultracode: true`. A
+Workflow call needs no approval in an executor (`--dangerously-skip-permissions`), and
+the Workflow tool is present in every `-p` session; only the opt-in differs.
 
 **Long tool calls.** Claude Code (2.1.301) aborts an MCP tool call that sends no
 response or progress for 1800s ("sent no response or progress for 1800s; aborting"),
@@ -329,7 +403,8 @@ carry: <what state.md should change, or none>
 red: no report or a bad header, no `result` line in the log, `is_error` in the result,
 killed at `max_hours`, interrupted (restart rule), control-folder tamper, a readonly
 item that changed its repo, a launch failure (worktree or setup included), a
-`paths` violation, uncommitted changes left in the worktree, or a rebase conflict.
+`paths` violation, uncommitted changes left in the worktree, or a rebase conflict
+(including a prose conflict its merge executor failed to resolve).
 The reasons are listed in the `finish` and `red` events.
 
 **max_hours** is enforced by the daemon: past the deadline (stored in `.run.json`, so
@@ -862,9 +937,10 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `start` | executor launched | session_id, pid, deadline, worktree, branch; resumed, landed (a staged item); error (launch failed) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline |
 | `staged` | the stage finished cleanly | session_id, plan (first 500 chars), cost_usd |
-| `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded | action, branch, base, note |
-| `merge` | an item's branch landed on main | branch, sha (main after), commits |
-| `conflict` | the rebase onto main conflicted (red) | branch, files, error |
+| `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
+| `merge` | an item's branch landed on main | branch, sha (main after), commits; resolved (prose files a merge executor resolved) |
+| `resolve` | the rebase stopped on prose files only; a merge executor was launched to resolve them | files, step, commit (the one being replayed), session_id, pid, deadline |
+| `conflict` | the rebase onto main conflicted, or a merge executor failed (red) | branch, files, error; resolver (the merge executor's log) |
 | `paths_violation` | the branch changed files outside `paths` (red) | files, paths_declared |
 | `adopt` | restart found the executor (or stage: `stage: true`) alive | pid, session_id |
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
@@ -894,7 +970,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `late` | an answer file after a default or close | question, text, outcome; by |
 | `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
-| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a stage discarded; a shared folder missing or not ignored; a report still unreviewed at a checkpoint | note; checkpoint, finish (the unreviewed-at-checkpoint warning) |
+| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a stage discarded; a shared path that is a file, or not ignored; a worktree not removed (recorded for retry) or still not removed on a retry; a report still unreviewed at a checkpoint | note; checkpoint, finish (the unreviewed-at-checkpoint warning) |
 
 ## Restart rule
 

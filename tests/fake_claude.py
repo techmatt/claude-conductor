@@ -4,6 +4,7 @@
     FAKE report <done|partial|red|none>      (default done)
     FAKE write <path> <text>                 write a file (absolute, or relative to cwd)
     FAKE commit <file> <text>                write <file> in cwd and commit it
+    FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
     FAKE check <path>                        the report is red unless <path> exists
     FAKE error                               emit an is_error result
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
@@ -15,6 +16,9 @@
 After every FAKE line but `sleep` (each counts as a tool call), the PostToolUse hooks named in
 --settings run as Claude Code runs them: input JSON on stdin, `additionalContext` from
 their stdout JSON. Each context received is written to the report as `CONTEXT: ...`.
+
+A merge executor's prompt resolves the conflicted files it lists by keeping both sides'
+lines; `FAKE merge-fail` in the item leaves the markers, `FAKE merge-stray` also adds a file.
 
 A staging prompt obeys only `FAKE stage-sleep <seconds>` and `FAKE stage-write <path>
 <text>`, remembers the prompt under its session id, and ends with a plan. `--resume`
@@ -47,6 +51,23 @@ def result(text="ok", is_error=False):
 
 
 emit({"type": "system", "subtype": "init", "session_id": session})
+
+if "conductor merge executor" in prompt:
+    # Resolve every listed file by keeping both sides, unless the item says `FAKE merge-fail`
+    # (markers left) or `FAKE merge-stray` (also edits a file not in conflict).
+    if "FAKE merge-fail" not in prompt:
+        files, at = [], lines.index(next(ln for ln in lines if "hold conflict markers" in ln)) + 1
+        while lines[at].startswith("- "):
+            files.append(lines[at][2:])
+            at += 1
+        for f in files:
+            kept = [ln for ln in Path(f).read_text(encoding="utf-8").splitlines()
+                    if not ln.startswith(("<<<<<<<", "=======", ">>>>>>>", "|||||||"))]
+            Path(f).write_text("\n".join(kept) + "\n", encoding="utf-8", newline="\n")
+        if "FAKE merge-stray" in prompt:
+            Path("stray.txt").write_text("stray\n", encoding="utf-8")
+    result("Resolved by keeping both sides.")
+    sys.exit(0)
 
 if "in its staging phase" in prompt:
     for ln in lines:
@@ -124,6 +145,12 @@ for ln in lines:
             Path(parts[2]).write_text(parts[3] + "\n", encoding="utf-8")
             subprocess.run(["git", "add", parts[2]], check=True)
             subprocess.run(["git", "commit", "-q", "-m", f"fake: {parts[2]}"], check=True)
+        case "append" | "prepend":
+            old = Path(parts[2]).read_text(encoding="utf-8") if Path(parts[2]).is_file() else ""
+            new = old + parts[3] + "\n" if parts[1] == "append" else parts[3] + "\n" + old
+            Path(parts[2]).write_text(new, encoding="utf-8", newline="\n")
+            subprocess.run(["git", "add", parts[2]], check=True)
+            subprocess.run(["git", "commit", "-q", "-m", f"fake: {parts[1]} {parts[2]}"], check=True)
         case "check":
             if not Path(parts[2]).exists():
                 status = "red"

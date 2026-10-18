@@ -87,9 +87,16 @@ def describe(ev: Event) -> str:
             text = f"{who} staged; waits for the lock" + (f": {plan[0][:160]}" if plan else "")
         case "merge":
             text = f"{who} merged `{d.get('branch')}` into main at {str(d.get('sha') or '')[:10]} ({d.get('commits')} commit(s))"
+            if d.get("resolved"):
+                text += f"; prose conflict resolved in {', '.join(d['resolved'][:5])}"
+        case "resolve":
+            text = (f"{who} prose conflict in {', '.join(d.get('files', [])[:5])}; merge executor resolving "
+                    f"(pid {d.get('pid')})")
         case "conflict":
             files = f" in {', '.join(d['files'][:5])}" if d.get("files") else ""
             text = f"{who} rebase conflicted{files}; `{d.get('branch')}` kept, main untouched"
+            if d.get("resolver"):
+                text += f"; merge executor failed: {d.get('error')}"
         case "paths_violation":
             files = d.get("files", [])
             text = (f"{who} changed {len(files)} file(s) outside its paths "
@@ -116,7 +123,7 @@ def describe(ev: Event) -> str:
             text = f"queue `{ev.repo}` cleared"
         case "enqueue":
             extras = [f"{k}: {d[k]}" for k in ("depends_on", "locks") if d.get(k)]
-            extras += [k for k in ("needs_planner", "readonly") if d.get(k)]
+            extras += [k for k in ("needs_planner", "readonly", "ultracode") if d.get(k)]
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
         case "adopt":
             text = f"{who} {'stage ' if d.get('stage') else ''}adopted after restart (pid {d.get('pid')})"
