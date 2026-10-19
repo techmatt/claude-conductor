@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from . import questions
+from . import picks, questions
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
 from .state import View, decide
-from .util import clock, now
+from .util import clock, now, parse_stamp
 
 
 def progress_line(ev: Event) -> str:
@@ -39,6 +39,17 @@ def describe(ev: Event) -> str:
                 text += f" · blocks: {d['blocks']}"
             if d.get("carry") not in (None, "none"):
                 text += f" · carry: {d['carry']}"
+            if d.get("pick"):
+                text += f" · pick: {d['pick']}"
+        case "pick_open":
+            text = f"opened picker `{d.get('name')}` ({d.get('manifest')}) at {d.get('url')}"
+            if d.get("opened") is False:
+                text += " — browser did not open"
+        case "pick_saved":
+            text = (f"picker `{d.get('name')}` saved: {d.get('changed')} of {d.get('rows')} changed, "
+                    f"{_count(d.get('notes'), 'note')}")
+        case "pick_failed":
+            text = f"picker {d.get('manifest')} failed: {d.get('error')}"
         case "progress":
             text = f"{who} progress: {progress_line(ev)}"
         case "tell":
@@ -170,6 +181,42 @@ def describe(ev: Event) -> str:
     return text
 
 
+def _count(n, word: str) -> str:
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def saved_line(c: dict) -> str:
+    """A saved picker: `art_alts_009 saved 4:52pm: 6 changed, 2 notes; picks/....json`."""
+    return (f"{c.get('name')} saved {clock(c['saved_at'])}: {c.get('changed')} changed, "
+            f"{_count(c.get('notes'), 'note')}; `picks/{c.get('name')}.choices.json`")
+
+
+def pick_lines(cfg: Config, log: EventLog, view: View) -> list[str]:
+    """The Picks section: each pending picker (saved, opened or waiting for Matt), then
+    pickers saved since the checkpoint (any time without one) that no pending item names."""
+    out, shown = [], set()
+    for p in picks.pending(cfg, view, log):
+        shown.add(p.ref)
+        if p.state == "saved":
+            out.append(f"- {saved_line({'name': p.name, 'saved_at': p.saved_at, 'changed': p.changed, 'notes': p.notes})}"
+                       f" ({p.item})")
+        elif p.state == "opened":
+            out.append(f"- {p.item} opened {clock(p.opened_at)}, not saved — `{p.ref}`")
+        else:
+            out.append(f"- {p.item} waiting for Matt — signal `pick: {p.ref}`")
+    cp = view.checkpoint
+    for ref, c in sorted(picks.scan_choices(cfg.control).items(), key=lambda kv: str(kv[1].get("saved_at"))):
+        if ref in shown or not c.get("saved_at"):
+            continue
+        try:
+            if cp and parse_stamp(c["saved_at"]) < parse_stamp(cp.ts):
+                continue
+        except ValueError:
+            continue
+        out.append(f"- {saved_line(c)}")
+    return out
+
+
 def _line(ev: Event) -> str:
     shown = ev.paths[:1] if ev.kind == "finish" else ev.paths     # the report; log and done/ are derivable
     paths = f" — {', '.join(shown)}" if shown and ev.kind in ("finish", "tamper", "request") else ""
@@ -229,10 +276,14 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
             d = ev.detail
             report = f" — {ev.paths[0]}" if ev.paths else ""
             carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
+            pick = f" · pick: {d['pick']}" if d.get("pick") else ""
             old = (" · **carried from before checkpoint "
                    f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
-            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){report}{carry}{old}")
+            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){report}{carry}{pick}{old}")
         out.append("  Mark one reviewed once acted on: signal `reviewed: <repo>/<NNN_name>`.")
+    if pick_rows := pick_lines(cfg, log, view):
+        # Standing too: a picker waits for Matt whatever the read mark says.
+        out += ["", "## Picks", *pick_rows]
     sections = [("Red", red), ("Holds", holds), ("Finished", finished), ("Questions resolved", asked),
                 ("Requests and commits", changes), ("Other", other)]
     for title, evs in sections:

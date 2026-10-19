@@ -24,6 +24,7 @@ uv run conductor tell <item> <text…> [--control <folder>]  # a message to a ru
 uv run conductor checkpoint [<label…>] [--control <folder>]   # a new checkpoint (see Checkpoints)
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
+uv run conductor pick <repo>/<manifest path> [--control <folder>]  # open a picker in the browser (see Picks)
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
 uv run conductor app [<control folder> …]                  # the desktop app (see The app)
 ```
@@ -59,8 +60,9 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
                                .stage.prompt.md for a stage; .audit.md (audit notes)
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, stop
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, pick, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
+picks/                         Matt's saved picker choices: <name>.choices.json (see Picks)
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
 .conductor/                    daemon lock (daemon.json), guard snapshot, cancelled/ (kept
@@ -79,6 +81,7 @@ running/
 done/
 reports/
 questions/
+picks/
 requests/
 signals/
 inbox.md
@@ -341,7 +344,9 @@ first ETA once it can estimate, at real milestones, and when the estimate change
 materially; not chatter); that a message from Matt may arrive after a tool call,
 outranks the prompt where they conflict, and is answered through `progress`; the time limit and kill time; the **absolute report
 path** (the only file the executor may write outside its repo); the report header and
-what each status means; and that the final message ends `Report written to <path>`.
+what each status means; the *Pickers* paragraph (when to write a picker manifest, its
+schema inline, and the `pick:` header line: see *Picks*); and that the final message
+ends `Report written to <path>`.
 The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
 
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
@@ -400,9 +405,15 @@ than plain JSON, so a killed run still leaves its transcript.
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
+pick: <manifest path relative to the repo root>     # optional: only after writing a picker manifest
 ```
 
-(Bare lines or inside a `---` block; `**status**:` is tolerated.)
+(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first four
+non-blank lines are read: `status`, `blocks` and `carry` count only in the first three
+(the first of each), and `pick:` only as the fourth, after all three, with a one-word
+value; so a body that opens with "Status: …" or "Pick: went with …" stays body. Backticks
+around its value are dropped, `\` becomes `/`, and `pick: none` is no pick. The `finish`
+event carries it as `pick: <repo>/<path>`, the ref the `pick:` signal takes.
 
 **Outcome.** The item's final status is the report's status unless something makes it
 red: no report or a bad header, no `result` line in the log, `is_error` in the result,
@@ -617,10 +628,130 @@ A repo's main checkout has no installed dependencies: executors install them in 
 worktrees, which are removed after the merge. So a target whose server needs them
 installs them first, e.g. `command = "npm install && npm run dev -- --port 5173"`.
 
+## Picks
+
+When an executor produces candidates (art variants now, anything visual later), Matt
+picks a favourite per row in his browser, adds a note where none is right, and saves;
+the planner reads his choices to write the next prompt. One generic page serves every
+project (`src/conductor/web/picker.html`); it knows nothing about what it shows. Code:
+`picks.py` (manifest, choices, what is pending; no HTTP) and `picker.py` (the server).
+
+**Manifest.** A JSON file the executor writes in its code repo; the preamble's
+*Pickers* paragraph gives it the schema, since executors never see this README:
+
+```json
+{"name": "art_alts_009",
+ "title": "Hero art alternatives",
+ "intro": "optional text above the rows",
+ "rows": [{"id": "hero", "label": "Hero, idle pose", "note": "optional",
+           "options": [{"key": "current", "image": "hero/current.png"},
+                       {"key": "1", "image": "hero/alt1.png", "label": "warmer"}]}]}
+```
+
+It is named by its ref, `<repo>/<path relative to the repo root>` (normalised: `\`
+becomes `/`, `.` and doubled separators go), and read from the repo's **main
+checkout**, never a worktree. Validation, on every `pick:`; the error names the place
+(`rows[2].options[1].image: missing file art/alt3.png`):
+
+- the path is relative, has no `..`, and stays inside the repo; the file exists, is at
+  most 1 MB, and is UTF-8 JSON whose top level is an object. "Inside" is judged on the
+  path as written, links not followed, so a Drive-homed `shared` folder (a junction out
+  of the main checkout) counts as the repo's;
+- `name`: a slug, `[a-z0-9][a-z0-9_-]{0,63}` (it becomes a URL part and a file name),
+  unique per project: a `pick:` is refused while the daemon's server serves that name
+  for another manifest, or while `picks/<name>.choices.json` holds another manifest's
+  choices; `title`: a non-empty string; `intro`: optional string;
+- `rows`: a non-empty list; each row's `id` a non-empty string unique in the file,
+  `label` a non-empty string, `note` an optional string, `options` a non-empty list;
+- each option's `key` a non-empty string without whitespace, unique in its row (it is
+  what the next prompt uses: `"current"`, `"1"`, …); `label` an optional string;
+  `image` a path relative to the manifest (`..` allowed while it stays in the repo; no
+  absolute path or drive), an existing file ending `.png .jpg .jpeg .gif .webp .avif .svg`;
+- unknown keys are ignored, so the format can grow.
+
+By convention the first option of a row is the current one, and it is the default; a
+row whose choice differs from it is *changed*.
+
+**Surviving the merge.** The manifest and its images must be on `main` by the time the
+`finish` event is logged, which is what the `pick:` line points at: commit them, or put
+them in a `shared` folder (linked into every worktree, so present in the main checkout
+already). An item with `paths:` must cover where it writes them. A `readonly` item is
+never merged (its worktree is discarded), so it must use a `shared` folder.
+
+**Signal and server.** `pick: <repo>/<manifest path>` (planner, app, `conductor pick`)
+validates the manifest, starts the picker server if it is not up, and opens the
+picker's page in the default browser (`pick_open`; `pick_failed`, red, if opening the
+browser raised). A bad manifest, or a server that cannot start, rejects the signal file
+(`invalid`, `.bad`, with the reason). The server:
+
+- listens on `127.0.0.1` only, on a free port, started by the first `pick:`: **one per
+  daemon**, serving any number of pickers, keyed by `name`. It stops when the daemon does;
+- URLs are `http://127.0.0.1:<port>/<token>/<name>/`, the token random per daemon start,
+  so other pages in the browser cannot find it;
+- routes: `GET …/` (the page), `GET …/manifest.json` (the manifest as the page reads it,
+  with the saved choices), `GET …/img/<row>/<option>` (by index into the validated
+  manifest; no part of a URL is ever joined to a file path), `POST …/save`;
+- **everything else is a 404**: another token, name or index, an extra path part, a
+  query on an image, any other method (HEAD, PUT, DELETE, OPTIONS, …), a `Host` that is
+  not `127.0.0.1:<port>` or `localhost:<port>` (DNS rebinding);
+- a save must be `application/json` (a cross-site form cannot send that without a
+  preflight the server never answers), at most 1 MB; a bad body is a 400 with the
+  reason, a choices file that cannot be written a 500. Saves are one at a time (two
+  tabs on one picker cannot interleave their writes). SVGs carry
+  `Content-Security-Policy: sandbox`, every response `X-Content-Type-Options: nosniff`.
+
+The manifest is a snapshot taken at `pick:` time; re-send `pick:` to serve an updated
+one (same name: replaced). Images are read from disk on each request; one deleted since
+is a 404. Handler threads touch only files and a queue: the daemon's loop appends their
+events (`pick_saved`) each tick. **A daemon restart loses the server** (port, token and
+what it serves): an open tab's Save then fails, and the page says so and keeps its
+choices. Re-send `pick:` and save from the new tab.
+
+**The page.** One row per `id`: label and note, then the options as tiles captioned
+`key · label`, about 256px tall (a size slider, 128–640px, remembered by the browser).
+Click a tile to select it; click the selected tile, or its magnifier corner, for a
+full-size overlay where ←/→ step through the row and Enter picks the one shown. Each
+row starts on its saved choice, else its first option; a changed row is badged. A note
+field per row. A sticky bar: "N of M changed · K notes", *show changed only*, and
+**Save** (Ctrl+S), which shows "Saved 4:52pm". Leaving with unsaved changes warns.
+Light or dark by system setting.
+
+**Choices.** Save writes `picks/<name>.choices.json` in the control folder (git-ignored
+runtime, like `questions/`), overwriting any earlier save:
+
+```json
+{"name": "art_alts_009", "title": "Hero art alternatives", "manifest": "code/picks/art_alts_009.json",
+ "saved_at": "2026-10-18T16:52:03-07:00", "changed": 6, "notes": 2,
+ "rows": [{"id": "hero", "key": "2", "changed": true, "note": "hair still too orange"}]}
+```
+
+Every manifest row appears once, in manifest order, with a key from its own options;
+`changed` is worked out by the server, never taken from the page; notes are stripped,
+at most 4000 characters, possibly empty. Reopening loads the save (the page shows "last
+saved 4:52pm"): rows match by `id`, and a key no longer offered falls back to the first
+option with its note kept. A choices file whose `saved_at` is not a stamp with a zone is
+ignored, as if unreadable.
+
+**Pending.** A finished item whose `finish` carries `pick` is *saved* when a choices file
+for that ref was saved after the finish, else *opened* when a `pick_open` for it came
+after the finish, else *waiting*. So a later item that reuses a manifest path starts
+again at waiting. Every such item in the current view is pending; so is one settled by a
+checkpoint while its picker is unsaved and no later finish names the same manifest, so
+a picker never drops out unpicked (saving it, even unchanged, lets it settle). The
+inbox's *Picks* and the app's **Pick…** buttons both read it; the app keeps an unsaved
+one among the current finished rows, however old.
+
+**CLI.** `conductor pick <repo>/<path>` validates first (`conductor: <reason>`, exit 1,
+and a red `pick_failed` event with the reason, as the signal's `invalid` would be).
+With the daemon alive it writes `signals/cli-….signal` (`by: cli`), and the daemon opens
+the picker. With no daemon it serves the picker itself in the foreground, printing the
+URL and each event as it is logged, until Ctrl+C. Those events go to `events.db` as the
+daemon's would.
+
 ## Toasts
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
-`ask`, `red`, `tamper`, `hold`, `run_failed` and `queue_empty` events. Each title names the project and
+`ask`, `red`, `tamper`, `hold`, `run_failed`, `pick_failed` and `queue_empty` events. Each title names the project and
 the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
 history records. Toasts use Command Prompt's registered app id, with "Conductor" as
 the attribution line, so nothing has to be installed. A toast that fails is logged as a
@@ -696,7 +827,7 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, stop
+## Signals: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, pick, stop
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -714,6 +845,7 @@ reviewed: sandbox/003        # the planner has acted on that finished item's rep
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see Progress and messages)
 checkpoint: session start    # a session boundary (see Checkpoints)
 run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
+pick: code/picks/art_alts_009.json   # serve that picker manifest and open it in the browser
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
 
@@ -761,6 +893,10 @@ value is ignored.
   *Checkpoints*.
 - **run** — `run: <target>` or `run: <target> stop`: see *Run targets*. An unknown
   target is refused.
+- **pick** — `pick: <repo>/<manifest path>`: see *Picks*. The value is one word (a
+  manifest path with a space, or ` #`, cannot be named) and its repo must be configured,
+  or the file is rejected at parse time; a manifest that fails validation rejects it
+  when applied, with the reason.
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
   (`reason: signal`), releases its lock and exits. Executors and stages keep running;
   the next start adopts them.
@@ -817,10 +953,22 @@ for the *Now* section). Its header names the current checkpoint (see *Checkpoint
 First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status, finish time, finish event id, report path and `carry:`
-line; it shows on every inbox, read mark or not, until a `reviewed:` signal names the
-item. Then every event after the read mark, grouped **Red** (tamper first,
-then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`),
-**Holds**, **Finished** (status, blocks, carry, report path), **Questions resolved**
+line (and ` · pick: <ref>` when its report named a picker); it shows on every inbox,
+read mark or not, until a `reviewed:` signal names the item. Then **Picks**, also
+standing (see *Picks*, *Pending*): each pending picker, then any picker saved since the
+checkpoint (any time without one) that no pending item names, as the saved line
+without the item:
+
+```
+- art_alts_009 saved 4:52pm: 6 changed, 2 notes; `picks/art_alts_009.choices.json` (code/012_art_alts)
+- code/013_more opened 4:40pm, not saved — `code/picks/more.json`
+- code/014_faces waiting for Matt — signal `pick: code/picks/faces.json`
+```
+
+Then every event after the read mark, grouped **Red** (tamper first,
+then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`,
+`pick_failed`),
+**Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
 included), **Other**; then **Now**: per repo, what is running (or merging), staged
 (`staging`/`staged`), queued, waiting or held, and how many audit notes are unused,
@@ -904,7 +1052,10 @@ stop` (no confirmation: a click is cheap to undo with Run).
   when it was sent); while it executes it has **Tell…**, a text box whose message goes
   out as a `tell:` signal (`by: app`). Every finished row has **Open in terminal**
   (`claude --resume`, see *Progress and messages*), beside **Mark reviewed** while
-  unreviewed. Items settled by the latest checkpoint sit below in an *earlier
+  unreviewed. A finished row whose report named a picker has **Pick…** (`pick: <ref>`,
+  `by: app`; amber until saved) and its note adds ` · pick: saved 4:52pm (6 changed, 2
+  notes)`, ` · pick: opened, not saved` or ` · pick: waiting for Matt` (see *Picks*,
+  *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the latest checkpoint sit below in an *earlier
   checkpoints* group (the 10 newest), collapsed until opened; it stays open across
   refreshes once opened.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
@@ -917,7 +1068,8 @@ stop` (no confirmation: a click is cheap to undo with Run).
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
   `report X reviewed`, `X used N audit note(s)`, `X: <progress line>`, `message #n to X: …` and `message #n
-  reached X`, run targets starting / up / opened / stopped, questions asked / answered / default taken (and late answers and
+  reached X`, run targets starting / up / opened / stopped, pickers opened / saved,
+  questions asked / answered / default taken (and late answers and
   closes), approved, cancelled, reordered, cleared, `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
   or `invalid` event whatever its kind. A `finish` is the *report written* line, not a
@@ -1004,7 +1156,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
 | `requeue` | restart found it never launched | reason |
 | `kill` | max_hours reached | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, session_id, exit_code, cost_usd, turns, branch, merged; audit (it kept notes), template |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged; audit (it kept notes), template |
 | `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window | changes, concurrent |
@@ -1019,6 +1171,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `delivered` | the message reached the executor | tell, via (`hook`/`progress`), text, waited_seconds |
 | `run_start` / `run_ready` / `run_open` / `run_stop` | a run target started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url / note |
 | `run_failed` | a run target never came up, or its URL could not be opened (red; holds no queue) | target, error, log_tail |
+| `pick_open` | a `pick:` signal (or `conductor pick`) served a manifest and opened its page; item: the latest finish that named it, if any | name, manifest, url, opened (false: the browser reported it did not open); by |
+| `pick_saved` | Matt saved a picker; paths: its choices file; no `by` (the page has no identity) | name, manifest, changed, notes, rows |
+| `pick_failed` | opening the browser raised, `conductor pick` refused the manifest, or its own server could not start (red; holds no queue) | manifest, name, url, error; by |
 | `approve` | a `proposed/` item moved into its queue | item, from |
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
@@ -1099,9 +1254,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~30s, 89 tests)
+uv run pytest            # the fast lane, after every change (~25s, 136 tests)
 uv run pytest -m slow    # the slow lane alone (~50s)
-uv run pytest -m ""      # everything (~65s); run this before committing
+uv run pytest -m ""      # everything (~70s, 186 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -1115,7 +1270,9 @@ built once per worker. The fake runs the real message hook only when a message i
 waiting.
 A staging prompt makes the fake obey only `FAKE stage-…` lines and remember the prompt
 under its session id; `--resume` recalls it, so a test can see that a resumed session
-kept what it read while staging. `FAKE ask {json}` calls the
+kept what it read while staging. `FAKE pick <path>` adds `pick: <path>` to the report
+header after `carry:` (a test writes the manifest and images with `FAKE commit` first);
+picker tests stub the browser and bind port 0. `FAKE ask {json}` calls the
 real ask server through the item's `--mcp-config` using `tests/mcp_client.py`, a
 scripted MCP client that also runs standalone:
 `python tests/mcp_client.py <mcp.json> '{"question": "…", "default": "…"}'`. The sandbox

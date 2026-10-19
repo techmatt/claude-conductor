@@ -45,6 +45,9 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
             return f"{project}: {who} held", str(detail.get("reason", ""))[:250]
         case "run_failed":
             return f"{project}: `{detail.get('target')}` did not come up", str(detail.get("error", ""))[:250]
+        case "pick_failed":
+            what = f"`{detail['name']}`" if detail.get("name") else str(detail.get("manifest", ""))
+            return f"{project}: picker {what} did not open", str(detail.get("error", ""))[:250]
         case "queue_empty":
             return f"{project}: queue `{repo}` is empty", f"last item {detail.get('last')}"
     return None

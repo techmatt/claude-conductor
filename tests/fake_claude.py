@@ -9,6 +9,7 @@
     FAKE commit <file> <text>                write <file> in cwd and commit it
     FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
     FAKE check <path>                        the report is red unless <path> exists
+    FAKE pick <path>                         add `pick: <path>` to the report header, after carry:
     FAKE error                               emit an is_error result
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
                                              the result text goes into the report
@@ -124,7 +125,7 @@ def progress(arguments: dict) -> str:
     return text
 
 
-status, is_error = "done", False
+status, is_error, pick = "done", False, None
 answers = []
 for ln in lines:
     if not ln.startswith("FAKE ") or ln.startswith("FAKE stage-"):
@@ -178,10 +179,13 @@ for ln in lines:
                 memory += f"MISSING: {parts[2]}\n"
         case "error":
             is_error = True
+        case "pick":
+            pick = parts[2]
     if parts[1] not in ("sleep", "wait-for"):   # waiting is thinking, not a tool call
         post_tool_use(parts[1])
 if status != "none":
-    report.write_text(f"status: {status}\nblocks: none\ncarry: none\n\nFake report.\n" + memory
+    report.write_text(f"status: {status}\nblocks: none\ncarry: none\n"
+                      + (f"pick: {pick}\n" if pick else "") + "\nFake report.\n" + memory
                       + "".join(f"\nASK RESULT: {a}\n" for a in answers)
                       + "".join(f"\nCONTEXT: {c}\n" for c in contexts), encoding="utf-8")
 result(is_error=is_error)

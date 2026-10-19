@@ -127,6 +127,16 @@ def when(value: str | None) -> str:
         return str(value)
 
 
+def pick_note(p) -> str:
+    """Where Matt is with a finished item's picker (a `picks.PickInfo`, or None)."""
+    if p is None or p.state == "waiting":
+        return "waiting for Matt"
+    if p.state == "opened":
+        return "opened, not saved"
+    notes = p.notes or 0
+    return f"saved {when(p.saved_at)} ({p.changed} changed, {notes} note{'' if notes == 1 else 's'})"
+
+
 def countdown(deadline: str | None) -> str:
     if not deadline:
         return ""
@@ -196,17 +206,18 @@ class ReposPanel(Panel):
             h.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        h.resizeSection(4, 250)
+        h.resizeSection(4, 310)            # room for Mark reviewed, Pick… and Open in terminal
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
-        hint = muted(QLabel("Double-click an item to open its trail. Clear, Cancel and Mark reviewed are signals "
+        hint = muted(QLabel("Double-click an item to open its trail. Clear, Cancel, Mark reviewed and Pick… are signals "
                             "the daemon carries out."))
         lay.addWidget(hint)
         lay.addWidget(self.tree)
         self._sig: tuple | None = None
         self._rows: dict[tuple, QTreeWidgetItem] = {}
         self._sessions: dict[str, str | None] = {}      # finished item → its session id
+        self._picks: dict[str, str] = {}                # finished item → its manifest ref
         self._earlier_open: set[str] = set()            # repos whose Earlier checkpoints group is open
         self.tree.itemExpanded.connect(lambda w: self._expanded(w, True))
         self.tree.itemCollapsed.connect(lambda w: self._expanded(w, False))
@@ -266,8 +277,13 @@ class ReposPanel(Panel):
             for f in rs.finished:
                 mark = "reviewed" if f.reviewed else "unreviewed"
                 note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
-                rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item,
-                             f"done:{f.status}:{mark}"))
+                look = f"done:{f.status}:{mark}"
+                if f.pick:
+                    # The pick state is part of the look: a save changes the button's tone.
+                    p = snap.picks.get(f.item)
+                    note += " · pick: " + pick_note(p)
+                    look += f"|pick:{p.state if p else 'waiting'}"
+                rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item, look))
             if rs.earlier:
                 # Settled by a checkpoint: one collapsed group, its rows children of this one.
                 cp = f"checkpoint #{snap.checkpoint.id}" if snap.checkpoint else "the checkpoint"
@@ -276,19 +292,25 @@ class ReposPanel(Panel):
                                                     f"finished and reviewed before {cp}{more}"], None, "earlier"))
             for f in rs.earlier:
                 note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
-                rows.append((("old", f.item), [f.name, f"{f.status} · reviewed", "", note], f.item,
-                             f"done:{f.status}:reviewed"))
+                look = f"done:{f.status}:reviewed"
+                if f.pick:                          # settled: no longer waits, but reopens
+                    note += f" · pick: {f.pick}"
+                    look += "|pick:settled"
+                rows.append((("old", f.item), [f.name, f"{f.status} · reviewed", "", note], f.item, look))
             busy = len(rs.running) + len(rs.staged)     # a staged head counts as queued too
             head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
             if rs.unreviewed:
                 head += f", {rs.unreviewed} unreviewed"
             if rs.audit_notes:
                 head += f", {rs.audit_notes} audit note(s)"
+            if waiting := sum(1 for p in snap.picks.values() if p.item.split("/", 1)[0] == rs.name and p.state != "saved"):
+                head += f", {waiting} to pick"
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
     def update_snapshot(self, snap: Snapshot) -> None:
         self._sessions = {f.item: f.session_id for rs in snap.repos for f in (*rs.finished, *rs.earlier)}
+        self._picks = {f.item: f.pick for rs in snap.repos for f in (*rs.finished, *rs.earlier) if f.pick}
         plan = self._plan(snap)
         sig = tuple((repo, tuple((k, look) for k, _, _, look in rows)) for repo, _, _, rows in plan)
         if sig != self._sig:
@@ -334,6 +356,7 @@ class ReposPanel(Panel):
             for key, texts, item_id, look in rows:
                 w = QTreeWidgetItem(texts)
                 w.setData(0, Qt.ItemDataRole.UserRole, item_id)
+                look, _, pick_state = look.partition("|pick:")
                 state, row, bg, strong = looks.get(look, (None, None, None, False))
                 for c in range(len(self.COLS)):
                     if row:
@@ -356,6 +379,10 @@ class ReposPanel(Panel):
                     self.tree.setItemWidget(w, 4, compact_button("Tell…", lambda _=False, i=key[1]: self._tell(i)))
                 elif key[0] in ("done", "old"):
                     specs = [("Open in terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
+                    if pick_state and (ref := self._picks.get(key[1])):
+                        # Amber until saved: the picker waits for Matt.
+                        specs.insert(0, ("Pick…", lambda _=False, r=ref: self._pick(r),
+                                         None if pick_state in ("saved", "settled") else "default"))
                     if look.endswith(":unreviewed"):
                         specs.insert(0, ("Mark reviewed", None, None))
                     holder = compact_buttons(*specs)
@@ -393,6 +420,9 @@ class ReposPanel(Panel):
 
     def _open_session(self, item_id: str) -> None:
         open_session(self, self.project, item_id, self._sessions.get(item_id))
+
+    def _pick(self, ref: str) -> None:
+        self.signal_sent(f"pick {ref} (opens in the browser)", actions.pick(self.control, ref))
 
     def _reviewed(self, item_id: str, button: QPushButton | None = None) -> None:
         if button is not None:

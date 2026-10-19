@@ -1,7 +1,7 @@
 """Everything the app writes. No Qt.
 
-The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, checkpoint, run and stop
-are `signals/` files the daemon carries out and logs. Besides those it writes only an
+The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, checkpoint, run, pick and
+stop are `signals/` files the daemon carries out and logs. Besides those it writes only an
 answer file (the same function `conductor answer` uses), starts the daemon, and opens a
 console on a finished item's session.
 """
@@ -95,6 +95,12 @@ def open_session(cfg, item_id: str, session_id: str, spawn=None):
 
 def run_target(control: Path, name: str, stop: bool = False, by: str = BY) -> Path:
     return write_signal(control, f"run: {name}" + (" stop" if stop else ""), by=by)
+
+
+def pick(control: Path, ref: str, by: str = BY) -> Path:
+    """`ref`: a manifest's `<repo>/<path>`, as a finish event's `detail.pick` names it. The
+    daemon validates it, serves the picker and opens it in the browser (`pick_open`)."""
+    return write_signal(control, f"pick: {ref}", by=by)
 
 
 def clear(control: Path, repo: str) -> Path:

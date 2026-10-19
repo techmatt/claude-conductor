@@ -13,7 +13,7 @@ CONFIG_NAME = "conductor.toml"
 # Runtime folders and files under the control folder. All git-ignored; none is ever
 # committed. A request may not target anything under these.
 RUNTIME = (
-    "queue", "proposed", "running", "done", "reports", "questions", "requests",
+    "queue", "proposed", "running", "done", "reports", "questions", "picks", "requests",
     "signals", "inbox.md", "events.db", ".conductor",
 )
 

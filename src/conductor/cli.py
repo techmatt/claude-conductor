@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | checkpoint | open | run-target | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | checkpoint | open | run-target | pick | init | app`."""
 
 from __future__ import annotations
 
@@ -36,16 +36,23 @@ def cmd_run(args) -> int:
     return 0
 
 
-def cmd_status(args) -> int:
+def _daemon_alive(cfg: config_mod.Config) -> dict | None:
+    """The live daemon's lock record (`pid`, `started`), or None."""
     from . import procs
     import json
-    cfg, log = _open(args.control)
     lock = cfg.state_dir / "daemon.json"
-    daemon = "not running"
-    if lock.is_file():
+    try:
         info = json.loads(lock.read_text(encoding="utf-8"))
-        if procs.alive(info.get("pid"), info.get("create_time")):
-            daemon = f"running (pid {info['pid']}, since {clock(info['started'])})"
+    except (OSError, ValueError):
+        return None
+    return info if isinstance(info, dict) and procs.alive(info.get("pid"), info.get("create_time")) else None
+
+
+def cmd_status(args) -> int:
+    cfg, log = _open(args.control)
+    daemon = "not running"
+    if info := _daemon_alive(cfg):
+        daemon = f"running (pid {info['pid']}, since {clock(info['started'])})"
     print(f"{cfg.project} — daemon {daemon}")
     view = state.scan(cfg, log)
     decisions = state.decide(cfg, view)
@@ -228,6 +235,39 @@ def cmd_run_target(args) -> int:
     return 1 if failed else 0
 
 
+def cmd_pick(args) -> int:
+    """Open a picker. With the daemon running, a `pick:` signal (the daemon's server
+    serves it); without one, serve it here until Ctrl+C, with the same events."""
+    from . import picker, picks
+    cfg = config_mod.load(_control(args.control))
+    log = EventLog(cfg.events_db)
+
+    def refuse(exc: ValueError) -> int:
+        # Red like the signal's `invalid`, so the inbox, a toast and the app show it too.
+        log.append("pick_failed", manifest=args.ref, error=str(exc), by="cli")
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        try:
+            manifest = picks.load_manifest(cfg, args.ref)
+        except ValueError as exc:
+            return refuse(exc)
+        if _daemon_alive(cfg) and not args.until_saved:
+            from .app import actions
+            path = actions.write_signal(cfg.control, f"pick: {manifest.ref}", by="cli")
+            print(f"wrote signals/{path.name}: the daemon opens the picker and logs pick_open")
+            return 0
+        log.on_append = lambda ev: print(f"{clock(ev.ts)} #{ev.id} {describe(ev)}")
+        try:
+            return picker.serve(cfg, log, manifest.ref, by="cli", until_saved=args.until_saved)
+        except ValueError as exc:
+            log.on_append = None
+            return refuse(exc)
+    finally:
+        log.close()
+
+
 def cmd_init(args) -> int:
     from .scaffold import InitError, init
     try:
@@ -348,6 +388,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--stop", action="store_true", help="stop it instead")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_run_target)
+    sp = sub.add_parser("pick", help="open a picker manifest in the browser (via the daemon, or served here)")
+    sp.add_argument("ref", help="<repo>/<manifest path>")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.add_argument("--until-saved", action="store_true", help=argparse.SUPPRESS)
+    sp.set_defaults(fn=cmd_pick)
     sp = sub.add_parser("init", help="create a new control folder and commit it")
     sp.add_argument("folder")
     sp.add_argument("--project", required=True)

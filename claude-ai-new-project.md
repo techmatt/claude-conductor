@@ -21,8 +21,9 @@ C:\Code\<project>-control\        git; the planner's world
   running\ done\                   conductor moves items through these
   reports\<repo>__NNN_name.md      executor reports
   questions\                       open asks and their answers
+  picks\                           Matt's saved picker choices (<name>.choices.json)
   requests\                        planner → conductor (apply + commit)
-  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, checkpoint, run, stop
+  signals\                         planner/app → conductor: read, approve, cancel, reorder, clear, reviewed, tell, checkpoint, run, pick, stop
   inbox.md                         generated digest since the planner's last read
   events.db                        append-only event log (SQLite)
 C:\Code\<repo>\                    code repos; executors work here
@@ -87,7 +88,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
 - Design and scoping decisions are made in conversation with Matt, not handed to an executor. What an executor adds is facts: comparisons, audits, prototypes to look at. Those are usually `readonly` items, which the planner may queue without approval when they take no shared lock (see *Approval*).
 - For a trivial outcome, two sentences and no write-up.
 - If this file turns out to be wrong or missing something during a project, tell Matt in a line. Then, when no conductor prompt is running, add a line to *Open* in `C:\Code\claude-conductor\HANDOFF.md` so the next conductor prompt fixes it.
-- Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos (with finished items and a Mark reviewed button), questions, the event trail (Activity since the latest checkpoint by default; Advanced for every event), proposed items, and a **New checkpoint…** button. There is only ever one app: launching it again with another control folder adds that folder as a tab in the running app (and brings it forward) instead of opening a second copy. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
+- Matt can also watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`): repos (with finished items, a Mark reviewed button, and a Pick… button for a report that left a picker), questions, the event trail (Activity since the latest checkpoint by default; Advanced for every event), proposed items, and a **New checkpoint…** button. There is only ever one app: launching it again with another control folder adds that folder as a tab in the running app (and brings it forward) instead of opening a second copy. Its actions are the same `signals/` verbs the planner uses, so the inbox shows them like any other event.
 
 ## Writing a prompt
 
@@ -129,6 +130,10 @@ Matt or the planner can **message a running executor**: signal `tell: <repo>/<NN
 
 A project's runnable thing (a dev server, the game) is a **run target**: a `[run.<name>]` table in `conductor.toml` with the repo (or folder) it runs in, the server command, the URL to open, and optionally a different URL to wait on and how long to wait (conductor's README, *Run targets*). The planner sets a project's targets through a `conductor.toml` request, with the command and URL the repo's README gives. A repo's main checkout has no installed dependencies, because executors install them in worktrees that are then deleted. So a target's `command` installs them first (e.g. `npm install && npm run dev -- --port 5173`). "run X" is the signal `run: X`. Conductor starts the server if it isn't already answering, waits for it, and opens the URL in Matt's browser. A server that never comes up is a red `run_failed` event carrying the end of its log; the planner reads it and says what broke. `run: X stop` stops it, e.g. to free files a dev server holds before an item that moves them. Matt can also use the app's **Run X** button, which shows whether X is up, and the **Stop X** button beside it while X is up. Matt never types the commands.
 
+## Picks
+
+When work produces candidates for Matt to choose between (art variants, layouts, anything visual), he picks in his browser: one row per thing, a click on his favourite in each row, a note where none is right, then **Save**. A prompt that produces candidates says "write a picker manifest". Conductor's preamble gives the executor the schema, and the executor names the manifest in its report's `pick:` line, so the prompt need not repeat either. It does say where the manifest and its images go: they must survive the merge (committed, or in a `shared` folder; a `readonly` item can only use a `shared` folder), and an item with `paths` must cover them. When the report is in, the planner sends `pick: <repo>/<manifest path>` (the ref is in the report's finish line and in the inbox's **Picks** section, which lists every picker still "waiting for Matt" or opened and not saved, across checkpoints, until Matt saves it). Conductor opens the page in Matt's browser. After Matt saves, the planner reads `picks\<name>.choices.json` (per row: `id`, the chosen `key`, `changed`, and Matt's `note`) and writes the chosen keys and his notes into the next prompt, since executors never see the control folder. Matt can also open one from the app's **Pick…** button. A bad manifest is refused with the reason (an `invalid` event; `pick_failed` from `conductor pick`), and the planner reports it; that includes a manifest whose `name` another manifest already uses, so a prompt that makes a new picker gives it a new name (e.g. with the item number). If conductor restarted while a picker tab was open, that tab can't save: send `pick:` again, and Matt saves from the new tab. A control folder made before pickers existed lacks `picks/` in its `.gitignore`, and conductor logs a startup `warning` until a request adds the line.
+
 ## Reading a report
 
 Every CC session that writes a report ends its final message with `Report written to <full path>` (each repo's `CLAUDE.md` carries this; conductor's executor preamble repeats it). Every report opens with a header conductor can parse:
@@ -137,11 +142,13 @@ Every CC session that writes a report ends its final message with `Report writte
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
+pick: <manifest path relative to the repo root>     (only when the executor wrote a picker manifest)
 ```
 
 - `done`: the goal was met.
 - `partial`: part of the goal was met, nothing is broken, and the rest is follow-up work. This includes an executor declining an instruction for a stated reason.
 - `red`: something is broken or unsafe, and this repo's queue should not continue without a look. With `after_red: stop` (the default) conductor holds the queue until the planner clears it.
+- `pick:`: the report left candidates for Matt (see *Picks*). Processing it means telling Matt the picker is ready (**pick X**); the next prompt waits for his choices unless he says otherwise.
 
 The planner does not summarize a report back. It says what the report changes, what the planner got wrong, and what (if anything) blocks — then folds the carry into `state.md` through a request. Spec deviations with stated reasons are usually right; read before overriding. Trivial outcomes get two sentences. Only decisions that block upcoming work are flagged. A micro-task is assumed handled once queued.
 
@@ -198,6 +205,8 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **clear R** | Signal `clear: <repo>`: releases a red hold on that repo's queue, after the planner has read the red report with Matt. |
 | **run X** / **run game** | Signal `run: X`: conductor starts target X if it isn't up, waits until it answers, and opens it in Matt's browser. With one target, plain "run game" (or "run it") means that one; with several and no match, the planner asks which. If no target exists yet, the planner proposes one as a `conductor.toml` request. On a `run_failed` event, it reports the error and the log tail. |
 | **stop X** | Signal `run: X stop`: conductor kills run target X's process tree. Matt can also click **Stop X** in the app, shown beside **Run X** while X is up. |
+| **pick X** | Signal `pick: <repo>/<manifest path>` for X's manifest (X is the item whose report has the `pick:` line, or the manifest's name): conductor opens the picker in Matt's browser. With one picker pending in the inbox's **Picks** section, plain "pick" means that one; with several, the planner asks which. |
+| **read picks X** | Reads `picks\<name>.choices.json` for X and says what the chosen keys and notes change, row by row (unchanged rows in one line). The next prompt carries them, since the executor can't read the control folder. If Matt hasn't saved yet, says so. |
 | **stop conductor** | Signal `stop: daemon`: the daemon exits cleanly; running executors carry on and are picked up when it restarts. Matt restarts it with `uv run conductor run <control folder>` or the app's Start button. |
 | **ultracode X** | For a queued item X that hasn't started: rewrite its front-matter with `ultracode: true`. For a running X: says that it can't be switched mid-run, and offers the rest of the work as a new item with `ultracode: true`. |
 | **with audit** / **audit X** | "with audit" on a new item: writes it with `audit: true`. "audit X" for a queued item X that hasn't started: rewrites its front-matter with `audit: true`. For a running or finished X: says it is too late, since audit notes are kept only from the start. |

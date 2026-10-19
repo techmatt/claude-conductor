@@ -86,7 +86,7 @@ def init(control: Path, project: str, repo_args: list[str]) -> tuple[str, list[s
     }
     for rel, text in tracked.items():
         write_text(control / rel, text)
-    for d in ("queue", "proposed", "running", "done", "reports", "questions", "requests", "signals"):
+    for d in ("queue", "proposed", "running", "done", "reports", "questions", "picks", "requests", "signals"):
         (control / d).mkdir()
     for name in repos:
         (control / "queue" / name).mkdir()

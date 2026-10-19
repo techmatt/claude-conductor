@@ -121,8 +121,9 @@ class ProjectView(QWidget):
         blocking = sum(1 for q in qs if q.block)
         bar = self.tabs.tabBar()
         unreviewed = sum(rs.unreviewed for rs in snap.repos)
-        self.tabs.setTabText(0, f"Repos ({unreviewed} unreviewed)" if unreviewed else "Repos")
-        bar.setTabTextColor(0, QColor(theme.AMBER if unreviewed else theme.MUTED))
+        counts = [f"{unreviewed} unreviewed"] * bool(unreviewed) + [f"{snap.to_pick} to pick"] * bool(snap.to_pick)
+        self.tabs.setTabText(0, f"Repos ({', '.join(counts)})" if counts else "Repos")
+        bar.setTabTextColor(0, QColor(theme.AMBER if counts else theme.MUTED))
         if qs:
             self.tabs.setTabText(1, f"Questions ({len(qs)}" + (f", {blocking} blocking)" if blocking else ")"))
             bar.setTabTextColor(1, QColor(theme.RED if blocking else theme.AMBER))

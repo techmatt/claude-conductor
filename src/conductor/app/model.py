@@ -11,12 +11,13 @@ import json
 import os
 import sqlite3
 import urllib.parse
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 from .. import config as config_mod
-from .. import git, items, procs, questions, state, targets
+from .. import git, items, picks, procs, questions, state, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
 from ..inbox import checkpoint_name, describe, progress_line
@@ -147,6 +148,7 @@ class Finished:
     reviewed: bool
     carry: str | None = None
     session_id: str | None = None
+    pick: str | None = None     # the manifest ref its report's `pick:` line named
 
 
 @dataclass
@@ -194,6 +196,12 @@ class Snapshot:
     error: str | None = None
     targets: dict[str, str] = field(default_factory=dict)      # run target → up | starting | down
     checkpoint: Event | None = None                            # the latest `checkpoint` event
+    picks: dict[str, picks.PickInfo] = field(default_factory=dict)  # finished item → its picker (`picks.pending`)
+
+    @property
+    def to_pick(self) -> int:
+        """Pickers that wait for Matt: named by a current report, not saved since."""
+        return sum(1 for p in self.picks.values() if p.state != "saved")
 
 
 TARGET_PROBE_SECONDS = 0.3      # per target per refresh, on the UI thread: a local server answers at once
@@ -224,22 +232,28 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
 
 def _finished(view: state.View, e: Event) -> Finished:
     return Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
-                    e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id"))
+                    e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id"),
+                    e.detail.get("pick") or None)
 
 
-def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> tuple[list[Finished], int]:
-    """A repo's current finished items (not settled by a checkpoint): the `recent` latest
-    plus every older unreviewed one, newest first; and how many current ones it has."""
-    evs = sorted((e for e in view.finishes.values() if e.repo == repo and not view.settled(e.item)),
+def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
+                   keep: Collection[str] = ()) -> tuple[list[Finished], int]:
+    """A repo's current finished items (not settled by a checkpoint, or in `keep`: items
+    whose picker still waits): the `recent` latest plus every older unreviewed or kept
+    one, newest first; and how many current ones it has."""
+    evs = sorted((e for e in view.finishes.values()
+                  if e.repo == repo and (e.item in keep or not view.settled(e.item))),
                  key=lambda e: e.id, reverse=True)
-    shown = [e for n, e in enumerate(evs) if n < recent or e.item not in view.reviews]
+    shown = [e for n, e in enumerate(evs) if n < recent or e.item not in view.reviews or e.item in keep]
     return [_finished(view, e) for e in shown], len(evs)
 
 
-def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> tuple[list[Finished], int]:
+def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
+                  skip: Collection[str] = ()) -> tuple[list[Finished], int]:
     """A repo's items settled by a checkpoint (finished and reviewed before the latest
-    one): the `recent` latest, newest first; and how many there are."""
-    evs = sorted((e for e in view.finishes.values() if e.repo == repo and view.settled(e.item)),
+    one), less those in `skip`: the `recent` latest, newest first; and how many there are."""
+    evs = sorted((e for e in view.finishes.values()
+                  if e.repo == repo and view.settled(e.item) and e.item not in skip),
                  key=lambda e: e.id, reverse=True)
     return [_finished(view, e) for e in evs[:recent]], len(evs)
 
@@ -251,7 +265,8 @@ def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN) -> 
 ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "request", "request_failed",
                   "daemon_start", "daemon_stop", "progress", "tell", "delivered", "resolve",
-                  "run_start", "run_ready", "run_open", "run_stop", "run_failed"}
+                  "run_start", "run_ready", "run_open", "run_stop", "run_failed",
+                  "pick_open", "pick_saved", "pick_failed"}
 ALWAYS_KINDS = RED_KINDS | {"warning"}
 
 
@@ -273,6 +288,8 @@ def activity_text(ev: Event) -> str:
             text = f"report {name} written — {d.get('status')}"
             if d.get("carry") not in (None, "none"):
                 text += f" (carry: {d['carry']})"
+            if d.get("pick"):
+                text += f" (pick: {d['pick']})"
             return text
         case "reviewed":
             return f"report {name} reviewed{by}"
@@ -322,6 +339,15 @@ def activity_text(ev: Event) -> str:
             return f"{d.get('target')} opened in the browser: {d.get('url')}{by}"
         case "run_stop":
             return f"{d.get('target')} stopped{by}"
+        case "pick_open":
+            text = f"picker {d.get('name')} opened in the browser: {d.get('url')}{by}"
+            return text + (" — the browser did not open" if d.get("opened") is False else "")
+        case "pick_saved":
+            notes = d.get("notes")
+            return (f"picker {d.get('name')} saved: {d.get('changed')} of {d.get('rows')} changed, "
+                    f"{notes} note{'' if notes == 1 else 's'}")
+        case "pick_failed":
+            return f"picker {d.get('manifest')} failed: {d.get('error')}"
     return describe(ev)
 
 
@@ -434,6 +460,9 @@ class Project:
             decisions = state.decide(cfg, view)
         except (OSError, ValueError, KeyError) as exc:     # a record caught mid-write
             view, decisions, error = state.View(), {}, f"could not read the queue: {exc}"
+        pending = self.scan_picks(view)
+        # An item whose picker waits stays current and shown, however old or settled.
+        waiting = {item for item, p in pending.items() if p.state != "saved"}
         for repo, path in cfg.repos.items():
             rs = RepoState(repo, path, queued=view.queued.get(repo, []), red=view.red_hold.get(repo))
             for rec in view.running.values():
@@ -449,14 +478,24 @@ class Project:
                                               rec.get("started"), rec.get("branch") or ""))
             if d := decisions.get(repo):
                 rs.action, rs.reason = d.action, d.reason
-            rs.finished, rs.finished_total = finished_items(view, repo)
-            rs.earlier, rs.earlier_total = earlier_items(view, repo)
+            rs.finished, rs.finished_total = finished_items(view, repo, keep=waiting)
+            rs.earlier, rs.earlier_total = earlier_items(view, repo, skip=waiting)
             rs.audit_notes = len(view.unused_notes(cfg, repo))
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
         run = {name: targets.status(cfg, t, TARGET_PROBE_SECONDS) for name, t in cfg.targets.items()}
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
-                        view.checkpoint)
+                        view.checkpoint, pending)
+
+    def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
+        """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only
+        asked when some report named a manifest, so most refreshes read nothing."""
+        if not any(f.detail.get("pick") for f in view.finishes.values()):
+            return {}
+        try:
+            return {p.item: p for p in picks.pending(self.cfg, view, self.log)}
+        except (OSError, ValueError):            # a choices file caught mid-write
+            return {}
 
     def scan_questions(self) -> list[questions.Question]:
         """`questions.scan`, re-parsing only files whose question or result changed:

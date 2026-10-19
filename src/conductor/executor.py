@@ -46,19 +46,43 @@ When you finish, whatever the outcome, write your report to exactly this path:
 write or commit anything else in that folder: conductor checks it after you exit,
 reverts any change, and marks this item red.
 
-The report must start with exactly these three lines:
+The report must start with these three lines:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
+and, only if you wrote a picker manifest, a fourth:
+pick: <manifest path relative to the repo root>
 `done`: the goal was met.
 `partial`: part of the goal was met, nothing is broken, and the rest is follow-up work.
 This includes declining an instruction for a stated reason.
 `red`: something is broken or unsafe, and this repo's queue should not continue without
 a look.
+
+{pick}
 The rest of the report follows the repo's CLAUDE.md. Your final message ends with
 `Report written to {report}`.
 
 {tail}"""
+
+PICK = """\
+Pickers. When the prompt asks for a picker, or you produce candidates for Matt to choose
+between (art variants, layouts, anything visual), write a picker manifest and add the
+`pick:` line to the report header. Matt picks one option per row in his browser and adds
+notes; the next prompt carries his choices. The manifest is a JSON file in this repo at
+a path that survives the merge (committed, or inside a shared folder), with its images
+kept the same way:
+    {"name": "art_alts_009",
+     "title": "Hero art alternatives",
+     "intro": "optional text above the rows",
+     "rows": [{"id": "hero", "label": "Hero, idle pose", "note": "optional",
+               "options": [{"key": "current", "image": "hero/current.png"},
+                           {"key": "1", "image": "hero/alt1.png", "label": "warmer"}]}]}
+`name` is a slug (lowercase letters, digits, `_` or `-`), unique in the project. The first
+option in each row is the current one and the default. `key` is what the next prompt
+will use for the choice; keys are unique within a row and row ids within the file.
+`image` is relative to the manifest, must exist inside the repo, and is PNG, JPEG, GIF,
+WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional.
+"""
 
 PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
 
@@ -228,7 +252,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
-        deadline=clock(deadline), report=paths.report.resolve(),
+        deadline=clock(deadline), report=paths.report.resolve(), pick=PICK,
         tail="" if resume else PROMPT_FOLLOWS,
     )
     if not resume:
@@ -312,16 +336,27 @@ def read_result(log: Path) -> dict | None:
 
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:
-    """(header, problem). Accepts the three lines bare or inside a `---` block."""
+    """(header, problem). Accepts the three lines bare or inside a `---` block, and an
+    optional fourth, `pick:` (a picker manifest's path; only there, never in the body)."""
     if not report.is_file():
         return None, "no report written"
     lines = [ln.strip() for ln in read_text(report).splitlines()]
-    lines = [ln for ln in lines if ln and ln != "---"][:3]
+    lines = [ln for ln in lines if ln and ln != "---"][:4]
     header = {}
-    for ln in lines:
-        m = re.match(r"^\**(status|blocks|carry)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
-        if m:
-            header[m.group(1).lower()] = m.group(2).strip()
+    for n, ln in enumerate(lines):
+        m = re.match(r"^\**(status|blocks|carry|pick)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
+        key = m.group(1).lower() if m else None
+        if key is None or key in header:
+            continue                    # the first of each key counts; a repeat is body
+        if key != "pick":
+            if n < 3:
+                header[key] = m.group(2).strip()
+            continue
+        # `pick:` only right after the three, as one path: a fourth line that merely
+        # starts "Pick: went with the warmer palette" is the body's.
+        value = m.group(2).strip().strip("`").strip()
+        if all(k in header for k in HEADER_KEYS) and value and len(value.split()) == 1:
+            header["pick"] = value
     missing = [k for k in HEADER_KEYS if k not in header]
     if missing:
         return header or None, f"report header missing {', '.join(missing)}"

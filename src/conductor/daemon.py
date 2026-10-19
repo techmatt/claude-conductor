@@ -2,7 +2,9 @@
 
 Each tick: signals → requests → questions → stages → running executors and merges →
 schedule → inbox. Single-threaded; executors are separate processes the loop polls,
-so several repos (and disjoint items within one) run at once.
+so several repos (and disjoint items within one) run at once. The one exception is the
+picker server (`picker`), whose handler threads touch only files and a queue that the
+loop drains into the event log.
 """
 
 from __future__ import annotations
@@ -23,8 +25,8 @@ from pathlib import Path
 import psutil
 
 from . import config as config_mod
-from . import (audits, executor, git, globs, guard, inbox, items, notify, procs, questions, request, state, talk, targets,
-               worktrees)
+from . import (audits, executor, git, globs, guard, inbox, items, notify, picker, picks, procs, questions, request, state,
+               talk, targets, worktrees)
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, now, parse_stamp, read_text, retry_io, stamp, write_text
@@ -83,6 +85,12 @@ def _signal_by(text: str) -> str | None:
     return None
 
 
+def _pick_ref(repo: str, value: str | None) -> str | None:
+    """A report's `pick:` (a manifest path in its repo) as the ref the `pick:` signal takes."""
+    value = (value or "").strip().replace("\\", "/").lstrip("/")
+    return f"{repo}/{picks.normal(value)}" if value and value.lower() != "none" else None
+
+
 def _file_hash(path: Path) -> str | None:
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -108,6 +116,7 @@ class Daemon:
         self.delivered_seen = {e.detail.get("tell") for e in self.log.query(kinds=["delivered"])}
         self._progress_sizes: dict[str, int] = {}
         self.runner = targets.Runner(cfg, self.log)
+        self.picker = picker.Server(cfg, self.log)  # no socket until the first `pick:`
         self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
         self._inbox_key: tuple | None = None
@@ -172,7 +181,7 @@ class Daemon:
         self.log.close()
 
     def startup(self) -> None:
-        for d in ("queue", "proposed", "running", "done", "reports", "questions", "requests", "signals"):
+        for d in ("queue", "proposed", "running", "done", "reports", "questions", "picks", "requests", "signals"):
             self.cfg.path(d).mkdir(parents=True, exist_ok=True)
         for repo in self.cfg.repos:
             self.cfg.path("queue", repo).mkdir(exist_ok=True)
@@ -230,6 +239,11 @@ class Daemon:
         except KeyboardInterrupt:
             self._log_stop("interrupt")
         finally:
+            try:
+                self.picker.drain()     # a save that arrived during the last tick
+                self.picker.close()
+            except Exception:           # noqa: BLE001 - never in the way of releasing the lock
+                pass
             self.write_inbox(force=True)
             self.release()
 
@@ -257,6 +271,7 @@ class Daemon:
         self.process_questions()
         self.process_talk()
         self.runner.poll()
+        self.picker.drain()
         self.check_stages()
         self.check_runs()
         self.process_merges()
@@ -504,6 +519,10 @@ class Daemon:
                     raise ValueError(f"line {n}: run: expects `<target>` or `<target> stop`, got {value!r}")
             elif key == "checkpoint":
                 pass                                    # any label, or none
+            elif key == "pick":
+                repo, sep, path = value.partition("/")
+                if len(value.split()) != 1 or not sep or not path or repo not in self.cfg.repos:
+                    raise ValueError(f"line {n}: pick: expects `<repo>/<manifest path>`, got {value!r}")
             elif key == "stop":
                 if value.lower() != "daemon":
                     raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
@@ -539,6 +558,8 @@ class Daemon:
         elif key == "reorder":
             where, *refs = value.split()
             self._reorder(where, refs, rel)
+        elif key == "pick":
+            self.picker.open(value, self._by, rel)
         elif key == "stop":
             self.stop_requested = {"paths": [rel], **({"by": self._by} if self._by else {})}
 
@@ -884,7 +905,7 @@ class Daemon:
                     busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
                     if gone := sorted(busy - set(new.repos)):
                         raise config_mod.ConfigError(f"repos {gone} still have items in running/")
-                    self.cfg = self.runner.cfg = new
+                    self.cfg = self.runner.cfg = self.picker.cfg = new
                     self.log.append("config_reload", paths=["conductor.toml"])
                 except config_mod.ConfigError as exc:
                     self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",
@@ -1325,6 +1346,7 @@ class Daemon:
         rec["outcome"] = {
             "status": status, "report_status": report_status, "reasons": reasons,
             "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
+            "pick": _pick_ref(repo, (header or {}).get("pick")),
             "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }
@@ -1626,7 +1648,7 @@ class Daemon:
         self.log.append(
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
-            blocks=out["blocks"], carry=out["carry"],
+            blocks=out["blocks"], carry=out["carry"], pick=out.get("pick"),
             session_id=rec["session_id"], exit_code=out["exit_code"],
             cost_usd=out["cost_usd"], turns=out["turns"],
             needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,

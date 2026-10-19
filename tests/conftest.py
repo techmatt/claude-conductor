@@ -17,6 +17,7 @@ running/
 done/
 reports/
 questions/
+picks/
 requests/
 signals/
 inbox.md

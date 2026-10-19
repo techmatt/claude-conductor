@@ -165,6 +165,7 @@ def test_signal_files(tmp_path):
     assert actions.swap(tmp_path, "code", names, 0, -1) is None
     assert actions.stop_daemon(tmp_path).read_text(encoding="utf-8").endswith("stop: daemon\n")
     assert actions.clear(tmp_path, "code").read_text(encoding="utf-8").endswith("clear: code\n")
+    assert actions.pick(tmp_path, "code/picks/m.json").read_bytes() == b"by: app\npick: code/picks/m.json\n"
 
 
 def test_app_signals_land_as_daemon_events(env):
@@ -420,7 +421,7 @@ def test_a_staged_head_is_one_repos_row(qapp, tmp_path):
         head, nxt = (Item("code", n, tmp_path / f"{n}.md") for n in ("002_b", "003_c"))
         stage = model.Activity("code/002_b", "002_b", "staged", None)
         rs = model.RepoState("code", tmp_path, staged=[stage], queued=[head, nxt], **kw)
-        [(_, _, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs]))
+        [(_, _, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs], picks={}))
         return [(key, texts[1], look) for key, texts, _, look in rows]
 
     # Once, as its queue row (so it keeps Cancel), its state naming both facts.
@@ -632,6 +633,88 @@ def test_repos_header_counts_unused_audit_notes(qapp, env, tmp_path):
     win.refresh()
     assert [rs.audit_notes for rs in view.snap.repos] == [1]
     assert any("1 audit note(s)" in head for _, head, _, _ in view.repos_panel._plan(view.snap))
+    win._quitting = True
+    win.close()
+
+
+# ---------------------------------------------------------------- pickers
+def _choices(control, name, ref, changed=1, notes=1):
+    from conductor.util import stamp
+    pdir = control / "picks"
+    pdir.mkdir(exist_ok=True)
+    data = {"name": name, "title": "T", "manifest": ref, "saved_at": stamp(), "changed": changed, "notes": notes,
+            "rows": [{"id": "hero", "key": "2", "changed": True, "note": "warmer"}]}
+    (pdir / f"{name}.choices.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_snapshot_picks_follow_open_and_save(env):
+    log, ref = env.d.log, "code/picks/m.json"
+    log.append("finish", item="code/001_x", status="done", carry="none", pick=ref)
+    log.append("finish", item="code/002_y", status="done", carry="none")
+    p = Project(env.control)
+    snap = p.snapshot()
+    [rs] = snap.repos
+    assert {f.name: f.pick for f in rs.finished} == {"001_x": ref, "002_y": None}
+    assert set(snap.picks) == {"code/001_x"} and snap.picks["code/001_x"].state == "waiting"
+    assert snap.to_pick == 1
+    log.append("pick_open", item="code/001_x", name="m", manifest=ref, url="http://x/", opened=True, by="app")
+    assert p.snapshot().picks["code/001_x"].state == "opened"
+    _choices(env.control, "m", ref, changed=6, notes=2)
+    snap = p.snapshot()
+    info = snap.picks["code/001_x"]
+    assert (info.state, info.changed, info.notes, info.name) == ("saved", 6, 2, "m")
+    assert snap.to_pick == 0
+    p.close()
+
+
+def test_pick_activity_wording(env):
+    log, ref = env.d.log, "code/picks/m.json"
+    evs = [log.append("finish", item="code/001_x", status="done", carry="none", pick=ref),
+           log.append("pick_open", item="code/001_x", name="m", manifest=ref, url="http://127.0.0.1:5/t/m/",
+                      opened=False, by="app"),
+           log.append("pick_saved", item="code/001_x", paths=["picks/m.choices.json"], name="m", manifest=ref,
+                      changed=6, notes=1, rows=9),
+           log.append("pick_failed", manifest=ref, error="opening failed")]
+    p = Project(env.control)
+    p.poll_events()
+    shown = {e.id for e in p.filter_events(advanced=False)}
+    assert all(e.id in shown for e in evs)
+    assert [model.activity_text(e) for e in evs] == [
+        f"report 001_x written — done (pick: {ref})",
+        "picker m opened in the browser: http://127.0.0.1:5/t/m/ (by app) — the browser did not open",
+        "picker m saved: 6 of 9 changed, 1 note",
+        f"picker {ref} failed: opening failed"]
+    p.close()
+
+
+def test_pick_button_in_the_repos_tab(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    ref = "code/picks/m.json"
+    env.d.log.append("finish", item="code/001_x", status="done", carry="none", pick=ref)
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    assert view.tabs.tabText(0) == "Repos (1 unreviewed, 1 to pick)"
+    panel = view.repos_panel
+    row = panel._rows[("done", "code/001_x")]
+    assert row.text(3).endswith(" · pick: waiting for Matt")
+    assert any(head.endswith(", 1 to pick") for _, head, _, _ in panel._plan(view.snap))
+    holder = panel.tree.itemWidget(row, 4)
+    assert list(holder.buttons) == ["Mark reviewed", "Pick…", "Open in terminal"]
+    pick = holder.buttons["Pick…"]
+    assert pick.property("tone") == "default"           # amber: it waits for Matt
+    pick.click()
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == f"by: app\npick: {ref}\n"
+    env.d.log.append("pick_open", item="code/001_x", name="m", manifest=ref, url="http://x/", opened=True, by="app")
+    win.refresh()
+    assert panel._rows[("done", "code/001_x")].text(3).endswith(" · pick: opened, not saved")
+    _choices(env.control, "m", ref, changed=6, notes=2)
+    win.refresh()
+    row = panel._rows[("done", "code/001_x")]
+    assert row.text(3).endswith(" (6 changed, 2 notes)") and " · pick: saved " in row.text(3)
+    assert panel.tree.itemWidget(row, 4).buttons["Pick…"].property("tone") is None   # rebuilt on save
+    assert view.tabs.tabText(0) == "Repos (1 unreviewed)"
     win._quitting = True
     win.close()
 
