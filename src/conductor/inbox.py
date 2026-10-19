@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import picks, questions
+from . import audits, picks, questions
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
 from .state import View, decide
@@ -321,7 +321,7 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
         elif ev := view.red_hold.get(repo):
             parts.append(f"held after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
         if notes := view.unused_notes(cfg, repo):
-            parts.append(f"{len(notes)} unused audit note(s) ({', '.join(n.item.split('/', 1)[1] for n in notes)})")
+            parts.append(audits.pending(len(notes), [n.item for n in notes]))
         out.append(f"- `{repo}`: {'; '.join(parts) or 'idle'}")
     for d in view.stray:
         out.append(f"- `queue/{d.name}` is not a repo in conductor.toml; its items never run")

@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from .. import items
+from .. import audits, items
 from ..events import RED_KINDS, Event
 from ..inbox import describe
 from ..util import clock, duration, now, parse_stamp
@@ -301,10 +301,11 @@ class ReposPanel(Panel):
             head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
             if rs.unreviewed:
                 head += f", {rs.unreviewed} unreviewed"
-            if rs.audit_notes:
-                head += f", {rs.audit_notes} audit note(s)"
             if waiting := sum(1 for p in snap.picks.values() if p.item.split("/", 1)[0] == rs.name and p.state != "saved"):
                 head += f", {waiting} to pick"
+            if rs.audit_notes:
+                # Last, so it reads as its own marker: time for a cleanup when convenient.
+                head += f" · {audits.pending(rs.audit_notes)}"
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
@@ -319,7 +320,10 @@ class ReposPanel(Panel):
         # Elapsed is empty unless something runs or stages: hide it then.
         self.tree.setColumnHidden(2, not any(rs.running or rs.staged for rs in snap.repos))
         for repo, note, _, rows in plan:
-            self._rows[("repo", repo)].setText(3, note)
+            top = self._rows[("repo", repo)]
+            top.setText(3, note)
+            # An audit pending marker draws the header note amber; it clears with the notes.
+            top.setForeground(3, QBrush(QColor(theme.AMBER if "audit pending" in note else theme.MUTED)))
             for key, texts, _, _ in rows:
                 w = self._rows[key]
                 for col, t in enumerate(texts):

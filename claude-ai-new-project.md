@@ -210,7 +210,7 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **stop conductor** | Signal `stop: daemon`: the daemon exits cleanly; running executors carry on and are picked up when it restarts. Matt restarts it with `uv run conductor run <control folder>` or the app's Start button. |
 | **ultracode X** | For a queued item X that hasn't started: rewrite its front-matter with `ultracode: true`. For a running X: says that it can't be switched mid-run, and offers the rest of the work as a new item with `ultracode: true`. |
 | **with audit** / **audit X** | "with audit" on a new item: writes it with `audit: true`. "audit X" for a queued item X that hasn't started: rewrites its front-matter with `audit: true`. For a running or finished X: says it is too late, since audit notes are kept only from the start. |
-| **audit notes** [R] | Lists the unused audit notes per repo (or for repo R): the *Now* line in `inbox.md` names them, and each is `reports\<repo>__NNN_name.audit.md`. Read one only if Matt asks. |
+| **audit notes** [R] | Lists the unused audit notes per repo (or for repo R): the repo's *Now* line in `inbox.md` names them as `audit pending: N audit notes (NNN_x, …)`, and each is `reports\<repo>__NNN_name.audit.md`. Read one only if Matt asks. |
 | **cleanup R** | If R has unused audit notes: queues `template: cleanup`, `ultracode: true` for repo R (body empty, or Matt's extra instructions). If it has none, says so and queues nothing. |
 | **general audit R** | Queues `template: general_audit`, `ultracode: true` for repo R. |
 | **test perf audit R** | Queues `template: test_perf` for repo R. |

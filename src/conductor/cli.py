@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import config as config_mod
-from . import items, questions, state
+from . import audits, items, questions, state
 from .events import EventLog
 from .inbox import describe, progress_line, render
 from .util import clock, duration, now, parse_since, parse_stamp
@@ -91,6 +91,8 @@ def cmd_status(args) -> int:
         if not (view.queued.get(repo) or view.red_hold.get(repo)
                 or any(r["repo"] == repo for r in [*view.running.values(), *view.staged.values()])):
             print("  idle")
+        if notes := view.unused_notes(cfg, repo):
+            print(f"  {audits.pending(len(notes), [n.item for n in notes])}")
     proposed = sorted(cfg.path("proposed").glob("*.md")) if cfg.path("proposed").is_dir() else []
     if proposed:
         print(f"\nproposed: {', '.join(p.stem for p in proposed)}")
@@ -122,7 +124,6 @@ def cmd_questions(args) -> int:
 
 
 def cmd_audits(args) -> int:
-    from . import audits
     cfg, log = _open(args.control)
     view = state.scan(cfg, log)
     claimed = view.claimed_notes()

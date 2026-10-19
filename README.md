@@ -514,8 +514,13 @@ it, it only waits, since the item it waits on may add notes.
 
 `conductor audits [<control>]` lists each repo's unused notes (item, status, finish
 time, file, line count); `--all` adds the used ones with the cleanup that used them.
-The inbox's *Now* line per repo says `N unused audit note(s) (NNN_x, …)`, and the app's
-Repos tab adds `N audit note(s)` to the repo's header.
+Whenever a repo has notes no cleanup has used or claimed, it shows an **audit pending**
+marker, so Matt can see a cleanup is due whenever it next makes sense. The inbox's *Now*
+line for the repo and `conductor status` (under the repo) say
+`audit pending: N audit notes (NNN_x, …)`. The app's Repos tab ends the repo's header
+with `· audit pending: N audit notes`, drawn amber. The marker clears as soon as a
+cleanup claims the notes (from when it launches) or uses them. All three share
+`audits.pending`.
 
 **max_hours** is enforced by the daemon: past the deadline (stored in `.run.json`, so
 it survives restarts) the executor's whole process tree is killed (`kill` event). Time
@@ -1019,13 +1024,14 @@ then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, 
 **Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
 included), **Other**; then **Now**: per repo, what is running (or merging), staged
-(`staging`/`staged`), queued, waiting or held, and how many audit notes are unused,
+(`staging`/`staged`), queued, waiting or held, and *audit pending* if notes are unused,
 plus proposed items. A hold stays in
 the Holds section until the item starts, merges, finishes or is cancelled, or a
 reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
 `stage` and `worktree` events are left out of the inbox (they are in
 `conductor events`). `conductor status` lists the same per repo: running (pid, branch,
-kill time), merging (with the reason it waits), staging/staged, queued.
+kill time), merging (with the reason it waits), staging/staged, queued, and the
+*audit pending* line when the repo has unused audit notes.
 `conductor inbox` prints the same thing without moving the mark.
 
 ## The app

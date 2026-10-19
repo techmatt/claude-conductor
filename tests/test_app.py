@@ -625,6 +625,7 @@ def test_run_buttons_in_the_header(qapp, env, tmp_path, monkeypatch):
 
 
 def test_repos_header_counts_unused_audit_notes(qapp, env, tmp_path):
+    from conductor.app import theme
     from conductor.app.window import MainWindow
     env.queue("001_a", "FAKE audit tidy the loader", audit="true")
     env.tick_until(lambda: env.finished("code/001_a"))
@@ -632,7 +633,9 @@ def test_repos_header_counts_unused_audit_notes(qapp, env, tmp_path):
     view = win.views[env.control.resolve()]
     win.refresh()
     assert [rs.audit_notes for rs in view.snap.repos] == [1]
-    assert any("1 audit note(s)" in head for _, head, _, _ in view.repos_panel._plan(view.snap))
+    assert any(head.endswith(" · audit pending: 1 audit note") for _, head, _, _ in view.repos_panel._plan(view.snap))
+    top = view.repos_panel._rows[("repo", "code")]
+    assert top.foreground(3).color().name().lower() == theme.AMBER.lower()
     win._quitting = True
     win.close()
 

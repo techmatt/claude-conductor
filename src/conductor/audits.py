@@ -58,6 +58,13 @@ class Note:
     used_by: Event | None = None      # the `audit_used` event that consumed it
 
 
+def pending(count: int, items: list[str] | None = None) -> str:
+    """The *audit pending* marker the app, the inbox and `conductor status` share:
+    `audit pending: 3 audit notes`, with the items' short names when given."""
+    text = f"audit pending: {count} audit note{'' if count == 1 else 's'}"
+    return text + (f" ({', '.join(i.split('/', 1)[-1] for i in items)})" if items else "")
+
+
 def notes(cfg: Config, repo: str, finishes: dict[str, Event], used: dict[str, Event],
           claimed: set[str] = frozenset(), include_used: bool = False) -> list[Note]:
     """A repo's audit notes, oldest first: finished items that kept notes and left a

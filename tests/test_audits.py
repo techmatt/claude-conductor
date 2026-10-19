@@ -31,10 +31,13 @@ def test_audit_item_keeps_notes_beside_its_report(env):
     assert fin.detail["audit"] is True and "reports/code__001_a.audit.md" in fin.paths
     assert "audit" not in env.finished("code/002_plain").detail
     inbox = (env.control / "inbox.md").read_text(encoding="utf-8")
-    assert "1 unused audit note(s) (001_a)" in inbox
+    assert "audit pending: 1 audit note (001_a)" in inbox
     out = subprocess.run([*ROOT_CLI, "audits", str(env.control)], capture_output=True, text=True,
                          encoding="utf-8").stdout
     assert "code: 1 unused audit note(s)" in out and "code/001_a" in out and "unused" in out
+    out = subprocess.run([*ROOT_CLI, "status", str(env.control)], capture_output=True, text=True,
+                         encoding="utf-8").stdout
+    assert "  audit pending: 1 audit note (001_a)" in out
 
 
 @pytest.mark.slow
@@ -86,7 +89,10 @@ def test_general_audit_writes_and_uses_its_own_notes(env):
     assert text.rstrip().endswith("The planner adds, for this item:\n\nFAKE audit messy layout")
     [used] = env.events("audit_used")
     assert used.detail["notes"] == ["code/001_ga"]
-    assert "unused audit note" not in (env.control / "inbox.md").read_text(encoding="utf-8")
+    assert "audit pending" not in (env.control / "inbox.md").read_text(encoding="utf-8")
+    out = subprocess.run([*ROOT_CLI, "status", str(env.control)], capture_output=True, text=True,
+                         encoding="utf-8").stdout
+    assert "audit pending" not in out
 
 
 def test_disk_audit_is_handed_conductors_measurements(env):
