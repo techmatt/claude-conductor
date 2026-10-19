@@ -710,7 +710,11 @@ choices. Re-send `pick:` and save from the new tab.
 **The page.** One row per `id`: label and note, then the options as tiles captioned
 `key · label`, about 256px tall (a size slider, 128–640px, remembered by the browser).
 Click a tile to select it; click the selected tile, or its magnifier corner, for a
-full-size overlay where ←/→ step through the row and Enter picks the one shown. Each
+full-size overlay where ←/→ step through the row and Enter picks the one shown. **The
+page never alters how an image looks**: no opacity, filter, tint or overlay on any
+image, selected or not, in the tiles or the overlay; nothing is drawn over one but the
+magnifier button. The selection shows only outside the image: a strong accent outline
+around the tile and a caption in the accent colour with a check and bold key. Each
 row starts on its saved choice, else its first option; a changed row is badged. A note
 field per row. A sticky bar: "N of M changed · K notes", *show changed only*, and
 **Save** (Ctrl+S), which shows "Saved 4:52pm". Leaving with unsaved changes warns.

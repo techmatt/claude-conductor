@@ -40,17 +40,22 @@
   .tiles { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
   .tile {
     position: relative; margin: 0; padding: 4px; border-radius: 6px; cursor: pointer;
-    outline: 3px solid transparent; outline-offset: 0; transition: opacity .12s;
+    outline: 3px solid transparent; outline-offset: 0;
   }
+  /* The selection shows only outside the image (outline, caption): images are never
+     dimmed, filtered, tinted or overlaid, so the art looks exactly as it will in use. */
   .tile:focus-visible { outline-color: var(--muted); }
-  .row.has-pick .tile { opacity: .6; }
-  .row.has-pick .tile.sel { opacity: 1; outline-color: var(--accent); }
+  .tile.sel { outline-color: var(--accent); }
   .tile img {
     display: block; height: var(--h); width: auto; min-width: calc(var(--h) * .5);
     max-width: calc(100vw - 72px); object-fit: contain; background: var(--line); border-radius: 3px;
   }
   .tile figcaption { margin-top: 4px; font-size: 13px; text-align: center; max-width: calc(var(--h) * 1.5); margin-left: auto; margin-right: auto; }
-  .tile .key { font-weight: 600; font-family: ui-monospace, Consolas, monospace; }
+  .tile .key { font-family: ui-monospace, Consolas, monospace; }
+  .tile .check { display: none; }
+  .tile.sel figcaption { color: var(--accent); }
+  .tile.sel .key { font-weight: 700; }
+  .tile.sel .check { display: inline; font-weight: 700; }
   .mag {
     position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%;
     background: rgba(0, 0, 0, .55); color: #fff; font-size: 16px; line-height: 30px; padding: 0; cursor: zoom-in;
@@ -206,7 +211,7 @@
     cap.appendChild(el("b", null, o.key));
     if (o.label) cap.appendChild(el("span", null, " · " + o.label));
     cap.appendChild(el("span", null, "  (" + (view.index + 1) + "/" + r.options.length + ")" +
-      (view.index === r.pick ? " picked" : "")));
+      (view.index === r.pick ? " ✓ picked" : "")));
     cap.appendChild(el("span", "hint", "←/→ step · Enter picks · Esc closes"));
   }
   function openView(r, index) {
@@ -274,6 +279,7 @@
       img.src = o.src;
       t.appendChild(img);
       var cap = el("figcaption");
+      cap.appendChild(el("span", "check", "✓ "));
       cap.appendChild(el("span", "key", o.key));
       if (o.label) cap.appendChild(el("span", null, " · " + o.label));
       t.appendChild(cap);
@@ -308,7 +314,6 @@
     });
     row.appendChild(ta);
 
-    row.classList.add("has-pick");
     r.el = { row: row, badge: badge, tiles: tiles };
     tiles[r.pick].classList.add("sel");
     return row;

@@ -5,8 +5,10 @@ import http.client
 import json
 import os
 import queue
+import re
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -260,6 +262,19 @@ def test_routes_serve_page_manifest_and_images(served):
     assert status == 200 and headers["Content-Type"] == "image/svg+xml"
     assert headers["Content-Security-Policy"] == "sandbox"
     assert request(srv, "GET", base + "img/1/1")[2] == b"\x89PNG-d"       # ../art, inside the repo
+
+
+def test_page_never_alters_an_image():
+    # The art must look as it will in use: no rule touching a tile, an image or the
+    # overlay may dim, filter, tint or blend it. The selection shows outside the image.
+    page = (Path(picker.__file__).parent / "web" / "picker.html").read_text(encoding="utf-8")
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+    touched = [(sel.strip(), body) for sel, body in rules if re.search(r"\bimg\b|\.tile|\.overlay|\.row", sel)]
+    assert any(sel == ".tile.sel" and "outline-color" in body for sel, body in touched)
+    for sel, body in touched:
+        assert not re.search(r"opacity|filter|mix-blend|background-blend", body), sel
+    assert not re.search(r"\.style\.(opacity|filter)|::(before|after)", page)
 
 
 def test_routes_refuse_everything_else(served):
