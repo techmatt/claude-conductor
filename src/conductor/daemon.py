@@ -119,6 +119,7 @@ class Daemon:
         self.picker = picker.Server(cfg, self.log)  # no socket until the first `pick:`
         self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
+        self.queued_hashes: dict[str, str | None] = {}  # queued item → its file's hash: a change is `edited`
         self._inbox_key: tuple | None = None
         self._inbox_at = 0.0
         self._lock_file = cfg.state_dir / "daemon.json"
@@ -193,6 +194,7 @@ class Daemon:
         self._recover_signal()
         self.recover()
         self._retry_leftovers("daemon start")
+        self._compact_logs(sorted(state.scan(self.cfg, self.log).done))
         if not self._active():
             if self.snapshot and (changes := guard.diff(self.cfg.control, self.snapshot)):
                 self.log.append("drift", paths=guard.changed_paths(changes), changes=changes,
@@ -1008,12 +1010,20 @@ class Daemon:
                     meta = item.meta()
                     meta["paths_declared"] = meta.pop("paths")      # `paths` is the event's own column
                     self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)], **meta)
+                # A queued item may be rewritten until it launches: the launch (and a
+                # stage, which a change discards below) reads the file as it is then.
+                digest = _file_hash(item.path)
+                if self.queued_hashes.get(item.id, digest) != digest:
+                    self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
+                                    staged=item.id in view.staged)
+                self.queued_hashes[item.id] = digest
                 if item.errors:
                     key = f"{item.id}:{item.path.stat().st_mtime}"
                     if self.invalid_seen.get(item.id) != key:
                         self.invalid_seen[item.id] = key
                         self.log.append("invalid", item=item.id, paths=[self.cfg.rel(item.path)],
                                         error="; ".join(item.errors))
+        self.queued_hashes = {i: h for i, h in self.queued_hashes.items() if i in queued}
         # A stage belongs to the item file it read; a changed or removed item drops it.
         for item_id, srec in list(view.staged.items()):
             item = queued.get(item_id)
@@ -1134,7 +1144,7 @@ class Daemon:
             self.finish(run, launch_error=error)
             return
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume,
-                                                       notes=self._notes_text(rec)))
+                                                       notes=self._notes_text(rec), usage=self._disk_usage(rec)))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         try:
@@ -1268,6 +1278,29 @@ class Daemon:
             return ""
         finishes = {i: ev for i in rec["notes"] if (ev := self.log.last("finish", item=i))}
         return audits.render_notes(self.cfg, rec["notes"], finishes)
+
+    def _disk_usage(self, rec: dict) -> str:
+        """A disk audit's view of what only conductor sees: the control folder's sizes
+        and what each of the repo's worktrees is. Leftover removals are retried first."""
+        if rec.get("template") != "disk_audit":
+            return ""
+        repo = rec["repo"]
+        self._retry_leftovers("disk audit", repo=repo)
+        live = {str(Path(r.rec["worktree"])): r.item_id for r in [*self.runs.values(), *self.stages.values()]
+                if r.rec.get("worktree") and r.rec.get("repo") == repo}
+        if rec.get("worktree"):
+            live[str(Path(rec["worktree"]))] = "this item's own working directory"
+        last: dict[str, str] = {}
+        for ev in self.log.query(kinds=["worktree"]):
+            if ev.repo == repo and ev.item:
+                last[ev.item.split("/", 1)[1]] = ev.detail.get("action")
+        kept = {name for name, action in last.items() if action == "kept"}
+        shared = self.cfg.opts(repo).shared
+        checkout = (f"Main checkout: `{self.cfg.repos[repo]}`. Its `shared` folders (linked into every "
+                    "worktree; a Drive-homed one is a junction in the main checkout): "
+                    + (", ".join(f"`{s}`" for s in shared) if shared else "none") + ".")
+        return "\n\n".join([checkout, audits.control_usage(self.cfg, repo),
+                            audits.worktree_listing(self.cfg, repo, live, self._leftovers(), kept)])
 
     def resume(self, item: items.Item, srec: dict) -> None:
         if self._stage_dirty(srec):
@@ -1658,6 +1691,7 @@ class Daemon:
             self._save(run)
         self._move_to_done(run)
         self.runs.pop(item_id, None)
+        self._compact_logs([item_id])
         self._close_questions(item_id)
         qdir = cfg.path("queue", repo)
         still_running = any(r.rec["repo"] == repo for r in self.runs.values())
@@ -1665,6 +1699,21 @@ class Daemon:
             self.log.append("queue_empty", item=item_id, repo=repo, last=item_id)
             # Not this item's own leftover: whatever held it a moment ago still does.
             self._retry_leftovers("queue empty", repo=repo, skip=item_id)
+
+    def _compact_logs(self, item_ids) -> None:
+        """Shrink finished items' run logs (`executor.compact_log`): after each finish,
+        and at daemon start for every finished item, which also catches logs written
+        before compaction existed."""
+        for item_id in item_ids:
+            if item_id in self.runs or item_id in self.stages:
+                continue
+            paths = executor.RunPaths.for_name(self.cfg, *item_id.split("/", 1))
+            for log in (paths.log, paths.stage_log, paths.merge_log):
+                try:
+                    executor.compact_log(log)
+                except OSError as exc:
+                    self.log.append("warning", item=item_id, paths=[self.cfg.rel(log)],
+                                    note=f"could not compact {log.name}: {exc!r}")
 
     def _move_to_done(self, run: Run) -> None:
         ddir = self.cfg.path("done", run.rec["repo"])

@@ -145,7 +145,7 @@ paths: ['src/ui/**']     # globs the item may change; enables concurrency (see `
 stage: false             # override the repo's `stage` setting for this item
 ultracode: true          # launch with Claude Code's ultracode on (see Executors, *Ultracode*)
 audit: true              # keep audit notes beside the report (see Audits and templates)
-template: cleanup        # cleanup | general_audit | test_perf: a conductor-owned prompt (same section)
+template: cleanup        # cleanup | general_audit | test_perf | disk_audit | claude_md_cleanup: a conductor-owned prompt (same section)
 ---
 Prompt body.
 ```
@@ -153,6 +153,15 @@ Prompt body.
 Unknown fields, a mismatched `repo`, bad values or an empty body (allowed with
 `template:`, whose text is the prompt) make the item **invalid**: logged once (and again whenever the file changes) and its queue holds
 until the file is fixed — an item not yet started may be rewritten freely.
+
+**Rewriting a queued item.** Conductor parses `queue/` afresh every tick, so a rewrite
+of an item that has not launched takes effect: the launch reads the file as it is then.
+Each change to a queued file's bytes logs an `edited` event (an Activity event, so the
+planner and the Events tab see that the rewrite landed). A staged item's stage belongs
+to the text it read, so a rewrite discards it and the item launches fresh (see
+*Staging*). Once the item has moved to `running/`, edits are never read. Changes made
+while the daemon is down log no `edited` (the first scan sees only the new text), but a
+stage is still discarded by its hash.
 
 An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numbers
 numerically, so it still resolves.
@@ -300,9 +309,9 @@ launches a session with a stage preamble — read the prompt and what it points 
 read-only commands only, nothing long or heavy, no edits, no asks (no `--mcp-config`),
 write a plan as the final message, stop. The item stays in `queue/`; its record is
 `running/<repo>/NNN_name.stage.json` (`stage` event, then `staged` with the plan's
-first 500 characters). At most one staged item per repo. A `template: cleanup` item
-never stages: the audit notes it is handed are fixed at launch, and the item it waits
-on may still add some.
+first 500 characters). At most one staged item per repo. A `template: cleanup` or
+`template: disk_audit` item never stages: what it is handed (audit notes, sizes) is
+fixed at launch, and the item it waits on may still change it.
 
 When the head can run, conductor checks the worktree is still exactly as cut (HEAD,
 tracked files, and no untracked files beyond what setup made), moves it to current
@@ -399,6 +408,19 @@ stdout (stream-json, one JSON object per line, ending with a `"type": "result"` 
 goes to `reports/<repo>__NNN_name.log`; stderr to `.stderr.log`. Stream-json rather
 than plain JSON, so a killed run still leaves its transcript.
 
+**Log compaction.** Run logs are most of a control folder's size (Word Warriors: 144 MB
+of 150 MB after 29 items). Nearly all of it is file copies the stream repeats: each
+image an executor reads appears twice as base64 (the tool result and
+`tool_use_result.file.base64`), and each edit carries the whole file before it
+(`tool_use_result.originalFile`). When an item finishes, conductor rewrites its
+`.log`, `.stage.log` and `.merge.log` with those strings emptied and their length kept
+as `dropped_by_conductor` (`executor.compact_log`; a log under 1 MB is left alone).
+The result line, what the executor said and every tool call stay, so the app's *Log*
+view and `read_result` are unchanged; 18 MB typically becomes under 2 MB. The full
+session, images included, stays in Claude Code's own store (`conductor open`). At
+daemon start the same pass runs over every finished item's logs, which also compacts
+logs from before this existed. A failure is a `warning`; the log is left as it was.
+
 **Report header.** The report starts with:
 
 ```
@@ -427,7 +449,7 @@ The reasons are listed in the `finish` and `red` events.
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`audit.md`, `cleanup.md`, `general_audit.md`,
-`test_perf.md`) and are versioned with this repo: the `start` event of a template item
+`test_perf.md`, `disk_audit.md`, `claude_md_cleanup.md`) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
@@ -454,6 +476,28 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
   up generally; a small loss of thoroughness or moving a slow test to the slow lane is
   allowed; the report gives before/after timings per lane (the one report where test
   detail belongs). It uses no notes.
+- **`template: disk_audit`**. Find why the project takes so much disk and free what
+  can safely go, under the project's storage policy (new-project doc, *Storage*):
+  delete what is cheaply rebuilt or clearly obsolete, move what is expensive or
+  irreplaceable but not needed day to day into `archive\` under the project's Drive
+  home, never delete anything hand-made; history rewrites and other destructive calls
+  go under **Deferred**. The text overrides the preamble's main-checkout rule only for
+  deleting untracked, cheaply rebuilt files there, and requires links (Drive junctions,
+  `shared` links) to be removed as links before any recursive delete. At launch,
+  conductor retries the repo's leftover worktree removals, then inlines what only it
+  sees (the `{{usage}}` placeholder): the main checkout and its `shared` folders; the
+  control folder's sizes by location (run logs, with the repo's share and the five
+  largest, the rest of `reports/`, `events.db`, `.git/`, `.conductor/`, `done/`,
+  everything else; `audits.control_usage`, a walk that never follows links); and each
+  folder under the repo's worktree root, marked live (never touch), a leftover removal
+  conductor retries, a red item's kept worktree, or stray. The executor never deletes a
+  worktree folder itself. The report gives a before/after size table by location. A
+  disk audit never stages.
+- **`template: claude_md_cleanup`**. A quick pass through the repo's `CLAUDE.md`:
+  cut what is extraneous or duplicated (a README fact gets a pointer, not a copy), fix
+  what is wrong against the code, tighten the wording, keep the standing contract the
+  new-project doc requires. Changes to how executors work go under **Deferred**. The
+  report is short: **Cut**, **Fixed**, **Deferred**.
 
 **Which notes are unused.** A note is a finished item whose `finish` event has
 `audit: true` and whose `.audit.md` exists and is not blank, in any status (a red
@@ -1074,7 +1118,7 @@ stop` (no confirmation: a click is cheap to undo with Run).
   `report X reviewed`, `X used N audit note(s)`, `X: <progress line>`, `message #n to X: …` and `message #n
   reached X`, run targets starting / up / opened / stopped, pickers opened / saved,
   questions asked / answered / default taken (and late answers and
-  closes), approved, cancelled, reordered, cleared, `doc update committed: <message>`
+  closes), approved, cancelled, reordered, cleared, a queued item rewritten (`edited`), `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
   or `invalid` event whatever its kind. A `finish` is the *report written* line, not a
   separate entry. Everything else (`worktree`, `stage`, `staged`, `merge`, `commit`,
@@ -1146,6 +1190,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 |---|---|---|
 | `daemon_start` / `daemon_stop` | daemon lifecycle | pid; running items at stop; stop `reason` (`signal`: a `stop: daemon` signal, `interrupt`: Ctrl+C, `error`: three ticks in a row failed on an `OSError`) |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields |
+| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded) |
 | `invalid` | bad item, signal, stray queue folder, bad config | error |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
 | `start` | executor launched | session_id, pid, deadline, worktree, branch; resumed, landed (a staged item); template, template_version, notes (a template item; a cleanup's notes); error (launch failed) |

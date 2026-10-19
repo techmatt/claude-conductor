@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -236,10 +237,11 @@ class RunPaths:
 
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
-                 run: dict | None = None, resume: dict | None = None, notes: str = "") -> str:
+                 run: dict | None = None, resume: dict | None = None, notes: str = "",
+                 usage: str = "") -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
-    audit notes, inlined."""
+    audit notes, inlined; `usage`: a disk audit's control-folder sizes and worktrees."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -256,7 +258,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         tail="" if resume else PROMPT_FOLLOWS,
     )
     if not resume:
-        return text + body(cfg, item, notes)
+        return text + body(cfg, item, notes, usage)
     n = resume["landed"]
     landed = (f"; {n} commit(s) landed since you staged (`git log --oneline {resume['old'][:10]}..HEAD`)"
               if n else "; nothing landed since you staged")
@@ -270,13 +272,14 @@ def build_stage_prompt(cfg: Config, item: Item, run: dict) -> str:
                         stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item)
 
 
-def body(cfg: Config, item: Item, notes: str = "") -> str:
+def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
     """What follows the preamble: the item body, or for a `template:` item the
-    template's text (a cleanup's with its audit notes inlined) and then whatever the
-    planner wrote."""
+    template's text (a cleanup's with its audit notes inlined, a disk audit's with
+    conductor's measurements) and then whatever the planner wrote."""
     if not item.template:
         return item.body
-    text = audits.fill(audits.template_text(item.template), repo=item.repo, notes=notes.strip()).rstrip() + "\n"
+    text = audits.fill(audits.template_text(item.template), repo=item.repo, project=cfg.project,
+                       notes=notes.strip(), usage=usage.strip()).rstrip() + "\n"
     if item.body.strip():
         text += f"\n---\n\nThe planner adds, for this item:\n\n{item.body}"
     return text
@@ -333,6 +336,63 @@ def read_result(log: Path) -> dict | None:
             if isinstance(obj, dict) and obj.get("type") == "result":
                 result = obj
     return result
+
+
+COMPACT_MIN_BYTES = 1 << 20     # a log smaller than this is left as it is
+DROPPED = "dropped_by_conductor"
+
+
+def _compact(obj, top: bool = True) -> int:
+    """Strip the bulk out of one stream-json line in place: base64 payloads (an image
+    the executor read, twice over: the tool result and `tool_use_result.file`) and
+    `tool_use_result.originalFile` (a whole file before each edit). Returns the
+    characters dropped. Both are copies of files that stay in the repo."""
+    dropped = 0
+    if isinstance(obj, dict):
+        if top and isinstance(tur := obj.get("tool_use_result"), dict) \
+                and isinstance(tur.get("originalFile"), str) and len(tur["originalFile"]) > 1024:
+            dropped += len(tur["originalFile"])
+            tur["originalFile"], tur[DROPPED] = "", len(tur["originalFile"])
+        for key in ("data", "base64"):
+            value = obj.get(key)
+            if isinstance(value, str) and len(value) > 1024 and (key == "base64" or obj.get("type") == "base64"):
+                dropped += len(value)
+                obj[key], obj[DROPPED] = "", len(value)
+        for value in obj.values():
+            dropped += _compact(value, False)
+    elif isinstance(obj, list):
+        for value in obj:
+            dropped += _compact(value, False)
+    return dropped
+
+
+def compact_log(log: Path) -> tuple[int, int] | None:
+    """Shrink a finished item's stream-json log in place (see `_compact`); everything
+    conductor and the app read from it (the result line, what was said, each tool call)
+    stays. Returns (bytes before, bytes after), or None when it was left alone."""
+    try:
+        before = log.stat().st_size
+    except OSError:
+        return None
+    if before < COMPACT_MIN_BYTES:
+        return None
+    out, dropped = [], 0
+    with open(log, "rb") as fh:
+        for raw in fh:
+            try:
+                obj = json.loads(raw)
+            except ValueError:
+                out.append(raw)
+                continue
+            n = _compact(obj)
+            dropped += n
+            out.append(json.dumps(obj, ensure_ascii=False).encode("utf-8") + b"\n" if n else raw)
+    if not dropped:
+        return None
+    tmp = log.with_name(log.name + ".compact")
+    tmp.write_bytes(b"".join(out))
+    os.replace(tmp, log)
+    return before, log.stat().st_size
 
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:

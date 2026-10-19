@@ -137,6 +137,9 @@ def describe(ev: Event) -> str:
             extras += [k for k in ("needs_planner", "readonly", "ultracode", "audit") if d.get(k)]
             extras += [f"template: {d['template']}"] if d.get("template") else []
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
+        case "edited":
+            text = f"{who} rewritten in the queue; it runs the new text" + (
+                " (its stage is discarded; it launches fresh)" if d.get("staged") else "")
         case "adopt":
             text = f"{who} {'stage ' if d.get('stage') else ''}adopted after restart (pid {d.get('pid')})"
         case "recover":

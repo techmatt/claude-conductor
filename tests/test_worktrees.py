@@ -372,6 +372,35 @@ def test_head_is_staged_then_resumed(env):
     assert env.finished("code/002_next").detail["status"] == "done"
 
 
+def test_rewrite_of_a_queued_item_takes_effect(env):
+    env.queue("001_long", env.hold())
+    env.queue("002_next", "FAKE commit b.txt b", stage="false")
+    env.tick_until(lambda: env.d.log.last("start", item="code/001_long"))
+    env.queue("002_next", "FAKE commit c.txt c", stage="false")
+    env.tick_until(lambda: env.events("edited"))
+    [edited] = env.events("edited")
+    assert edited.item == "code/002_next" and edited.detail["staged"] is False
+    env.release()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    assert (env.repo / "c.txt").is_file() and not (env.repo / "b.txt").exists()
+    assert len(env.events("edited")) == 1
+
+
+@pytest.mark.slow
+def test_rewrite_after_staging_discards_the_stage(env):
+    env.queue("001_long", env.hold())
+    env.queue("002_next", "FAKE commit b.txt b")
+    env.tick_until(lambda: env.events("staged"))
+    env.queue("002_next", "FAKE commit c.txt c")
+    env.tick_until(lambda: env.events("edited"))
+    assert env.events("edited")[0].detail["staged"] is True
+    env.release()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    assert any("item file changed" in e.detail["note"] for e in env.events("warning"))
+    assert not env.d.log.last("start", item="code/002_next").detail.get("resumed")
+    assert (env.repo / "c.txt").is_file() and not (env.repo / "b.txt").exists()
+
+
 @pytest.mark.slow
 def test_stage_that_writes_is_discarded_and_launched_fresh(env):
     env.queue("001_long", "FAKE sleep 2\nFAKE report done")

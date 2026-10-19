@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 
@@ -86,6 +87,64 @@ def test_general_audit_writes_and_uses_its_own_notes(env):
     [used] = env.events("audit_used")
     assert used.detail["notes"] == ["code/001_ga"]
     assert "unused audit note" not in (env.control / "inbox.md").read_text(encoding="utf-8")
+
+
+def test_disk_audit_is_handed_conductors_measurements(env):
+    (env.control / "reports" / "code__000_old.log").write_bytes(b"x" * 5000)
+    env.queue("001_disk", "Leave the fixtures alone.", template="disk_audit")
+    env.tick_until(lambda: env.finished("code/001_disk"))
+    text = prompt(env, "001_disk")
+    assert "Disk space audit of `code`" in text and "{{" not in text
+    assert "| Control folder | Size |" in text and "`code__000_old.log` 4.9 KB" in text
+    assert f"Worktrees of `code`: `{env.worktree('x').parent}`" in text
+    assert "`001_disk`: live (this item's own working directory)" in text
+    assert "Main checkout:" in text and text.rstrip().endswith("Leave the fixtures alone.")
+    assert not env.events("stage") and not env.events("audit_used")
+    assert env.finished("code/001_disk").detail["template"] == "disk_audit"
+
+
+def test_claude_md_cleanup_template(env):
+    env.queue("001_md", "", template="claude_md_cleanup")
+    env.tick_until(lambda: env.finished("code/001_md"))
+    text = prompt(env, "001_md")
+    assert "CLAUDE.md cleanup of `code`" in text and "running notes file" not in text
+    assert "The planner adds" not in text and not env.events("audit_used")
+
+
+def test_compact_log_drops_image_bytes_and_file_copies(tmp_path):
+    from conductor import executor
+    image = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "A" * 600_000}}
+    lines = [
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "looking"}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "content": [image]}]},
+         "tool_use_result": {"type": "image", "file": {"base64": "A" * 600_000, "type": "image/png"}}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "content": "edited"}]},
+         "tool_use_result": {"filePath": "x.py", "originalFile": "y" * 5000}},
+        {"type": "result", "subtype": "success", "result": "done", "total_cost_usd": 1.5},
+    ]
+    log = tmp_path / "a.log"
+    log.write_text("".join(json.dumps(x) + "\n" for x in lines) + "not json\n", encoding="utf-8")
+    before, after = executor.compact_log(log)
+    assert before > 1_200_000 and after < 2000
+    out = log.read_text(encoding="utf-8").splitlines()
+    assert json.loads(out[0]) == lines[0] and out[-1] == "not json"
+    assert json.loads(out[1])["tool_use_result"]["file"] == {"base64": "", "type": "image/png",
+                                                            executor.DROPPED: 600_000}
+    assert json.loads(out[2])["tool_use_result"]["originalFile"] == ""
+    assert executor.read_result(log) == lines[3]
+    assert executor.compact_log(log) is None                    # under 1 MB now: left alone
+
+
+def test_daemon_start_compacts_finished_items_logs(env):
+    big = {"type": "user", "tool_use_result": {"file": {"base64": "A" * (2 << 20)}}}
+    (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)
+    (env.control / "done" / "code" / "001_old.md").write_text("---\nrepo: code\n---\nx\n", encoding="utf-8")
+    for name in ("001_old", "002_queued"):
+        (env.control / "reports" / f"code__{name}.log").write_text(json.dumps(big) + "\n", encoding="utf-8")
+    env.d.log.close()
+    env.d = env.new_daemon()
+    assert (env.control / "reports" / "code__001_old.log").stat().st_size < 1000
+    assert (env.control / "reports" / "code__002_queued.log").stat().st_size > 2 << 20
 
 
 def test_test_perf_template_and_bad_template(env, tmp_path):

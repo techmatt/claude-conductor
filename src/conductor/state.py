@@ -122,9 +122,9 @@ def may_stage(cfg: Config, view: View, head: Item) -> bool:
     opts = cfg.opts(head.repo)
     wanted = head.stage if head.stage is not None else opts.stage
     others = [i for i, rec in view.staged.items() if rec["repo"] == head.repo and i != head.id]
-    # A cleanup never stages: the notes it gets are fixed at launch, and an item running
-    # meanwhile may still add some.
-    return opts.worktrees and wanted and not others and head.template != "cleanup"
+    # A cleanup or disk audit never stages: what it is handed (notes, sizes) is fixed at
+    # launch, and an item running meanwhile may still change it.
+    return opts.worktrees and wanted and not others and head.template not in audits.NO_STAGE
 
 
 def decide(cfg: Config, view: View) -> dict[str, Decision]:
