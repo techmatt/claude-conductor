@@ -17,6 +17,11 @@
     FAKE progress <json arguments>           call the progress tool; its text goes into the report
     FAKE until-message <seconds>             "work" (a tool call every 0.2s) until a message
                                              arrives or the time is up; then answer it with progress
+    FAKE leave <seconds>                     start a process in cwd that outlives the executor
+                                             (`LEFT=<pid>` in the report)
+    FAKE hog <MB> <seconds>                  a child process holding <MB> of touched memory
+                                             (`HOG=<pid>` in the report)
+    FAKE detach-hog <MB> <seconds>           the same, detached: an orphan in cwd
 
 After every FAKE line but `sleep` (each counts as a tool call), the PostToolUse hooks named in
 --settings run as Claude Code runs them: input JSON on stdin, `additionalContext` from
@@ -129,6 +134,7 @@ def progress(arguments: dict) -> str:
 
 status, is_error, pick = "done", False, None
 answers = []
+hogs = []
 for ln in lines:
     if not ln.startswith("FAKE ") or ln.startswith("FAKE stage-"):
         continue
@@ -181,6 +187,37 @@ for ln in lines:
                 memory += f"MISSING: {parts[2]}\n"
         case "error":
             is_error = True
+        case "leave":
+            # A leftover: a process in cwd that outlives the executor, as a dev server does.
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            left = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep({float(parts[2])})"],
+                                    creationflags=flags, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            memory += f"LEFT={left.pid}\n"
+        case "hog":
+            # A child holding <MB> of touched memory for <seconds>, in the executor's tree.
+            mb, secs = int(parts[2]), float(parts[3])
+            hogs.append(subprocess.Popen([sys.executable, "-c",
+                                          f"import time; b = bytearray({mb} << 20); b[::4096] = b'x' * len(b[::4096]); "
+                                          f"open({str(Path.cwd() / '.hog')!r}, 'w').close(); time.sleep({secs})"]))
+            while not (Path.cwd() / ".hog").exists():
+                time.sleep(0.05)
+            (Path.cwd() / ".hog").unlink()
+            memory += f"HOG={hogs[-1].pid}\n"
+        case "detach-hog":
+            # The same, with no live parent: an orphan in cwd, as `( cmd & )` in a shell
+            # makes one. Through conductor's own launcher: a venv's python.exe holds its
+            # child in a kill-on-close job, so a hand-rolled launcher takes the hog with it.
+            from conductor import procs
+            mb, secs = int(parts[2]), float(parts[3])
+            hog = (f"import time; b = bytearray({mb} << 20); b[::4096] = b'x' * len(b[::4096]); "
+                   f"open({str(Path.cwd() / '.hog')!r}, 'w').close(); time.sleep({secs})")
+            left = procs.spawn_detached([sys.executable, "-c", hog], Path.cwd(),
+                                        Path(tempfile.gettempdir()) / "conductor-fake-hog.log")
+            while not (Path.cwd() / ".hog").exists():
+                time.sleep(0.05)
+            (Path.cwd() / ".hog").unlink()
+            memory += f"HOG={left.pid}\n"
         case "pick":
             pick = parts[2]
         case "env":

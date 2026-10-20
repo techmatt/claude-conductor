@@ -17,10 +17,11 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import config as config_mod
-from .. import git, items, picks, procs, questions, state, targets
+from .. import git, items, memory, picks, questions, state, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
 from ..inbox import checkpoint_name, describe, progress_line
+from ..state import DaemonInfo, daemon_info
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
 
 # Overall state, most urgent first: the tray shows the first that applies anywhere.
@@ -102,26 +103,6 @@ class ReadOnlyLog:
 
 
 @dataclass
-class DaemonInfo:
-    alive: bool
-    pid: int | None = None
-    started: str | None = None
-
-
-def daemon_info(cfg: config_mod.Config) -> DaemonInfo:
-    lock = cfg.state_dir / "daemon.json"
-    try:
-        info = json.loads(lock.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return DaemonInfo(False)
-    if not isinstance(info, dict):
-        return DaemonInfo(False)
-    if procs.alive(info.get("pid"), info.get("create_time")):
-        return DaemonInfo(True, info.get("pid"), info.get("started"))
-    return DaemonInfo(False)
-
-
-@dataclass
 class Activity:
     """A running, merging, staging or staged item, as the Repos panel shows it."""
     item: str
@@ -199,6 +180,7 @@ class Snapshot:
     targets: dict[str, str] = field(default_factory=dict)      # run target → up | starting | down
     checkpoint: Event | None = None                            # the latest `checkpoint` event
     picks: dict[str, picks.PickInfo] = field(default_factory=dict)  # finished item → its picker (`picks.pending`)
+    memory: tuple[str, str] = ("", "ok")                       # `memory.line`: text, level
 
     @property
     def to_pick(self) -> int:
@@ -493,8 +475,12 @@ class Project:
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
         run = {name: targets.status(cfg, t, TARGET_PROBE_SECONDS) for name, t in cfg.targets.items()}
+        try:
+            mem = memory.line(cfg)
+        except OSError as exc:
+            mem = (f"memory: could not read ({exc})", "ok")
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
-                        view.checkpoint, pending)
+                        view.checkpoint, pending, mem)
 
     def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
         """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only

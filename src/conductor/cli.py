@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import config as config_mod
-from . import audits, items, questions, state
+from . import audits, items, memory, questions, state
 from .events import EventLog
 from .inbox import describe, progress_line, render
 from .util import clock, duration, now, parse_since, parse_stamp
@@ -36,24 +36,19 @@ def cmd_run(args) -> int:
     return 0
 
 
-def _daemon_alive(cfg: config_mod.Config) -> dict | None:
-    """The live daemon's lock record (`pid`, `started`), or None."""
-    from . import procs
-    import json
-    lock = cfg.state_dir / "daemon.json"
-    try:
-        info = json.loads(lock.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    return info if isinstance(info, dict) and procs.alive(info.get("pid"), info.get("create_time")) else None
-
-
 def cmd_status(args) -> int:
     cfg, log = _open(args.control)
-    daemon = "not running"
-    if info := _daemon_alive(cfg):
-        daemon = f"running (pid {info['pid']}, since {clock(info['started'])})"
+    d = state.daemon_info(cfg)
+    beat = clock(d.beat) if d.beat else "never"
+    if d.alive:
+        daemon = f"running (pid {d.pid}, since {clock(d.started)})" + (
+            f" but not answering: last heartbeat {beat}" if d.stale else "")
+    elif d.died:
+        daemon = f"not running: it died (pid {d.pid}, last heartbeat {beat}; it never stopped cleanly)"
+    else:
+        daemon = "not running"
     print(f"{cfg.project} — daemon {daemon}")
+    print(memory.line(cfg)[0])
     view = state.scan(cfg, log)
     decisions = state.decide(cfg, view)
     open_qs = [q for q in questions.scan(cfg.control) if q.is_open]
@@ -287,7 +282,7 @@ def cmd_pick(args) -> int:
             manifest = picks.load_manifest(cfg, args.ref)
         except ValueError as exc:
             return refuse(exc)
-        if _daemon_alive(cfg) and not args.until_saved:
+        if state.daemon_info(cfg).alive and not args.until_saved:
             from .app import actions
             path = actions.write_signal(cfg.control, f"pick: {manifest.ref}", by="cli")
             print(f"wrote signals/{path.name}: the daemon opens the picker and logs pick_open")

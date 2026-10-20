@@ -8,10 +8,12 @@ is not lost: a restarted daemon finds the process again and adopts it.
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import psutil
@@ -75,37 +77,68 @@ def console_python() -> str:
     return sys.executable
 
 
-def spawn_daemon(control: Path, log: Path) -> subprocess.Popen:
+def spawn_daemon(control: Path, log: Path) -> Detached:
     """Start `python -m conductor run <control>` detached from the caller (the app):
     no console window, its own process group, out of any job object that allows it,
     output appended to `log`, unbuffered (`-u`: a file is block-buffered, so the log
-    would otherwise stay empty for hours). Quitting the app never takes the daemon down."""
+    would otherwise stay empty for hours). Quitting the app never takes the daemon down,
+    and neither does killing the app's process tree (`spawn_detached`)."""
     return spawn_detached([console_python(), "-u", "-m", "conductor", "run", str(control)], control, log)
 
 
-def spawn_detached(cmd: list[str] | str, cwd: Path, log: Path) -> subprocess.Popen:
-    """Start a long-running process detached from the caller: no console window, its own
+@dataclass
+class Detached:
+    """A process `spawn_detached` started. It is not the caller's child, so its exit
+    code is never known: `poll()` is None while it runs, else -1."""
+    pid: int
+    create_time: float | None
+
+    def poll(self) -> int | None:
+        return None if alive(self.pid, self.create_time) else -1
+
+
+# Run by a short-lived launcher: it starts the real process and exits at once, so the
+# real one's parent is gone and no tree kill of the caller (`taskkill /T`, a Claude Code
+# session reaping its background commands) reaches it. Found live, 2026-10-20: the
+# app ran as a Claude Code background command, and when that session reaped it at
+# 2:16am the daemon and its executor died with it, logging nothing.
+_LAUNCHER = """\
+import json, subprocess, sys
+a = json.loads(sys.argv[1])
+with open(a["log"], "ab") as out:
+    for i, flags in enumerate(a["flags"]):
+        try:
+            p = subprocess.Popen(a["cmd"], cwd=a["cwd"], shell=a["shell"], stdin=subprocess.DEVNULL,
+                                 stdout=out, stderr=subprocess.STDOUT, creationflags=flags,
+                                 start_new_session=a["posix"])
+            break
+        except OSError:
+            if i == len(a["flags"]) - 1:
+                raise
+print(p.pid, flush=True)
+"""
+
+
+def spawn_detached(cmd: list[str] | str, cwd: Path, log: Path) -> Detached:
+    """Start a long-running process detached from the caller: through a launcher that
+    exits at once (so the process has no live parent), no console window, its own
     process group, out of the caller's job object when that is allowed, stdin closed,
     stdout and stderr appended to `log`. A string runs through the platform shell."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    kwargs: dict = {"shell": isinstance(cmd, str)}
     if WINDOWS:
         base = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-        flags = [base | subprocess.CREATE_BREAKAWAY_FROM_JOB, base]
+        flags = [base | subprocess.CREATE_BREAKAWAY_FROM_JOB, base]   # a job may refuse breakaway
     else:
         flags = [0]
-        kwargs["start_new_session"] = True
-    with open(log, "ab") as out:
-        for i, extra in enumerate(flags):
-            if WINDOWS:
-                kwargs["creationflags"] = extra
-            try:
-                return subprocess.Popen(cmd, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=out,
-                                        stderr=subprocess.STDOUT, env=child_env(), **kwargs)
-            except OSError:
-                if i == len(flags) - 1:     # breakaway refused by a job: retry without it
-                    raise
-    raise AssertionError("unreachable")
+    spec = json.dumps({"cmd": cmd, "cwd": str(cwd), "log": str(log), "shell": isinstance(cmd, str),
+                       "flags": flags, "posix": not WINDOWS})
+    out = subprocess.run([sys.executable, "-c", _LAUNCHER, spec], stdin=subprocess.DEVNULL,
+                         capture_output=True, text=True, env=child_env(),
+                         **({"creationflags": subprocess.CREATE_NO_WINDOW} if WINDOWS else {}))
+    if out.returncode != 0 or not out.stdout.strip().isdigit():
+        raise OSError(f"could not start {cmd!r}: {out.stderr.strip().splitlines()[-1:] or out.returncode}")
+    pid = int(out.stdout.strip())
+    return Detached(pid, create_time(pid))
 
 
 def open_console(argv: list[str], cwd: Path) -> subprocess.Popen:
@@ -251,3 +284,161 @@ def kill_tree(pid: int) -> None:
         except psutil.Error:
             pass
     psutil.wait_procs(procs, timeout=10)
+
+
+def family(pid: int | None) -> set[int]:
+    """A live process and every descendant, as pids (empty when it is gone)."""
+    if not pid:
+        return set()
+    try:
+        root = psutil.Process(pid)
+        return {pid} | {c.pid for c in root.children(recursive=True)}
+    except psutil.Error:
+        return set()
+
+
+def ancestors(pid: int | None = None) -> list[psutil.Process]:
+    """The live parents of `pid` (default: this process), nearest first."""
+    out = []
+    try:
+        p = psutil.Process(pid or os.getpid()).parent()
+        while p is not None and len(out) < 64:
+            out.append(p)
+            p = p.parent()
+    except psutil.Error:
+        pass
+    return out
+
+
+def claude_ancestor() -> psutil.Process | None:
+    """A Claude Code process this one runs under, if any: when that session ends or
+    reaps its background commands, it kills its whole tree, this process included."""
+    for p in ancestors():
+        try:
+            if Path(p.name()).stem.lower() == "claude":
+                return p
+        except psutil.Error:
+            continue
+    return None
+
+
+# ---------------------------------------------------------------- memory
+@dataclass
+class MemoryStatus:
+    """The box's memory, in bytes. `commit` against `limit` is what runs out on Windows
+    (RAM plus page file); `available` is free physical memory."""
+    commit: int
+    limit: int
+    available: int
+    total: int
+
+
+def memory_status() -> MemoryStatus:
+    if WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+
+        class PerformanceInformation(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("CommitTotal", ctypes.c_size_t),
+                        ("CommitLimit", ctypes.c_size_t), ("CommitPeak", ctypes.c_size_t),
+                        ("PhysicalTotal", ctypes.c_size_t), ("PhysicalAvailable", ctypes.c_size_t),
+                        ("SystemCache", ctypes.c_size_t), ("KernelTotal", ctypes.c_size_t),
+                        ("KernelPaged", ctypes.c_size_t), ("KernelNonpaged", ctypes.c_size_t),
+                        ("PageSize", ctypes.c_size_t), ("HandleCount", wintypes.DWORD),
+                        ("ProcessCount", wintypes.DWORD), ("ThreadCount", wintypes.DWORD)]
+
+        info = PerformanceInformation()
+        info.cb = ctypes.sizeof(info)
+        if not ctypes.windll.psapi.GetPerformanceInfo(ctypes.byref(info), info.cb):
+            raise OSError(ctypes.get_last_error(), "GetPerformanceInfo failed")
+        page = info.PageSize
+        return MemoryStatus(info.CommitTotal * page, info.CommitLimit * page,
+                            info.PhysicalAvailable * page, info.PhysicalTotal * page)
+    vm, sw = psutil.virtual_memory(), psutil.swap_memory()
+    return MemoryStatus(vm.total - vm.available + sw.used, vm.total + sw.total, vm.available, vm.total)
+
+
+def kind(name: str, cmdline: list[str] | None = None) -> str:
+    """What a process is, for memory accounting: claude (an executor and its in-process
+    subagents), chromium, vite, playwright, node, python, shell or other."""
+    stem = Path(name).stem.lower()
+    if stem == "claude":
+        return "claude"
+    if stem in ("chrome", "chromium", "headless_shell", "msedge", "chrome-headless-shell", "firefox"):
+        return "chromium"
+    if stem == "node":
+        line = " ".join(cmdline or []).lower()
+        return "vite" if "vite" in line else "playwright" if "playwright" in line else "node"
+    if stem.startswith(("python", "pythonw", "uv")):
+        return "python"
+    if stem in ("bash", "sh", "cmd", "powershell", "pwsh", "conhost", "tail", "grep", "sleep", "timeout", "git"):
+        return "shell"
+    return "other"
+
+
+# Kinds an item's leftover may be when only its command line names the worktree (its
+# working folder is elsewhere): never an editor or a terminal Matt opened on it.
+TOOL_KINDS = {"chromium", "vite", "playwright", "node", "python", "shell"}
+
+
+def usage(p: psutil.Process) -> tuple[int, int]:
+    """(private bytes, working set) of one process; private is RSS off Windows."""
+    mi = p.memory_info()
+    return getattr(mi, "private", mi.rss), mi.rss
+
+
+def _ppids() -> dict[int, int]:
+    """pid → ppid for every process at once: psutil's own map (what `children()` uses,
+    ~10ms). A first `ppid()` per process costs far more on Windows (3.3s for 400,
+    measured), so asking each is the fallback only."""
+    try:
+        return dict(psutil._ppid_map())
+    except Exception:           # noqa: BLE001 - a private helper; fall back to the public call
+        out = {}
+        for p in psutil.process_iter():
+            try:
+                out[p.pid] = p.ppid()
+            except psutil.Error:
+                continue
+        return out
+
+
+def _orphan(pid: int, created: float, ppids: dict[int, int], by_pid: dict[int, float | None]) -> bool:
+    """Is the parent of `pid` gone? (Its ppid is free, or was reused by a later process.)"""
+    ppid = ppids.get(pid)
+    if not ppid or ppid not in by_pid:
+        return True
+    parent_created = by_pid[ppid]
+    return parent_created is not None and parent_created > created
+
+
+def strays(root: Path, since: float, until: float, spare: set[int]) -> list[psutil.Process]:
+    """What an item left running in its worktree: live processes started between
+    `since` and `until` (epoch seconds) whose parent is gone (an item's leftover always
+    outlived the executor or shell that started it) and whose working folder is `root`
+    or under it, or a tool (`TOOL_KINDS`) whose command line names it. Each is the root
+    of what it started: kill its `family`. Never one in `spare`, this process or its
+    parents. Creation time and parent are checked first: reading a working folder is
+    slow (~10ms), and a terminal Matt opened on the worktree has a live parent."""
+    base = os.path.normcase(str(root)).rstrip("\\/")
+    spare = spare | {os.getpid()} | {p.pid for p in ancestors()}
+    listed = list(psutil.process_iter(["create_time"]))
+    by_pid = {p.pid: p.info.get("create_time") for p in listed}
+    ppids = _ppids()
+    out = []
+    for p in listed:
+        created = by_pid[p.pid]
+        if (p.pid in spare or created is None or not (since <= created <= until)
+                or not _orphan(p.pid, created, ppids, by_pid)):
+            continue
+        try:
+            cwd = os.path.normcase(p.cwd() or "").rstrip("\\/")
+            under = cwd == base or cwd.startswith(base + os.sep)
+            if not under:
+                cmd = p.cmdline()
+                under = base in os.path.normcase(" ".join(cmd)) and kind(p.name(), cmd) in TOOL_KINDS
+        except psutil.Error:
+            continue
+        if under:
+            out.append(p)
+    return out

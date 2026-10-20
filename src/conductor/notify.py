@@ -50,6 +50,15 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
             return f"{project}: picker {what} did not open", str(detail.get("error", ""))[:250]
         case "amend_refused":
             return f"{project}: amendment to {who} refused", str(detail.get("reason", ""))[:250]
+        case "memory" if detail.get("level") != "ok":
+            return (f"{project}: memory pressure",
+                    f"{detail.get('free')} GiB free, {detail.get('percent')}% committed. {detail.get('action', '')}"[:250])
+        case "memory_critical":
+            return (f"{project}: memory CRITICAL",
+                    f"{detail.get('free')} GiB free, {detail.get('percent')}% committed. {detail.get('action', '')}"[:250])
+        case "daemon_died":
+            return (f"{project}: the daemon had died",
+                    f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}.")
         case "queue_empty":
             return f"{project}: queue `{repo}` is empty", f"last item {detail.get('last')}"
     return None

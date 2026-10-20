@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import audits, picks, questions
+from . import audits, memory, picks, questions
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
 from .state import View, decide
@@ -153,6 +153,31 @@ def describe(ev: Event) -> str:
             text = f"{who} returned to the queue: {d.get('reason')}"
         case "daemon_start":
             text = f"daemon started (pid {d.get('pid')})"
+        case "daemon_died":
+            text = (f"the previous daemon (pid {d.get('pid')}, started {clock(d['started']) if d.get('started') else '?'}) "
+                    f"died without stopping: last heartbeat {clock(d['last_beat']) if d.get('last_beat') else 'never'}, "
+                    f"nothing ran for {d.get('gap')}")
+            if d.get("memory"):
+                m = d["memory"]
+                text += f"; memory then: {m.get('commit')} of {m.get('limit')} GiB committed, {m.get('free')} GiB free ({m.get('level')})"
+            if d.get("running"):
+                text += f"; was running: {', '.join(d['running'])}"
+        case "memory" | "memory_critical":
+            text = (f"memory {d.get('level')} (was {d.get('was')}): {d.get('commit')} of {d.get('limit')} GiB "
+                    f"committed ({d.get('percent')}%), {d.get('free')} GiB free")
+            if d.get("top"):
+                text += "; biggest: " + ", ".join(f"{t['item']} {t['kind']}×{t['count']} {t['private_mb']} MiB"
+                                                  for t in d["top"][:3])
+            if d.get("others"):
+                text += "; outside items: " + ", ".join(f"{o['name']}×{o['count']} {o['private_mb']} MiB"
+                                                        for o in d["others"])
+            if d.get("action"):
+                text += f" — {d['action']}"
+        case "reaped":
+            procs_ = d.get("processes", [])
+            text = (f"{who} left {len(procs_)} process(es) running in its worktree ({d.get('context')}); killed: "
+                    + ", ".join(f"{p['name']} {p['pid']}" for p in procs_[:6])
+                    + (" …" if len(procs_) > 6 else "") + f" ({d.get('private_mb')} MiB)")
         case "daemon_stop":
             text = "daemon stopped" + (" by a `stop: daemon` signal" if d.get("reason") == "signal" else "")
             text += f"; still running: {', '.join(d['running'])}" if d.get("running") else ""
@@ -301,6 +326,8 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
         out += ["", "Nothing new."]
 
     out += ["", "## Now"]
+    mem, level = memory.line(cfg)
+    out.append(f"- {'**' + mem + '**' if level != 'ok' else mem}")
     decisions = decide(cfg, view)
     for repo in cfg.repos:
         d = decisions[repo]

@@ -47,7 +47,10 @@ def build_template(root: Path) -> Path:
     init_repo(root / "code", {"README.md": "code\n"})
     toml = (
         'project = "test"\nlocks = ["gpu"]\n\n[defaults]\nmax_hours = 1\npoll_seconds = 0.1\n'
-        'ask_default_minutes = 0.03\n\n'
+        'ask_default_minutes = 0.03\n'
+        # The box's real memory never gates a test; memory tests set a probe or thresholds.
+        'memory_pressure_percent = 0\nmemory_pressure_free_gb = 0\n'
+        'memory_critical_percent = 0\nmemory_critical_free_gb = 0\n\n'
         f'[repos]\ncode = "../code"\n\n[executor]\ncommand = {[sys.executable, str(FAKE)]!r}\n'
     ).replace("'", '"').replace("\\", "/")
     init_repo(root / "control", {"conductor.toml": toml, "state.md": "# state\n",
@@ -119,6 +122,14 @@ class Env:
 
     def finished(self, item: str):
         return self.d.log.last("finish", item=item)
+
+
+@pytest.fixture(autouse=True)
+def no_claude_ancestor(monkeypatch):
+    """The suite often runs inside a Claude Code session: a daemon's warning about that
+    is tested on its own, never left to whoever runs the tests."""
+    from conductor import procs
+    monkeypatch.setattr(procs, "claude_ancestor", lambda: None)
 
 
 @pytest.fixture(scope="session")

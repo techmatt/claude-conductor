@@ -57,6 +57,10 @@ class RunTarget:
 
 RUN_KEYS = {"repo", "cwd", "command", "url", "ready", "ready_seconds"}
 
+MEMORY_KEYS = ("memory_sample_seconds", "memory_keep_hours", "memory_pressure_percent",
+               "memory_pressure_free_gb", "memory_critical_percent", "memory_critical_free_gb",
+               "memory_calm_seconds")
+
 
 @dataclass
 class Config:
@@ -74,6 +78,17 @@ class Config:
     merge_minutes: float = 10.0      # a merge executor resolving a prose conflict
     foreground_seconds: float = 60.0  # an executor's foreground shell call moves to the background after this (0: off)
     toasts: bool = True
+    # Memory (`memory.py`): sampled every N seconds (0: off); a level is commit at or over
+    # a percent of its limit, or free RAM at or under a size (0 turns either off).
+    memory_sample_seconds: float = 30.0
+    memory_keep_hours: float = 24.0
+    # Free RAM is the main signal: an auto-managed page file grows the commit limit on
+    # demand, so this box sat at 87% committed through an ordinary test run (2026-10-20).
+    memory_pressure_percent: float = 90.0
+    memory_pressure_free_gb: float = 3.0
+    memory_critical_percent: float = 95.0
+    memory_critical_free_gb: float = 1.5
+    memory_calm_seconds: float = 300.0   # a level falls only after the box stays clear this long
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
     targets: dict[str, RunTarget] = field(default_factory=dict)
@@ -255,6 +270,7 @@ def load(control: Path) -> Config:
         merge_minutes=float(defaults.get("merge_minutes", 10.0)),
         foreground_seconds=float(defaults.get("foreground_seconds", 60.0)),
         toasts=bool(defaults.get("toasts", True)),
+        **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS},
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],
         targets=_targets(control, repos, data.get("run")),

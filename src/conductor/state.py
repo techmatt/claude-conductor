@@ -6,10 +6,43 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import audits, git, globs, items
+from . import audits, git, globs, items, procs
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
+from .util import now, parse_stamp
+
+
+@dataclass
+class DaemonInfo:
+    alive: bool
+    pid: int | None = None
+    started: str | None = None
+    beat: str | None = None     # its last heartbeat (`beat` in daemon.json)
+    stale: bool = False         # alive, but no heartbeat for three memory samples (at least 90s)
+    died: bool = False          # not alive, and its lock is still there: it never stopped cleanly
+
+
+def daemon_info(cfg: Config) -> DaemonInfo:
+    """The daemon as `.conductor/daemon.json` tells it: a clean stop removes the file,
+    so a file whose process is gone is a daemon that died (killed, or its tree was)."""
+    lock = cfg.state_dir / "daemon.json"
+    try:
+        info = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return DaemonInfo(False)
+    if not isinstance(info, dict):
+        return DaemonInfo(False)
+    pid, started, beat = info.get("pid"), info.get("started"), info.get("beat")
+    if not procs.alive(pid, info.get("create_time")):
+        return DaemonInfo(False, pid, started, beat, died=True)
+    stale = False
+    if beat and cfg.memory_sample_seconds:
+        try:
+            stale = (now() - parse_stamp(beat)).total_seconds() > max(3 * cfg.memory_sample_seconds, 90)
+        except ValueError:
+            pass
+    return DaemonInfo(True, pid, started, beat, stale=stale)
 
 
 @dataclass

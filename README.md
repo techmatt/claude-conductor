@@ -43,7 +43,14 @@ checkpoint's own event on) or `checkpoint N` (from checkpoint #N on). `--item` t
 
 Stopping the daemon (Ctrl+C, or killing it) does **not** stop executors: they run
 detached (no console window, own process group), writing straight to their log files.
-The next start adopts them — see *Restart rule*.
+The next start adopts them — see *Restart rule*. A **tree** kill of the daemon does
+(`taskkill /T`, or whatever started it reaping its descendants), since executors are
+its children. So the app's **Start daemon** starts it with no live parent (*Platform
+notes*), and a daemon that finds a Claude Code session among its parents logs a
+`warning` at start: when that session ends, or reaps its background commands under
+memory pressure, the daemon and every executor die with it (2026-10-20, *Memory*).
+Start the daemon from the app or a plain terminal, never as a Claude Code background
+command.
 
 ## Control folder layout
 
@@ -68,10 +75,11 @@ questions/                     executor asks: <id>.md, <id>.answer.md, <id>.resu
 picks/                         Matt's saved picker choices: <name>.choices.json (see Picks)
 inbox.md                       generated digest since the read mark
 events.db                      append-only event log (SQLite, WAL)
-.conductor/                    daemon lock (daemon.json), guard snapshot, cancelled/ (kept
+.conductor/                    daemon lock and heartbeat (daemon.json), guard snapshot, cancelled/ (kept
                                cancelled items), reorder.json and signal.json (crash journals),
                                daemon.out.log (a daemon started by the app), progress/ and
-                               mail/ (progress lines, messages to executors: see *Progress and messages*)
+                               mail/ (progress lines, messages to executors: see *Progress and messages*),
+                               memory.jsonl (memory samples: see *Memory*)
 ```
 
 Conductor creates the runtime folders on start and logs a `warning` event if any of
@@ -108,6 +116,13 @@ setup_minutes = 10            # per setup command
 merge_minutes = 10            # a merge executor resolving a prose conflict is killed after this
 foreground_seconds = 60       # an executor's foreground shell call moves to the background after this; 0 = off (see Messages)
 toasts = true                 # Windows desktop notifications (see Toasts)
+memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (see Memory)
+memory_keep_hours = 24        # samples kept in .conductor/memory.jsonl
+memory_pressure_percent = 90  # pressure: commit at or over this % of its limit (0 = off) ...
+memory_pressure_free_gb = 3   # ... or free RAM at or under this (0 = off)
+memory_critical_percent = 95  # critical: the same, further on
+memory_critical_free_gb = 1.5
+memory_calm_seconds = 300     # a level falls only after the box stays clear this long (a rise is at once)
 
 [repos]                       # name = path; relative paths resolve from the control folder
 sandbox = "../conductor-sandbox"
@@ -929,6 +944,74 @@ the picker. With no daemon it serves the picker itself in the foreground, printi
 URL and each event as it is logged, until Ctrl+C. Those events go to `events.db` as the
 daemon's would.
 
+## Memory
+
+Code: `memory.py`, with the Windows parts (`GetPerformanceInfo`, the launcher) in
+`procs.py`. Found live, 2026-10-20 (`reports/20_memory_pressure_report.md`): at 2:16am
+a Claude Code session judged the box low on memory and reaped its background commands.
+One of them was the app; the app had started the daemon, and the daemon the executor,
+so the tree kill took all three and nothing was logged until 7:01am. Windows itself
+never logged a low-memory event.
+
+**Samples.** Every `memory_sample_seconds` the daemon reads the box's commit charge
+against its limit (RAM plus page file: what runs out on Windows) and free physical
+memory, and walks each live item's process tree (the executor, a stage, a merge
+executor, and everything under them) by kind: `claude` (the executor with its
+in-process subagents and workflows), `chromium`, `vite`, `playwright`, `node`,
+`python`, `shell`, `other`, with count and private bytes (RSS off Windows). One
+compact JSON line per sample goes to `.conductor/memory.jsonl` (GiB, kinds in MiB,
+items biggest first). Past 4 MB the file keeps only the last `memory_keep_hours`.
+Each sample also rewrites the heartbeat (`beat` in `daemon.json`). No event is logged
+per sample.
+
+**Levels.** `ok`, `pressure`, `critical`: commit at or over `memory_*_percent` of its
+limit, or free RAM at or under `memory_*_free_gb` (0 turns a threshold off). A level is
+left only when it is clear by 3 points or 0.5 GiB, and has stayed clear for
+`memory_calm_seconds` (300); a rise counts at once. So a box hovering at a threshold
+doesn't flap: found live, Alienware's `OCControl.Service` on this box grew its private
+memory by ~3 GiB a minute and was recycled near 9–10 GiB, swinging free RAM by gigabytes
+every few minutes. Free RAM is the main signal: with an auto-managed page file Windows grows
+the commit limit on demand, so commit sat at 87% through an ordinary test run on this
+box (limit 36.6 GiB idle, 40.6 under load), which is why the commit defaults are high. On each change the daemon logs `memory` (into or out of pressure) or
+`memory_critical` (red, toasted). Each names the commit, limit, percent and free GiB,
+the five biggest item × kind rows, the three biggest process names outside conductor's
+items (a full scan, so only on a change), and what conductor does now.
+
+**Guard.** While the level is not `ok`, nothing new starts: no launch, resume or
+stage (the queue keeps its order, and the inbox's *Now* line and `conductor status`
+say *launches and stages paused*). Each running item is sent a `tell` (`by:
+conductor`, `MEMORY_TELLS` in `daemon.py`) when the level changes: at pressure, cut
+parallelism (one browser and one test worker, close idle servers, no new parallel
+subagents or workflows); at critical, one process at a time and commit work so far;
+back at ok, it may return to normal. A running executor is **never** killed for
+memory. A critical level also says, in its event and toast, to close what Matt can.
+
+**Leftovers.** When an item's executor exits (any outcome), and when a stage is
+discarded, conductor kills what it left running in its worktree (`reaped`, with each
+process and the MiB freed). A leftover is an **orphan** (its parent is gone: it
+outlived the executor or the shell that started it) started while the item ran (5s
+before its start, up to now) whose working folder is the worktree or under it, or a
+tool (`chromium`, `vite`, `playwright`, `node`, `python`, `shell`) whose command line
+names the worktree. It is killed with everything under it. A terminal or editor Matt
+opened on the worktree has a live parent, so it is never matched. Never reaped: a run
+target's process tree, another item's or a stage's, or the daemon and its parents. The
+scan reads creation times and psutil's parent map first (a working folder costs ~10ms
+per process), about 0.15s on a box of 400 processes. Items run in the main checkout (`worktrees = false`)
+are never reaped. A leftover worktree's removal retry (`leftovers.json`) reaps first,
+with the window from the item's `start` event to its `finish`: found live, 030's Vite
+preview and twenty waiter loops (`tail`, `grep`, `bash`) held its worktree for a day.
+
+**Death made visible.** A clean stop removes `daemon.json`, so one left by a process
+that is gone means the daemon died. The next start logs `daemon_died` (red, toasted)
+with the dead pid, its last heartbeat, how long nothing ran, the last memory sample,
+and what was in `running/`. The app's header and `conductor status` say **died** (with
+the last heartbeat) instead of *not running*, and **not answering** for a live daemon
+whose heartbeat is more than three samples (at least 90s) old.
+
+**Staging is cheap already.** A staged item holds no process while it waits for its
+lock: the stage session ends with its plan, and the resume is a new
+`claude --resume`.
+
 ## Toasts
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
@@ -1148,16 +1231,19 @@ without the item:
 
 Then every event after the read mark, grouped **Red** (tamper first,
 then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`,
-`pick_failed`),
+`pick_failed`, `amend_refused`, `memory_critical`, `daemon_died`),
 **Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
-included), **Other**; then **Now**: per repo, what is running (or merging), staged
+included), **Other**; then **Now**: first the memory line (`memory.line`: commit of
+limit, percent, free GiB, the biggest item from the daemon's latest sample, and the
+level, bold with *launches and stages paused* when not ok), then per repo, what is running (or merging), staged
 (`staging`/`staged`), queued, waiting or held, and *audit pending* if notes are unused,
 plus proposed items. A hold stays in
 the Holds section until the item starts, merges, finishes or is cancelled, or a
 reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
 `stage` and `worktree` events are left out of the inbox (they are in
-`conductor events`). `conductor status` lists the same per repo: running (pid, branch,
+`conductor events`). `conductor status` prints the daemon (running, **not answering**
+with a stale heartbeat, **died**, or not running) and the same memory line, then per repo: running (pid, branch,
 `readonly`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
 *audit pending* line when the repo has unused audit notes.
 `conductor inbox` prints the same thing without moving the mark.
@@ -1196,13 +1282,16 @@ On Windows its reads can briefly block the daemon's renames; the daemon retries 
 (`util.retry_io`, up to 3s). It never moves a queue file. Its only writes are signal files, answer
 files, its own settings, starting the daemon, and opening a console on a finished session.
 
-**Header.** The project's state, whether its daemon is alive (`.conductor/daemon.json`,
-pid + creation time), and a count of the app's signals still waiting in `signals/` (or
-rejected as `.bad`). *Start daemon* spawns `<python> -m conductor run <folder>` (the
+**Header.** The project's state, its daemon (`.conductor/daemon.json`, pid + creation
+time: **running**, amber **not answering** when its heartbeat is stale, red **died**
+when its lock outlived it, or **not running**; see *Memory*), and a count of the app's
+signals still waiting in `signals/` (or rejected as `.bad`). A second line is the memory
+line (`memory.line`, as in the inbox's *Now*), amber under pressure, red when critical.
+*Start daemon* spawns `<python> -m conductor run <folder>` (the
 console `python.exe` even when the app runs under `pythonw.exe`; git calls pass
 `CREATE_NO_WINDOW` too, so nothing flashes a console window)
-detached (no window, its own process group, out of the caller's job object when
-allowed), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log`; *Stop daemon…* asks first,
+detached through a launcher that exits (no live parent, no window, its own process group, out of the caller's job object when
+allowed: *Platform notes*), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log`; *Stop daemon…* asks first,
 then writes a `stop: daemon` signal. Executors and stages keep running either way.
 Each run target gets a **Run <name>** button beside them, reading `● up`, `● starting`
 or `● down` (green, amber, grey; probed each refresh); a click writes `run: <name>`,
@@ -1337,6 +1426,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | kind | when | notable detail |
 |---|---|---|
 | `daemon_start` / `daemon_stop` | daemon lifecycle | pid; running items at stop; stop `reason` (`signal`: a `stop: daemon` signal, `interrupt`: Ctrl+C, `error`: three ticks in a row failed on an `OSError`) |
+| `daemon_died` | at start: the previous daemon left `daemon.json` and is gone, so it never stopped cleanly (red) | pid, started, last_beat, gap, memory (its last sample: at, level, commit, limit, free), running |
+| `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
+| `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded) |
 | `invalid` | bad item, signal, stray queue folder, bad config | error |
@@ -1364,7 +1456,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
 | `checkpoint` | a `checkpoint:` signal started a new session view (its id is its number) | label, by |
 | `progress` | the executor called `progress` | seq, at, note, eta, done, remaining |
-| `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id) | text, by |
+| `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message | text, by |
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`/`progress`; an amendment also `prompt`/`resume`), text, waited_seconds; kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
@@ -1445,6 +1537,14 @@ Windows still records the daemon as the executors' parent, so `taskkill /T` on t
 daemon kills them too. To stop only the daemon use Ctrl+C or `taskkill /F /PID <pid>`
 without `/T`.
 
+A long-lived process another one starts (the daemon from the app's **Start daemon**, a
+run target from the daemon) goes through `procs.spawn_detached`: a short-lived Python
+launcher starts it (own process group, no window, out of the caller's job when the job
+allows breakaway) and exits, so the process has no live parent and no tree kill of the
+caller reaches it. What it returns is a `Detached` (pid, creation time), not a
+`Popen`: the exit code of a process that isn't your child is never known. Executors,
+stages and merge executors stay the daemon's own children, so their exit codes are kept.
+
 ## Development
 
 The suite runs against a fake executor (`tests/fake_claude.py`, which obeys `FAKE …`
@@ -1453,9 +1553,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~25s, 136 tests)
+uv run pytest            # the fast lane, after every change (~25s quiet, ~40s loaded; 164 tests)
 uv run pytest -m slow    # the slow lane alone (~50s)
-uv run pytest -m ""      # everything (~70s, 186 tests); run this before committing
+uv run pytest -m ""      # everything (~70s quiet, ~100s loaded; 219 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -1471,7 +1571,12 @@ A staging prompt makes the fake obey only `FAKE stage-…` lines and remember th
 under its session id; `--resume` recalls it, so a test can see that a resumed session
 kept what it read while staging. `FAKE pick <path>` adds `pick: <path>` to the report
 header after `carry:` (a test writes the manifest and images with `FAKE commit` first);
-picker tests stub the browser and bind port 0. `FAKE ask {json}` calls the
+picker tests stub the browser and bind port 0. `FAKE leave <s>` starts a process in the
+worktree that outlives the executor and `FAKE hog <MB> <s>` a child holding touched
+memory (each pid in the report) for the reaper and sampler. The test template turns
+every memory threshold off, so the box's real memory never pauses a test; guard tests
+set `daemon.memory_probe` to a stand-in box. `procs.claude_ancestor` is stubbed for
+every test (the suite usually runs inside Claude Code). `FAKE ask {json}` calls the
 real ask server through the item's `--mcp-config` using `tests/mcp_client.py`, a
 scripted MCP client that also runs standalone:
 `python tests/mcp_client.py <mcp.json> '{"question": "…", "default": "…"}'`. The sandbox

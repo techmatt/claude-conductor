@@ -79,6 +79,11 @@ class ProjectView(QWidget):
         head.addWidget(self.start_btn)
         head.addWidget(self.stop_btn)
         lay.addLayout(head)
+        # The header's second line: the box's memory (`memory.line`), amber under
+        # pressure, red when critical.
+        self.memory_label = QLabel()
+        self.memory_label.setStyleSheet(f"color: {theme.MUTED}")
+        lay.addWidget(self.memory_label)
         self.tabs = QTabWidget()
         self.repos_panel = ReposPanel(project, notify)
         self.questions_panel = QuestionsPanel(project, notify)
@@ -143,8 +148,20 @@ class ProjectView(QWidget):
         self.state_label.setText(f"{dot(snap.state)} <b>{snap.project}</b> · {what}")
         d = snap.daemon
         since = f", since {clock(d.started)}" if d.started else ""
-        self.daemon_label.setText(f"· daemon <b style='color:{theme.GREEN}'>running</b> (pid {d.pid}{since})"
-                                  if d.alive else f"· daemon <b style='color:{theme.RED}'>not running</b>")
+        beat = clock(d.beat) if d.beat else "never"
+        if d.alive and d.stale:
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.AMBER}'>not answering</b> "
+                                      f"(pid {d.pid}, last heartbeat {beat})")
+        elif d.alive:
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.GREEN}'>running</b> (pid {d.pid}{since})")
+        elif d.died:
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>died</b> (pid {d.pid}, "
+                                      f"last heartbeat {beat}; it never stopped cleanly)")
+        else:
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>not running</b>")
+        text, level = snap.memory
+        colour = {"pressure": theme.AMBER, "critical": theme.RED}.get(level)
+        self.memory_label.setText(f"<b style='color:{colour}'>{text}</b>" if colour else text)
         self.start_btn.setEnabled(not d.alive)
         self.stop_btn.setEnabled(d.alive)
         self._update_run_buttons(snap)
