@@ -402,9 +402,13 @@ class ReposPanel(Panel):
                     self.tree.setItemWidget(w, 4, compact_button("Clear hold", lambda _=False, r=repo: self._clear(r),
                                                                  tone="danger"))
                 elif key[0] == "queued":
-                    self.tree.setItemWidget(w, 4, compact_button("Cancel", lambda _=False, i=key[1]: self._cancel(i)))
+                    self.tree.setItemWidget(w, 4, compact_buttons(
+                        ("Cancel", lambda _=False, i=key[1]: self._cancel(i), None),
+                        ("Amend…", lambda _=False, i=key[1]: self._amend(i), None)))
                 elif key[0] == "run" and look == "run":
-                    self.tree.setItemWidget(w, 4, compact_button("Tell…", lambda _=False, i=key[1]: self._tell(i)))
+                    self.tree.setItemWidget(w, 4, compact_buttons(
+                        ("Tell…", lambda _=False, i=key[1]: self._tell(i), None),
+                        ("Amend…", lambda _=False, i=key[1]: self._amend(i), None)))
                 elif key[0] in ("done", "old"):
                     specs = [("Open in terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
                     if pick_state and (ref := self._picks.get(key[1])):
@@ -444,6 +448,17 @@ class ReposPanel(Panel):
             "it answers through a progress line.")
         if ok and text.strip():
             self.signal_sent(f"message to {item_id}", actions.tell(self.control, item_id, text))
+
+    def _amend(self, item_id: str) -> None:
+        text, ok = QInputDialog.getMultiLineText(
+            self, f"Amend {item_id}",
+            f"An addition to {item_id}'s prompt; where they conflict, it wins.\nQueued: appended at "
+            "launch. Staged: added to the resume message, the stage kept. Running: arrives after its "
+            "next tool call.")
+        if ok and text.strip():
+            path = actions.amend(self.control, item_id, text)
+            self.notify(f"amendment to {item_id}: wrote queue/{path.parent.name}/{path.name}; "
+                        "the daemon delivers it and logs `amended`")
 
     def _open_session(self, item_id: str) -> None:
         open_session(self, self.project, item_id, self._sessions.get(item_id))

@@ -264,7 +264,7 @@ def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
 # or an invalid event is always activity, whatever its kind.
 ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "ask", "answer", "default", "late", "question_closed",
                   "approve", "cancel", "reorder", "clear", "edited", "request", "request_failed",
-                  "daemon_start", "daemon_stop", "progress", "tell", "delivered", "resolve",
+                  "daemon_start", "daemon_stop", "progress", "tell", "amended", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed",
                   "pick_open", "pick_saved", "pick_failed"}
 ALWAYS_KINDS = RED_KINDS | {"warning"}
@@ -302,7 +302,13 @@ def activity_text(ev: Event) -> str:
         case "tell":
             return f"message #{ev.id} to {name}{by}: {d.get('text')}"
         case "delivered":
+            if d.get("amend"):
+                return f"amendment #{d['amend']} reached {name} (via {d.get('via')})"
             return f"message #{d.get('tell')} reached {name}"
+        case "amended":
+            return f"amendment #{ev.id} to {name}{by}, while {d.get('state')} ({d.get('delivery')}): {d.get('text')}"
+        case "amend_refused":
+            return f"amendment to {name} refused{by}: {d.get('reason')}"
         case "ask":
             how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
             return f"question asked by {name} ({how}): {d.get('text')}"

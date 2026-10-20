@@ -56,7 +56,12 @@ def describe(ev: Event) -> str:
             text = f"message #{ev.id} for {who}: {d.get('text')}"
         case "delivered":
             waited = f" after {d['waited_seconds']}s" if d.get("waited_seconds") is not None else ""
-            text = f"{who} got message #{d.get('tell')}{waited} (via {d.get('via')})"
+            what = f"amendment #{d['amend']}" if d.get("amend") else f"message #{d.get('tell')}"
+            text = f"{who} got {what}{waited} (via {d.get('via')})"
+        case "amended":
+            text = f"amendment #{ev.id} for {who} (while {d.get('state')}: {d.get('delivery')}): {d.get('text')}"
+        case "amend_refused":
+            text = f"amendment for {who} refused (while {d.get('state')}): {d.get('reason')}; {d.get('path')} left in place"
         case "run_start":
             how = "already starting" if d.get("reused") else "started"
             text = f"run target `{d.get('target')}` {how} (pid {d.get('pid')})"

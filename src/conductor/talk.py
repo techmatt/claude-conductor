@@ -1,8 +1,10 @@
 """Progress lines and messages into a running executor: the files behind `progress`,
-`tell` and `delivered`, and the Claude Code hook that delivers messages.
+`tell`, `amended` and `delivered`, and the Claude Code hook that delivers messages.
 
     .conductor/progress/<repo>__<NNN_name>.jsonl     one line per `progress` tool call
-    .conductor/mail/<repo>__<NNN_name>/<id>.json     a message waiting (id: its `tell` event)
+    .conductor/mail/<repo>__<NNN_name>/<id>.json     a message waiting (id: its `tell` or
+                                                     `amended` event; an amendment may wait
+                                                     for a queued item's launch to take it)
     .conductor/mail/<repo>__<NNN_name>/<id>.delivered.json    delivered (adds `via`, `delivered`)
     .conductor/mail/<repo>__<NNN_name>/<id>.undelivered.json  the executor exited first
 
@@ -33,7 +35,7 @@ import threading
 from fnmatch import fnmatchcase
 from pathlib import Path
 
-from .util import parse_stamp, stamp, write_text
+from .util import clock, parse_stamp, stamp, write_text
 
 HOOK_TIMEOUT_SECONDS = 15
 SHELL_TOOLS = ("Bash", "PowerShell")
@@ -94,10 +96,28 @@ def progress_items(control: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------- messages
-def post(control: Path, item: str, msg_id: int, text: str, by: str | None) -> Path:
+def post(control: Path, item: str, msg_id: int, text: str, by: str | None, **extra) -> Path:
+    """A message waiting for `item`. An amendment carries `kind: amend` and the `state`
+    the item was in; it may wait for a queued or staged item until its launch takes it."""
     path = mail_dir(control, item) / f"{msg_id}.json"
-    write_text(path, json.dumps({"id": msg_id, "item": item, "text": text, "by": by, "sent": stamp()}))
+    write_text(path, json.dumps({"id": msg_id, "item": item, "text": text, "by": by, "sent": stamp(), **extra}))
     return path
+
+
+def is_amend(msg: dict) -> bool:
+    return msg.get("kind") == "amend"
+
+
+def move_mail(control: Path, old: str, new: str) -> None:
+    """A reorder renamed queued `old` to `new`: its waiting amendments follow it."""
+    for p in pending(control, old):
+        try:
+            msg = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        post(control, new, msg["id"], msg.get("text", ""), msg.get("by"),
+             **{k: v for k, v in msg.items() if k not in ("id", "item", "text", "by")})
+        p.unlink(missing_ok=True)
 
 
 def pending(control: Path, item: str) -> list[Path]:
@@ -155,10 +175,28 @@ def context_text(messages: list[dict]) -> str:
     parts = []
     for m in messages:
         via = f" via {m['by']}" if m.get("by") and m["by"] != "unknown" else ""
-        parts.append(f"MESSAGE #{m['id']} from Matt{via}, sent through conductor while you work"
-                     f" ({m.get('sent', '')}):\n{m.get('text', '')}")
+        what = ("AMENDMENT #{id} from Matt{via}, an addition to the prompt you are running, sent through "
+                "conductor while you work" if is_amend(m) else
+                "MESSAGE #{id} from Matt{via}, sent through conductor while you work").format(id=m["id"], via=via)
+        parts.append(f"{what} ({m.get('sent', '')}):\n{m.get('text', '')}")
     return ("\n\n".join(parts) + "\n\nTreat this as an instruction from Matt: where it conflicts with the "
             "prompt, it wins. Change your plan if it asks you to, and answer it with the `progress` tool.")
+
+
+def keep_amendment(path: Path, msg: dict) -> None:
+    """Append one amendment, as delivered (or never), to the item's amendments file
+    beside its report: what the executor was told, and when."""
+    if msg.get("delivered"):
+        how = f"delivered {clock(msg['delivered'])} via {msg.get('via')}"
+    else:
+        how = "never delivered: the executor exited first"
+    head = "" if path.is_file() else f"# Amendments to {msg.get('item')}\n\n"
+    by = f" by {msg['by']}" if msg.get("by") else ""
+    entry = (f"## Amendment #{msg.get('id')}\n\nAmended {clock(msg['sent']) if msg.get('sent') else '?'}{by}, "
+             f"while {msg.get('state', '?')}; {how}.\n\n{str(msg.get('text', '')).strip()}\n\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(head + entry)
 
 
 def waited(msg: dict) -> int | None:

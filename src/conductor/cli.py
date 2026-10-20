@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | checkpoint | open | run-target | pick | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | amend | checkpoint | open | run-target | pick | init | app`."""
 
 from __future__ import annotations
 
@@ -182,6 +182,38 @@ def cmd_tell(args) -> int:
         return 1
     print(f"wrote signals/{path.name}: the daemon logs `tell`, and the executor gets the message "
           "after its next tool call (`delivered`)")
+    return 0
+
+
+def cmd_amend(args) -> int:
+    from .app import actions
+    cfg, log = _open(args.control)
+    view = state.scan(cfg, log)
+    live = {*view.running, *view.staged, *(it.id for q in view.queued.values() for it in q)}
+    hits = sorted(set(_named(live, args.item)))
+    if len(hits) != 1:
+        done = _named(view.finishes, args.item)
+        why = (f"{args.item!r} is ambiguous among {hits}" if hits else
+               f"{done[0]} has finished; a correction to finished work is a new item" if done else
+               f"no queued, staged or running item {args.item!r}")
+        print(f"conductor: {why}", file=sys.stderr)
+        return 1
+    item_id = hits[0]
+    if view.running.get(item_id, {}).get("phase", "exec") != "exec" or item_id in view.finishes:
+        print(f"conductor: {item_id} has finished executing; a correction to finished work is a new item",
+              file=sys.stderr)
+        return 1
+    text = " ".join(args.text)
+    if len(args.text) == 1 and Path(args.text[0]).is_file():
+        text = Path(args.text[0]).read_text(encoding="utf-8")
+    try:
+        path = actions.amend(cfg.control, item_id, text, by="cli")
+    except ValueError as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+    how = ("after its next tool call" if item_id in view.running else
+           "in the resume message (the stage is kept)" if item_id in view.staged else "in its prompt at launch")
+    print(f"wrote {cfg.rel(path)}: the daemon logs `amended`, and the executor gets it {how}")
     return 0
 
 
@@ -376,6 +408,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("text", nargs="+", help="the message")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_tell)
+    sp = sub.add_parser("amend", help="add to a queued, staged or running item's instructions")
+    sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
+    sp.add_argument("text", nargs="+", help="the amendment, or the path of a file holding it")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_amend)
     sp = sub.add_parser("checkpoint", help="start a new checkpoint (a session boundary) via a signal")
     sp.add_argument("label", nargs="*", help="e.g. session start")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")

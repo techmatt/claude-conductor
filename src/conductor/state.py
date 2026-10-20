@@ -79,7 +79,7 @@ def scan(cfg: Config, log: EventLog) -> View:
             if d.name not in cfg.repos:
                 view.stray.append(d)
     for repo in cfg.repos:
-        q = [items.parse(p, repo) for p in sorted((qroot / repo).glob("*.md"))] if (qroot / repo).is_dir() else []
+        q = [items.parse(p, repo) for p in items.item_files(qroot / repo)]
         view.queued[repo] = sorted(q, key=lambda i: (i.num, i.name))
         for rec in sorted(cfg.path("running", repo).glob("*.run.json")) if cfg.path("running", repo).is_dir() else []:
             if rec.with_name(rec.name.removesuffix(".run.json") + ".md").is_file():

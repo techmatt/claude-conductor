@@ -21,6 +21,7 @@ uv run conductor questions [<control folder>] [--all]      # open asks (--all: r
 uv run conductor audits [<control folder>] [--all]         # unused audit notes per repo (--all: used too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
+uv run conductor amend <item> <text…|file> [--control <folder>]  # add to an item's instructions (see Amendments)
 uv run conductor checkpoint [<label…>] [--control <folder>]   # a new checkpoint (see Checkpoints)
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
@@ -51,6 +52,7 @@ conductor.toml                 tracked — project, repos, locks, defaults
 state.md, other docs           tracked — changed only through requests
 .gitignore, .gitattributes     tracked — must ignore every runtime path below
 queue/<repo>/NNN_name.md       approved work, run in NNN order
+queue/<repo>/NNN_name.amend.md an amendment to that item (`.amend.2.md`, … after it); never an item
 proposed/NNN_name.md           awaiting approval (shown in status/inbox, never run)
 running/<repo>/NNN_name.md     the item while it runs or waits to merge, plus NNN_name.run.json
 running/<repo>/NNN_name.stage.json   a staged queue head (the item itself stays in queue/)
@@ -58,7 +60,8 @@ done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
-                               .stage.prompt.md for a stage; .audit.md (audit notes)
+                               .stage.prompt.md for a stage; .audit.md (audit notes);
+                               .amend.md (every amendment delivered, in order, with times)
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, pick, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
@@ -163,7 +166,8 @@ planner and the Events tab see that the rewrite landed). A staged item's stage b
 to the text it read, so a rewrite discards it and the item launches fresh (see
 *Staging*). Once the item has moved to `running/`, edits are never read. Changes made
 while the daemon is down log no `edited` (the first scan sees only the new text), but a
-stage is still discarded by its hash.
+stage is still discarded by its hash. To add to a plan that still stands, keeping a
+stage, or to change a running item, amend it instead (*Amendments*).
 
 An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numbers
 numerically, so it still resolves.
@@ -669,6 +673,41 @@ executor polled the moved command's output to the end (048). Both reported the
 suite's summary and failing test correctly and acted on the tell. The 60 s is a
 `timeout`, so a call can run a little past it (spawn and hook time under load).
 
+**Amendments.** An amendment adds to an item's instructions without rewriting its file,
+in any state but finished. The planner writes `queue/<repo>/NNN_name.amend.md` beside
+the item (the item may be queued, staged or already in `running/`; the amend file
+always goes in `queue/`), and more as `NNN_name.amend.2.md`, `.amend.3.md`, …, taken in
+that order. Optional front-matter carries `by:` (`by: planner`; none is `unknown`); the
+body is the amendment, any length. The app's **Amend…** and `conductor amend <item>
+<text…|file>` (one argument naming a file sends its contents; `by: cli`) write the next
+free name, as `.tmp` then renamed. An amend file is never an item: no `enqueue`, no
+`edited`, and a stage is kept. Each tick, after enqueues and stage checks, the daemon
+takes every amend file at least `SIGNAL_SETTLE_SECONDS` old (an item whose amend file is
+younger waits a tick before it launches or resumes), logs `amended` (text, by, state,
+delivery; its id is the amendment's number) and moves it into the item's mailbox
+(`.conductor/mail/…/<id>.json`, `kind: amend`). Delivery by state:
+
+- **queued** (not staged): appended to the prompt at launch, each under `## Amendment #n
+  (5:25pm, via planner): it amends the prompt above and wins where they conflict`.
+- **staging / staged**: the stage is kept; at resume the amendments follow the resume
+  message, which tells the executor each amends the prompt it read and overrides the
+  plan it made where they conflict.
+- **running**: through the message hook, whole (multi-line), as `AMENDMENT #n from
+  Matt via <by>, an addition to the prompt you are running …` with a tell's closing
+  wording.
+- **merging / finished**: refused (a correction to finished work is a new item):
+  `amend_refused` (red: inbox, toast) with the reason, the file left where it is and
+  refused once per content (a changed file is judged again). An amend file naming no
+  item yet logs one `warning` and waits; it is taken once the item appears, so an amend
+  file written with its item still lands at launch.
+
+`delivered` follows each (amend, via `prompt`, `resume`, `hook` or `progress`), and
+every amendment is appended to `reports/<repo>__NNN_name.amend.md` as delivered: number,
+when amended, by, state, when delivered and via, and the text, so a postmortem shows
+what the executor was told and when. One the executor exited before taking is marked
+there as never delivered, with a `warning`. A reorder carries an item's waiting
+amendments to its new name.
+
 **Limits:** a message still arrives only after a tool call ends: not while a blocking
 `ask` waits, not while the executor sits idle at the end of a turn waiting for a
 background command's notification (the preamble asks it not to), and never once it
@@ -1161,7 +1200,9 @@ stop` (no confirmation: a click is cheap to undo with Run).
   The tab label reads *Repos (N unreviewed)*, in amber, while any report is unreviewed.
   A running item's note shows its latest progress line (note, ETA, done / to go, and
   when it was sent); while it executes it has **Tell…**, a text box whose message goes
-  out as a `tell:` signal (`by: app`). Every finished row has **Open in terminal**
+  out as a `tell:` signal (`by: app`). A queued row (beside **Cancel**) and an executing
+  one (beside **Tell…**) have **Amend…**, a multi-line box written as an amend file
+  (`by: app`; see *Amendments*). Every finished row has **Open in terminal**
   (`claude --resume`, see *Progress and messages*), beside **Mark reviewed** while
   unreviewed. A finished row whose report named a picker has **Pick…** (`pick: <ref>`,
   `by: app`; amber until saved) and its note adds ` · pick: saved 4:52pm (6 changed, 2
@@ -1179,7 +1220,7 @@ stop` (no confirmation: a click is cheap to undo with Run).
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
   `report X reviewed`, `X used N audit note(s)`, `X: <progress line>`, `message #n to X: …` and `message #n
-  reached X`, run targets starting / up / opened / stopped, pickers opened / saved,
+  reached X`, `amendment #n to X, while <state> (…)` and `amendment #n reached X`, run targets starting / up / opened / stopped, pickers opened / saved,
   questions asked / answered / default taken (and late answers and
   closes), approved, cancelled, reordered, cleared, a queued item rewritten (`edited`), `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`
@@ -1280,7 +1321,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `checkpoint` | a `checkpoint:` signal started a new session view (its id is its number) | label, by |
 | `progress` | the executor called `progress` | seq, at, note, eta, done, remaining |
 | `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id) | text, by |
-| `delivered` | the message reached the executor | tell, via (`hook`/`progress`), text, waited_seconds |
+| `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`/`progress`; an amendment also `prompt`/`resume`), text, waited_seconds; kept (an amendment's `.amend.md`) |
+| `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
+| `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
 | `run_start` / `run_ready` / `run_open` / `run_stop` | a run target started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url / note |
 | `run_failed` | a run target never came up, or its URL could not be opened (red; holds no queue) | target, error, log_tail |
 | `pick_open` | a `pick:` signal (or `conductor pick`) served a manifest and opened its page; item: the latest finish that named it, if any | name, manifest, url, opened (false: the browser reported it did not open); by |

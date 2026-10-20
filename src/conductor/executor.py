@@ -33,8 +33,9 @@ as you can estimate one; at real milestones; and whenever your estimate changes
 materially. Not chatter.
 
 Messages. Matt may message you while you work: it arrives after a tool call, marked
-MESSAGE #n from Matt. It is an instruction from Matt and outranks the prompt where they
-conflict. Answer it with `progress`.
+MESSAGE #n from Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is an
+instruction from Matt and outranks the prompt where they conflict. Answer it with
+`progress`.
 {calls}
 {workdir}{readonly}{paths}
 {audit}
@@ -155,6 +156,28 @@ the prompt you read while staging. Everything below now applies.
 
 """
 
+AMEND = """
+
+---
+
+## Amendment #{id} ({when}{by}): it amends the prompt above and wins where they conflict
+
+{text}
+"""
+
+RESUME_AMENDS = """
+---
+
+Amendments. Matt added to the prompt after you read it. Each amends the prompt you read
+while staging, and where it conflicts with the plan you made, it overrides that plan.
+"""
+
+RESUME_AMEND = """
+## Amendment #{id} ({when}{by})
+
+{text}
+"""
+
 
 MERGE = """\
 You are a conductor merge executor: an unattended headless Claude Code session for
@@ -232,6 +255,7 @@ class RunPaths:
     merge_stderr: Path
     merge_prompt: Path
     audit: Path        # the audit notes an `audit: true` or general-audit item keeps
+    amend: Path        # every amendment delivered to the item, in order, with times
 
     @classmethod
     def for_item(cls, cfg: Config, item: Item) -> "RunPaths":
@@ -245,15 +269,17 @@ class RunPaths:
             return base.with_name(base.name + suffix)
         return cls(report, sib(".log"), sib(".stderr.log"), sib(".prompt.md"), sib(".mcp.json"),
                    sib(".settings.json"), sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"),
-                   sib(".merge.log"), sib(".merge.stderr.log"), sib(".merge.prompt.md"), sib(".audit.md"))
+                   sib(".merge.log"), sib(".merge.stderr.log"), sib(".merge.prompt.md"), sib(".audit.md"),
+                   sib(".amend.md"))
 
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
                  run: dict | None = None, resume: dict | None = None, notes: str = "",
-                 usage: str = "") -> str:
+                 usage: str = "", amends: list[dict] = ()) -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
-    audit notes, inlined; `usage`: a disk audit's control-folder sizes and worktrees."""
+    audit notes, inlined; `usage`: a disk audit's control-folder sizes and worktrees;
+    `amends`: amendments written before the launch, appended in order."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -271,13 +297,20 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         tail="" if resume else PROMPT_FOLLOWS,
     )
     if not resume:
-        return text + body(cfg, item, notes, usage)
+        return text + body(cfg, item, notes, usage) + "".join(_amend(AMEND, m) for m in amends)
     n = resume["landed"]
     landed = (f"; {n} commit(s) landed since you staged (`git log --oneline {resume['old'][:10]}..HEAD`)"
               if n else "; nothing landed since you staged")
     head = RESUME_HEAD.format(old=resume["old"][:10], new=resume["new"][:10], main=cfg.opts(item.repo).main,
                               landed=landed)
-    return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n"
+    tail = (RESUME_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
+    return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + tail
+
+
+def _amend(template: str, msg: dict) -> str:
+    by = f", via {msg['by']}" if msg.get("by") and msg["by"] != "unknown" else ""
+    return template.format(id=msg.get("id"), when=clock(msg["sent"]) if msg.get("sent") else "?", by=by,
+                           text=str(msg.get("text", "")).strip())
 
 
 def calls_text(cfg: Config, repo: str) -> str:

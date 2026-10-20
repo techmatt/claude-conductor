@@ -131,11 +131,25 @@ def number_matches(name: str, ref: str) -> bool:
     return name == ref or num == ref or (ref.isdigit() and num.isdigit() and int(num) == int(ref))
 
 
+# An amendment to an item: `NNN_name.amend.md`, then `NNN_name.amend.2.md`, ... beside
+# it in `queue/<repo>/`, applied in that order. Never an item file itself.
+AMEND_RE = re.compile(r"^(.+)\.amend(?:\.(\d+))?$")
+
+
+def amend_of(path: Path) -> tuple[str, int] | None:
+    """(item name, order) for an amend file's path, or None for anything else."""
+    m = AMEND_RE.match(path.stem) if path.suffix == ".md" else None
+    return (m.group(1), int(m.group(2) or 1)) if m else None
+
+
+def item_files(folder: Path) -> list[Path]:
+    """The item files in `folder`: every `*.md` but an amend file."""
+    return [p for p in sorted(folder.glob("*.md")) if amend_of(p) is None] if folder.is_dir() else []
+
+
 def find(folder: Path, ref: str) -> list[Path]:
-    """The item files in `folder` (`*.md`) that `ref` names."""
-    if not folder.is_dir():
-        return []
-    return [p for p in sorted(folder.glob("*.md")) if number_matches(p.stem, ref)]
+    """The item files in `folder` that `ref` names."""
+    return [p for p in item_files(folder) if number_matches(p.stem, ref)]
 
 
 # A reorder renames `NNN_name.md` to `NNN_name<REORDER_TEMP><new name>` first, then to

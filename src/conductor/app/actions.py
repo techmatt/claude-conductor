@@ -2,8 +2,8 @@
 
 The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, checkpoint, run, pick and
 stop are `signals/` files the daemon carries out and logs. Besides those it writes only an
-answer file (the same function `conductor answer` uses), starts the daemon, and opens a
-console on a finished item's session.
+answer file (the same function `conductor answer` uses) and an amend file (as `conductor
+amend` does), starts the daemon, and opens a console on a finished item's session.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from .. import procs, questions
+from .. import items, procs, questions
 
 BY = "app"
 _counter = itertools.count(1)
@@ -74,6 +74,26 @@ def tell(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     if not one:
         raise ValueError("the message is empty")
     return write_signal(control, f"tell: {item_id} {one}", by=by)
+
+
+def amend(control: Path, item_id: str, text: str, by: str = BY) -> Path:
+    """An addition to queued, staged or running `item_id`'s instructions, any length:
+    `queue/<repo>/NNN_name.amend[.N].md` (after any already waiting), written as `.tmp`
+    then renamed. The daemon logs `amended` and delivers it by the item's state."""
+    text = text.strip()
+    if not text:
+        raise ValueError("the amendment is empty")
+    repo, _, name = item_id.partition("/")
+    qdir = Path(control) / "queue" / repo
+    qdir.mkdir(parents=True, exist_ok=True)
+    taken = [a[1] for p in qdir.glob(f"{name}.amend*.md") if (a := items.amend_of(p)) and a[0] == name]
+    n = max(taken, default=0) + 1
+    final = qdir / (f"{name}.amend.md" if n == 1 else f"{name}.amend.{n}.md")
+    tmp = final.with_name(final.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(f"---\nby: {by}\n---\n\n{text}\n")
+    os.replace(tmp, final)
+    return final
 
 
 def checkpoint(control: Path, label: str = "", by: str = BY) -> Path:

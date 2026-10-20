@@ -29,12 +29,18 @@ from . import (audits, executor, git, globs, guard, inbox, items, notify, picker
                talk, targets, worktrees)
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
-from .util import clock, now, parse_stamp, read_text, retry_io, stamp, write_text
+from .util import FrontMatterError, clock, now, parse_stamp, read_text, retry_io, split_front_matter, stamp, write_text
 
 INBOX_REFRESH_SECONDS = 30
 TICK_FAILURES_BEFORE_EXIT = 3     # consecutive ticks failing on an OSError
 SIGNAL_SETTLE_SECONDS = 1.0
 OUTCOME_KINDS = {"answered": "answer", "default": "default"}     # anything else: question_closed
+AMEND_DELIVERY = {
+    "queued": "appended to the prompt at launch",
+    "staging": "added to the resume message; the stage is kept",
+    "staged": "added to the resume message; the stage is kept",
+    "running": "delivered after its next tool call",
+}
 
 
 class DaemonError(RuntimeError):
@@ -113,7 +119,10 @@ class Daemon:
         self.holds = {e.item: e.detail.get("reason") for e in self.log.query(kinds=["hold"])}
         self.q_seen = {(e.kind, e.detail.get("question")) for e in self.log.query(kinds=QUESTION_KINDS)}
         self.progress_seen = {(e.item, e.detail.get("seq")) for e in self.log.query(kinds=["progress"])}
-        self.delivered_seen = {e.detail.get("tell") for e in self.log.query(kinds=["delivered"])}
+        self.delivered_seen = {e.detail.get("tell") or e.detail.get("amend") for e in self.log.query(kinds=["delivered"])}
+        # An amend file refused stays where it is: refused once per content.
+        self.amend_refused = {(e.detail.get("path"), e.detail.get("hash")) for e in self.log.query(kinds=["amend_refused"])}
+        self.amend_waiting: dict[str, str | None] = {}  # amend file → hash, for an item not seen yet
         self._progress_sizes: dict[str, int] = {}
         self.runner = targets.Runner(cfg, self.log)
         self.picker = picker.Server(cfg, self.log)  # no socket until the first `pick:`
@@ -731,7 +740,7 @@ class Daemon:
         listed = [p.stem for p in chosen]
         new = items.renumber(listed)
         pairs = [(o, n) for o, n in zip(listed, new) if o != n]
-        unlisted = {p.stem for p in folder.glob("*.md")} - set(listed)
+        unlisted = {p.stem for p in items.item_files(folder)} - set(listed)
         if clash := sorted(n for _, n in pairs if n in unlisted):
             raise ValueError(f"reorder: the new name(s) {clash} are taken by unlisted items")
         if where != "proposed":
@@ -754,8 +763,8 @@ class Daemon:
             repo = where if where != "proposed" else items.front_repo(folder / f"{name}.md")
             return f"{repo}/{name}" if repo else None
         renamed = [i for o, _ in pairs if (i := item_id(o))]
-        dependents = [items.parse(p, r) for r in self.cfg.repos for p in sorted(self.cfg.path("queue", r).glob("*.md"))]
-        for p in sorted(self.cfg.path("proposed").glob("*.md")):
+        dependents = [items.parse(p, r) for r in self.cfg.repos for p in items.item_files(self.cfg.path("queue", r))]
+        for p in items.item_files(self.cfg.path("proposed")):
             if (r := items.front_repo(p)) is not None:
                 dependents.append(items.parse(p, r))
         for d in dependents:
@@ -832,8 +841,9 @@ class Daemon:
                 retry_io(os.rename, tmp, dst)
                 moved = True
         if j["where"] != "proposed":
-            for o, _ in j["pairs"]:
+            for o, n in j["pairs"]:
                 self._forget(f"{j['where']}/{o}")
+                talk.move_mail(self.cfg.control, f"{j['where']}/{o}", f"{j['where']}/{n}")
         last = self.log.last("reorder", repo=j["where"])
         repeat = (recovered and not moved and last is not None
                   and last.detail.get("before") == j["before"] and last.detail.get("after") == j["after"])
@@ -971,8 +981,91 @@ class Daemon:
             if msg.get("id") in self.delivered_seen:
                 continue
             self.delivered_seen.add(msg.get("id"))
-            self.log.append("delivered", item=msg.get("item"), tell=msg.get("id"), via=msg.get("via"),
-                            text=msg.get("text"), waited_seconds=talk.waited(msg))
+            extra = {"tell": msg.get("id")}
+            if talk.is_amend(msg):
+                extra = {"amend": msg.get("id")}
+                kept = self._keep_amendment(msg)
+                extra["kept"] = self.cfg.rel(kept) if kept else None
+            self.log.append("delivered", item=msg.get("item"), via=msg.get("via"),
+                            text=msg.get("text"), waited_seconds=talk.waited(msg), **extra)
+
+    def _keep_amendment(self, msg: dict) -> Path | None:
+        repo, _, name = str(msg.get("item", "")).partition("/")
+        if repo not in self.cfg.repos:
+            return None
+        path = executor.RunPaths.for_name(self.cfg, repo, name).amend
+        talk.keep_amendment(path, msg)
+        return path
+
+    # ---------------------------------------------------------------- amendments
+    def process_amends(self, view: state.View) -> set[str]:
+        """Take every settled `queue/<repo>/NNN_name.amend[.N].md`, in order, and deliver
+        it by the item's state: a queued or staged item gets it at launch (in its prompt,
+        or in the resume message, the stage kept); a running one after its next tool call.
+        A finished or merging item's is refused and left in place. Returns the items with
+        an amend file still being written: they wait a tick before they launch."""
+        fresh: set[str] = set()
+        queued = {it.id for q in view.queued.values() for it in q}
+        for repo in self.cfg.repos:
+            qdir = self.cfg.path("queue", repo)
+            found = sorted(((a, p) for p in qdir.glob("*.md") if (a := items.amend_of(p))) if qdir.is_dir() else [],
+                           key=lambda t: (t[0], t[1].name))
+            for (name, _), p in found:
+                item_id, rel = f"{repo}/{name}", self.cfg.rel(p)
+                try:
+                    if time.time() - p.stat().st_mtime < SIGNAL_SETTLE_SECONDS:
+                        fresh.add(item_id)
+                        continue
+                except OSError:
+                    continue
+                digest = _file_hash(p)
+                if (rel, digest) in self.amend_refused:
+                    continue
+                where = self._amend_state(item_id, view, queued)
+                if where is None:
+                    if self.amend_waiting.get(rel) != digest:
+                        self.amend_waiting[rel] = digest
+                        self.log.append("warning", item=item_id, paths=[rel],
+                                        note=f"{rel}: no item {item_id} is queued, staged or running; "
+                                             "left in place until it appears")
+                    continue
+                self.amend_waiting.pop(rel, None)
+                reason = None
+                try:
+                    meta, text = split_front_matter(read_text(p))
+                except (FrontMatterError, UnicodeDecodeError) as exc:
+                    meta, text, reason = {}, "", f"unreadable: {exc}"
+                by = str((meta or {}).get("by") or "unknown")
+                text = text.strip()
+                if where in ("finished", "merging"):
+                    reason = (f"{item_id} has finished; a correction to finished work is a new item"
+                              if where == "finished" else
+                              f"{item_id} has finished executing and is merging; a correction to finished work "
+                              "is a new item")
+                elif reason is None and not text:
+                    reason = "the amendment is empty"
+                if reason:
+                    self.amend_refused.add((rel, digest))
+                    self.log.append("amend_refused", item=item_id, paths=[rel], path=rel, hash=digest,
+                                    state=where, reason=reason, by=by)
+                    continue
+                ev = self.log.append("amended", item=item_id, paths=[rel], text=text, by=by, state=where,
+                                     delivery=AMEND_DELIVERY[where])
+                talk.post(self.cfg.control, item_id, ev.id, text, by, kind="amend", state=where)
+                retry_io(p.unlink)
+        return fresh
+
+    def _amend_state(self, item_id: str, view: state.View, queued: set[str]) -> str | None:
+        """queued | staging | staged | running | merging | finished, or None (not seen)."""
+        if run := self.runs.get(item_id):
+            return "running" if run.rec.get("phase", "exec") == "exec" and not run.exited() else "merging"
+        if item_id in view.running:
+            return "running" if view.running[item_id].get("phase", "exec") == "exec" else "merging"
+        if item_id in view.finishes or item_id in view.done:
+            return "finished"
+        if item_id in view.staged and item_id in queued:
+            return view.staged[item_id].get("phase", "staged")
+        return "queued" if item_id in queued else None
 
     def _q_log(self, kind: str, q: questions.Question, paths: list[str], **detail) -> None:
         self.q_seen.add((kind, q.id))
@@ -1035,10 +1128,15 @@ class Daemon:
                 run = self.stages.get(item_id) or self._stage_run(srec)
                 self._discard_stage(run, "the item file changed or left the queue after staging")
                 view.staged.pop(item_id)
+        # After the enqueues (an amend file written with its item finds it queued) and the
+        # stage checks (an amendment never discards a stage; an item change still does).
+        amending = self.process_amends(view)
         reordering = self._reorder_pending()      # its items are under temp names: wait
         for repo, d in state.decide(self.cfg, view).items():
             if repo == reordering:
                 continue
+            if d.action in ("run", "resume") and d.item.id in amending:
+                continue                            # an amend file still being written: next tick
             if d.action == "hold" and d.item and self.holds.get(d.item.id) != d.reason:
                 self.holds[d.item.id] = d.reason
                 self.log.append("hold", item=d.item.id, paths=[self.cfg.rel(d.item.path)], reason=d.reason)
@@ -1143,8 +1241,11 @@ class Daemon:
                             pid=None, error=error)
             self.finish(run, launch_error=error)
             return
+        # Amendments written before the launch: into the prompt, or the resume message.
+        amends = talk.take(cfg.control, item.id, "resume" if stage else "prompt")
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume,
-                                                       notes=self._notes_text(rec), usage=self._disk_usage(rec)))
+                                                       notes=self._notes_text(rec), usage=self._disk_usage(rec),
+                                                       amends=[m for m in amends if talk.is_amend(m)]))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         try:
@@ -1673,6 +1774,11 @@ class Daemon:
         # item, so the red hold must already be on record.
         self.process_talk()
         for msg in talk.set_aside(cfg.control, item_id):
+            if talk.is_amend(msg):
+                kept = self._keep_amendment(msg)
+                self.log.append("warning", item=item_id, amend=msg.get("id"), paths=[cfg.rel(kept)] if kept else [],
+                                note=f"amendment #{msg.get('id')} was never delivered: the executor exited first")
+                continue
             self.log.append("warning", item=item_id, tell=msg.get("id"),
                             note=f"message #{msg.get('id')} was never delivered: the executor exited first")
         if out["status"] == "red":
@@ -1695,7 +1801,7 @@ class Daemon:
         self._close_questions(item_id)
         qdir = cfg.path("queue", repo)
         still_running = any(r.rec["repo"] == repo for r in self.runs.values())
-        if not still_running and not (qdir.is_dir() and any(qdir.glob("*.md"))):
+        if not still_running and not items.item_files(qdir):
             self.log.append("queue_empty", item=item_id, repo=repo, last=item_id)
             # Not this item's own leftover: whatever held it a moment ago still does.
             self._retry_leftovers("queue empty", repo=repo, skip=item_id)
