@@ -32,12 +32,12 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last report reviewed by the planner: 24_lean_session_start
+Last report reviewed by the planner: 25_cleanup_conductor
 Last cleanup: 2026-10-20, after prompt 25
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`) and Word Warriors (`C:\Code\wordwarriors-control`, the newest). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
-What is live, in brief: per-repo queues with worktrees, serial merges, `paths:` concurrency and staging; questions, progress lines, outlines, `tell:` messages and amendments; reviewed reports and checkpoints; run targets, pickers, conductor-owned templates and audit notes; memory sampling with a launch guard and a leftover reaper; the desktop app, where the Repos tab follows one item end to end in its Conversation view.
+What is live, in brief: per-repo queues with worktrees, serial merges, `paths:` concurrency and staging; questions, progress lines, outlines, `tell:` messages and amendments; reviewed reports and checkpoints; run targets, pickers, conductor-owned templates and audit notes; memory sampling with a launch guard and a leftover reaper; the desktop app, where the Repos tab follows one item end to end in its Conversation view. "Restart all" (`CLAUDE.md`, `tools/restart_all.py`) restarts the app and every live daemon, both detached.
 
 The planner docs are split (24). `planner.md` is read whole every session (roles, bridge, prompts, reports, `state.md`, maintenance, **Vocab**). `claude-ai-new-project.md` keeps only new / park / resume and project setup, pointing into `docs/` for mechanics. README is an overview plus an index into `docs/`, one topic per file. A session starts with one signal, `session: start`: conductor writes a checkpoint, then `session.md` (the inbox since the read mark, conductor's reports past the marker above, per-repo maintenance facts), then moves the read mark.
 

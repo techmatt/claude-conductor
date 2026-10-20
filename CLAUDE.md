@@ -14,6 +14,10 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 
 When Matt says "launch the conductor" (or "launch conductor", "start the conductor app", "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\wordwarriors-control`). The app also reopens every remembered project, so naming the newest one is enough. It is a viewer only — it does not start the daemon (`uv run conductor run <control>`), and launching it is not a test, so the sandbox-only rule below does not apply.
 
+## "Restart all"
+
+When Matt says "restart all" (or "restart everything", "restart conductor and the app" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). Running executors are adopted by the new daemon, not killed. The warning still comes first, because a restart is a moment Matt should choose.
+
 ## "Run next prompt"
 
 When Matt says "run next prompt" (or "run the next prompt" and the like):

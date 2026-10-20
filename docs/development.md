@@ -42,3 +42,10 @@ Two scripts in `tools/` serve the maintenance pass (`CLEANUP.md`) and any sessio
 <sandbox control folder> [--shot <png>]` drives the sandbox with the fake executor (an
 item through queue and merge, `session: start`, a request) and then renders the app on
 it offscreen, refusing while the sandbox's own daemon runs.
+
+`uv run python tools/restart_all.py [--check]` is "restart all" (`CLAUDE.md`). It covers every
+live daemon of the `*-control` folders beside this repo, and the app. `--check` lists what a
+restart would interrupt (running or staged items, open questions) and exits 1 if anything
+is active. Without it, each daemon is stopped by `stop: daemon`, waited for and started
+detached (`procs.spawn_daemon`). The app is then killed and started detached with the folders
+it was launched with. No app running: it starts one on the newest control folder.

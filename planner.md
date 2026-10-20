@@ -146,6 +146,7 @@ Queue actions are signals (*Files*). `NNN_name` may be shortened to `NNN`; a que
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt. Not saved yet: says so. |
 | **stop conductor** | Signal `stop: daemon`; running executors carry on and are adopted on restart (the app's Start button). |
+| **restart all** | Not a planner's (no shell): Matt says it in Claude Code in `claude-conductor`. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: can't switch; offers the rest as a new item with `ultracode: true`. |
 | **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item, or into a queued X (too late once running) / lists unused notes per repo (*Now*'s `audit pending:`), reading one only if asked. |
 | **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none, says so. |
