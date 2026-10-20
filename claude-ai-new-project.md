@@ -81,7 +81,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
 
 ## Every session
 
-- Start (Matt says **start a new <project> session**): if folder access isn't granted yet, request access to the control folder, the code repos and `C:\Code\gdrive-sync` first. Read this file (the **Vocab** section included), then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Send `checkpoint: session start` (`by: planner`), then do **check inbox**. Open questions lead the inbox; raise blocking ones first, then any report the checkpoint's warnings name as still unreviewed.
+- Start (Matt says **start a new <project> session**): if folder access isn't granted yet, request access to the control folder, the code repos and `C:\Code\gdrive-sync` first. Read this file (the **Vocab** section included), then `C:\Code\<project>-control\state.md` and the control folder's other tracked docs. Send `checkpoint: session start` (`by: planner`), then do **check inbox**. Open executor questions (in `questions\`, not `state.md`'s *Paged* items) lead the inbox; raise blocking ones first, then any report the checkpoint's warnings name as still unreviewed.
 - **Checkpoints.** A checkpoint is a session boundary. Finished items reviewed before the latest one drop out of the inbox's counts, the app's Repos tab (into its collapsed *Earlier checkpoints* group, below *In flight* and *Finished since checkpoint*) and its Events tab (which starts at the checkpoint). Unreviewed reports, red holds, open questions and anything queued, staged, running or proposed always carry forward, and nothing is deleted. Conductor numbers checkpoints by their event id, so the planner never keeps a counter. `inbox.md` names the current one at the top.
 - Matt raises every next step. The planner answers what is asked and lists open questions; it never assumes or schedules the next leg.
 - `remind me the vocab` prints the **Vocab** table.
@@ -160,6 +160,7 @@ The planner does not summarize a report back. It says what the report changes, w
 
 - **The handoff docs are the active wavefront, not a history.** A line survives only if it would change a future decision and cannot live in code: undecided questions, caveats that would cause a misread, true-but-unenforceable facts. A mechanic lives in its repo's README; the docs point to it. One home per fact.
 - **state.md is status, plan and flags** — what is queued, running, open, ruled — and holds no facts that belong elsewhere.
+- **Waiting on Matt / Open questions / Paged.** Every item for Matt sits in exactly one of three `state.md` sections. *Waiting on Matt* holds only what queued or next work is blocked on, and is raised at every session start until resolved. *Open questions* are decisions the planner needs to author upcoming work; each is asked once, in the reply where it arises, and if Matt doesn't take it up it moves to *Paged* with the planner's default. *Paged* is everything else that is Matt's to do or decide whenever he gets to it: nothing waits on it, so the planner never asks about it, never lists it at session start or closeout, and never asks when. It comes up only when Matt raises it, or when a prompt already touching the same code can carry a paged polish item (said in one line).
 - **Closeout** = the planner writes the final `state.md` (and any doc the session changed) as one request, conductor commits it, and the next session starts from it. No apply scripts, no files for Matt to place. "Prepare for closeout" = list open questions for Matt, items still expecting a report, and parked edits that should ride the next prompt.
 - A mistake the planner repeats becomes one line in the project's docs; a one-off mistake is said in the chat and not carried.
 
@@ -220,7 +221,7 @@ Queue actions are signals: the planner writes a small file into `signals\` with 
 | **park project** | Follows *Park / resume a project*: checks nothing is in flight, does **closeout** while the daemon runs, stops every run target, signals `stop: daemon`, then tells Matt which worktree folders are left to clear and to use **Remove project** in the app. |
 | **resume project** | Tells Matt to start the daemon and **Add project…** in the app, then does **start a new <project> session**. |
 | **context estimate** | Token estimate for this session; ~200k is the warn point. |
-| **prepare for closeout** | Open questions for Matt, items still expecting a report, parked edits that should ride the next prompt. |
+| **prepare for closeout** | Open questions for Matt (never paged items), items still expecting a report, parked edits that should ride the next prompt. |
 | **closeout** | Writes the final `state.md` (and any changed doc) as one request; conductor commits it. |
 | **read the workflow** | Re-reads `claude-ai-new-project.md` (in the conductor repo). |
 | **remind me the vocab** | Prints this table. |
