@@ -14,6 +14,13 @@ and `delivered` events from what it finds. Delivery is a rename (`<id>.json` →
 
 is the executor's PostToolUse hook: after every tool call it hands any waiting messages
 to the session as additional context (stdout JSON), and prints nothing otherwise.
+
+    python -m conductor.talk pre --cap <seconds> [--background=<glob> ...]
+
+is its PreToolUse hook on Bash and PowerShell, which keeps every call short enough for a
+message to get in: a command matching a `background` glob runs with `run_in_background`,
+and any other foreground call's `timeout` is capped (Claude Code moves a command still
+running at its timeout to the background rather than killing it).
 """
 
 from __future__ import annotations
@@ -23,11 +30,13 @@ import json
 import os
 import sys
 import threading
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from .util import parse_stamp, stamp, write_text
 
 HOOK_TIMEOUT_SECONDS = 15
+SHELL_TOOLS = ("Bash", "PowerShell")
 _lock = threading.Lock()
 
 
@@ -160,12 +169,54 @@ def waited(msg: dict) -> int | None:
 
 
 # ---------------------------------------------------------------- the hook
-def hook_settings(python: str, control: Path, item: str) -> str:
-    """The executor's `--settings`: a PostToolUse hook on every tool."""
-    return json.dumps({"hooks": {"PostToolUse": [{"matcher": "", "hooks": [{
+def hook_settings(python: str, control: Path, item: str, cap_seconds: float = 0,
+                  background: list[str] = ()) -> str:
+    """The executor's `--settings`: a PostToolUse hook on every tool, and with a cap or
+    `background` globs, the PreToolUse hook on the shell tools."""
+    hooks = {"PostToolUse": [{"matcher": "", "hooks": [{
         "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
         "args": ["-m", "conductor.talk", "hook", "--control", str(control), "--item", item],
-    }]}]}}, indent=1)
+    }]}]}
+    if cap_seconds > 0 or background:
+        hooks["PreToolUse"] = [{"matcher": "|".join(SHELL_TOOLS), "hooks": [{
+            "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
+            "args": ["-m", "conductor.talk", "pre", "--cap", f"{cap_seconds:g}",
+                     *(f"--background={g}" for g in background)],
+        }]}]
+    return json.dumps({"hooks": hooks}, indent=1)
+
+
+def backgrounds(command: str, globs: list[str]) -> bool:
+    """Does a shell command match one of a repo's `background` globs (whole command,
+    case-sensitive, `*` crossing spaces)?"""
+    text = " ".join(command.split())
+    return any(fnmatchcase(text, g) for g in globs)
+
+
+def pre_tool(event: dict, cap_seconds: float, background: list[str]) -> dict | None:
+    """The tool input a shell call should run with instead, or None to leave it be."""
+    if event.get("tool_name") not in SHELL_TOOLS or not isinstance(event.get("tool_input"), dict):
+        return None
+    tool = dict(event["tool_input"])
+    if tool.get("run_in_background") or not isinstance(tool.get("command"), str):
+        return None
+    if backgrounds(tool["command"], background):
+        tool.pop("timeout", None)
+        return tool | {"run_in_background": True}
+    cap = round(cap_seconds * 1000)
+    timeout = tool.get("timeout")
+    if cap <= 0 or (isinstance(timeout, (int, float)) and 0 < timeout <= cap):
+        return None
+    return tool | {"timeout": cap}       # no timeout means Claude Code's default, 2 minutes
+
+
+def pre_hook(event: dict, cap_seconds: float, background: list[str]) -> str | None:
+    """What the PreToolUse hook prints: the rewritten input, or None."""
+    tool = pre_tool(event, cap_seconds, background)
+    if tool is None:
+        return None
+    return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                                              "updatedInput": tool}})
 
 
 def hook(control: Path, item: str) -> str | None:
@@ -183,13 +234,23 @@ def main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("hook")
     h.add_argument("--control", required=True)
     h.add_argument("--item", required=True)
+    pre = sub.add_parser("pre")
+    pre.add_argument("--cap", type=float, default=0)
+    pre.add_argument("--background", action="append", default=[])
     args = p.parse_args(argv)
     try:
-        sys.stdin.read()                # the hook input; not needed
-    except (OSError, ValueError):
-        pass
+        raw = sys.stdin.buffer.read().decode("utf-8", "replace")     # the hook input
+    except (OSError, ValueError, AttributeError):
+        raw = ""
     try:
-        out = hook(Path(args.control), args.item)
+        if args.cmd == "pre":
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                return 0
+            out = pre_hook(event if isinstance(event, dict) else {}, args.cap, args.background)
+        else:
+            out = hook(Path(args.control), args.item)
     except Exception as exc:            # a hook never breaks the executor's tool call
         print(f"conductor hook: {exc!r}", file=sys.stderr)
         return 0

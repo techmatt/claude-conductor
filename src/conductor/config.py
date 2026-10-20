@@ -17,7 +17,7 @@ RUNTIME = (
     "signals", "inbox.md", "events.db", ".conductor",
 )
 
-REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose"}
+REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background"}
 
 # Shared prose nearly every item touches: exempt from `paths`, merged textually.
 DEFAULT_PROSE = ["CLAUDE.md", "README.md", "docs/**/*.md"]
@@ -37,6 +37,7 @@ class RepoOptions:
     shared: list[str] = field(default_factory=list)      # untracked dirs junctioned into worktrees
     setup: list[str] = field(default_factory=list)       # shell commands run in a new worktree
     prose: list[str] = field(default_factory=lambda: list(DEFAULT_PROSE))   # globs outside `paths`
+    background: list[str] = field(default_factory=list)  # command globs an executor always backgrounds
 
     def is_prose(self, path: str) -> bool:
         return any(globs.matches(path, g) for g in self.prose)
@@ -71,6 +72,7 @@ class Config:
     stage_minutes: float = 30.0
     setup_minutes: float = 10.0
     merge_minutes: float = 10.0      # a merge executor resolving a prose conflict
+    foreground_seconds: float = 60.0  # an executor's foreground shell call moves to the background after this (0: off)
     toasts: bool = True
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
@@ -130,7 +132,7 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
         if not isinstance(table["main"], str) or not table["main"]:
             raise ConfigError(f"{where}.main must be a branch name")
         opts.main = table["main"]
-    for key in ("shared", "setup", "prose"):
+    for key in ("shared", "setup", "prose", "background"):
         value = table.get(key, getattr(opts, key))
         if isinstance(value, str):
             value = [value]
@@ -251,6 +253,7 @@ def load(control: Path) -> Config:
         stage_minutes=float(defaults.get("stage_minutes", 30.0)),
         setup_minutes=float(defaults.get("setup_minutes", 10.0)),
         merge_minutes=float(defaults.get("merge_minutes", 10.0)),
+        foreground_seconds=float(defaults.get("foreground_seconds", 60.0)),
         toasts=bool(defaults.get("toasts", True)),
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],

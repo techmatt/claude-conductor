@@ -103,6 +103,7 @@ ask_default_minutes = 10      # an unanswered non-blocking ask returns its defau
 stage_minutes = 30            # a stage running longer is killed and discarded
 setup_minutes = 10            # per setup command
 merge_minutes = 10            # a merge executor resolving a prose conflict is killed after this
+foreground_seconds = 60       # an executor's foreground shell call moves to the background after this; 0 = off (see Messages)
 toasts = true                 # Windows desktop notifications (see Toasts)
 
 [repos]                       # name = path; relative paths resolve from the control folder
@@ -116,6 +117,7 @@ main = "main"                 # the branch items are cut from and merged into
 shared = ["data", ".venv"]    # untracked folders linked into every worktree (junctions)
 setup = ["uv sync"]           # shell commands run in a new worktree before launch
 prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]   # the default: exempt from `paths`, merged textually
+background = ["npm test*", "*playwright test*"]       # shell commands executors always background (default none; see Messages)
 
 [executor]                    # optional
 command = ["claude"]          # the executable (resolved on PATH)
@@ -351,7 +353,7 @@ default whenever one exists, block only when every default is worse than waiting
 everything else is a branch); the progress rule (a `progress` line at the start, with a
 first ETA once it can estimate, at real milestones, and when the estimate changes
 materially; not chatter); that a message from Matt may arrive after a tool call,
-outranks the prompt where they conflict, and is answered through `progress`; the time limit and kill time; the **absolute report
+outranks the prompt where they conflict, and is answered through `progress`; the *Short calls* rule (background anything over `foreground_seconds`, poll it in calls no longer, don't idle; see *Progress and messages*); the time limit and kill time; the **absolute report
 path** (the only file the executor may write outside its repo); the report header and
 what each status means; the *Pickers* paragraph (when to write a picker manifest, its
 schema inline, and the `pick:` header line: see *Picks*); and that the final message
@@ -361,7 +363,7 @@ The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
 (`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …`);
 its tools are `ask` (see *Questions*) and `progress` (see *Progress and messages*). The
-`--settings` file holds one PostToolUse hook, the message hook (same section), and
+`--settings` file holds the PostToolUse message hook and the PreToolUse *Short calls* hook (same section), and
 `"ultracode": true` for an `ultracode` item. A stage gets neither file.
 
 **Ultracode.** Claude Code's ultracode is a session setting: once it is on, the session
@@ -622,12 +624,56 @@ them renamed `.undelivered.json`, and a `warning` names each.
 
 Proven with Claude Code 2.1.301 headless (`-p`, stream-json): a message sent while a
 real executor worked through a run of `sleep 25` Bash calls reached it after the call
-in progress, and it changed course (see `reports/07_heads_report.md`). **Limits:** a
-message arrives only after a tool call ends, so not during one long command, not while
-a blocking `ask` waits, and never once the executor has made its last tool call (then
-it is undelivered). The injected context is not written to the stream-json log; the
-`delivered` event is the record. The user's own `~/.claude/settings.json` hooks still
-run beside it (`--settings` adds to them).
+in progress, and it changed course (see `reports/07_heads_report.md`). The injected
+context is not written to the stream-json log; the `delivered` event is the record.
+The user's own `~/.claude/settings.json` hooks still run beside it (`--settings` adds
+to them).
+
+**Short calls.** Since a message only gets in between tool calls, conductor keeps
+every executor tool call to about a minute, the headless stand-in for pressing Ctrl+B
+in an interactive session. Word Warriors 034 shows why: a tell waited 461 s because
+the executor, having rightly backgrounded its test run, waited on it with one
+foreground `timeout 590 bash -c 'until grep -q EXIT …; do sleep 10; done'` call; that
+run made 20 such calls of 1–10 minutes, about 113 minutes in all. Two parts:
+
+- The preamble's *Short calls* paragraph: run anything that may take over
+  `foreground_seconds` (default 60) with `run_in_background`, wait on it in polls of at
+  most that long, and don't end the turn to wait (an idle session takes no message).
+- A **PreToolUse hook** on `Bash|PowerShell` in the same `--settings` file:
+  `<python> -m conductor.talk pre --cap <foreground_seconds> --background=<glob> …`.
+  A call already `run_in_background` is left alone. A command matching one of the
+  repo's `background` globs (`fnmatch` on the whole command with runs of whitespace
+  collapsed, case-sensitive, `*` crossing spaces: `npm test*`, `*playwright test*`)
+  gets `run_in_background: true` and loses its `timeout`. Any other call whose
+  `timeout` is missing (Claude Code's default is 2 minutes) or longer than the cap gets
+  `timeout` = the cap. It prints `{"hookSpecificOutput": {"hookEventName":
+  "PreToolUse", "permissionDecision": "allow", "updatedInput": …}}`, or nothing.
+  `foreground_seconds = 0` with no globs drops the hook and the paragraph.
+
+What makes the cap safe (Claude Code 2.1.304, `-p`): a foreground Bash call that
+reaches its `timeout` is not killed but **moved to the background** ("Command did not
+complete within its 60s timeout and was moved to the background (ID: …)"), the tool
+call ends there, and the session is notified when the command finishes, as for one
+started in the background; `-p` keeps the session alive until its background commands
+end. A command moved this way is killed 10 minutes after the move (Claude Code says
+so in the result; measured: moved at 15 s, killed at 10m15s); one started with
+`run_in_background` has no such limit, which is what the `background` globs are for: a
+suite that can run longer.
+
+Proven in the sandbox with real executors (2.1.304) and a 4-minute stand-in suite, a
+tell sent mid-run each time: told only by the preamble, the executor backgrounded the
+suite and polled in 55 s calls, and the tell landed in 21 s (sandbox 047); told by its
+prompt to run the suite as one foreground call with `timeout` 600000, the hook cut it
+to 60 s, the call came back after ~73 s as moved, the tell landed in 52 s, and the
+executor polled the moved command's output to the end (048). Both reported the
+suite's summary and failing test correctly and acted on the tell. The 60 s is a
+`timeout`, so a call can run a little past it (spawn and hook time under load).
+
+**Limits:** a message still arrives only after a tool call ends: not while a blocking
+`ask` waits, not while the executor sits idle at the end of a turn waiting for a
+background command's notification (the preamble asks it not to), and never once it
+has made its last tool call (then it is undelivered). A non-shell tool that runs long
+(an Agent / Task subagent, a Workflow) is not capped.
 
 **Open a finished session.** `conductor open <item>` (and **Open in terminal** in the
 app) opens a new console window running `<executor command> --resume <session id>`
@@ -1086,16 +1132,27 @@ stop` (no confirmation: a click is cheap to undo with Run).
 
 **Panels.**
 
-- *Repos* — per repo: the running item with its phase (`running`, `merging`,
-  `concluding`) and elapsed time, the queue in order with the head's decision (`wait`,
-  `hold`, …) and any invalid item, and a hold row, listed first under its repo (the head
-  item then reads *blocked by hold*): a red hold has a **Clear hold** button
-  (`clear: <repo>`); each queued item has **Cancel** (asks first;
-  `cancel: <repo>/<NNN_name>`). A staged item is the queue head, so it is one row whose
-  state carries both: `staging` (with elapsed) or `staged (plan ready)`, then `· head`
-  or `· blocked by hold`.
-  Under the queue, a *finished* row heads the repo's current finished items (those not
-  settled by a checkpoint), newest first: the
+- *Repos* — a tree: each repo row, then up to three group rows, each item under its
+  group. The repo row's note is a summary in the same words as the items' State
+  cells, each item counted once (`1 running · 1 staged · 2 queued · 1 unreviewed`,
+  then `N to pick` and the *audit pending* marker; `held` / `held after red` first
+  while held; `idle` when there is nothing). Group rows are muted bold labels with
+  their count (`In flight (3)`, `Finished since checkpoint (1 unreviewed)` — plain
+  `Finished` before any checkpoint — and `Earlier checkpoints (29)`), and nothing in
+  State, Note or the button column; an empty group is not shown. Every repo row and
+  group can be collapsed, and each keeps the state it was left in across refreshes
+  (*In flight* and *Finished* start open, *Earlier checkpoints* closed). A hold row
+  sits directly under the repo, before the groups (the next item then reads *blocked
+  by hold*); a red hold has a **Clear hold** button (`clear: <repo>`).
+  *In flight*: the running item with its phase (`running`, `merging`, `concluding`)
+  and elapsed time, then the queue in order, the next one marked `· next` with its
+  decision (`wait`, `stage`, …) in the note, and any invalid item. A staged item is
+  still queued, so it is one row whose state carries both: `staging` (with elapsed) or
+  `staged` (note: plan ready), then `· next` or `· blocked by hold`; other queued items
+  read `queued`. Each queued item has **Cancel** (asks first;
+  `cancel: <repo>/<NNN_name>`).
+  *Finished* holds the repo's current finished items (those not settled by a
+  checkpoint), newest first: the
   10 most recent plus every unreviewed one however old, each with its status, finish
   time, carry and a *reviewed* / *unreviewed* mark (unreviewed bold, coloured by
   status; reviewed muted). Double-click opens the trail, as for live items. Each
@@ -1109,9 +1166,9 @@ stop` (no confirmation: a click is cheap to undo with Run).
   unreviewed. A finished row whose report named a picker has **Pick…** (`pick: <ref>`,
   `by: app`; amber until saved) and its note adds ` · pick: saved 4:52pm (6 changed, 2
   notes)`, ` · pick: opened, not saved` or ` · pick: waiting for Matt` (see *Picks*,
-  *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the latest checkpoint sit below in an *earlier
-  checkpoints* group (the 10 newest), collapsed until opened; it stays open across
-  refreshes once opened.
+  *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the
+  latest checkpoint sit in *Earlier checkpoints* (the 10 newest; the count is all of
+  them).
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes

@@ -218,62 +218,80 @@ class ReposPanel(Panel):
         self._rows: dict[tuple, QTreeWidgetItem] = {}
         self._sessions: dict[str, str | None] = {}      # finished item → its session id
         self._picks: dict[str, str] = {}                # finished item → its manifest ref
-        self._earlier_open: set[str] = set()            # repos whose Earlier checkpoints group is open
+        self._open: dict[tuple, bool] = {}              # repo row / group key → expanded, once clicked
         self.tree.itemExpanded.connect(lambda w: self._expanded(w, True))
         self.tree.itemCollapsed.connect(lambda w: self._expanded(w, False))
 
-    def _plan(self, snap: Snapshot) -> list[tuple[str, str, str, list[tuple[tuple, list[str], str | None, str]]]]:
-        """Per repo: (repo, header note, path, rows of (key, texts, item id, look))."""
+    # Which groups start open; a click on one is remembered from then on.
+    GROUP_OPEN = {"flight": True, "finished": True, "earlier": False}
+
+    def _plan(self, snap: Snapshot) -> list[tuple[str, str, str, list[tuple[tuple, list[str], str | None, str, tuple | None]]]]:
+        """Per repo: (repo, summary, path, rows of (key, texts, item id, look, parent key)).
+        A parent of None is the repo row; groups are `("group", repo, which)` rows, and
+        each item row hangs under its group. The summary counts each item once, in the
+        words its State cell uses."""
         at = now()
         out = []
         for rs in snap.repos:
-            rows = []
+            rows, counts = [], {}
+            def count(state: str) -> None:
+                word = state.split(" · ", 1)[0]
+                counts[word] = counts.get(word, 0) + 1
             # A hold comes first: it is the cause of everything queued below it.
             if rs.red:
                 rows.append((("red", rs.name), ["hold", "held after red", "",
                                                 f"red {rs.red.item} (#{rs.red.id}, {clock(rs.red.ts)}): "
-                                                f"{'; '.join(rs.red.detail.get('reasons', []))}"], rs.red.item, "red"))
+                                                f"{'; '.join(rs.red.detail.get('reasons', []))}"], rs.red.item, "red", None))
             elif rs.action == "hold":
-                rows.append((("hold", rs.name), ["hold", "held", "", rs.reason], None, "hold"))
+                rows.append((("hold", rs.name), ["hold", "held", "", rs.reason], None, "hold", None))
             held = bool(rs.red) or rs.action == "hold"
+            flight = ("group", rs.name, "flight")
+            items = []
             for a in rs.running:
                 note = " · ".join(x for x in (a.progress, f"on {a.detail}" if a.detail else "") if x)
                 # Only an executing item takes a message: merging and concluding ones have exited.
-                rows.append((("run", a.item), [a.name, a.phase, duration(a.elapsed(at)), note], a.item,
-                             "run" if a.phase == "running" else "run:after"))
-            # A staged item stays in queue/ (it is the head): it gets one row, its queue
-            # row, whose state carries the stage too.
+                items.append((("run", a.item), [a.name, a.phase, duration(a.elapsed(at)), note], a.item,
+                              "run" if a.phase == "running" else "run:after", flight))
+            # A staged item stays in queue/ (it is the next to run): it gets one row, its
+            # queue row, whose state carries the stage too.
             queued_ids = {it.id for it in rs.queued}
             stages = {a.item: a for a in rs.staged}
             for a in rs.staged:
                 if a.item not in queued_ids:        # a stage whose item left the queue
-                    what = "staging" if a.phase == "staging" else "staged (plan ready)"
-                    rows.append((("stage", a.item), [a.name, what, duration(a.elapsed(at)) if a.phase == "staging" else "",
-                                                     "resumes when it can run" if a.phase != "staging" else ""], a.item, "stage"))
+                    staging = a.phase == "staging"
+                    items.append((("stage", a.item), [a.name, a.phase, duration(a.elapsed(at)) if staging else "",
+                                                      "" if staging else "plan ready; resumes when it can run"],
+                                  a.item, "stage", flight))
             for i, it in enumerate(rs.queued):
-                note, state, look, elapsed = "", "queued" if i else "queued (head)", "queued", ""
+                note, state, look, elapsed = "", "queued", "queued", ""
                 if a := stages.get(it.id):
                     staging = a.phase == "staging"
-                    state, look = ("staging" if staging else "staged (plan ready)"), "stage"
+                    state, look = a.phase, "stage"
                     elapsed = duration(a.elapsed(at)) if staging else ""
-                    note = "" if staging else "resumes when it can run"
-                    if i == 0 and not held:
-                        state += " · head"
+                    note = "" if staging else "plan ready; resumes when it can run"
                 if i == 0 and held:
                     # the hold row above says why
                     state, look = (f"{state} · blocked by hold" if it.id in stages else "blocked by hold"), "blocked"
-                elif i == 0 and rs.action in ("wait", "stage", "run", "resume"):
-                    note = rs.action + (f": {rs.reason}" if rs.reason else "")
+                elif i == 0:
+                    state += " · next"
+                    if rs.action in ("wait", "stage", "run", "resume"):
+                        note = rs.action + (f": {rs.reason}" if rs.reason else "")
                 if it.errors:
                     note = "invalid: " + "; ".join(it.errors)
-                rows.append((("queued", it.id), [it.name, state, elapsed, note], it.id, look))
-            if not rows:
-                rows.append((("idle", rs.name), ["", "idle", "", ""], None, "idle"))
+                items.append((("queued", it.id), [it.name, state, elapsed, note], it.id, look, flight))
+            if items:
+                rows.append((flight, [f"In flight ({len(items)})", "", "", ""], None, "group", None))
+                rows += items
+                for _, texts, *_ in items:
+                    count(texts[1])
             if rs.finished:
-                older = rs.finished_total - len(rs.finished)
-                rows.append((("finished", rs.name), ["finished", f"{rs.unreviewed} unreviewed" if rs.unreviewed else "",
-                                                     "", f"newest first; {older} older, all reviewed" if older else
-                                                     "newest first"], None, "section"))
+                n, k = rs.finished_total, rs.unreviewed
+                since = "Finished since checkpoint" if snap.checkpoint else "Finished"
+                label = f"{since} ({k} unreviewed)" if k == n else f"{since} ({n}, {k} unreviewed)" if k else f"{since} ({n})"
+                group = ("group", rs.name, "finished")
+                tip = "newest first" + (f"; the {len(rs.finished)} newest and every unreviewed one shown"
+                                        if n > len(rs.finished) else "")
+                rows.append((group, [label, "", "", ""], None, "group|" + tip, None))
             for f in rs.finished:
                 mark = "reviewed" if f.reviewed else "unreviewed"
                 note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
@@ -283,29 +301,30 @@ class ReposPanel(Panel):
                     p = snap.picks.get(f.item)
                     note += " · pick: " + pick_note(p)
                     look += f"|pick:{p.state if p else 'waiting'}"
-                rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item, look))
+                rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item, look,
+                             ("group", rs.name, "finished")))
+            if rs.unreviewed:
+                counts["unreviewed"] = rs.unreviewed
             if rs.earlier:
-                # Settled by a checkpoint: one collapsed group, its rows children of this one.
+                # Settled by a checkpoint: finished and reviewed before it.
                 cp = f"checkpoint #{snap.checkpoint.id}" if snap.checkpoint else "the checkpoint"
-                more = f"; newest {len(rs.earlier)} shown" if rs.earlier_total > len(rs.earlier) else ""
-                rows.append((("earlier", rs.name), ["earlier checkpoints", f"{rs.earlier_total} settled", "",
-                                                    f"finished and reviewed before {cp}{more}"], None, "earlier"))
+                more = f"; the newest {len(rs.earlier)} shown" if rs.earlier_total > len(rs.earlier) else ""
+                rows.append((("group", rs.name, "earlier"), [f"Earlier checkpoints ({rs.earlier_total})", "", "", ""],
+                             None, f"group|finished and reviewed before {cp}{more}", None))
             for f in rs.earlier:
                 note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
                 look = f"done:{f.status}:reviewed"
                 if f.pick:                          # settled: no longer waits, but reopens
                     note += f" · pick: {f.pick}"
                     look += "|pick:settled"
-                rows.append((("old", f.item), [f.name, f"{f.status} · reviewed", "", note], f.item, look))
-            busy = len(rs.running) + len(rs.staged)     # a staged head counts as queued too
-            head = f"{len(rs.queued)} queued" + (f", {busy} active" if busy else "")
-            if rs.unreviewed:
-                head += f", {rs.unreviewed} unreviewed"
+                rows.append((("old", f.item), [f.name, f"{f.status} · reviewed", "", note], f.item, look,
+                             ("group", rs.name, "earlier")))
+            parts = (["held after red"] if rs.red else ["held"] if rs.action == "hold" else [])
+            parts += [f"{n} {word}" for word, n in counts.items()] or ([] if parts else ["idle"])
             if waiting := sum(1 for p in snap.picks.values() if p.item.split("/", 1)[0] == rs.name and p.state != "saved"):
-                head += f", {waiting} to pick"
-            if rs.audit_notes:
-                # Last, so it reads as its own marker: time for a cleanup when convenient.
-                head += f" · {audits.pending(rs.audit_notes)}"
+                parts.append(f"{waiting} to pick")
+            # The audit marker last, so it reads as its own: time for a cleanup when convenient.
+            head = " · ".join(parts + ([audits.pending(rs.audit_notes)] if rs.audit_notes else []))
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
@@ -313,7 +332,7 @@ class ReposPanel(Panel):
         self._sessions = {f.item: f.session_id for rs in snap.repos for f in (*rs.finished, *rs.earlier)}
         self._picks = {f.item: f.pick for rs in snap.repos for f in (*rs.finished, *rs.earlier) if f.pick}
         plan = self._plan(snap)
-        sig = tuple((repo, tuple((k, look) for k, _, _, look in rows)) for repo, _, _, rows in plan)
+        sig = tuple((repo, tuple((k, look) for k, _, _, look, _ in rows)) for repo, _, _, rows in plan)
         if sig != self._sig:
             self._rebuild(plan)
             self._sig = sig
@@ -324,7 +343,7 @@ class ReposPanel(Panel):
             top.setText(3, note)
             # An audit pending marker draws the header note amber; it clears with the notes.
             top.setForeground(3, QBrush(QColor(theme.AMBER if "audit pending" in note else theme.MUTED)))
-            for key, texts, _, _ in rows:
+            for key, texts, _, _, _ in rows:
                 w = self._rows[key]
                 for col, t in enumerate(texts):
                     if w.text(col) != t:
@@ -340,8 +359,7 @@ class ReposPanel(Panel):
         looks = {"run": (theme.BLUE, None, None, True), "run:after": (theme.BLUE, None, None, True), "stage": (theme.TEAL, None, None, True),
                  "queued": (theme.MUTED, None, None, False), "idle": (theme.MUTED, None, None, False),
                  "blocked": (theme.AMBER, None, None, True),
-                 "red": (None, theme.RED, theme.RED_BG, True), "hold": (None, theme.AMBER, theme.AMBER_BG, True),
-                 "section": (theme.AMBER, theme.MUTED, None, True), "earlier": (None, theme.MUTED, None, False)}
+                 "red": (None, theme.RED, theme.RED_BG, True), "hold": (None, theme.AMBER, theme.AMBER_BG, True)}
         status_fg = {"done": theme.GREEN, "partial": theme.AMBER, "red": theme.RED}
         for status, fg in status_fg.items():
             # A finished item: its state coloured by outcome, bold until reviewed; a
@@ -357,9 +375,17 @@ class ReposPanel(Panel):
             top.setForeground(3, QBrush(QColor(theme.MUTED)))
             self.tree.addTopLevelItem(top)
             self._rows[("repo", repo)] = top
-            for key, texts, item_id, look in rows:
+            for key, texts, item_id, look, parent in rows:
                 w = QTreeWidgetItem(texts)
                 w.setData(0, Qt.ItemDataRole.UserRole, item_id)
+                (self._rows[parent] if parent else top).addChild(w)
+                self._rows[key] = w
+                if key[0] == "group":
+                    # A group is a node, not an item: muted bold label, nothing else.
+                    w.setToolTip(0, look.partition("|")[2])
+                    w.setFont(0, bold)
+                    w.setForeground(0, QBrush(QColor(theme.MUTED)))
+                    continue
                 look, _, pick_state = look.partition("|pick:")
                 state, row, bg, strong = looks.get(look, (None, None, None, False))
                 for c in range(len(self.COLS)):
@@ -371,8 +397,6 @@ class ReposPanel(Panel):
                     w.setForeground(1, QBrush(QColor(state)))
                 if strong:
                     w.setFont(1, bold)
-                (self._rows[("earlier", repo)] if key[0] == "old" else top).addChild(w)
-                self._rows[key] = w
                 if key[0] == "red":
                     # The one action that releases the hold: drawn as the row's main action.
                     self.tree.setItemWidget(w, 4, compact_button("Clear hold", lambda _=False, r=repo: self._clear(r),
@@ -394,18 +418,17 @@ class ReposPanel(Panel):
                         b.clicked.connect(lambda _=False, i=key[1], b=b: self._reviewed(i, b))
                     holder.buttons["Open in terminal"].setEnabled(bool(self._sessions.get(key[1])))
                     self.tree.setItemWidget(w, 4, holder)
-        self.tree.blockSignals(True)            # not a click: the remembered set stays
-        self.tree.expandAll()
+        self.tree.blockSignals(True)            # not a click: the remembered state stays
         for key, w in self._rows.items():
-            if key[0] == "earlier":
-                w.setExpanded(key[1] in self._earlier_open)
+            if key[0] in ("repo", "group"):
+                w.setExpanded(self._open.get(key, key[0] == "repo" or self.GROUP_OPEN[key[2]]))
         self.tree.blockSignals(False)
 
     def _expanded(self, w: QTreeWidgetItem, on: bool) -> None:
-        """Remember which repos' Earlier checkpoints group is open across rebuilds."""
+        """Remember each repo row's and group's open state across rebuilds."""
         for key, row in self._rows.items():
-            if row is w and key[0] == "earlier":
-                (self._earlier_open.add if on else self._earlier_open.discard)(key[1])
+            if row is w and key[0] in ("repo", "group"):
+                self._open[key] = on
 
     def _double(self, w: QTreeWidgetItem, _col: int) -> None:
         if item_id := w.data(0, Qt.ItemDataRole.UserRole):

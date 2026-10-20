@@ -93,6 +93,32 @@ def test_hook_prints_context_once(tmp_path):
     settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x"))
     [group] = settings["hooks"]["PostToolUse"]
     assert group["matcher"] == "" and group["hooks"][0]["args"][:3] == ["-m", "conductor.talk", "hook"]
+    assert "PreToolUse" not in settings
+
+
+def test_pre_hook_keeps_shell_calls_short(tmp_path):
+    bg = ["npm test*", "*playwright test*"]
+    def run(tool_input, tool="Bash"):
+        return talk.pre_tool({"tool_name": tool, "tool_input": tool_input}, 60, bg)
+    # The 034 waiter: one foreground poll loop of up to ten minutes.
+    waiter = {"command": "timeout 590 bash -c 'until grep -q EXIT x.log; do sleep 10; done'", "timeout": 600000}
+    assert run(waiter) == waiter | {"timeout": 60000}
+    assert run({"command": "git status"}) == {"command": "git status", "timeout": 60000}   # default is 2 min
+    assert run({"command": "git status", "timeout": 30000}) is None
+    assert run({"command": "npm  test -- --grep slow", "timeout": 900000, "description": "d"}) == {
+        "command": "npm  test -- --grep slow", "description": "d", "run_in_background": True}
+    assert run({"command": "cd web && npx playwright test x", "timeout": 5000}, "PowerShell")["run_in_background"]
+    assert run({"command": "npm test", "run_in_background": True}) is None
+    assert run({"file_path": "x"}, "Read") is None
+    assert talk.pre_tool({"tool_name": "Bash", "tool_input": {"command": "ls"}}, 0, []) is None
+    out = json.loads(talk.pre_hook({"tool_name": "Bash", "tool_input": waiter}, 60, []))["hookSpecificOutput"]
+    assert out["hookEventName"] == "PreToolUse" and out["updatedInput"]["timeout"] == 60000
+    settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x", 60, bg))
+    [group] = settings["hooks"]["PreToolUse"]
+    assert group["matcher"] == "Bash|PowerShell"
+    assert group["hooks"][0]["args"] == ["-m", "conductor.talk", "pre", "--cap", "60",
+                                         "--background=npm test*", "--background=*playwright test*"]
+    assert talk.main(["pre", "--cap", "60"]) == 0       # stdin is empty under pytest: prints nothing
 
 
 def test_cli_tell_and_open(env, capsys, monkeypatch):

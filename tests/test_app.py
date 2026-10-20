@@ -421,17 +421,35 @@ def test_a_staged_head_is_one_repos_row(qapp, tmp_path):
         head, nxt = (Item("code", n, tmp_path / f"{n}.md") for n in ("002_b", "003_c"))
         stage = model.Activity("code/002_b", "002_b", "staged", None)
         rs = model.RepoState("code", tmp_path, staged=[stage], queued=[head, nxt], **kw)
-        [(_, _, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs], picks={}))
-        return [(key, texts[1], look) for key, texts, _, look in rows]
+        [(_, head, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs], picks={}, checkpoint=None))
+        return head, [(key, texts[0] if key[0] == "group" else texts[1], parent) for key, texts, _, _, parent in rows]
 
-    # Once, as its queue row (so it keeps Cancel), its state naming both facts.
-    assert plan(action="wait", reason="repo busy") == [
-        (("queued", "code/002_b"), "staged (plan ready) · head", "stage"),
-        (("queued", "code/003_c"), "queued", "queued")]
-    held = plan(action="hold", reason="lock busy")
-    assert held[0][0][0] == "hold"
-    assert held[1:] == [(("queued", "code/002_b"), "staged (plan ready) · blocked by hold", "blocked"),
-                        (("queued", "code/003_c"), "queued", "queued")]
+    # Once, as its queue row (so it keeps Cancel), its state naming both facts; in flight
+    # with the queued item after it, each counted once in the summary.
+    flight = ("group", "code", "flight")
+    assert plan(action="wait", reason="repo busy") == ("1 staged · 1 queued", [
+        (flight, "In flight (2)", None),
+        (("queued", "code/002_b"), "staged · next", flight),
+        (("queued", "code/003_c"), "queued", flight)])
+    head, held = plan(action="hold", reason="lock busy")
+    assert head == "held · 1 staged · 1 queued" and held[0][0][0] == "hold" and held[0][2] is None
+    assert held[2:] == [(("queued", "code/002_b"), "staged · blocked by hold", flight),
+                        (("queued", "code/003_c"), "queued", flight)]
+    run = model.Activity("code/001_a", "001_a", "running", None)
+    rs = model.RepoState("code", tmp_path, running=[run], queued=[Item("code", "002_b", tmp_path / "b.md")],
+                         finished=[model.Finished("code/000_z", "000_z", "done", "2026-10-19T10:00:00-07:00", False)],
+                         finished_total=1)
+    [(_, head, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs], picks={}, checkpoint=None))
+    assert head == "1 running · 1 queued · 1 unreviewed"
+    assert [(k, t[0], t[1], p) for k, t, _, _, p in rows] == [
+        (flight, "In flight (2)", "", None),
+        (("run", "code/001_a"), "001_a", "running", flight),
+        (("queued", "code/002_b"), "002_b", "queued · next", flight),
+        (("group", "code", "finished"), "Finished (1 unreviewed)", "", None),
+        (("done", "code/000_z"), "000_z", "done · unreviewed", ("group", "code", "finished"))]
+    empty = model.RepoState("code", tmp_path)
+    assert ReposPanel._plan(None, SimpleNamespace(repos=[empty], picks={}, checkpoint=None)) == [
+        ("code", "idle", str(tmp_path), [])]
 
 
 def test_a_remembered_project_that_fails_to_load_stays_remembered(qapp, env, tmp_path):
@@ -585,14 +603,20 @@ def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
     assert len(ev.model.rows) == everything + 2
     # Repos: 002 (unreviewed) is current; 001 sits in the collapsed Earlier group.
     panel = view.repos_panel
-    group = panel._rows[("earlier", "code")]
+    group = panel._rows[("group", "code", "earlier")]
+    finished = panel._rows[("group", "code", "finished")]
     assert ("done", "code/002_new") in panel._rows and ("done", "code/001_old") not in panel._rows
     assert panel._rows[("old", "code/001_old")].parent() is group and not group.isExpanded()
-    assert group.text(1) == "1 settled"
+    assert panel._rows[("done", "code/002_new")].parent() is finished and finished.isExpanded()
+    assert group.text(0) == "Earlier checkpoints (1)" and group.text(1) == ""
+    assert finished.text(0) == "Finished since checkpoint (1 unreviewed)"
     group.setExpanded(True)
+    finished.setExpanded(False)
     env.d.log.append("reviewed", item="code/002_new", status="done")
-    win.refresh()                                      # a rebuild keeps the group open
-    assert panel._rows[("earlier", "code")].isExpanded()
+    win.refresh()                                      # a rebuild keeps each group as it was left
+    assert panel._rows[("group", "code", "earlier")].isExpanded()
+    assert not panel._rows[("group", "code", "finished")].isExpanded()
+    assert panel._rows[("group", "code", "finished")].text(0) == "Finished since checkpoint (1)"
     assert f"Current: checkpoint #{cp.id}" in view.checkpoint_btn.toolTip()
     win._quitting = True
     win.close()
@@ -701,7 +725,7 @@ def test_pick_button_in_the_repos_tab(qapp, env, tmp_path):
     panel = view.repos_panel
     row = panel._rows[("done", "code/001_x")]
     assert row.text(3).endswith(" · pick: waiting for Matt")
-    assert any(head.endswith(", 1 to pick") for _, head, _, _ in panel._plan(view.snap))
+    assert any(head.endswith(" · 1 to pick") for _, head, _, _ in panel._plan(view.snap))
     holder = panel.tree.itemWidget(row, 4)
     assert list(holder.buttons) == ["Mark reviewed", "Pick…", "Open in terminal"]
     pick = holder.buttons["Pick…"]

@@ -35,7 +35,7 @@ materially. Not chatter.
 Messages. Matt may message you while you work: it arrives after a tool call, marked
 MESSAGE #n from Matt. It is an instruction from Matt and outranks the prompt where they
 conflict. Answer it with `progress`.
-
+{calls}
 {workdir}{readonly}{paths}
 {audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
@@ -84,6 +84,18 @@ will use for the choice; keys are unique within a row and row ids within the fil
 `image` is relative to the manifest, must exist inside the repo, and is PNG, JPEG, GIF,
 WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional.
 """
+
+CALLS = """
+Short calls. A message can only get in between tool calls, so no call should last more
+than about {cap:g} seconds. Run anything that may take longer (tests, builds, renders) with
+`run_in_background`, and wait on it in polls of at most {cap:g} seconds each (a `timeout`
+of {cap_ms} or less), never one long waiter. Do not end your turn to wait for it either:
+a message cannot reach you while you are idle. Conductor enforces this: a foreground
+shell call still running after {cap:g} seconds is moved to the background (you are told
+so and notified when it ends; Claude Code kills it 10 minutes after the move){bg}.
+"""
+
+CALLS_BG = ", and commands matching {globs} always run in the background"
 
 PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
 
@@ -253,6 +265,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
+        calls=calls_text(cfg, item.repo),
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
         deadline=clock(deadline), report=paths.report.resolve(), pick=PICK,
         tail="" if resume else PROMPT_FOLLOWS,
@@ -265,6 +278,14 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     head = RESUME_HEAD.format(old=resume["old"][:10], new=resume["new"][:10], main=cfg.opts(item.repo).main,
                               landed=landed)
     return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n"
+
+
+def calls_text(cfg: Config, repo: str) -> str:
+    """The preamble's *Short calls* paragraph, or nothing when the cap is off."""
+    cap, bg = cfg.foreground_seconds, cfg.opts(repo).background
+    if cap <= 0:
+        return ""
+    return CALLS.format(cap=cap, cap_ms=round(cap * 1000), bg=CALLS_BG.format(globs=_ticks(bg)) if bg else "")
 
 
 def build_stage_prompt(cfg: Config, item: Item, run: dict) -> str:
@@ -296,13 +317,16 @@ def mcp_config(cfg: Config, item: Item, session_id: str) -> str:
 
 
 def hook_settings(cfg: Config, item: Item) -> str:
-    """The executor's --settings: the PostToolUse hook that delivers messages, run by the
-    daemon's console interpreter, and `"ultracode": true` for an `ultracode` item. The
+    """The executor's --settings: the PostToolUse hook that delivers messages and the
+    PreToolUse hook that keeps shell calls short (`foreground_seconds`, the repo's
+    `background` globs), run by the daemon's console interpreter, and
+    `"ultracode": true` for an `ultracode` item. The
     settings key is what turns ultracode on in `-p`: the keyword in the prompt does not,
     and neither does a message (hook context) or a later edit of this file."""
     from .procs import console_python
     from .talk import hook_settings as settings
-    data = json.loads(settings(console_python(), cfg.control, item.id))
+    data = json.loads(settings(console_python(), cfg.control, item.id, cfg.foreground_seconds,
+                               cfg.opts(item.repo).background))
     if item.ultracode:
         data["ultracode"] = True
     return json.dumps(data, indent=1)
