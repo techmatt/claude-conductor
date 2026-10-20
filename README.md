@@ -10,7 +10,8 @@ every other view is derived.
 `planner.md` is how a planner session uses it, every session; `claude-ai-new-project.md`
 is how a project is started, parked and resumed. This file and `docs/` are how conductor
 works: the canon for commands, file formats, fields and event kinds. Each topic file is
-small enough to read whole.
+small enough to read whole, and stays so: `CLEANUP.md` is the standing maintenance pass,
+with every file's size budget (`uv run python tools/sizes.py`).
 
 ## Install and run
 
@@ -21,7 +22,7 @@ uv run conductor status [<control folder>]
 uv run conductor inbox  [<control folder>]
 uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--kind K] [--paths]
 uv run conductor questions [<control folder>] [--all]      # open asks (--all: resolved too)
-uv run conductor audits [<control folder>] [--all]         # unused audit notes per repo (--all: used too)
+uv run conductor audits [<control folder>] [--all]         # unused audit notes per repo (--all: used and claimed too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
 uv run conductor outline <item> [--control <folder>]       # ask a running executor for an updated outline
@@ -46,16 +47,9 @@ One daemon per control folder: a second `run` refuses while the first is alive
 checkpoint's own event on) or `checkpoint N` (from checkpoint #N on). `--item` takes `sandbox/001_x`,
 `001_x` or `001`.
 
-Stopping the daemon (Ctrl+C, or killing it) does **not** stop executors: they run
-detached (no console window, own process group), writing straight to their log files.
-The next start adopts them (`docs/restart.md`). A **tree** kill of the daemon does
-(`taskkill /T`, or whatever started it reaping its descendants), since executors are
-its children. So the app's **Start daemon** starts it with no live parent
-(`docs/restart.md`, *Platform notes*), and a daemon that finds a Claude Code session
-among its parents logs a `warning` at start: when that session ends, or reaps its
-background commands under memory pressure, the daemon and every executor die with it
-(2026-10-20, `docs/memory.md`). Start the daemon from the app or a plain terminal, never
-as a Claude Code background command.
+Stopping the daemon (Ctrl+C, or killing it) does **not** stop executors; the next start
+adopts them. A **tree** kill does, so start the daemon from the app or a plain terminal,
+never as a Claude Code background command (`docs/restart.md`).
 
 ## Topics
 
@@ -73,7 +67,8 @@ as a Claude Code background command.
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
 | `docs/memory.md` | Memory sampling, pressure levels and the launch guard, the leftover reaper, a daemon's death made visible |
-| `docs/app.md` | The desktop app: header, Repos (with the Conversation view), Questions, Events, Proposed, tray |
+| `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, tray |
+| `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/restart.md` | The restart rule; platform notes (process groups, detached launches) |
 | `docs/development.md` | The test suite, its lanes and the fake executor |

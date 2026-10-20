@@ -60,7 +60,7 @@ comes after that call's own line, so its reply is the next one. A running amendm
 not. The daemon logs deliveries before progress lines in each pass, and rebuilds what
 still waits for a reply from the log at start. `conductor events`, the inbox and the
 Activity view show a tagged line as `progress (reply to #N)`; the app's Repos tab shows
-the reply under its tell (`app.md`, Conversation). An item that exits with messages still waiting has
+the reply under its tell (`app-panels.md`, Conversation). An item that exits with messages still waiting has
 them renamed `.undelivered.json`, and a `warning` names each.
 
 Proven with Claude Code 2.1.301 headless (`-p`, stream-json): a message sent while a

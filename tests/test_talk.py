@@ -58,6 +58,7 @@ def test_a_message_reaches_a_busy_executor_and_changes_what_it_does(env):
     assert f"(reply to #{tell.id})" in describe(answer) and f"(reply to #{tell.id})" in model.activity_text(answer)
 
 
+@pytest.mark.slow
 def test_conversation_ties_replies_to_their_tells(env):
     go = env.root / "go"
     env.queue("001_talk", 'FAKE progress {"note": "reading", "eta": "5m"}\n'

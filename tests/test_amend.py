@@ -2,7 +2,7 @@
 
 import pytest
 
-from conductor import cli, items, talk
+from conductor import cli, items
 from conductor.app import actions, model
 from conductor.inbox import describe
 

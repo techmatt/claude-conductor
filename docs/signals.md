@@ -10,7 +10,7 @@ order:
 
 ```
 by: planner                  # optional: every event this file causes carries detail `by`
-read: 42                     # inbox read through event #42 (`latest` = everything so far)
+read: 42                     # inbox read through event #42 (`latest` or `all` = everything so far)
 clear: sandbox               # release the sandbox queue after a red
 approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)

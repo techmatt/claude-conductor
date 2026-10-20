@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import time
@@ -83,6 +84,13 @@ def retry_io(fn, *args, seconds: float = RETRY_SECONDS):
                 raise
             time.sleep(delay)
             delay = min(delay * 2, 0.25)
+
+
+def file_hash(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def write_text(path: Path, text: str) -> None:

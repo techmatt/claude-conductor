@@ -6,13 +6,13 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 
 | kind | when | notable detail |
 |---|---|---|
-| `daemon_start` / `daemon_stop` | daemon lifecycle | pid; running items at stop; stop `reason` (`signal`: a `stop: daemon` signal, `interrupt`: Ctrl+C, `error`: three ticks in a row failed on an `OSError`) |
+| `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control; running items at stop; stop `reason` (`signal`: a `stop: daemon` signal, `interrupt`: Ctrl+C, `error`: three ticks in a row failed on an `OSError`) |
 | `daemon_died` | at start: the previous daemon left `daemon.json` and is gone, so it never stopped cleanly (red) | pid, started, last_beat, gap, memory (its last sample: at, level, commit, limit, free), running |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded) |
-| `invalid` | bad item, signal, stray queue folder, bad config | error |
+| `invalid` | bad item, signal, stray queue folder, bad config | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
 | `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); template, template_version, notes (a template item; a cleanup's notes); error (launch failed) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline |
@@ -26,10 +26,10 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
 | `requeue` | restart found it never launched | reason |
 | `kill` | max_hours reached | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged; audit (it kept notes), template |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; audit (it kept notes), template |
 | `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
-| `tamper` | control folder changed during an executor's window | changes, concurrent |
+| `tamper` | control folder changed during an executor's window | changes, concurrent, found (the check that saw it) |
 | `drift` | control folder changed with no executor running | changes |
 | `request` / `request_failed` | a request applied or rejected | request, message, targets / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |

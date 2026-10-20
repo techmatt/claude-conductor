@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~25s quiet, ~40s loaded; 164 tests)
-uv run pytest -m slow    # the slow lane alone (~50s)
-uv run pytest -m ""      # everything (~70s quiet, ~100s loaded; 219 tests); run this before committing
+uv run pytest            # the fast lane, after every change (~38s; 169 tests; 2026-10-20)
+uv run pytest -m slow    # the slow lane alone
+uv run pytest -m ""      # everything (~90s; 228 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -35,3 +35,10 @@ scripted MCP client that also runs standalone:
 `python tests/mcp_client.py <mcp.json> '{"question": "…", "default": "…"}'`. The sandbox
 (`C:\Code\conductor-sandbox`, `C:\Code\conductor-sandbox-control`) is for end-to-end
 runs with real executors.
+
+Two scripts in `tools/` serve the maintenance pass (`CLEANUP.md`) and any session:
+`uv run python tools/sizes.py [--all]` prints docs and code against their size budgets
+(the table in `CLEANUP.md`) and exits 1 on a breach; `uv run python tools/sandbox_proof.py
+<sandbox control folder> [--shot <png>]` drives the sandbox with the fake executor (an
+item through queue and merge, `session: start`, a request) and then renders the app on
+it offscreen, refusing while the sandbox's own daemon runs.

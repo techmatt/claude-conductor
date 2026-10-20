@@ -122,20 +122,6 @@ def _at(line: str) -> float:
         return 0.0
 
 
-def samples(state_dir: Path) -> list[dict]:
-    try:
-        lines = (state_dir / FILE).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
-    out = []
-    for ln in lines:
-        try:
-            out.append(json.loads(ln))
-        except ValueError:
-            continue
-    return out
-
-
 def latest(state_dir: Path) -> dict | None:
     """The newest sample, read from the end of the file."""
     path = state_dir / FILE

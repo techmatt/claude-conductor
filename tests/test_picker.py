@@ -280,7 +280,7 @@ def test_page_never_alters_an_image():
 def test_routes_refuse_everything_else(served):
     srv, _, _, cfg, _ = served
     t = srv.token
-    for path in (f"/wrongtoken/art_alts/", f"/{t}/other/", f"/{t}/art_alts", f"/{t}/art_alts/img/2/0",
+    for path in ("/wrongtoken/art_alts/", f"/{t}/other/", f"/{t}/art_alts", f"/{t}/art_alts/img/2/0",
                  f"/{t}/art_alts/img/0/2", f"/{t}/art_alts/img/0", f"/{t}/art_alts/img/0/0/x",
                  f"/{t}/art_alts/img/0/0?x=1", f"/{t}/art_alts/img/-1/0",
                  f"/{t}/art_alts/img/../../conductor.toml", f"/{t}/art_alts/../../conductor.toml",

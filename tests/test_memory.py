@@ -19,6 +19,21 @@ def status(percent: float, free_gb: float) -> procs.MemoryStatus:
     return procs.MemoryStatus(commit=int(percent * GIB), limit=100 * GIB, available=int(free_gb * GIB), total=32 * GIB)
 
 
+def gone(pid: int, timeout: float = 5.0) -> bool:
+    """A killed process is gone (or a zombie). Windows can keep a killed pid visible for a
+    moment, and it can vanish between `pid_exists` and `status`, so poll and allow both."""
+    end = time.time() + timeout
+    while True:
+        try:
+            if not psutil.pid_exists(pid) or psutil.Process(pid).status() == psutil.STATUS_ZOMBIE:
+                return True
+        except psutil.NoSuchProcess:
+            return True
+        if time.time() > end:
+            return False
+        time.sleep(0.1)
+
+
 def guarded(cfg: config.Config) -> config.Config:
     cfg.memory_pressure_percent, cfg.memory_pressure_free_gb = 85, 3
     cfg.memory_critical_percent, cfg.memory_critical_free_gb = 93, 1.5
@@ -81,7 +96,7 @@ def test_samples_record_each_items_tree_and_the_heartbeat(env):
     reaped = env.events("reaped")
     assert reaped and hog in {p["pid"] for p in reaped[0].detail["processes"]}
     assert reaped[0].detail["private_mb"] >= 200
-    assert not psutil.pid_exists(hog) or psutil.Process(hog).status() == psutil.STATUS_ZOMBIE
+    assert gone(hog)
     env.d.release()
     assert not state.daemon_info(env.d.cfg).died      # a clean stop leaves no lock
 
@@ -203,7 +218,7 @@ def test_leftovers_are_reaped_when_the_item_finishes(env):
     ev = env.events("reaped")[0]
     # A venv's python.exe is a launcher with the real interpreter as its child: both are left.
     assert ev.item == "code/001_leaves" and left in [p["pid"] for p in ev.detail["processes"]]
-    assert not psutil.pid_exists(left)
+    assert gone(left)
     # The worktree, no longer held, is removed with the merge.
     assert not env.worktree("001_leaves").exists()
 

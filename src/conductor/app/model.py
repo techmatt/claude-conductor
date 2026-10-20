@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .. import config as config_mod
 from .. import git, items, memory, picks, questions, state, talk, targets
-from ..events import RED_KINDS, EventLog, Event
+from ..events import RED_KINDS, Event, EventLog
 from ..executor import RunPaths
 from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
 from ..state import DaemonInfo, daemon_info

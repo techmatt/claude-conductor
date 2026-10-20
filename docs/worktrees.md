@@ -65,7 +65,8 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   fail while another process holds a file in it (a dev server an executor left
   running, an editor): `PermissionError 13` on Windows. The failure is a `warning` and
   a row in `.conductor/leftovers.json`; the item concludes as usual. Conductor retries
-  each row at daemon start and whenever that repo's queue empties (`queue_empty`, but
+  each row at daemon start, before a `disk_audit` launches, and whenever that repo's
+  queue empties (`queue_empty`, but
   not the row of the item that just emptied it, since whatever held its files a
   moment ago still does). A retry that works logs the `worktree` event the first try
   would have (`removed`/`discarded`, note `leftover removed on retry (...)`) and drops

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from conductor import config, daemon, request
+from conductor import config, daemon, daemon_signals, request
 
 FAKE = Path(__file__).with_name("fake_claude.py")
 
@@ -141,7 +141,7 @@ def env_template(tmp_path_factory) -> Path:
 @pytest.fixture
 def env(tmp_path, monkeypatch, env_template):
     monkeypatch.setattr(request, "SETTLE_SECONDS", 0)
-    monkeypatch.setattr(daemon, "SIGNAL_SETTLE_SECONDS", 0)
+    monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", 0)
     e = Env(tmp_path, env_template)
     yield e
     for run in list(e.d.runs.values()):

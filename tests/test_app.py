@@ -8,11 +8,9 @@ import sys
 
 import psutil
 import pytest
-
 from conductor import questions
 from conductor.app import actions, model, theme
 from conductor.app.model import Project, ReadOnlyLog, render_stream_json
-
 from conftest import CONTROL_GITIGNORE, git, init_repo
 
 
@@ -223,6 +221,7 @@ def test_answer_writes_the_same_file_as_the_cli(tmp_path):
 
 def test_start_daemon_detached(tmp_path):
     import time
+
     from conductor import procs
     control = bare_control(tmp_path)
     p = actions.start_daemon(control)
@@ -414,7 +413,8 @@ def test_window_renders_every_panel(qapp, env, tmp_path):
 
 def test_a_staged_head_is_one_repos_row(qapp, tmp_path):
     from types import SimpleNamespace
-    from conductor.app.panels import ReposPanel
+
+    from conductor.app.repos_panel import ReposPanel
     from conductor.items import Item
 
     def plan(**kw):
@@ -552,9 +552,9 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
 
 def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, monkeypatch):
     from conductor import procs
-    from PySide6.QtCore import QUrl
-    from conductor.app import panels
     from conductor.app.window import MainWindow
+    from PySide6.QtCore import QUrl
+    from PySide6.QtWidgets import QInputDialog
     env.queue("001_x", 'FAKE progress {"note": "reading", "eta": "5m"}\nFAKE until-message 30')
     env.tick_until(lambda: env.events("progress"))
     win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
@@ -570,7 +570,7 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     assert [t.title for t in chat.turns] == ["Started", "Progress"]
     tell = repos.tree.itemWidget(row, 4).button
     assert tell.text() == "Tell…"
-    monkeypatch.setattr(panels.QInputDialog, "getMultiLineText", lambda *a, **k: ("finish now\nplease", True))
+    monkeypatch.setattr(QInputDialog, "getMultiLineText", lambda *a, **k: ("finish now\nplease", True))
     chat.tell_btn.click()                                   # the same signal as the row's Tell…
     env.tick_until(lambda: env.finished("code/001_x"))
     assert env.events("tell")[0].detail["text"] == "finish now / please"
@@ -817,6 +817,7 @@ def test_pick_button_in_the_repos_tab(qapp, env, tmp_path):
 
 def test_a_second_launch_hands_its_folders_to_the_running_app(qapp, env, tmp_path):
     import time
+
     from conductor.app import single
     from conductor.app.window import MainWindow
     name = f"conductor-app-test-{os.getpid()}-{time.monotonic_ns()}"

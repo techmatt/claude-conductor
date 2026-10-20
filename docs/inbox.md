@@ -83,7 +83,7 @@ without the item:
 ```
 
 Then every event after the read mark, grouped **Red** (tamper first,
-then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`,
+then the rest in event order: `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`,
 `pick_failed`, `amend_refused`, `memory_critical`, `daemon_died`),
 **Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
@@ -104,7 +104,8 @@ with a stale heartbeat, **died**, or not running) and the same memory line, then
 ## Toasts
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
-`ask`, `red`, `tamper`, `hold`, `run_failed`, `pick_failed` and `queue_empty` events. Each title names the project and
+`ask`, `red`, `tamper`, `hold`, `run_failed`, `pick_failed`, `amend_refused`, `memory` (a level other than
+`ok`), `memory_critical`, `daemon_died` and `queue_empty` events. Each title names the project and
 the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
 history records. Toasts use Command Prompt's registered app id, with "Conductor" as
 the attribution line, so nothing has to be installed. A toast that fails is logged as a

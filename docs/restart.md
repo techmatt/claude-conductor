@@ -49,8 +49,8 @@ item to `running/`, drop the stage record (if resuming), spawn, record the pid; 
 
 ## Platform notes
 
-Windows-first, cross-platform by construction. Everything platform-specific is in
-`src/conductor/procs.py`: executors start with `CREATE_NEW_PROCESS_GROUP |
+Windows-first, cross-platform by construction. Process handling specific to Windows
+is in `src/conductor/procs.py`: executors start with `CREATE_NEW_PROCESS_GROUP |
 CREATE_NO_WINDOW` on Windows (`start_new_session` on POSIX) so Ctrl+C or closing the
 daemon's console doesn't reach them; processes are identified by pid **and** creation
 time (pids are reused); kills take the whole tree (psutil). All files conductor writes
@@ -58,7 +58,11 @@ are UTF-8 with LF endings.
 
 Windows still records the daemon as the executors' parent, so `taskkill /T` on the
 daemon kills them too. To stop only the daemon use Ctrl+C or `taskkill /F /PID <pid>`
-without `/T`.
+without `/T`. So never start the daemon as a Claude Code background command: when that
+session ends, or reaps its background commands under memory pressure, the daemon and
+every executor die with it (2026-10-20, `memory.md`). A daemon that finds a Claude Code
+session among its parents logs a startup `warning`. Start it from the app or a plain
+terminal.
 
 A long-lived process another one starts (the daemon from the app's **Start daemon**, a
 run target from the daemon) goes through `procs.spawn_detached`: a short-lived Python

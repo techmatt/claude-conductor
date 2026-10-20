@@ -2,7 +2,7 @@
 
 `conductor app [<control folder> …]` or the `conductor-app` gui script. Qt is imported
 only here, lazily, so the daemon and the CLI never need it. `model` and `actions` are
-Qt-free; `panels` and `window` are the widgets.
+Qt-free; `window`, one `*_panel` module per tab, `trail` and `widgets` are the widgets.
 """
 
 from __future__ import annotations

@@ -6,17 +6,19 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox,
-    QPushButton, QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
-)
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu,
+                               QMessageBox, QPushButton, QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
 from .. import config as config_mod
 from ..inbox import checkpoint_name
 from ..util import clock
 from . import actions, theme
+from .events_panel import EventsPanel
 from .model import PRIORITY, Project, Snapshot, overall
-from .panels import EventsPanel, ProposedPanel, QuestionsPanel, ReposPanel, confirm
+from .proposed_panel import ProposedPanel
+from .questions_panel import QuestionsPanel
+from .repos_panel import ReposPanel
+from .widgets import confirm
 
 # Icon and status-dot colours (graphics, not text: they need 3:1, which each meets).
 COLORS = {"red": theme.RED, "asking": theme.ICON_ASKING, "running": theme.ACCENT, "idle": theme.ICON_IDLE}

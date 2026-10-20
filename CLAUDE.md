@@ -7,7 +7,7 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 - Python 3.12+, managed with `uv`. Windows-first, cross-platform by construction: `pathlib` only, no absolute paths in tracked code. Process handling specific to Windows lives in one module.
 - Every file conductor writes is UTF-8 with LF line endings (`newline="\n"`); `.gitattributes` holds `* text=auto eol=lf`.
 - `README.md` + `docs/` are the canon for how conductor works: README is an overview and an index, each `docs/` file one topic small enough to read whole. Facts learned while working — commands, file formats, front-matter fields, event kinds — are promoted to the matching topic file as you pass them, never left only in a report. A new topic gets its own file and an index line.
-- Tests: `uv run pytest` is the fast lane (~30s) for after each change; `uv run pytest -m ""` runs everything (~90s) and is what must be green before a commit. A test that takes 2.5s or more serially gets `@pytest.mark.slow` (`docs/development.md`).
+- Tests: `uv run pytest` is the fast lane for after each change; `uv run pytest -m ""` runs everything and is what must be green before a commit (timings: `docs/development.md`). A test that takes 2.5s or more serially gets `@pytest.mark.slow` (`docs/development.md`).
 - Never touch a real project's control folder or code repo. Testing uses the sandbox (`C:\Code\conductor-sandbox` and `C:\Code\conductor-sandbox-control`) only.
 
 ## "Launch the conductor"
@@ -25,6 +25,10 @@ When Matt says "run next prompt" (or "run the next prompt" and the like):
 - **None:** say so in one line ("No unrun prompt; the latest is 18_readonly_concurrency_and_report_marker, and its report is in") and do nothing else: no invented work, no reruns.
 
 There is no "run all prompts" phrase.
+
+## "Cleanup conductor"
+
+When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup", "run a cleanup on conductor" and the like), follow `CLEANUP.md` as written: a maintenance pass with its report at `reports/cleanup_<YYYY-MM-DD>_report.md`. It is not a numbered prompt, so "run next prompt" never picks it, and it never runs unasked. `uv run python tools/sizes.py` shows any file over its size budget at a glance, in any session.
 
 ## Standing prompt contract
 

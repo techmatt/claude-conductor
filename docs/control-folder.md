@@ -15,7 +15,9 @@ done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
-                               .stage.prompt.md for a stage; .audit.md (audit notes);
+                               .stage.prompt.md / .stage.stderr.log for a stage; .merge.log /
+                               .merge.prompt.md / .merge.stderr.log for a merge executor;
+                               .audit.md (audit notes);
                                .amend.md (every amendment delivered, in order, with times)
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, outline, checkpoint, session, run, pick, stop
@@ -28,7 +30,9 @@ events.db                      append-only event log (SQLite, WAL)
                                cancelled items), reorder.json and signal.json (crash journals),
                                daemon.out.log (a daemon started by the app), progress/ and
                                mail/ (progress lines, messages to executors: see `progress.md`),
-                               memory.jsonl (memory samples: see `memory.md`)
+                               memory.jsonl (memory samples: see `memory.md`), leftovers.json
+                               (worktrees to retry: see `worktrees.md`), run-<name>.log and
+                               run-<name>.json (run targets: see `run-targets.md`)
 ```
 
 Conductor creates the runtime folders on start and logs a `warning` event if any of

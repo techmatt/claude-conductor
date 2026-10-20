@@ -83,7 +83,7 @@ until an audit item finishes or it is cancelled. While something else still bloc
 it, it only waits, since the item it waits on may add notes.
 
 `conductor audits [<control>]` lists each repo's unused notes (item, status, finish
-time, file, line count); `--all` adds the used ones with the cleanup that used them.
+time, file, line count); `--all` adds the used ones with the cleanup that used them, and those a running cleanup has claimed.
 Whenever a repo has notes no cleanup has used or claimed, it shows an **audit pending**
 marker, so Matt can see a cleanup is due whenever it next makes sense. The inbox's *Now*
 line for the repo and `conductor status` (under the repo) say

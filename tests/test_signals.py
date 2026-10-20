@@ -2,7 +2,7 @@
 
 import pytest
 
-from conductor import config, daemon, items, procs
+from conductor import config, daemon, daemon_signals, items, procs
 from conductor.daemon import Daemon
 
 
@@ -344,14 +344,14 @@ def test_a_reorder_whose_rename_fails_is_finished_on_a_later_tick(env, monkeypat
     env.queue("002_a", "FAKE report done")
     env.queue("003_b", "FAKE report done")
     env.d.tick()
-    real, locked = daemon.retry_io, {"on": True}
+    real, locked = daemon_signals.retry_io, {"on": True}
 
     def held_open(fn, *args, **kwargs):
         if locked["on"] and fn is daemon.os.rename and str(args[0]).endswith("003_b.md"):
             raise PermissionError(32, "being used by another process")
         return real(fn, *args, **kwargs)
 
-    monkeypatch.setattr(daemon, "retry_io", held_open)
+    monkeypatch.setattr(daemon_signals, "retry_io", held_open)
     send(env, "reorder: code 003 002")
     assert not bad(env) and not env.events("reorder")
     assert journal(env, "reorder.json").exists() and env.d._reorder_pending() == "code"
@@ -509,7 +509,7 @@ def test_reviewed_refusals(env):
 # ---------------------------------------------------------------- checkpoints
 @pytest.mark.slow
 def test_a_checkpoint_hides_settled_items_and_carries_the_rest(env):
-    from conductor import inbox, state
+    from conductor import state
     from conductor.app import model
     env.queue("001_old", "FAKE report done")
     env.queue("002_unrev", "FAKE report partial")
