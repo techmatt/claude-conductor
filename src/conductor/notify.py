@@ -59,6 +59,8 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
         case "daemon_died":
             return (f"{project}: the daemon had died",
                     f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}.")
+        case "notify":
+            return f"{project}: from the {detail.get('by') or 'planner'}", str(detail.get("text", ""))[:250]
         case "queue_empty":
             return f"{project}: queue `{repo}` is empty", f"last item {detail.get('last')}"
     return None

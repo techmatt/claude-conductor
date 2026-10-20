@@ -132,6 +132,12 @@ def describe(ev: Event) -> str:
             text = f"run target `{d.get('target')}` failed: {d.get('error')}"
             if d.get("log_tail"):
                 text += " — log tail: " + " ⏎ ".join(d["log_tail"].splitlines()[-5:])
+        case "opened":
+            text = f"opened ({d.get('verb')}) {d.get('url') or d.get('path')}"
+        case "open_refused":
+            text = f"open: {d.get('verb')} {d.get('target')} refused: {d.get('reason')}"
+        case "notify":
+            text = f"toast: {d.get('text')}"
         case "reviewed":
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
         case "checkpoint":

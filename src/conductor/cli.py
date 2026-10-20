@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | run-target | pick | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | app`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import config as config_mod
-from . import audits, items, memory, questions, state
+from . import audits, desktop, items, memory, questions, state
 from .events import EventLog
 from .inbox import describe, latest_outline, outline_line, progress_line, render
 from .util import clock, duration, now, parse_since, parse_stamp
@@ -272,6 +272,16 @@ def cmd_run_target(args) -> int:
     return 1 if failed else 0
 
 
+def cmd_open_path(args) -> int:
+    """One `open:` verb here and now, with the signal's checks and events (`by: cli`)."""
+    cfg, log = _open(args.control)
+    first = log.max_id()
+    ok = desktop.Opener(cfg, log).open(args.verb, " ".join(args.target), by="cli")
+    for ev in log.query(since_id=first):
+        print(describe(ev))
+    return 0 if ok else 1
+
+
 def cmd_pick(args) -> int:
     """Open a picker. With the daemon running, a `pick:` signal (the daemon's server
     serves it); without one, serve it here until Ctrl+C, with the same events."""
@@ -446,6 +456,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--stop", action="store_true", help="stop it instead")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_run_target)
+    sp = sub.add_parser("open-path", help="open a folder, file or URL on the desktop (the `open:` verbs and checks)")
+    sp.add_argument("verb", choices=desktop.VERBS)
+    sp.add_argument("target", nargs="+", help="a path inside the project's folders, or a URL")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_open_path)
     sp = sub.add_parser("pick", help="open a picker manifest in the browser (via the daemon, or served here)")
     sp.add_argument("ref", help="<repo>/<manifest path>")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")

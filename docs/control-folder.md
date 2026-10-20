@@ -60,6 +60,7 @@ events.db*
 project = "sandbox"
 locks = ["shared"]            # named locks items may take; must not clash with repo names
 worktree_root = "../conductor-sandbox-worktrees"   # default ../<project>-worktrees
+open_roots = ["C:/Code/gdrive-sync/sandbox"]  # more folders `open:` may act in (see signals.md)
 
 [defaults]
 max_hours = 2                 # per item unless the item sets max_hours

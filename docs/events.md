@@ -46,6 +46,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `pick_open` | a `pick:` signal (or `conductor pick`) served a manifest and opened its page; item: the latest finish that named it, if any | name, manifest, url, opened (false: the browser reported it did not open); by |
 | `pick_saved` | Matt saved a picker; paths: its choices file; no `by` (the page has no identity) | name, manifest, changed, notes, rows |
 | `pick_failed` | opening the browser raised, `conductor pick` refused the manifest, or its own server could not start (red; holds no queue) | manifest, name, url, error; by |
+| `opened` | an `open:` signal (or `conductor open-path`) launched its action | verb, path or url; by |
+| `open_refused` | an `open:` target failed its check (not red; the signal file goes on) | verb, target (as given), reason; by |
+| `notify` | a `notify:` signal raised a toast | text, by |
 | `approve` | a `proposed/` item moved into its queue | item, from |
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |

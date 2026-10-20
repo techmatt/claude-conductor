@@ -251,7 +251,7 @@ ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "as
                   "approve", "cancel", "reorder", "clear", "edited", "request", "request_failed",
                   "daemon_start", "daemon_stop", "progress", "tell", "amended", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed",
-                  "pick_open", "pick_saved", "pick_failed"}
+                  "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify"}
 ALWAYS_KINDS = RED_KINDS | {"warning"}
 
 
@@ -343,6 +343,12 @@ def activity_text(ev: Event) -> str:
                     f"{notes} note{'' if notes == 1 else 's'}")
         case "pick_failed":
             return f"picker {d.get('manifest')} failed: {d.get('error')}"
+        case "opened":
+            return f"opened ({d.get('verb')}) {d.get('url') or d.get('path')}{by}"
+        case "open_refused":
+            return f"open {d.get('verb')} refused: {d.get('reason')}{by}"
+        case "notify":
+            return f"toast: {d.get('text')}{by}"
     return describe(ev)
 
 

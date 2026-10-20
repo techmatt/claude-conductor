@@ -26,7 +26,7 @@ from pathlib import Path
 
 import psutil
 
-from . import (audits, executor, git, globs, guard, inbox, items, memory, notify, picker, picks, procs, request, state,
+from . import (audits, desktop, executor, git, globs, guard, inbox, items, memory, notify, picker, picks, procs, request, state,
                talk, targets, worktrees)
 from . import config as config_mod
 from .config import RUNTIME, Config
@@ -116,6 +116,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         self._progress_sizes: dict[str, int] = {}
         self.runner = targets.Runner(cfg, self.log)
         self.picker = picker.Server(cfg, self.log)  # no socket until the first `pick:`
+        self.opener = desktop.Opener(cfg, self.log)
         self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
         self.queued_hashes: dict[str, str | None] = {}  # queued item → its file's hash: a change is `edited`
@@ -551,7 +552,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
                     busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
                     if gone := sorted(busy - set(new.repos)):
                         raise config_mod.ConfigError(f"repos {gone} still have items in running/")
-                    self.cfg = self.runner.cfg = self.picker.cfg = new
+                    self.cfg = self.runner.cfg = self.picker.cfg = self.opener.cfg = new
                     self.log.append("config_reload", paths=["conductor.toml"])
                 except config_mod.ConfigError as exc:
                     self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",

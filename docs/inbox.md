@@ -105,7 +105,7 @@ with a stale heartbeat, **died**, or not running) and the same memory line, then
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
 `ask`, `red`, `tamper`, `hold`, `run_failed`, `pick_failed`, `amend_refused`, `memory` (a level other than
-`ok`), `memory_critical`, `daemon_died` and `queue_empty` events. Each title names the project and
+`ok`), `memory_critical`, `daemon_died`, `notify` (a `notify:` signal) and `queue_empty` events. Each title names the project and
 the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
 history records. Toasts use Command Prompt's registered app id, with "Conductor" as
 the attribution line, so nothing has to be installed. A toast that fails is logged as a

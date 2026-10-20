@@ -92,6 +92,7 @@ class Config:
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
     targets: dict[str, RunTarget] = field(default_factory=dict)
+    open_roots: list[Path] = field(default_factory=list)   # more folders `open:` may act in
 
     # Layout ---------------------------------------------------------------
     def path(self, *parts: str) -> Path:
@@ -250,6 +251,10 @@ def load(control: Path) -> Config:
     if clash:
         raise ConfigError(f"{CONFIG_NAME}: lock names clash with repo names: {sorted(clash)}")
 
+    open_roots = data.get("open_roots", [])
+    if not isinstance(open_roots, list) or not all(isinstance(x, str) and x for x in open_roots):
+        raise ConfigError(f"{CONFIG_NAME}: `open_roots` must be a list of folder paths")
+
     defaults = data.get("defaults", {})
     executor = data.get("executor", {})
     command = executor.get("command", ["claude"])
@@ -274,4 +279,5 @@ def load(control: Path) -> Config:
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],
         targets=_targets(control, repos, data.get("run")),
+        open_roots=[_resolve(control, x) for x in open_roots],
     )

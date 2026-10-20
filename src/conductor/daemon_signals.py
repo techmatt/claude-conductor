@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import items, procs, state, talk
+from . import desktop, items, procs, state, talk
 from . import session as session_mod
 from .events import Event
 from .util import clock, read_text, retry_io, write_text
@@ -117,7 +117,7 @@ class SignalsMixin:
             key, sep, value = s.partition(":")
             key = key.strip().lower()
             # A message is free text: a ` # ` in it is part of it, not a comment.
-            value = value.strip() if key in ("tell", "checkpoint", "session") else _strip_comment(value)
+            value = value.strip() if key in ("tell", "checkpoint", "session", "notify") else _strip_comment(value)
             if not sep or not key:
                 raise ValueError(f"line {n}: expected `key: value`, got {s!r}")
             if key == "by":
@@ -148,6 +148,13 @@ class SignalsMixin:
                 repo, sep, path = value.partition("/")
                 if len(value.split()) != 1 or not sep or not path or repo not in self.cfg.repos:
                     raise ValueError(f"line {n}: pick: expects `<repo>/<manifest path>`, got {value!r}")
+            elif key == "open":
+                if len(value.split(None, 1)) != 2 or value.split()[0].lower() not in desktop.VERBS:
+                    raise ValueError(f"line {n}: open: expects `<{'|'.join(desktop.VERBS)}> <path or URL>`, "
+                                     f"got {value!r}")
+            elif key == "notify":
+                if not value:
+                    raise ValueError(f"line {n}: notify: expects a line of text")
             elif key == "stop":
                 if value.lower() != "daemon":
                     raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
@@ -189,6 +196,12 @@ class SignalsMixin:
             self._reorder(where, refs, rel)
         elif key == "pick":
             self.picker.open(value, self._by, rel)
+        elif key == "open":
+            # A refusal is an `open_refused` event, not a rejected file: later lines still apply.
+            verb, target = value.split(None, 1)
+            self.opener.open(verb.lower(), target, self._by, rel)
+        elif key == "notify":
+            self.log.append("notify", paths=[rel], text=value, by=self._by or "unknown")
         elif key == "stop":
             self.stop_requested = {"paths": [rel], **({"by": self._by} if self._by else {})}
 
