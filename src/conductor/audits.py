@@ -19,7 +19,8 @@ from .events import Event
 from .util import clock, read_text
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
-TEMPLATES = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_cleanup")  # what `template:` may name
+TEMPLATES = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_cleanup",
+             "bug_hunt")  # what `template:` may name
 USES_NOTES = ("cleanup", "general_audit")                  # a finish not red logs `audit_used`
 NO_STAGE = ("cleanup", "disk_audit")       # what they are handed is fixed at launch, so they never stage
 

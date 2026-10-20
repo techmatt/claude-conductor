@@ -150,7 +150,7 @@ paths: ['src/ui/**']     # globs the item may change; enables concurrency (see `
 stage: false             # override the repo's `stage` setting for this item
 ultracode: true          # launch with Claude Code's ultracode on (see Executors, *Ultracode*)
 audit: true              # keep audit notes beside the report (see Audits and templates)
-template: cleanup        # cleanup | general_audit | test_perf | disk_audit | claude_md_cleanup: a conductor-owned prompt (same section)
+template: cleanup        # cleanup | general_audit | test_perf | disk_audit | claude_md_cleanup | bug_hunt: a conductor-owned prompt (same section)
 ---
 Prompt body.
 ```
@@ -455,7 +455,7 @@ The reasons are listed in the `finish` and `red` events.
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`audit.md`, `cleanup.md`, `general_audit.md`,
-`test_perf.md`, `disk_audit.md`, `claude_md_cleanup.md`) and are versioned with this repo: the `start` event of a template item
+`test_perf.md`, `disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
@@ -504,6 +504,23 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
   what is wrong against the code, tighten the wording, keep the standing contract the
   new-project doc requires. Changes to how executors work go under **Deferred**. The
   report is short: **Cut**, **Fixed**, **Deferred**.
+- **`template: bug_hunt`**. Run the project as its intended users would (whoever its
+  docs say they are), find what is broken, confusing, ugly or slow, fix the clear bugs
+  and list the rest. The method: build or extend a reusable checker kept in the repo
+  and documented in its README (drives the app across many seeds and paths at speed,
+  screenshots only at meaningful moments, automatic checks there: overflowing text,
+  overlaps and hidden targets, missing or placeholder assets, console errors, missing
+  audio, input dead spots, frame-time spikes, memory growth; a debug hook or flag
+  where that is cheap); review contact sheets and use the app at real speed; fix clear
+  bugs and make each automatable check a test; keep a findings list in the repo
+  (`docs/qa-findings.md` unless it has a convention), read first so nothing known is
+  re-reported. `max_hours` is the hunt's target plus an hour for setup and the report
+  (the vocab queues N + 1), and the target is not a cap. The planner's body, if any,
+  usually names a focus. With `readonly: true` it is *notes only*: the text's own
+  paragraph has it find and record but change nothing tracked (checker and
+  screenshots in a `shared` folder or nowhere, findings in the report only). The
+  report has **Checker**, **Fixed** (notes only: **Found**) and **Deferred**, most
+  important first, each with options and the executor's pick.
 
 **Which notes are unused.** A note is a finished item whose `finish` event has
 `audit: true` and whose `.audit.md` exists and is not blank, in any status (a red

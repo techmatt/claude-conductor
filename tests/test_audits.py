@@ -117,6 +117,19 @@ def test_claude_md_cleanup_template(env):
     assert "The planner adds" not in text and not env.events("audit_used")
 
 
+def test_bug_hunt_template_and_its_notes_only_variant(env):
+    env.queue("001_bh", "Focus on the shop screen.", template="bug_hunt", max_hours="4")
+    env.queue("002_bh", "", template="bug_hunt", readonly="true", stage="false")
+    env.tick_until(lambda: env.finished("code/002_bh"))
+    text = prompt(env, "001_bh")
+    assert "Bug hunt in `code`" in text and "{{" not in text and "running notes file" not in text
+    assert text.rstrip().endswith("The planner adds, for this item:\n\nFocus on the shop screen.")
+    ro = prompt(env, "002_bh")
+    assert "This item is readonly" in ro and "**Notes only.**" in ro and "The planner adds" not in ro
+    assert env.finished("code/002_bh").detail["template"] == "bug_hunt"
+    assert not env.events("audit_used")
+
+
 def test_compact_log_drops_image_bytes_and_file_copies(tmp_path):
     from conductor import executor
     image = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "A" * 600_000}}
