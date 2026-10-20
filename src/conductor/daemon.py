@@ -1227,6 +1227,11 @@ class Daemon:
         cwd = Path(rec["worktree"]) if rec["worktree"] else repo_path
         rec["repo_head"] = rec["base"] or git.head(repo_path)
         rec["repo_status"] = git.tracked_status(cwd) if item.readonly and not error else None
+        if not error:
+            try:
+                rec["port"] = self._free_port()
+            except OSError as exc:
+                error = f"port: {exc}"
         self._save(run)
         retry_io(os.replace, item.path, md_path)
         if stage:
@@ -1251,7 +1256,7 @@ class Daemon:
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
                                                      settings=paths.settings),
-                                    cwd, paths.prompt, paths.log, paths.stderr)
+                                    cwd, paths.prompt, paths.log, paths.stderr, env={executor.PORT_VAR: str(rec["port"])})
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
                             pid=None, error=str(exc))
@@ -1261,6 +1266,7 @@ class Daemon:
         rec["create_time"] = procs.create_time(run.popen.pid)
         self._save(run)
         extra = {"worktree": rec["worktree"], "branch": rec["branch"]} if rec["worktree"] else {}
+        extra["port"] = rec["port"]
         if item.template:
             extra |= {"template": item.template, "template_version": rec["template_version"]}
         if rec.get("notes"):
@@ -1270,6 +1276,14 @@ class Daemon:
         self.log.append("start", item=item.id,
                         paths=[cfg.rel(md_path), cfg.rel(paths.report), cfg.rel(paths.log)],
                         session_id=rec["session_id"], pid=run.popen.pid, deadline=rec["deadline"], **extra)
+
+    def _free_port(self) -> int:
+        """The port an executor's servers use (`CONDUCTOR_PORT`): free now, and never a
+        run target's, another live item's or the picker's."""
+        avoid = targets.ports(self.cfg) | {r.rec["port"] for r in self.runs.values() if r.rec.get("port")}
+        if self.picker.port:
+            avoid.add(self.picker.port)
+        return procs.free_port(avoid)
 
     # ---------------------------------------------------------------- staging
     def stage(self, item: items.Item) -> None:

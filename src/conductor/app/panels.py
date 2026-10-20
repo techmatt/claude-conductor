@@ -248,9 +248,13 @@ class ReposPanel(Panel):
             flight = ("group", rs.name, "flight")
             items = []
             for a in rs.running:
-                note = " · ".join(x for x in (a.progress, f"on {a.detail}" if a.detail else "") if x)
+                running = a.phase == "running"
+                note = " · ".join(x for x in (a.progress, f"on {a.detail}" if a.detail else "",
+                                              f"port {a.port}" if a.port and running else "") if x)
+                # A readonly item runs beside the others; the summary still counts it as running.
+                phase = f"{a.phase} · readonly" if a.readonly and running else a.phase
                 # Only an executing item takes a message: merging and concluding ones have exited.
-                items.append((("run", a.item), [a.name, a.phase, duration(a.elapsed(at)), note], a.item,
+                items.append((("run", a.item), [a.name, phase, duration(a.elapsed(at)), note], a.item,
                               "run" if a.phase == "running" else "run:after", flight))
             # A staged item stays in queue/ (it is the next to run): it gets one row, its
             # queue row, whose state carries the stage too.

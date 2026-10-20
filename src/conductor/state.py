@@ -109,12 +109,16 @@ def scan(cfg: Config, log: EventLog) -> View:
 
 
 def can_share(cfg: Config, head: Item, rec: dict) -> bool:
-    """May `head` run beside the running item `rec` in the same repo? Only in worktrees,
-    when both declared `paths`, the globs are disjoint (prose aside) and they share no
-    named lock."""
+    """May `head` run beside the running item `rec` in the same repo, as far as the repo
+    lock goes? Only in worktrees. A readonly item (either one) never merges, so it neither
+    holds the repo lock nor waits for it; its named locks are `decide`'s. Otherwise both
+    declared `paths`, the globs are disjoint (prose aside) and they share no named lock."""
     opts = cfg.opts(head.repo)
-    return (opts.worktrees and bool(rec.get("worktree"))
-            and globs.disjoint(head.paths, rec.get("paths") or [], opts.prose)
+    if not (opts.worktrees and rec.get("worktree")):
+        return False
+    if head.readonly or rec.get("readonly"):
+        return True
+    return (globs.disjoint(head.paths, rec.get("paths") or [], opts.prose)
             and not set(head.locks) & set(rec.get("locks") or []))
 
 
@@ -131,6 +135,8 @@ def decide(cfg: Config, view: View) -> dict[str, Decision]:
     """One decision per configured repo. Items start strictly in NNN order per repo.
 
     A finished item still waiting to merge keeps its repo lock but not its named locks.
+    A readonly item takes no repo lock (`can_share`): at the head it starts beside
+    whatever runs, and the items after it never wait for it.
     """
     held_locks: dict[str, str] = {}
     for item_id, rec in view.running.items():

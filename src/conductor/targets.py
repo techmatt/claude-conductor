@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 from dataclasses import dataclass
@@ -45,6 +46,19 @@ def answers(url: str, timeout: float = PROBE_SECONDS) -> bool:
         return True
     except (urllib.error.URLError, OSError, ValueError):
         return False
+
+
+def ports(cfg: Config) -> set[int]:
+    """Every port a run target's `url` or `ready` names: never handed to an executor."""
+    out = set()
+    for t in cfg.targets.values():
+        for url in (t.url, t.ready):
+            try:
+                if port := urllib.parse.urlsplit(url).port:
+                    out.add(port)
+            except ValueError:
+                pass
+    return out
 
 
 def process(cfg: Config, name: str) -> dict | None:

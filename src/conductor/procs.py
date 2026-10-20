@@ -9,6 +9,7 @@ is not lost: a restarted daemon finds the process again and adopts it.
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -39,7 +40,21 @@ def allow_foreground() -> None:
         ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY)
 
 
-def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path) -> subprocess.Popen:
+def free_port(avoid: set[int] = frozenset()) -> int:
+    """A local TCP port nothing listens on now, from the OS's ephemeral range, never one
+    in `avoid` (run targets' ports, other items')."""
+    for _ in range(50):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        if port not in avoid:
+            return port
+    raise OSError("no free port found")
+
+
+def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path,
+          env: dict[str, str] | None = None) -> subprocess.Popen:
+    """`env`: variables added to the child's environment."""
     kwargs: dict = {}
     if WINDOWS:
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
@@ -47,7 +62,7 @@ def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path) ->
         kwargs["start_new_session"] = True
     with open(stdin, "rb") as fin, open(stdout, "ab") as fout, open(stderr, "ab") as ferr:
         return subprocess.Popen(cmd, cwd=str(cwd), stdin=fin, stdout=fout, stderr=ferr,
-                                env=child_env(), **kwargs)
+                                env={**child_env(), **(env or {})}, **kwargs)
 
 
 def console_python() -> str:

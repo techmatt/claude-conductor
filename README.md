@@ -177,7 +177,8 @@ that cannot run holds everything behind it. Different repos run in parallel. The
 runs when all of these hold:
 
 - no item of that repo is running or waiting to merge (the implicit repo lock), unless
-  every such item may share the repo with it (see `paths:`);
+  every such item may share the repo with it (see `paths:`), which a readonly item
+  always may (*Readonly items* below);
 - the repo is not held after a red (below) and no `needs_planner` report is unread;
 - every named lock is declared in `conductor.toml` and free;
 - every `depends_on` item finished with status `done` (a dependency still queued
@@ -193,6 +194,18 @@ lock but releases its named locks.
   holds until a `clear: <repo>` signal. `continue` items don't hold.
 - *needs_planner*: the repo's next item holds until the read mark is at or past the
   finished item's `finish` event id.
+
+**Readonly items** take no repo lock (in a repo with worktrees; with `worktrees = false`
+they share the one checkout, so the lock stays). They never merge, so nothing waits for
+them and they wait for nothing in the repo: a readonly head starts at once beside
+whatever runs or waits to merge, and the items after it don't wait for it. Everything
+else still applies: its named locks, `depends_on`, the holds, its own worktree
+(discarded at the end), and the readonly and tamper checks. Start order is unchanged.
+A readonly item still starts only once it is the head, so one queued behind a waiting
+item waits for that item to *start*, not to finish. It sees `main` as it is when it
+launches, so one meant to look at an earlier item's work declares `depends_on` on it.
+`conductor status` marks it `readonly`, and the app's *In flight* row reads
+`running · readonly`.
 
 Items move `queue → running → done` by atomic rename.
 
@@ -287,7 +300,7 @@ everything under a folder it matches (`docs` = `docs/**`); case is ignored.
 - **Running together.** A queue head may start while other items of its repo run (or
   wait to merge) only if the repo uses worktrees, both items declare `paths`, every
   pair of their globs is disjoint, and they share no named lock. Otherwise the repo
-  lock is exclusive. Disjointness is conservative: two globs count as disjoint only
+  lock is exclusive, except that a readonly item never takes it (*Readonly items*). Disjointness is conservative: two globs count as disjoint only
   when, segment by segment, two literal segments differ or a literal fails a wildcard;
   two wildcard segments, a `**`, or one glob being a prefix of the other count as
   overlapping.
@@ -351,7 +364,7 @@ prompt on stdin: a conductor preamble followed by the item body. A staged item i
 resumed with `--resume <session id>` instead of `--session-id` (see *Staging*). The
 preamble names the item and says the session is unattended; says where it works (the
 worktree, its branch and cut point, shared folders, the commit rule) and any declared
-`paths`; gives the asking
+`paths`; gives its *Port* (below); gives the asking
 rule (ask only when a wrong guess would waste real work or be hard to undo, give a
 default whenever one exists, block only when every default is worse than waiting;
 everything else is a branch); the progress rule (a `progress` line at the start, with a
@@ -363,6 +376,17 @@ what each status means; the *Pickers* paragraph (when to write a picker manifest
 schema inline, and the `pick:` header line: see *Picks*); and that the final message
 ends `Report written to <path>`.
 The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
+
+**Port.** Every launch (a resumed stage too) gets a TCP port of its own, chosen by
+conductor: free at launch, from the OS's ephemeral range, never a run target's (the
+ports in its `url` and `ready`), another live item's or the picker's. It is in the run
+record and the `start` event (`port`), and in the executor's environment as
+`CONDUCTOR_PORT`. The preamble says that any server the executor starts uses that
+port and never the repo's usual one, and that where the repo's docs or scripts
+hard-code a port, it passes this one through (a flag or an environment variable)
+without changing them. So an item that starts the app, readonly items running side by
+side among them, never collides with **run game** or with another item's server. A
+stage and a merge executor run no servers and get no port.
 
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
 (`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …`);
@@ -778,6 +802,8 @@ of a closed local port can take up to its timeout (1s; the app's header probe us
 A repo's main checkout has no installed dependencies: executors install them in their
 worktrees, which are removed after the merge. So a target whose server needs them
 installs them first, e.g. `command = "npm install && npm run dev -- --port 5173"`.
+Name the port in `url` (or `ready`): conductor never hands a target's port to an
+executor (*Executors*, *Port*).
 
 ## Picks
 
@@ -1132,7 +1158,7 @@ the Holds section until the item starts, merges, finishes or is cancelled, or a
 reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
 `stage` and `worktree` events are left out of the inbox (they are in
 `conductor events`). `conductor status` lists the same per repo: running (pid, branch,
-kill time), merging (with the reason it waits), staging/staged, queued, and the
+`readonly`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
 *audit pending* line when the repo has unused audit notes.
 `conductor inbox` prints the same thing without moving the mark.
 
@@ -1200,8 +1226,9 @@ stop` (no confirmation: a click is cheap to undo with Run).
   (*In flight* and *Finished* start open, *Earlier checkpoints* closed). A hold row
   sits directly under the repo, before the groups (the next item then reads *blocked
   by hold*); a red hold has a **Clear hold** button (`clear: <repo>`).
-  *In flight*: the running item with its phase (`running`, `merging`, `concluding`)
-  and elapsed time, then the queue in order, the next one marked `· next` with its
+  *In flight*: each running item with its phase (`running`, `merging`, `concluding`;
+  a readonly one beside the others reads `running · readonly`), its elapsed time and,
+  while it runs, its port in the note, then the queue in order, the next one marked `· next` with its
   decision (`wait`, `stage`, …) in the note, and any invalid item. A staged item is
   still queued, so it is one row whose state carries both: `staging` (with elapsed) or
   `staged` (note: plan ready), then `· next` or `· blocked by hold`; other queued items
@@ -1314,7 +1341,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded) |
 | `invalid` | bad item, signal, stray queue folder, bad config | error |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
-| `start` | executor launched | session_id, pid, deadline, worktree, branch; resumed, landed (a staged item); template, template_version, notes (a template item; a cleanup's notes); error (launch failed) |
+| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); template, template_version, notes (a template item; a cleanup's notes); error (launch failed) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline |
 | `staged` | the stage finished cleanly | session_id, plan (first 500 chars), cost_usd |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |

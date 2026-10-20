@@ -131,6 +131,8 @@ class Activity:
     detail: str = ""
     progress: str = ""          # the latest `progress` line, with its time
     session_id: str | None = None
+    readonly: bool = False      # runs beside the repo's other items, never merges
+    port: int | None = None     # its CONDUCTOR_PORT
 
     def elapsed(self, at: datetime | None = None) -> float:
         if not self.started:
@@ -474,7 +476,8 @@ class Project:
             for rec in view.running.values():
                 if rec.get("repo") == repo:
                     a = Activity(rec.get("item", "?"), rec.get("name", "?"), PHASES.get(rec.get("phase", "exec"), rec.get("phase")),
-                                 rec.get("started"), rec.get("branch") or "", session_id=rec.get("session_id"))
+                                 rec.get("started"), rec.get("branch") or "", session_id=rec.get("session_id"),
+                                 readonly=bool(rec.get("readonly")), port=rec.get("port"))
                     if a.phase == "running" and (p := self.log.last("progress", item=a.item)):
                         a.progress = f"{progress_line(p)} · {clock(p.ts)}"
                     rs.running.append(a)

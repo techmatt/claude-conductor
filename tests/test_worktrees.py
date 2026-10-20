@@ -1,6 +1,8 @@
 import pytest
 
-from conductor import globs
+from pathlib import Path
+
+from conductor import globs, state
 
 from conftest import git
 
@@ -338,6 +340,43 @@ def test_readonly_worktree_is_discarded(env):
     assert env.finished("code/001_ro").detail["status"] == "done"
     assert main_head(env) == before and not env.worktree("001_ro").exists()
     assert "conductor/001_ro" not in branches(env)
+
+
+@pytest.mark.slow
+def test_readonly_item_runs_beside_others_with_its_own_port(env):
+    gate = env.control / "gate"
+    env.configure('[repos]\ncode = "../code"\n\n[run.game]\nrepo = "code"\ncommand = "x"\n'
+                  'url = "http://127.0.0.1:5173/"\n')
+    env.queue("001_a", f"FAKE wait-for {gate.as_posix()} 20\nFAKE commit a.txt a", stage="false")
+    env.queue("002_ro", f"FAKE wait-for {gate.as_posix()}.ro 20\nFAKE env CONDUCTOR_PORT", readonly="true")
+    env.queue("003_b", "FAKE commit b.txt b", stage="false")
+    # 002 starts beside 001 (no repo lock), and 003 waits for 001, never for 002.
+    env.tick_until(lambda: len(env.events("start")) == 2)
+    view = state.scan(env.cfg, env.d.log)
+    assert set(view.running) == {"code/001_a", "code/002_ro"}
+    assert state.decide(env.cfg, view)["code"].reason == "repo busy: code/001_a running"
+    ports = {e.item: e.detail["port"] for e in env.events("start")}
+    assert len(set(ports.values())) == 2 and 5173 not in ports.values()
+    gate.touch()
+    env.tick_until(lambda: env.finished("code/003_b"))
+    assert not env.finished("code/002_ro")                      # 003 never waited for it
+    Path(f"{gate}.ro").touch()
+    env.tick_until(lambda: env.finished("code/002_ro"))
+    assert env.finished("code/002_ro").detail["status"] == "done"
+    assert f"CONDUCTOR_PORT={ports['code/002_ro']}" in report(env, "002_ro")
+    text = (env.control / "reports" / "code__002_ro.prompt.md").read_text(encoding="utf-8")
+    assert f"uses port {ports['code/002_ro']}, also in your environment as `CONDUCTOR_PORT`" in text
+
+
+def test_readonly_item_still_takes_its_named_locks(env):
+    gate = env.control / "gate"
+    env.queue("001_a", f"FAKE wait-for {gate.as_posix()} 20", locks="['gpu']", stage="false")
+    env.queue("002_ro", "FAKE report done", readonly="true", locks="['gpu']", stage="false")
+    env.tick_until(lambda: env.events("start"))
+    env.d.tick()
+    assert state.decide(env.cfg, state.scan(env.cfg, env.d.log))["code"].reason == "lock gpu held by code/001_a"
+    gate.touch()
+    env.tick_until(lambda: env.finished("code/002_ro"))
 
 
 @pytest.mark.slow

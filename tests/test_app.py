@@ -447,6 +447,14 @@ def test_a_staged_head_is_one_repos_row(qapp, tmp_path):
         (("queued", "code/002_b"), "002_b", "queued · next", flight),
         (("group", "code", "finished"), "Finished (1 unreviewed)", "", None),
         (("done", "code/000_z"), "000_z", "done · unreviewed", ("group", "code", "finished"))]
+    # A readonly item running beside another: its state says so, its note names its port,
+    # and the summary counts both as running.
+    ro = model.Activity("code/002_ro", "002_ro", "running", None, readonly=True, port=51234)
+    rs = model.RepoState("code", tmp_path, running=[run, ro])
+    [(_, head, _, rows)] = ReposPanel._plan(None, SimpleNamespace(repos=[rs], picks={}, checkpoint=None))
+    assert head == "2 running"
+    assert [(t[1], t[3]) for k, t, _, _, _ in rows if k[0] == "run"] == [("running", ""),
+                                                                        ("running · readonly", "port 51234")]
     empty = model.RepoState("code", tmp_path)
     assert ReposPanel._plan(None, SimpleNamespace(repos=[empty], picks={}, checkpoint=None)) == [
         ("code", "idle", str(tmp_path), [])]

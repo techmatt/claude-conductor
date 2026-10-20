@@ -37,7 +37,7 @@ MESSAGE #n from Matt, or AMENDMENT #n from Matt for an addition to the prompt. I
 instruction from Matt and outranks the prompt where they conflict. Answer it with
 `progress`.
 {calls}
-{workdir}{readonly}{paths}
+{workdir}{readonly}{paths}{port}
 {audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
 time spent blocked on a question.
@@ -121,6 +121,14 @@ READONLY = ("\nThis item is readonly: commit nothing and change no tracked file.
 
 PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: conductor "
          "checks what the branch changed and marks anything else red, unmerged.{prose}")
+
+PORT_VAR = "CONDUCTOR_PORT"
+
+PORT = ("\nPort. Any server you start (the app, a dev server, anything that listens) uses port "
+        "{port}, also in your environment as `" + PORT_VAR + "`; never the repo's usual port, which "
+        "a run target or another item's server may hold. Where the repo's docs or scripts "
+        "hard-code a port, pass this one through (a flag or an environment variable) without "
+        "changing them. If you need a second port, ask the OS for a free one (bind to port 0).")
 
 PROSE = (" Prose files ({globs}) are exempt: update them as the work needs; another item may "
          "edit them at the same time, and conductor merges them textually.")
@@ -288,6 +296,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         readonly=READONLY if item.readonly else "",
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
+        port=PORT.format(port=run["port"]) if run.get("port") else "",
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,

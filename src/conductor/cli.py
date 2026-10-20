@@ -72,7 +72,8 @@ def cmd_status(args) -> int:
             blocked = [q.id for q in open_qs if q.item == item_id and q.block]
             kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
                     else f"kill at {clock(rec['deadline'])}")
-            print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}, {kill}")
+            extra = (", readonly" if rec.get("readonly") else "") + (f", port {rec['port']}" if rec.get("port") else "")
+            print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}{extra}, {kill}")
             if p := log.last("progress", item=item_id):
                 print(f"           progress {clock(p.ts)}: {progress_line(p)}")
         for item_id, rec in view.staged.items():

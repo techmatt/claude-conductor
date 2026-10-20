@@ -10,6 +10,7 @@
     FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
     FAKE check <path>                        the report is red unless <path> exists
     FAKE pick <path>                         add `pick: <path>` to the report header, after carry:
+    FAKE env <NAME>                          write `NAME=<its value>` into the report
     FAKE error                               emit an is_error result
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
                                              the result text goes into the report
@@ -30,6 +31,7 @@ recalls that prompt, runs its FAKE lines, and says so in the report.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -181,6 +183,8 @@ for ln in lines:
             is_error = True
         case "pick":
             pick = parts[2]
+        case "env":
+            memory += f"{parts[2]}={os.environ.get(parts[2])}\n"
     if parts[1] not in ("sleep", "wait-for"):   # waiting is thinking, not a tool call
         post_tool_use(parts[1])
 if status != "none":
