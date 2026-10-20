@@ -26,6 +26,13 @@ def checkpoint_name(ev: Event) -> str:
     return f"checkpoint #{ev.id}" + (f' "{label}"' if label else "")
 
 
+def slow_text(detail: dict) -> str | None:
+    """A finish's `slow:` worth showing: what its report said took long, or None when
+    it said `none` or (an older report) nothing."""
+    slow = (detail.get("slow") or "").strip()
+    return slow if slow and slow.lower().rstrip(".") != "none" else None
+
+
 def describe(ev: Event) -> str:
     """One line for an event, used by the inbox and `conductor events`."""
     d = ev.detail
@@ -39,6 +46,8 @@ def describe(ev: Event) -> str:
                 text += f" · blocks: {d['blocks']}"
             if d.get("carry") not in (None, "none"):
                 text += f" · carry: {d['carry']}"
+            if slow := slow_text(d):
+                text += f" · slow: {slow}"
             if d.get("pick"):
                 text += f" · pick: {d['pick']}"
         case "pick_open":
@@ -309,10 +318,12 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
             d = ev.detail
             report = f" — {ev.paths[0]}" if ev.paths else ""
             carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
+            slow = f" · slow: {s}" if (s := slow_text(d)) else ""
             pick = f" · pick: {d['pick']}" if d.get("pick") else ""
             old = (" · **carried from before checkpoint "
                    f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
-            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){report}{carry}{pick}{old}")
+            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id})"
+                       f"{report}{carry}{slow}{pick}{old}")
         out.append("  Mark one reviewed once acted on: signal `reviewed: <repo>/<NNN_name>`.")
     if pick_rows := pick_lines(cfg, log, view):
         # Standing too: a picker waits for Matt whatever the read mark says.

@@ -471,6 +471,24 @@ def test_reviewed_marks_a_finished_report_and_survives_restart(env):
 
 
 @pytest.mark.slow
+def test_slow_line_rides_the_finish_into_the_inbox(env):
+    from conductor import inbox, state
+    slow = "tests ~25m, every change ran the full lane, split the browser tests out"
+    env.queue("001_a", f"FAKE slow {slow}")
+    env.queue("002_b", "FAKE slow none")
+    env.queue("003_c", "FAKE report done")                  # an older-style report: no slow: line
+    env.tick_until(lambda: env.finished("code/003_c"))
+    assert [env.finished(f"code/{i}").detail["slow"] for i in ("001_a", "002_b", "003_c")] == [slow, "none", None]
+    assert not env.events("red")
+    text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
+    section = text.split("## Unreviewed reports", 1)[1].split("\n## ", 1)[0]
+    lines = {ln.split()[1]: ln for ln in section.splitlines() if ln.startswith("- ")}
+    assert f" · slow: {slow}" in lines["code/001_a"]
+    assert "slow:" not in lines["code/002_b"] and "slow:" not in lines["code/003_c"]
+    assert f"slow: {slow}" in inbox.describe(env.finished("code/001_a"))
+
+
+@pytest.mark.slow
 def test_reviewed_refusals(env):
     env.queue("001_long", env.hold() + "\nFAKE report done")
     env.queue("002_q", "FAKE report done", stage="false")

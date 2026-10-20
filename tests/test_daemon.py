@@ -234,3 +234,25 @@ def test_header_parsing(tmp_path):
     assert problem is None and header["status"] == "partial" and header["carry"] == "add X"
     r.write_text("status: great\nblocks: none\ncarry: none\n", encoding="utf-8")
     assert executor.read_header(r)[1]
+
+
+def test_header_slow_line(tmp_path):
+    r = tmp_path / "r.md"
+    slow = "tests ~20m, full lane every change, mark the browser tests slow"
+    for text in (f"status: done\nblocks: none\ncarry: none\nslow: {slow}\npick: picks/m.json\n\nbody\n",
+                 f"---\nstatus: done\nblocks: none\ncarry: none\npick: picks/m.json\nslow: {slow}\n---\nbody\n"):
+        r.write_text(text, encoding="utf-8")
+        header, problem = executor.read_header(r)
+        assert problem is None and header["slow"] == slow and header["pick"] == "picks/m.json"
+    # Absent (an older report) is no problem; `none` is kept as said.
+    r.write_text("status: done\nblocks: none\ncarry: none\n\nbody\n", encoding="utf-8")
+    header, problem = executor.read_header(r)
+    assert problem is None and "slow" not in header
+    r.write_text("status: done\nblocks: none\ncarry: none\nslow: none\n\nbody\n", encoding="utf-8")
+    assert executor.read_header(r)[0]["slow"] == "none"
+    # Only straight after the three: a body line, or a fifth after a non-header fourth, is body.
+    r.write_text("status: done\nblocks: none\ncarry: none\nThe build was fine.\nslow: the build\n", encoding="utf-8")
+    header, problem = executor.read_header(r)
+    assert problem is None and "slow" not in header
+    r.write_text("status: done\nblocks: none\ncarry: none\nNotes.\npick: picks/m.json\n", encoding="utf-8")
+    assert "pick" not in executor.read_header(r)[0]

@@ -10,7 +10,7 @@ import psutil
 import pytest
 
 from conductor import questions
-from conductor.app import actions, model
+from conductor.app import actions, model, theme
 from conductor.app.model import Project, ReadOnlyLog, render_stream_json
 
 from conftest import CONTROL_GITIGNORE, git, init_repo
@@ -528,6 +528,7 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
     panel = view.repos_panel
     row = panel._rows[("done", "code/001_x")]
     assert row.text(1) == "done · unreviewed"
+    assert row.foreground(0).color().name() == theme.AMBER          # unreviewed: needs Matt
     button = panel.tree.itemWidget(row, 4).button
     button.click()
     assert not button.isEnabled()
@@ -536,7 +537,8 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
     win.refresh()
     assert view.tabs.tabText(0) == "Repos"
     row = panel._rows[("done", "code/001_x")]
-    assert row.text(1) == "done · reviewed" and set(panel.tree.itemWidget(row, 4).buttons) == {"Open in terminal"}
+    assert row.text(1) == "done · reviewed" and set(panel.tree.itemWidget(row, 4).buttons) == {"Terminal"}
+    assert row.foreground(0).color().name() != theme.AMBER          # reviewed: no longer needs Matt
     # Events: Activity by default; Advanced shows every kind.
     ev = view.events_panel
     assert not ev.advanced.isChecked()
@@ -569,10 +571,10 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     assert env.events("delivered")
     win.refresh()
     holder = repos.tree.itemWidget(repos._rows[("done", "code/001_x")], 4)
-    assert set(holder.buttons) == {"Mark reviewed", "Open in terminal"}
+    assert set(holder.buttons) == {"Mark reviewed", "Terminal"}
     opened = []
     monkeypatch.setattr(procs, "open_console", lambda argv, cwd: opened.append((argv, cwd)))
-    holder.buttons["Open in terminal"].click()
+    holder.buttons["Terminal"].click()
     sid = env.finished("code/001_x").detail["session_id"]
     assert opened and opened[0][0][-2:] == ["--resume", sid]
     view.open_item("code/001_x")
@@ -735,9 +737,16 @@ def test_pick_button_in_the_repos_tab(qapp, env, tmp_path):
     assert row.text(3).endswith(" · pick: waiting for Matt")
     assert any(head.endswith(" · 1 to pick") for _, head, _, _ in panel._plan(view.snap))
     holder = panel.tree.itemWidget(row, 4)
-    assert list(holder.buttons) == ["Mark reviewed", "Pick…", "Open in terminal"]
+    assert list(holder.buttons) == ["Mark reviewed", "Pick…", "Terminal"]
+    # The widest row's buttons fit their column, labels whole.
+    assert holder.sizeHint().width() <= panel.tree.header().sectionSize(4)
+    for b in holder.buttons.values():
+        assert b.sizeHint().width() >= b.fontMetrics().horizontalAdvance(b.text())
     pick = holder.buttons["Pick…"]
     assert pick.property("tone") == "default"           # amber: it waits for Matt
+    # Unreviewed: the row needs Matt, so its name and Mark reviewed are amber.
+    assert row.foreground(0).color().name() == theme.AMBER and row.background(0).color().name() == theme.AMBER_BG
+    assert holder.buttons["Mark reviewed"].property("tone") == "default"
     pick.click()
     [sig] = (env.control / "signals").glob("app-*.signal")
     assert sig.read_text(encoding="utf-8") == f"by: app\npick: {ref}\n"
@@ -750,6 +759,9 @@ def test_pick_button_in_the_repos_tab(qapp, env, tmp_path):
     assert row.text(3).endswith(" (6 changed, 2 notes)") and " · pick: saved " in row.text(3)
     assert panel.tree.itemWidget(row, 4).buttons["Pick…"].property("tone") is None   # rebuilt on save
     assert view.tabs.tabText(0) == "Repos (1 unreviewed)"
+    # Saved: the action is taken, so the amber goes, though the report is still unreviewed.
+    assert row.foreground(0).color().name() != theme.AMBER
+    assert panel.tree.itemWidget(row, 4).buttons["Mark reviewed"].property("tone") is None
     win._quitting = True
     win.close()
 

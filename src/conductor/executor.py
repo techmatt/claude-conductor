@@ -48,12 +48,18 @@ When you finish, whatever the outcome, write your report to exactly this path:
 write or commit anything else in that folder: conductor checks it after you exit,
 reverts any change, and marks this item red.
 
-The report must start with these three lines:
+The report must start with these four lines:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
-and, only if you wrote a picker manifest, a fourth:
+slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
+and, only if you wrote a picker manifest, a fifth:
 pick: <manifest path relative to the repo root>
+`slow:` names only a part of this work that took over ~15 minutes, or about twice what
+you expected: a coarse time, the cause, and a fix if you can see one (a test-lane split,
+a fact missing from README or CLAUDE.md, a slow build step, a tool that kept failing,
+too much searching to find something). `none` is the normal answer; never pad it, and
+skip timings your progress lines already gave.
 `done`: the goal was met.
 `partial`: part of the goal was met, nothing is broken, and the rest is follow-up work.
 This includes declining an instruction for a stated reason.
@@ -462,26 +468,36 @@ def compact_log(log: Path) -> tuple[int, int] | None:
 
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:
-    """(header, problem). Accepts the three lines bare or inside a `---` block, and an
-    optional fourth, `pick:` (a picker manifest's path; only there, never in the body)."""
+    """(header, problem). Accepts the three lines bare or inside a `---` block, then
+    `slow:` (what took long; absent is no problem) and an optional `pick:` (a picker
+    manifest's path). Those two only right after the three, never in the body."""
     if not report.is_file():
         return None, "no report written"
     lines = [ln.strip() for ln in read_text(report).splitlines()]
-    lines = [ln for ln in lines if ln and ln != "---"][:4]
+    lines = [ln for ln in lines if ln and ln != "---"][:5]
     header = {}
     for n, ln in enumerate(lines):
-        m = re.match(r"^\**(status|blocks|carry|pick)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
+        m = re.match(r"^\**(status|blocks|carry|slow|pick)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
         key = m.group(1).lower() if m else None
         if key is None or key in header:
             continue                    # the first of each key counts; a repeat is body
-        if key != "pick":
+        if key in HEADER_KEYS:
             if n < 3:
                 header[key] = m.group(2).strip()
             continue
-        # `pick:` only right after the three, as one path: a fourth line that merely
-        # starts "Pick: went with the warmer palette" is the body's.
-        value = m.group(2).strip().strip("`").strip()
-        if all(k in header for k in HEADER_KEYS) and value and len(value.split()) == 1:
+        # `slow:` and `pick:` only as the lines straight after the three (either order):
+        # a fifth line is theirs only when the fourth was the other one.
+        if not all(k in header for k in HEADER_KEYS) or n - 3 != sum(k in header for k in ("slow", "pick")):
+            continue
+        value = m.group(2).strip()
+        if key == "slow":
+            if value:
+                header["slow"] = value
+            continue
+        # `pick:` as one path: a line that merely starts "Pick: went with the warmer
+        # palette" is the body's.
+        value = value.strip("`").strip()
+        if value and len(value.split()) == 1:
             header["pick"] = value
     missing = [k for k in HEADER_KEYS if k not in header]
     if missing:

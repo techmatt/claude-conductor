@@ -9,7 +9,9 @@
     FAKE commit <file> <text>                write <file> in cwd and commit it
     FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
     FAKE check <path>                        the report is red unless <path> exists
+    FAKE slow <text>                         add `slow: <text>` to the report header, after carry:
     FAKE pick <path>                         add `pick: <path>` to the report header, after carry:
+                                             (and slow:)
     FAKE env <NAME>                          write `NAME=<its value>` into the report
     FAKE error                               emit an is_error result
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
@@ -132,7 +134,7 @@ def progress(arguments: dict) -> str:
     return text
 
 
-status, is_error, pick = "done", False, None
+status, is_error, pick, slow = "done", False, None, None
 answers = []
 hogs = []
 for ln in lines:
@@ -220,13 +222,15 @@ for ln in lines:
             memory += f"HOG={left.pid}\n"
         case "pick":
             pick = parts[2]
+        case "slow":
+            slow = ln.split(" ", 2)[2]
         case "env":
             memory += f"{parts[2]}={os.environ.get(parts[2])}\n"
     if parts[1] not in ("sleep", "wait-for"):   # waiting is thinking, not a tool call
         post_tool_use(parts[1])
 if status != "none":
     report.write_text(f"status: {status}\nblocks: none\ncarry: none\n"
-                      + (f"pick: {pick}\n" if pick else "") + "\nFake report.\n" + memory
+                      + (f"slow: {slow}\n" if slow else "") + (f"pick: {pick}\n" if pick else "") + "\nFake report.\n" + memory
                       + "".join(f"\nASK RESULT: {a}\n" for a in answers)
                       + "".join(f"\nCONTEXT: {c}\n" for c in contexts), encoding="utf-8")
 result(is_error=is_error)

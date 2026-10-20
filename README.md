@@ -472,15 +472,28 @@ logs from before this existed. A failure is a `warning`; the log is left as it w
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
+slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 pick: <manifest path relative to the repo root>     # optional: only after writing a picker manifest
 ```
 
-(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first four
+(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first five
 non-blank lines are read: `status`, `blocks` and `carry` count only in the first three
-(the first of each), and `pick:` only as the fourth, after all three, with a one-word
-value; so a body that opens with "Status: …" or "Pick: went with …" stays body. Backticks
-around its value are dropped, `\` becomes `/`, and `pick: none` is no pick. The `finish`
-event carries it as `pick: <repo>/<path>`, the ref the `pick:` signal takes.
+(the first of each); `slow:` and `pick:` only straight after them (fourth, or fifth when
+the fourth was the other), `pick:` with a one-word value; so a body that opens with
+"Status: …" or "Pick: went with …" stays body. Backticks around a pick are dropped, `\`
+becomes `/`, and `pick: none` is no pick. The `finish` event carries it as
+`pick: <repo>/<path>`, the ref the `pick:` signal takes.
+
+`slow:` is where the executor's time went, the one thing an audit can't reconstruct
+later: a component listed only if it took over ~15 minutes or about twice what was
+expected, with a coarse time, the cause and a fix when one is visible (a test-lane
+split, a fact missing from README or CLAUDE.md, a slow build step, a tool that kept
+failing, too much searching). `none` is the normal answer. The preamble asks for it from
+every item, template items included. A report without it still parses (`slow` is null:
+no red, no warning). The `finish` event carries it as written; the inbox's *Unreviewed
+reports* line, `conductor events`, the app's Activity line and the Repos tab's note
+(whole in its tooltip) show it unless it is `none` or absent. The planner reads these
+lines as a maintenance trigger (`claude-ai-new-project.md`, *Maintenance*).
 
 **Outcome.** The item's final status is the report's status unless something makes it
 red: no report or a bad header, no `result` line in the log, `is_error` in the result,
@@ -770,8 +783,8 @@ background command's notification (the preamble asks it not to), and never once 
 has made its last tool call (then it is undelivered). A non-shell tool that runs long
 (an Agent / Task subagent, a Workflow) is not capped.
 
-**Open a finished session.** `conductor open <item>` (and **Open in terminal** in the
-app) opens a new console window running `<executor command> --resume <session id>`
+**Open a finished session.** `conductor open <item>` (and **Terminal** in the app's
+Repos tab, **Open in terminal** in its trail) opens a new console window running `<executor command> --resume <session id>`
 (the session id from the item's `finish` event) in the item's worktree while it exists,
 else the repo's main checkout: `--resume` finds a session from any folder. Refused
 while the item is running or staged (resuming a live session forks it). Windows only;
@@ -1217,7 +1230,8 @@ for the *Now* section). Its header names the current checkpoint (see *Checkpoint
 First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status, finish time, finish event id, report path and `carry:`
-line (and ` · pick: <ref>` when its report named a picker); it shows on every inbox,
+line (and ` · slow: …` unless its report said `slow: none` or nothing, and
+` · pick: <ref>` when its report named a picker); it shows on every inbox,
 read mark or not, until a `reviewed:` signal names the item. Then **Picks**, also
 standing (see *Picks*, *Pending*): each pending picker, then any picker saved since the
 checkpoint (any time without one) that no pending item names, as the saved line
@@ -1326,8 +1340,10 @@ stop` (no confirmation: a click is cheap to undo with Run).
   *Finished* holds the repo's current finished items (those not settled by a
   checkpoint), newest first: the
   10 most recent plus every unreviewed one however old, each with its status, finish
-  time, carry and a *reviewed* / *unreviewed* mark (unreviewed bold, coloured by
-  status; reviewed muted). Double-click opens the trail, as for live items. Each
+  time, carry, slow (unless `none`) and a *reviewed* / *unreviewed* mark (unreviewed
+  bold, coloured by status; reviewed muted); the note's tooltip holds it whole. An
+  unreviewed row needs Matt, so its name is amber on an amber cell and its **Mark
+  reviewed** has the amber border, until it is reviewed or its picker is saved. Double-click opens the trail, as for live items. Each
   unreviewed row has **Mark reviewed** (`reviewed: <repo>/<NNN_name>`, `by: app`; the
   button disables once clicked and the row turns *reviewed* when the daemon logs it).
   The tab label reads *Repos (N unreviewed)*, in amber, while any report is unreviewed.
@@ -1335,8 +1351,8 @@ stop` (no confirmation: a click is cheap to undo with Run).
   when it was sent); while it executes it has **Tell…**, a text box whose message goes
   out as a `tell:` signal (`by: app`). A queued row (beside **Cancel**) and an executing
   one (beside **Tell…**) have **Amend…**, a multi-line box written as an amend file
-  (`by: app`; see *Amendments*). Every finished row has **Open in terminal**
-  (`claude --resume`, see *Progress and messages*), beside **Mark reviewed** while
+  (`by: app`; see *Amendments*). Every finished row has **Terminal** (open in terminal:
+  `claude --resume`, see *Progress and messages*), beside **Mark reviewed** while
   unreviewed. A finished row whose report named a picker has **Pick…** (`pick: <ref>`,
   `by: app`; amber until saved) and its note adds ` · pick: saved 4:52pm (6 changed, 2
   notes)`, ` · pick: opened, not saved` or ` · pick: waiting for Matt` (see *Picks*,
@@ -1445,7 +1461,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
 | `requeue` | restart found it never launched | reason |
 | `kill` | max_hours reached | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged; audit (it kept notes), template |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged; audit (it kept notes), template |
 | `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window | changes, concurrent |
@@ -1569,8 +1585,8 @@ built once per worker. The fake runs the real message hook only when a message i
 waiting.
 A staging prompt makes the fake obey only `FAKE stage-…` lines and remember the prompt
 under its session id; `--resume` recalls it, so a test can see that a resumed session
-kept what it read while staging. `FAKE pick <path>` adds `pick: <path>` to the report
-header after `carry:` (a test writes the manifest and images with `FAKE commit` first);
+kept what it read while staging. `FAKE slow <text>` adds `slow: <text>` and
+`FAKE pick <path>` adds `pick: <path>` to the report header after `carry:` (a test writes the manifest and images with `FAKE commit` first);
 picker tests stub the browser and bind port 0. `FAKE leave <s>` starts a process in the
 worktree that outlives the executor and `FAKE hog <MB> <s>` a child holding touched
 memory (each pid in the report) for the reaper and sampler. The test template turns

@@ -20,7 +20,7 @@ from .. import config as config_mod
 from .. import git, items, memory, picks, questions, state, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
-from ..inbox import checkpoint_name, describe, progress_line
+from ..inbox import checkpoint_name, describe, progress_line, slow_text
 from ..state import DaemonInfo, daemon_info
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
 
@@ -132,6 +132,7 @@ class Finished:
     carry: str | None = None
     session_id: str | None = None
     pick: str | None = None     # the manifest ref its report's `pick:` line named
+    slow: str | None = None     # its report's `slow:`, unless `none` or absent
 
 
 @dataclass
@@ -217,7 +218,7 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
 def _finished(view: state.View, e: Event) -> Finished:
     return Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
                     e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id"),
-                    e.detail.get("pick") or None)
+                    e.detail.get("pick") or None, slow_text(e.detail))
 
 
 def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
@@ -272,6 +273,8 @@ def activity_text(ev: Event) -> str:
             text = f"report {name} written — {d.get('status')}"
             if d.get("carry") not in (None, "none"):
                 text += f" (carry: {d['carry']})"
+            if slow := slow_text(d):
+                text += f" (slow: {slow})"
             if d.get("pick"):
                 text += f" (pick: {d['pick']})"
             return text

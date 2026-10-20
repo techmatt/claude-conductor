@@ -1620,7 +1620,7 @@ class Daemon:
         rec["outcome"] = {
             "status": status, "report_status": report_status, "reasons": reasons,
             "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
-            "pick": _pick_ref(repo, (header or {}).get("pick")),
+            "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
             "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }
@@ -1980,7 +1980,7 @@ class Daemon:
         self.log.append(
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
-            blocks=out["blocks"], carry=out["carry"], pick=out.get("pick"),
+            blocks=out["blocks"], carry=out["carry"], slow=out.get("slow"), pick=out.get("pick"),
             session_id=rec["session_id"], exit_code=out["exit_code"],
             cost_usd=out["cost_usd"], turns=out["turns"],
             needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,

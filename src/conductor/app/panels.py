@@ -191,6 +191,7 @@ class Panel(QWidget):
 # ===================================================================== Repos
 class ReposPanel(Panel):
     COLS = ["Repo / item", "State", "Elapsed", "Note", ""]
+    BUTTONS_WIDTH = 310     # the button column's least width; each rebuild widens it to fit
 
     def __init__(self, project: Project, notify):
         super().__init__(project, notify)
@@ -206,7 +207,7 @@ class ReposPanel(Panel):
             h.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        h.resizeSection(4, 310)            # room for Mark reviewed, Pick… and Open in terminal
+        h.resizeSection(4, self.BUTTONS_WIDTH)   # room for Mark reviewed, Pick… and Terminal
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
@@ -298,7 +299,8 @@ class ReposPanel(Panel):
                 rows.append((group, [label, "", "", ""], None, "group|" + tip, None))
             for f in rs.finished:
                 mark = "reviewed" if f.reviewed else "unreviewed"
-                note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
+                note = (f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
+                        + (f" · slow: {f.slow}" if f.slow else ""))
                 look = f"done:{f.status}:{mark}"
                 if f.pick:
                     # The pick state is part of the look: a save changes the button's tone.
@@ -316,7 +318,8 @@ class ReposPanel(Panel):
                 rows.append((("group", rs.name, "earlier"), [f"Earlier checkpoints ({rs.earlier_total})", "", "", ""],
                              None, f"group|finished and reviewed before {cp}{more}", None))
             for f in rs.earlier:
-                note = f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
+                note = (f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
+                        + (f" · slow: {f.slow}" if f.slow else ""))
                 look = f"done:{f.status}:reviewed"
                 if f.pick:                          # settled: no longer waits, but reopens
                     note += f" · pick: {f.pick}"
@@ -401,6 +404,13 @@ class ReposPanel(Panel):
                     w.setForeground(1, QBrush(QColor(state)))
                 if strong:
                     w.setFont(1, bold)
+                if texts[3]:
+                    w.setToolTip(3, texts[3])       # a long note (carry, slow) reads whole here
+                if look.endswith(":unreviewed") and pick_state != "saved":
+                    # Needs Matt: its name amber until the report is reviewed or its pick saved.
+                    w.setForeground(0, QBrush(AMBER))
+                    w.setBackground(0, QBrush(QColor(theme.AMBER_BG)))
+                    w.setFont(0, bold)
                 if key[0] == "red":
                     # The one action that releases the hold: drawn as the row's main action.
                     self.tree.setItemWidget(w, 4, compact_button("Clear hold", lambda _=False, r=repo: self._clear(r),
@@ -414,18 +424,24 @@ class ReposPanel(Panel):
                         ("Tell…", lambda _=False, i=key[1]: self._tell(i), None),
                         ("Amend…", lambda _=False, i=key[1]: self._amend(i), None)))
                 elif key[0] in ("done", "old"):
-                    specs = [("Open in terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
+                    specs = [("Terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
                     if pick_state and (ref := self._picks.get(key[1])):
                         # Amber until saved: the picker waits for Matt.
                         specs.insert(0, ("Pick…", lambda _=False, r=ref: self._pick(r),
                                          None if pick_state in ("saved", "settled") else "default"))
                     if look.endswith(":unreviewed"):
-                        specs.insert(0, ("Mark reviewed", None, None))
+                        specs.insert(0, ("Mark reviewed", None, None if pick_state == "saved" else "default"))
                     holder = compact_buttons(*specs)
                     if b := holder.buttons.get("Mark reviewed"):
                         b.clicked.connect(lambda _=False, i=key[1], b=b: self._reviewed(i, b))
-                    holder.buttons["Open in terminal"].setEnabled(bool(self._sessions.get(key[1])))
+                    term = holder.buttons["Terminal"]
+                    term.setToolTip("Open this item's session in a terminal (claude --resume)")
+                    term.setEnabled(bool(self._sessions.get(key[1])))
                     self.tree.setItemWidget(w, 4, holder)
+        # The button column fits its widest row, so no label is cut ("Open in terminal" was).
+        widest = max((h.sizeHint().width() for w in self._rows.values()
+                      if (h := self.tree.itemWidget(w, 4)) is not None), default=0)
+        self.tree.header().resizeSection(4, max(self.BUTTONS_WIDTH, widest + 8))
         self.tree.blockSignals(True)            # not a click: the remembered state stays
         for key, w in self._rows.items():
             if key[0] in ("repo", "group"):
