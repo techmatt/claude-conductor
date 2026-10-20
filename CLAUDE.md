@@ -14,6 +14,18 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 
 When Matt says "launch the conductor" (or "launch conductor", "start the conductor app", "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\wordwarriors-control`). The app also reopens every remembered project, so naming the newest one is enough. It is a viewer only — it does not start the daemon (`uv run conductor run <control>`), and launching it is not a test, so the sandbox-only rule below does not apply.
 
+## "Run next prompt"
+
+When Matt says "run next prompt" (or "run the next prompt" and the like):
+
+- **Next** is the lowest-numbered prompt in `prompts/` after the newest one that has a report in `reports/` (`NN_name.md` ↔ `NN_name_report.md`), in natural order: 12 < 12a < 13.
+- Name it first ("Running 19_run_next_and_maintenance"), so a wrong pick is obvious, then run exactly that one as if pasted, ending with `Report written to <path>` as usual. Never chain on to the next one.
+- With several unrun, run only the lowest and say how many remain.
+- An **older** prompt with no report (skipped or superseded) is never run by this phrase; mention it in one line in case it was missed.
+- **None:** say so in one line ("No unrun prompt; the latest is 18_readonly_concurrency_and_report_marker, and its report is in") and do nothing else: no invented work, no reruns.
+
+There is no "run all prompts" phrase.
+
 ## Standing prompt contract
 
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
