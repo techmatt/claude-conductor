@@ -7,6 +7,7 @@ answers and scroll positions survive the refresh.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateTimeEdit, QGroupBox, QHBoxLayout,
     QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
     QSplitter, QStyle, QStyledItemDelegate, QTableView, QTableWidget, QTableWidgetItem, QTabWidget,
-    QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QTextBrowser, QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .. import audits, items
@@ -31,7 +32,7 @@ from ..events import RED_KINDS, Event
 from ..inbox import describe
 from ..util import clock, duration, now, parse_stamp
 from . import actions, theme
-from .model import ACTIVITY_KINDS, ALWAYS_KINDS, Project, Snapshot, activity_text, git_trail
+from .model import ACTIVITY_KINDS, ALWAYS_KINDS, Project, Snapshot, activity_text, conversation, git_trail
 
 RED = QColor(theme.RED)
 AMBER = QColor(theme.AMBER)
@@ -211,10 +212,25 @@ class ReposPanel(Panel):
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
-        hint = muted(QLabel("Double-click an item to open its trail. Clear, Cancel, Mark reviewed and Pick… are signals "
-                            "the daemon carries out."))
+        hint = muted(QLabel("Select an item to follow it on the right; double-click opens it in Events. Clear, "
+                            "Cancel, Mark reviewed and Pick… are signals the daemon carries out."))
         lay.addWidget(hint)
-        lay.addWidget(self.tree)
+        # The tree on the left, the selected item's detail (Conversation first) on the right.
+        split = QSplitter(Qt.Orientation.Horizontal)
+        split.addWidget(self.tree)
+        self.detail = TrailView(project, conversation=True)
+        self.detail.setMinimumWidth(320)
+        self.detail.conversation.tell.connect(self._tell)
+        self.detail.conversation.amend.connect(self._amend)
+        split.addWidget(self.detail)
+        split.setStretchFactor(0, 3)
+        split.setStretchFactor(1, 2)
+        split.setSizes([720, 520])
+        lay.addWidget(split, 1)
+        self.selected: str | None = None                # the item Matt picked in the tree
+        self._actions: dict[str, tuple[bool, bool]] = {}    # item → (Tell allowed, Amend allowed)
+        self._rebuilding = False
+        self.tree.currentItemChanged.connect(self._current_changed)
         self._sig: tuple | None = None
         self._rows: dict[tuple, QTreeWidgetItem] = {}
         self._sessions: dict[str, str | None] = {}      # finished item → its session id
@@ -335,14 +351,23 @@ class ReposPanel(Panel):
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
-    def update_snapshot(self, snap: Snapshot) -> None:
+    def update_snapshot(self, snap: Snapshot, new: list[Event] = ()) -> None:
         self._sessions = {f.item: f.session_id for rs in snap.repos for f in (*rs.finished, *rs.earlier)}
         self._picks = {f.item: f.pick for rs in snap.repos for f in (*rs.finished, *rs.earlier) if f.pick}
         plan = self._plan(snap)
+        # Tell and Amend follow the tree's buttons: Tell only while executing, Amend
+        # queued (staged included) or executing.
+        self._actions = {}
+        for _, _, _, rows in plan:
+            for key, _, item_id, look, _ in rows:
+                if item_id and key[0] in ("run", "queued"):
+                    running = key[0] == "run" and look == "run"
+                    self._actions[item_id] = (running, running or key[0] == "queued")
         sig = tuple((repo, tuple((k, look) for k, _, _, look, _ in rows)) for repo, _, _, rows in plan)
         if sig != self._sig:
             self._rebuild(plan)
             self._sig = sig
+        self._follow(snap, new)
         # Elapsed is empty unless something runs or stages: hide it then.
         self.tree.setColumnHidden(2, not any(rs.running or rs.staged for rs in snap.repos))
         for repo, note, _, rows in plan:
@@ -357,6 +382,18 @@ class ReposPanel(Panel):
                         w.setText(col, t)
 
     def _rebuild(self, plan) -> None:
+        self._rebuilding = True
+        try:
+            self._build(plan)
+            # The selection survives: the selected item's row again (its key may have
+            # changed, queued → run → done).
+            if again := next((w for key, w in self._rows.items() if key[0] not in ("repo", "group", "red", "hold")
+                              and w.data(0, Qt.ItemDataRole.UserRole) == self.selected), None):
+                self.tree.setCurrentItem(again)
+        finally:
+            self._rebuilding = False
+
+    def _build(self, plan) -> None:
         self.tree.clear()
         self._rows = {}
         bold = self.tree.font()
@@ -447,6 +484,33 @@ class ReposPanel(Panel):
             if key[0] in ("repo", "group"):
                 w.setExpanded(self._open.get(key, key[0] == "repo" or self.GROUP_OPEN[key[2]]))
         self.tree.blockSignals(False)
+
+    def _follow(self, snap: Snapshot, new: list[Event]) -> None:
+        """Keep the detail on the selected item, or with nothing selected on the running
+        item, else the most recently finished one; refresh it when it has new events."""
+        shown = self.selected
+        if shown is None:
+            running = [a for rs in snap.repos for a in rs.running]
+            done = sorted((f for rs in snap.repos for f in rs.finished), key=lambda f: f.ts, reverse=True)
+            shown = (min(running, key=lambda a: a.started or "").item if running
+                     else done[0].item if done else None)
+        tell, amend = self._actions.get(shown, (False, False)) if shown else (False, False)
+        self.detail.conversation.set_actions(tell, amend)
+        if shown != self.detail.item:
+            if shown:
+                self.detail.show_item(shown)
+        elif shown and any(e.item == shown for e in new):
+            self.detail.refresh_item()
+
+    def _current_changed(self, w: QTreeWidgetItem | None, _prev=None) -> None:
+        if self._rebuilding:
+            return
+        item_id = w.data(0, Qt.ItemDataRole.UserRole) if w is not None else None
+        if item_id and item_id != self.selected:
+            self.selected = item_id
+            tell, amend = self._actions.get(item_id, (False, False))
+            self.detail.conversation.set_actions(tell, amend)
+            self.detail.show_item(item_id)
 
     def _expanded(self, w: QTreeWidgetItem, on: bool) -> None:
         """Remember each repo row's and group's open state across rebuilds."""
@@ -795,8 +859,108 @@ class TrailHighlighter(QSyntaxHighlighter):
             self.setFormat(0, len(text), self._fmt(theme.MUTED, False, True))
 
 
+class ConversationView(QWidget):
+    """One item as a chat thread (`model.conversation`): Matt's messages and amendments on
+    the right with their replies under them, the executor's questions and progress on
+    the left, conductor's start, picker and finish lines across. Tell… and Amend… at the
+    bottom act on the item on screen. It follows the newest entry unless Matt scrolled up."""
+    report = Signal()               # the finish's "Report" link
+    tell = Signal(str)
+    amend = Signal(str)
+
+    LOOK = {"matt": (theme.SELECT, "Matt"), "executor": (theme.BASE, "executor"), "conductor": (theme.BAND, "conductor")}
+    TONE = {"wait": theme.MUTED, "warn": theme.AMBER, "red": theme.RED, "done": theme.GREEN,
+            "partial": theme.AMBER}
+
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.view = QTextBrowser()
+        self.view.setOpenLinks(False)
+        self.view.anchorClicked.connect(lambda url: self.report.emit() if url.toString() == "report" else None)
+        self.view.setStyleSheet(f"QTextBrowser {{ background: {theme.WINDOW}; }}")
+        lay.addWidget(self.view, 1)
+        bar = QHBoxLayout()
+        self.tell_btn = QPushButton("Tell…")
+        self.tell_btn.setToolTip("A message to the running executor; it arrives after its next tool call "
+                                 "and the executor answers with a progress line, shown under it here")
+        self.amend_btn = QPushButton("Amend…")
+        self.amend_btn.setToolTip("An addition to this item's prompt: queued, appended at launch; staged, "
+                                  "in the resume message; running, after its next tool call")
+        self.tell_btn.clicked.connect(lambda: self.item and self.tell.emit(self.item))
+        self.amend_btn.clicked.connect(lambda: self.item and self.amend.emit(self.item))
+        self.hint = muted(QLabel())
+        bar.addWidget(self.hint, 1)
+        bar.addWidget(self.tell_btn)
+        bar.addWidget(self.amend_btn)
+        lay.addLayout(bar)
+        self.item: str | None = None
+        self.turns: list = []
+        self._html = ""
+        self.set_actions(False, False)
+
+    def set_actions(self, tell: bool, amend: bool) -> None:
+        self.tell_btn.setEnabled(tell)
+        self.amend_btn.setEnabled(amend)
+        self.hint.setText("" if tell or amend else "Tell and Amend reach a queued, staged or running item only.")
+
+    def show_turns(self, item_id: str | None, turns: list, fresh: bool) -> None:
+        self.item, self.turns = item_id, turns
+        html = self.render(turns)
+        if html == self._html and not fresh:
+            return
+        sb = self.view.verticalScrollBar()
+        bottom = fresh or sb.value() >= sb.maximum() - 4
+        value = sb.value()
+        self._html = html
+        self.view.setHtml(html)
+        sb.setValue(sb.maximum() if bottom else value)
+
+    @classmethod
+    def render(cls, turns: list) -> str:
+        if not turns:
+            return f"<p style='color:{theme.MUTED}'>Nothing said yet: the item has not started.</p>"
+        rows = []
+        for t in turns:
+            bg, name = cls.LOOK.get(t.who, (theme.BASE, t.who))
+            tone = cls.TONE.get(t.tone)
+            colour = f" style='color:{tone}'" if tone and not t.note else ""
+            head = (f"<b>{_esc(name)}</b> · <b{colour}>{_esc(t.title)}</b> "
+                    f"<span style='color:{theme.MUTED}'>· {when(t.ts)} · #{t.id}</span>")
+            body = f"<div>{_lines(t.text)}</div>" if t.text else ""
+            for label, ts, text in t.under:
+                stamp_ = f" {when(ts)}" if ts else ""
+                if label == "reply":
+                    body += (f"<table width='100%' cellpadding='6' style='margin-top:6px'><tr>"
+                             f"<td bgcolor='{theme.BASE}'><b>executor replied</b>"
+                             f"<span style='color:{theme.MUTED}'>{stamp_}</span><br>{_lines(text)}</td></tr></table>")
+                else:
+                    body += f"<div style='color:{theme.MUTED}'>{_esc(label)}{stamp_}: {_esc(text)}</div>"
+            if t.note:
+                body += f"<div style='color:{tone or theme.MUTED}'><i>{_esc(t.note)}</i></div>"
+            if t.report:
+                body += "<div><a href='report'>Report</a></div>"
+            cell = f"<td bgcolor='{bg}'>{head}{body}</td>"
+            # Matt's turns sit right, the executor's left, conductor's across the thread.
+            spacer = "<td width='18%'></td>"
+            row = (spacer + cell if t.who == "matt" else cell + spacer if t.who == "executor" else cell)
+            rows.append(f"<table width='100%' cellpadding='8' cellspacing='0' style='margin-bottom:8px'>"
+                        f"<tr>{row}</tr></table>")
+        return "".join(rows)
+
+
+def _esc(text: str) -> str:
+    return html.escape(str(text), quote=False)
+
+
+def _lines(text: str) -> str:
+    return _esc(text).replace("\n", "<br>")
+
+
 class TrailView(QWidget):
-    """An item's whole trail: prompt, every event, report, executor log(s), git.
+    """An item's whole trail: prompt, every event, report, executor log(s), git; in the
+    Repos tab, a Conversation tab first (`ConversationView`).
 
     Built once per item. Moving to another event of the same item only re-renders the
     Events tab; new events for the open item refresh each tab in place (scroll kept,
@@ -805,12 +969,14 @@ class TrailView(QWidget):
     TABS = ["Events", "Prompt", "Report", "Log", "Stage log", "Git"]
     INDENT = "      "                         # the focused event's detail lines
 
-    def __init__(self, project: Project):
+    def __init__(self, project: Project, conversation: bool = False):
         super().__init__()
         self.project = project
+        self.names = (["Conversation"] if conversation else []) + self.TABS
+        self.conversation = ConversationView() if conversation else None
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 0, 0, 0)
-        self.title = QLabel("Select an event to see its item's trail.")
+        self.title = QLabel("Select an item to follow it." if conversation else "Select an event to see its item's trail.")
         self.title.setWordWrap(True)
         self.title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.title.setStyleSheet(f"font-size: {theme.BASE_POINT_SIZE + 0.5}pt; padding: 2px 0 4px 0")
@@ -826,6 +992,9 @@ class TrailView(QWidget):
         lay.addLayout(head)
         self.tabs = QTabWidget()
         self.text: dict[str, QPlainTextEdit | QTextEdit] = {}
+        if self.conversation is not None:
+            self.tabs.addTab(self.conversation, "Conversation")
+            self.conversation.report.connect(lambda: self.tabs.setCurrentWidget(self.text["Report"]))
         for name in self.TABS:
             # Events is a QTextEdit: its layout honours block margins, which give each
             # wrapped line a hanging indent (`_indent`). The rest stay plain (fast on big logs).
@@ -896,6 +1065,8 @@ class TrailView(QWidget):
             bits.append(f"<b style='color:{theme.RED}'>{len(reds)} red</b>")
         self.title.setText(" · ".join(bits))
         self.open_btn.setEnabled(self.session_id() is not None)
+        if self.conversation is not None:
+            self.conversation.show_turns(self.item, conversation(tr.events), fresh)
         self._render_events(center=fresh)
         self._set("Prompt", tr.prompt or "(no prompt file: not launched and not in any queue folder)", fresh)
         self._set("Report", tr.report or "(no report)", fresh)
@@ -1028,7 +1199,7 @@ class TrailView(QWidget):
     def _tab_changed(self, index: int) -> None:
         # Git is the one slow part: computed only when its tab is looked at, again only
         # when the item has new events, and never on the UI thread.
-        if self.TABS[index] != "Git" or not self.item or self._trail is None:
+        if self.names[index] != "Git" or not self.item or self._trail is None:
             return
         key = (self.item, len(self._trail.events))
         if key == self._git_for:

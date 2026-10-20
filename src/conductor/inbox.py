@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import audits, memory, picks, questions
+from . import audits, memory, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
 from .state import View, decide
@@ -18,6 +18,12 @@ def progress_line(ev: Event) -> str:
     if d.get("remaining") is not None:
         bits.append(f"{d['remaining']:g} to go")
     return str(d.get("note", "")) + (f" ({', '.join(bits)})" if bits else "")
+
+
+def reply_to(ev: Event) -> str:
+    """` (reply to #12)` for a `progress` event tagged as a reply, else empty."""
+    ids = talk.reply_ids(ev.detail)
+    return f" (reply to {', '.join(f'#{i}' for i in ids)})" if ids else ""
 
 
 def checkpoint_name(ev: Event) -> str:
@@ -60,7 +66,7 @@ def describe(ev: Event) -> str:
         case "pick_failed":
             text = f"picker {d.get('manifest')} failed: {d.get('error')}"
         case "progress":
-            text = f"{who} progress: {progress_line(ev)}"
+            text = f"{who} progress{reply_to(ev)}: {progress_line(ev)}"
         case "tell":
             text = f"message #{ev.id} for {who}: {d.get('text')}"
         case "delivered":

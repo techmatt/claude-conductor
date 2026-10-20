@@ -17,10 +17,10 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import config as config_mod
-from .. import git, items, memory, picks, questions, state, targets
+from .. import git, items, memory, picks, questions, state, talk, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
-from ..inbox import checkpoint_name, describe, progress_line, slow_text
+from ..inbox import checkpoint_name, describe, progress_line, reply_to, slow_text
 from ..state import DaemonInfo, daemon_info
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
 
@@ -285,7 +285,7 @@ def activity_text(ev: Event) -> str:
         case "checkpoint":
             return f"new {checkpoint_name(ev)}{by}"
         case "progress":
-            return f"{name}: {progress_line(ev)}"
+            return f"{name}{reply_to(ev)}: {progress_line(ev)}"
         case "tell":
             return f"message #{ev.id} to {name}{by}: {d.get('text')}"
         case "delivered":
@@ -539,6 +539,124 @@ class Project:
     # ------------------------------------------------------------ trail
     def trail(self, item_id: str) -> "Trail":
         return build_trail(self.cfg, self.events, item_id)
+
+
+# ---------------------------------------------------------------- an item's conversation
+@dataclass
+class Turn:
+    """One entry of an item's Conversation: who said it, and what came back under it
+    (a tell's reply, a question's answer, an amendment's delivery)."""
+    id: int                     # the event it stands for
+    ts: str
+    who: str                    # matt | executor | conductor
+    title: str
+    text: str = ""
+    under: list[tuple[str, str, str]] = field(default_factory=list)    # (label, ts, text)
+    note: str = ""              # what it still waits for, or why it never arrived
+    tone: str = ""              # "" | wait | warn | red | done | partial
+    report: bool = False        # a finish: links to the Report tab
+
+
+# Shown in Conversation; every other kind (delivered, merge, reaped, enqueue, edited,
+# commit, worktree, ...) is plumbing and stays in the item's Events tab. Reds other than
+# `red` itself (whose reasons the finish carries) show too.
+CONVERSATION_KINDS = {"start", "staged", "tell", "amended", "amend_refused", "ask", "progress",
+                      "pick_open", "pick_saved", "pick_failed", "finish"}
+QUESTION_ENDS = {"answer": "Matt answered", "default": "default taken (nobody answered)",
+                 "late": "late answer, ignored", "question_closed": "closed unanswered"}
+
+
+def conversation(events: list[Event]) -> list[Turn]:
+    """An item's events (oldest first) as a chat thread. Replies sit under their tell:
+    a `progress` event tagged `reply_to` is not a turn of its own."""
+    replies: dict[int, Event] = {}
+    delivered: dict[int, Event] = {}
+    undelivered: dict[int, Event] = {}
+    ends: dict[str, Event] = {}
+    for e in events:
+        d = e.detail
+        if e.kind == "progress":
+            for mid in talk.reply_ids(d):
+                replies.setdefault(mid, e)
+        elif e.kind == "delivered":
+            delivered[d.get("tell") or d.get("amend")] = e
+        elif e.kind == "warning" and (d.get("tell") or d.get("amend")):
+            undelivered[d.get("tell") or d.get("amend")] = e
+        elif e.kind in QUESTION_ENDS and d.get("question"):
+            ends.setdefault(d["question"], e)
+    talked = {e.id for e in events if e.kind in ("tell", "amended")}
+    out: list[Turn] = []
+    for e in events:
+        d = e.detail
+        if e.kind not in CONVERSATION_KINDS and not (e.kind in RED_KINDS and e.kind != "red"):
+            continue
+        match e.kind:
+            case "start":
+                if d.get("error"):
+                    out.append(Turn(e.id, e.ts, "conductor", "Failed to launch", str(d["error"]), tone="red"))
+                else:
+                    out.append(Turn(e.id, e.ts, "conductor",
+                                    "Resumed its staged session" if d.get("resumed") else "Started",
+                                    " · ".join(x for x in (f"on {d['branch']}" if d.get("branch") else "",
+                                                           f"port {d['port']}" if d.get("port") else "") if x)))
+            case "staged":
+                plan = (d.get("plan") or "").strip().splitlines()
+                out.append(Turn(e.id, e.ts, "executor", "Staged; waits for the lock", plan[0] if plan else ""))
+            case "tell" | "amended":
+                amend = e.kind == "amended"
+                by = d.get("by")
+                who = "conductor" if by == "conductor" else "matt"
+                title = f"{'Amendment' if amend else 'Message'} #{e.id}" + (f" (by {by})" if by and who == "matt" else "")
+                t = Turn(e.id, e.ts, who, title, str(d.get("text") or ""))
+                if amend:
+                    t.title += f", while {d.get('state')}"
+                    t.under.append(("delivery", "", str(d.get("delivery") or "")))
+                if dv := delivered.get(e.id):
+                    t.under.append(("delivered", dv.ts, f"via {dv.detail.get('via')}"
+                                    + (f", after {dv.detail['waited_seconds']}s" if dv.detail.get("waited_seconds") is not None else "")))
+                if r := replies.get(e.id):
+                    t.under.append(("reply", r.ts, progress_line(r)))
+                elif w := undelivered.get(e.id):
+                    t.note, t.tone = str(w.detail.get("note") or "never delivered"), "warn"
+                elif dv and dv.detail.get("via") in ("hook", "progress"):
+                    t.note, t.tone = "waiting for a reply", "wait"
+                elif not dv:
+                    t.note, t.tone = ("waiting for its launch" if amend and d.get("state") != "running"
+                                      else "waiting for delivery, after its next tool call"), "wait"
+                out.append(t)
+            case "ask":
+                how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
+                text = str(d.get("text") or "")
+                if d.get("options"):
+                    text += "\noptions: " + " / ".join(map(str, d["options"]))
+                t = Turn(e.id, e.ts, "executor", f"Question ({how})", text)
+                if end := ends.get(d.get("question")):
+                    what = end.detail.get("text") if end.kind != "question_closed" else end.detail.get("reason")
+                    t.under.append((QUESTION_ENDS[end.kind], end.ts, str(what or "")))
+                else:
+                    t.note, t.tone = "waiting for an answer", "wait"
+                out.append(t)
+            case "progress":
+                if (ids := talk.reply_ids(d)) and all(i in talked for i in ids):
+                    continue                    # shown under its tell
+                title = "Progress" + (f" (reply to {', '.join(f'#{i}' for i in ids)})" if ids else "")
+                out.append(Turn(e.id, e.ts, "executor", title, progress_line(e)))
+            case "pick_open" | "pick_saved" | "pick_failed":
+                out.append(Turn(e.id, e.ts, "conductor", "Picker", activity_text(e),
+                                tone="red" if e.kind == "pick_failed" else ""))
+            case "finish":
+                status = str(d.get("status"))
+                lines = [f"status: {status}" + (f" ({'; '.join(d['reasons'])})" if d.get("reasons") else "")]
+                for key in ("blocks", "carry"):
+                    lines.append(f"{key}: {d.get(key) or 'none'}")
+                lines.append(f"slow: {slow_text(d) or 'none'}")
+                if d.get("pick"):
+                    lines.append(f"pick: {d['pick']}")
+                out.append(Turn(e.id, e.ts, "conductor", f"Finished {status}", "\n".join(lines),
+                                tone=status if status in ("done", "partial", "red") else "", report=True))
+            case _:
+                out.append(Turn(e.id, e.ts, "conductor", e.kind, activity_text(e), tone="red"))
+    return out
 
 
 # ---------------------------------------------------------------- an item's trail

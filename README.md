@@ -691,8 +691,17 @@ by renaming `<id>.json` → `<id>.delivered.json` and prints
 `MESSAGE #<id> from Matt via <by> …`, the text, and that it is an instruction from
 Matt that wins over the prompt and is answered with `progress`. With no mail it prints
 nothing. A `progress` call also hands over any message still waiting (the rename makes
-either path deliver it once). The daemon logs `delivered` (tell, via `hook` or
-`progress`, text, waited_seconds). An item that exits with messages still waiting has
+either path deliver it once). The claim also records `after_seq`, how many progress
+lines the item had written by then. The daemon logs `delivered` (tell, via `hook` or
+`progress`, text, waited_seconds, after_seq), and tags the item's first progress line
+with a higher `seq` as the **reply** (`reply_to: <tell id>`; a list when several
+messages reached it before the same line). A message handed over by a `progress` call
+comes after that call's own line, so its reply is the next one. A running amendment
+(via `hook` or `progress`) is tagged the same way; one delivered at launch or resume is
+not. The daemon logs deliveries before progress lines in each pass, and rebuilds what
+still waits for a reply from the log at start. `conductor events`, the inbox and the
+Activity view show a tagged line as `progress (reply to #N)`; the app's Repos tab shows
+the reply under its tell (*The app*, Conversation). An item that exits with messages still waiting has
 them renamed `.undelivered.json`, and a `warning` names each.
 
 Proven with Claude Code 2.1.301 headless (`-p`, stream-json): a message sent while a
@@ -1359,6 +1368,30 @@ stop` (no confirmation: a click is cheap to undo with Run).
   *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the
   latest checkpoint sit in *Earlier checkpoints* (the 10 newest; the count is all of
   them).
+  The tab is a split: the tree on the left, the selected item's detail on the right,
+  so Matt follows one prompt end to end here and leaves *Events* for investigating
+  conductor. Selecting an item row shows it (a group or repo row changes nothing); the
+  selection survives refreshes and rebuilds (the item's row is reselected as it moves
+  from queued to running to finished). With nothing selected the detail shows the
+  running item (the longest-running, with several), else the most recently finished
+  one. Double-click still opens the item in *Events*. The detail is the trail *Events*
+  shows (Events, Prompt, Report, Log, Stage log, Git, **Open in terminal**) with
+  **Conversation** first and selected: the item as a chat thread, oldest first,
+  following the newest entry unless Matt has scrolled up. Matt's messages and
+  amendments sit on the right, the executor's progress lines (note, ETA, done / to go),
+  questions and its staged plan line on the left, conductor's start, picker and finish
+  lines across. Under a tell sits its delivery and the executor's **reply** (the
+  `progress` event tagged `reply_to` it; see *Progress and messages*), else *waiting for
+  a reply* (delivered), *waiting for delivery* (not yet) or the never-delivered warning
+  (sent after the last tool call). An amendment shows how it is delivered for the state
+  it was written in, when it was, and (a running one) its reply the same way. A
+  question shows its answer, the default taken, a late answer or its close, else
+  *waiting for an answer*. The finish shows its header (status with reasons, blocks,
+  carry, slow, pick) and a **Report** link to the Report tab; other reds show as their
+  Activity line. Plumbing (`delivered`, `merge`, `reaped`, `enqueue`, `edited`,
+  `commit`, `worktree`, …) stays in the detail's Events tab. **Tell…** and **Amend…**
+  at the bottom act on the item on screen, enabled by the tree's rules (Tell while it
+  executes; Amend queued, staged or executing). The thread is `model.conversation`.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
@@ -1471,9 +1504,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `read` / `clear` | signals | through / repo |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
 | `checkpoint` | a `checkpoint:` signal started a new session view (its id is its number) | label, by |
-| `progress` | the executor called `progress` | seq, at, note, eta, done, remaining |
+| `progress` | the executor called `progress` | seq, at, note, eta, done, remaining; reply_to (the tell or running amendment it answers) |
 | `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message | text, by |
-| `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`/`progress`; an amendment also `prompt`/`resume`), text, waited_seconds; kept (an amendment's `.amend.md`) |
+| `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`/`progress`; an amendment also `prompt`/`resume`), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
 | `run_start` / `run_ready` / `run_open` / `run_stop` | a run target started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url / note |

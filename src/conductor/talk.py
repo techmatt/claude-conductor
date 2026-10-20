@@ -5,7 +5,8 @@
     .conductor/mail/<repo>__<NNN_name>/<id>.json     a message waiting (id: its `tell` or
                                                      `amended` event; an amendment may wait
                                                      for a queued item's launch to take it)
-    .conductor/mail/<repo>__<NNN_name>/<id>.delivered.json    delivered (adds `via`, `delivered`)
+    .conductor/mail/<repo>__<NNN_name>/<id>.delivered.json    delivered (adds `via`, `delivered`,
+                                                     and `after_seq`, the progress lines by then)
     .conductor/mail/<repo>__<NNN_name>/<id>.undelivered.json  the executor exited first
 
 The ask server appends progress lines; the daemon writes messages and logs `progress`
@@ -138,7 +139,8 @@ def take(control: Path, item: str, via: str) -> list[dict]:
             msg = json.loads(done.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             msg = {"id": int(p.stem), "item": item, "text": ""}
-        msg |= {"via": via, "delivered": stamp()}
+        # The progress lines written by now: the next one is the executor's reply.
+        msg |= {"via": via, "delivered": stamp(), "after_seq": len(read_progress(control, item))}
         write_text(done, json.dumps(msg))
         out.append(msg)
     return out
@@ -197,6 +199,13 @@ def keep_amendment(path: Path, msg: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8", newline="\n") as fh:
         fh.write(head + entry)
+
+
+def reply_ids(detail: dict) -> list[int]:
+    """The tells (or running amendments) a `progress` event replies to: `reply_to` is
+    one id, or a list when several were delivered before the same line."""
+    r = detail.get("reply_to")
+    return [r] if isinstance(r, int) else [x for x in r if isinstance(x, int)] if isinstance(r, list) else []
 
 
 def waited(msg: dict) -> int | None:

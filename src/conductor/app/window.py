@@ -115,7 +115,7 @@ class ProjectView(QWidget):
         guarded("events", self.events_panel.add_events, new)
         snap = self.project.snapshot()
         self.snap = snap
-        guarded("repos", self.repos_panel.update_snapshot, snap)
+        guarded("repos", self.repos_panel.update_snapshot, snap, new)
         guarded("questions", self.questions_panel.update_snapshot, snap)
         guarded("proposed", self.proposed_panel.update_snapshot, snap)
         if errors:

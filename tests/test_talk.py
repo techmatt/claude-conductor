@@ -7,6 +7,7 @@ import pytest
 from conductor import cli, procs, talk
 from conductor.app import actions, model
 from conductor.app.model import Project
+from conductor.inbox import describe
 
 
 def send(env, text: str, name: str = "s.signal") -> None:
@@ -52,6 +53,76 @@ def test_a_message_reaches_a_busy_executor_and_changes_what_it_does(env):
     [answer] = env.events("progress")
     assert answer.detail["note"] == "got it: stop and write the summary # now"
     assert got.id < answer.id < env.finished("code/001_busy").id
+    # The first progress line after the delivery is its reply.
+    assert (got.detail["after_seq"], answer.detail["reply_to"]) == (0, tell.id)
+    assert f"(reply to #{tell.id})" in describe(answer) and f"(reply to #{tell.id})" in model.activity_text(answer)
+
+
+def test_conversation_ties_replies_to_their_tells(env):
+    go = env.root / "go"
+    env.queue("001_talk", 'FAKE progress {"note": "reading", "eta": "5m"}\n'
+                          "FAKE until-message 30\n"
+                          f"FAKE wait-for {go.as_posix()} 30\n"
+                          'FAKE progress {"note": "noted"}\n'
+                          'FAKE progress {"note": "amendment applied"}\n'
+                          'FAKE ask {"question": "Which colour?", "options": ["red", "blue"], "default": "blue"}')
+    env.tick_until(lambda: env.events("progress"))
+    send(env, "by: app\ntell: 001 how is it going")
+    [tell] = env.events("tell")
+    env.tick_until(lambda: (env.root / "go.waiting").exists())
+    env.d.tick()                            # the reply logged before the amendment goes in
+    actions.amend(env.control, "code/001_talk", "also add a test")
+    env.tick_until(lambda: env.events("amended"))
+    [am] = env.events("amended")
+    go.touch()
+    env.tick_until(lambda: env.finished("code/001_talk"))
+    # The amendment came back with the first progress call's result ("progress" delivery):
+    # that line was written before it was seen, so the reply is the next one.
+    by_note = {e.detail["note"]: e for e in env.events("progress")}
+    assert "reply_to" not in by_note["reading"].detail and "reply_to" not in by_note["noted"].detail
+    assert by_note["got it: how is it going"].detail["reply_to"] == tell.id
+    assert by_note["amendment applied"].detail["reply_to"] == am.id
+    project = Project(env.control)
+    project.poll_events()
+    turns = model.conversation(project.trail("code/001_talk").events)
+    assert [t.title.split(" #")[0].split(",")[0] for t in turns] == [
+        "Started", "Progress", "Message", "Amendment", "Progress", "Question (default 'blue' at "
+        + env.events("ask")[0].detail["deadline_clock"] + ")", "Finished done"]
+    msg = next(t for t in turns if t.id == tell.id)
+    assert ("reply", by_note["got it: how is it going"].ts, "got it: how is it going") in msg.under and not msg.note
+    amend = next(t for t in turns if t.id == am.id)
+    assert amend.under[0] == ("delivery", "", "delivered after its next tool call")
+    assert amend.under[-1][0] == "reply" and amend.under[-1][2] == "amendment applied"
+    q = next(t for t in turns if t.title.startswith("Question"))
+    assert q.under[0][0] == "default taken (nobody answered)" and q.under[0][2] == "blue"
+    fin = turns[-1]
+    assert fin.report and "slow: none" in fin.text and fin.tone == "done"
+    # Plumbing stays out; a restarted daemon tags nothing twice.
+    assert not any(t.title.startswith(("delivered", "merge", "enqueue")) for t in turns)
+    env.d.log.close()
+    env.d = env.new_daemon()
+    env.d.tick()
+    assert env.d.awaiting_reply == {}
+
+
+def test_conversation_waits_and_warns():
+    from conductor.events import Event
+    ev = lambda i, kind, **d: Event(i, f"2026-10-20T10:0{i}:00-07:00", kind, "code/001_x", "code", [], d)
+    turns = model.conversation([
+        ev(1, "start", session_id="s"),
+        ev(2, "tell", text="first", by="app"),
+        ev(3, "delivered", tell=2, via="hook", after_seq=0),
+        ev(4, "tell", text="second", by="planner"),
+        ev(5, "tell", text="late", by="app"),
+        ev(6, "warning", tell=5, note="message #5 was never delivered: the executor exited first"),
+        ev(7, "progress", seq=1, note="both", reply_to=[2, 99]),
+    ])
+    first, second, late, both = turns[1:]
+    assert first.under[-1][:1] == ("reply",) and not first.note
+    assert (second.note, second.tone) == ("waiting for delivery, after its next tool call", "wait")
+    assert late.tone == "warn" and "never delivered" in late.note
+    # A reply to a tell not in this trail still shows on its own.
+    assert both.title == "Progress (reply to #2, #99)"
 
 
 @pytest.mark.slow

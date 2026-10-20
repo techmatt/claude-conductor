@@ -54,6 +54,7 @@ AMEND_DELIVERY = {
     "staged": "added to the resume message; the stage is kept",
     "running": "delivered after its next tool call",
 }
+REPLY_VIAS = ("hook", "progress")       # deliveries into a running session, which replies with `progress`
 
 
 class DaemonError(RuntimeError):
@@ -133,6 +134,7 @@ class Daemon:
         self.q_seen = {(e.kind, e.detail.get("question")) for e in self.log.query(kinds=QUESTION_KINDS)}
         self.progress_seen = {(e.item, e.detail.get("seq")) for e in self.log.query(kinds=["progress"])}
         self.delivered_seen = {e.detail.get("tell") or e.detail.get("amend") for e in self.log.query(kinds=["delivered"])}
+        self.awaiting_reply = self._awaiting_reply()
         # An amend file refused stays where it is: refused once per content.
         self.amend_refused = {(e.detail.get("path"), e.detail.get("hash")) for e in self.log.query(kinds=["amend_refused"])}
         self.amend_waiting: dict[str, str | None] = {}  # amend file → hash, for an item not seen yet
@@ -1081,8 +1083,24 @@ class Daemon:
 
     def process_talk(self) -> None:
         """Log what the executors' progress tool and message hook wrote: one `progress`
-        per new progress line, one `delivered` per delivered message."""
+        per new progress line, one `delivered` per delivered message. Deliveries go
+        first: the first progress line after a message reached a running executor is
+        tagged as its reply (`reply_to`)."""
         control = self.cfg.control
+        for msg in talk.delivered(control):
+            if msg.get("id") in self.delivered_seen:
+                continue
+            self.delivered_seen.add(msg.get("id"))
+            extra = {"tell": msg.get("id")}
+            if talk.is_amend(msg):
+                extra = {"amend": msg.get("id")}
+                kept = self._keep_amendment(msg)
+                extra["kept"] = self.cfg.rel(kept) if kept else None
+            self.log.append("delivered", item=msg.get("item"), via=msg.get("via"),
+                            text=msg.get("text"), waited_seconds=talk.waited(msg),
+                            after_seq=msg.get("after_seq"), **extra)
+            if msg.get("via") in REPLY_VIAS and isinstance(msg.get("after_seq"), int):
+                self.awaiting_reply.setdefault(msg["item"], []).append((msg["id"], msg["after_seq"]))
         for item_id in talk.progress_items(control):
             path = talk.progress_file(control, item_id)
             try:
@@ -1096,19 +1114,26 @@ class Daemon:
                 if (item_id, line["seq"]) in self.progress_seen:
                     continue
                 self.progress_seen.add((item_id, line["seq"]))
+                extra = {}
+                waiting = self.awaiting_reply.get(item_id, [])
+                if replied := [mid for mid, after in waiting if line["seq"] > after]:
+                    extra["reply_to"] = replied[0] if len(replied) == 1 else replied
+                    self.awaiting_reply[item_id] = [w for w in waiting if w[0] not in replied]
                 self.log.append("progress", item=item_id, paths=[self.cfg.rel(path)],
-                                **{k: v for k, v in line.items() if k in ("seq", "at", "note", "eta", "done", "remaining")})
-        for msg in talk.delivered(control):
-            if msg.get("id") in self.delivered_seen:
-                continue
-            self.delivered_seen.add(msg.get("id"))
-            extra = {"tell": msg.get("id")}
-            if talk.is_amend(msg):
-                extra = {"amend": msg.get("id")}
-                kept = self._keep_amendment(msg)
-                extra["kept"] = self.cfg.rel(kept) if kept else None
-            self.log.append("delivered", item=msg.get("item"), via=msg.get("via"),
-                            text=msg.get("text"), waited_seconds=talk.waited(msg), **extra)
+                                **{k: v for k, v in line.items() if k in ("seq", "at", "note", "eta", "done", "remaining")},
+                                **extra)
+
+    def _awaiting_reply(self) -> dict[str, list[tuple[int, int]]]:
+        """Messages delivered to a running executor with no reply tagged yet, per item:
+        (message id, progress lines by its delivery). Rebuilt from the log at start."""
+        replied = {i for e in self.log.query(kinds=["progress"]) for i in talk.reply_ids(e.detail)}
+        out: dict[str, list[tuple[int, int]]] = {}
+        for e in self.log.query(kinds=["delivered"]):
+            mid = e.detail.get("tell") or e.detail.get("amend")
+            after = e.detail.get("after_seq")
+            if e.detail.get("via") in REPLY_VIAS and isinstance(after, int) and mid not in replied and e.item:
+                out.setdefault(e.item, []).append((mid, after))
+        return out
 
     def _keep_amendment(self, msg: dict) -> Path | None:
         repo, _, name = str(msg.get("item", "")).partition("/")

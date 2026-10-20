@@ -552,6 +552,7 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
 
 def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, monkeypatch):
     from conductor import procs
+    from PySide6.QtCore import QUrl
     from conductor.app import panels
     from conductor.app.window import MainWindow
     env.queue("001_x", 'FAKE progress {"note": "reading", "eta": "5m"}\nFAKE until-message 30')
@@ -562,16 +563,36 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     repos = view.repos_panel
     row = repos._rows[("run", "code/001_x")]
     assert row.text(3).startswith("reading (ETA 5m) · ")
+    # Nothing selected: the detail follows the running item, Conversation first.
+    detail, chat = repos.detail, repos.detail.conversation
+    assert detail.item == "code/001_x" and detail.tabs.currentWidget() is chat
+    assert chat.tell_btn.isEnabled() and chat.amend_btn.isEnabled()
+    assert [t.title for t in chat.turns] == ["Started", "Progress"]
     tell = repos.tree.itemWidget(row, 4).button
     assert tell.text() == "Tell…"
     monkeypatch.setattr(panels.QInputDialog, "getMultiLineText", lambda *a, **k: ("finish now\nplease", True))
-    tell.click()
+    chat.tell_btn.click()                                   # the same signal as the row's Tell…
     env.tick_until(lambda: env.finished("code/001_x"))
     assert env.events("tell")[0].detail["text"] == "finish now / please"
     assert env.events("delivered")
     win.refresh()
     holder = repos.tree.itemWidget(repos._rows[("done", "code/001_x")], 4)
     assert set(holder.buttons) == {"Mark reviewed", "Terminal"}
+    # The reply sits under its tell; a finished item takes neither Tell nor Amend.
+    [msg] = [t for t in chat.turns if t.title.startswith("Message")]
+    assert msg.under[-1][0] == "reply" and "got it: finish now / please" in msg.under[-1][2]
+    assert "executor replied" in chat.view.toPlainText() and chat.turns[-1].report
+    assert not chat.tell_btn.isEnabled() and not chat.amend_btn.isEnabled()
+    chat.view.anchorClicked.emit(QUrl("report"))
+    assert detail.tabs.currentWidget() is detail.text["Report"]
+    # A selection survives a rebuild (Mark reviewed changes the row's look).
+    repos.tree.setCurrentItem(repos._rows[("done", "code/001_x")])
+    assert repos.selected == "code/001_x"
+    holder.buttons["Mark reviewed"].click()
+    env.tick_until(lambda: env.events("reviewed"))
+    win.refresh()
+    assert repos.tree.currentItem() is repos._rows[("done", "code/001_x")] and detail.item == "code/001_x"
+    holder = repos.tree.itemWidget(repos._rows[("done", "code/001_x")], 4)
     opened = []
     monkeypatch.setattr(procs, "open_console", lambda argv, cwd: opened.append((argv, cwd)))
     holder.buttons["Terminal"].click()
