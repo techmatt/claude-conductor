@@ -1,0 +1,115 @@
+# Checkpoints, the session digest, the inbox and toasts
+
+## Checkpoints
+
+A checkpoint is a session boundary, so each planner session starts with a clean view.
+`checkpoint: <label>` (the planner's `session:` below writes one; the app's **New
+checkpoint…**; `conductor checkpoint [label]`, `by: cli`) logs a
+`checkpoint` event (label, by). **Its number is its event id**: nobody keeps a counter.
+Only the latest checkpoint matters to the views.
+
+- **Hidden:** a finished item whose `finish` event and first `reviewed` event both come
+  before the latest checkpoint, unless its red still holds its queue (`clear:` not yet
+  sent). Such an item is *settled*.
+- **Carried forward, whatever their age:** unreviewed reports, an item reviewed only
+  after the checkpoint (until the next one), red holds, open questions, and anything
+  queued, staged, running or proposed. None of these is a finished-and-reviewed item,
+  so none is ever hidden.
+- **Warning:** at the checkpoint, every report still unreviewed gets a `warning` naming
+  it (item, `checkpoint`, `finish`, `note`), so the new session raises it first.
+
+Nothing is deleted or moved: reports, `done/` and `events.db` stay as they are, and
+`conductor events`, a postmortem, the app's trail and `conductor open` reach any item.
+What changes is only the default views:
+- `inbox.md` names the current checkpoint (number, label, time, by) under its header
+  and how many settled items it hides; an unreviewed report older than the checkpoint
+  is tagged *carried from before checkpoint #N*.
+- The app's Repos tab lists only current finished items, with the settled ones in a
+  collapsed *earlier checkpoints* group per repo. The Events tab starts at the latest
+  checkpoint (*since checkpoint #N*, on by default; off shows the whole log).
+- `conductor events --since checkpoint` (or `checkpoint N`) starts at a checkpoint;
+  `conductor status` names the latest one.
+
+## Session start digest
+
+`session: <label>` (planner, `session: start` with `by: planner`; `conductor session
+[label]`, `by: cli`, label default `start`) opens a planner session in one signal, so
+the planner reads one file instead of round-tripping a checkpoint, a re-stage and a
+`read:`. In order (`session.py`):
+
+1. a checkpoint with that label, as above, its event carrying `session: session.md`
+   (the unreviewed-report warnings included);
+2. `session.md` in the control folder (runtime, git-ignored), overwritten: its header
+   names the signal file it answers and the checkpoint (number, label, time), so a
+   planner that staged it too early sees it is the previous one and stages again. The
+   body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
+   reports, picks, every event since the previous read mark, *Now*), then:
+   - **Conductor reports**: every `reports/NN_name_report.md` in conductor's own
+     checkout (found from the installed package, `src/conductor/` → the repo root) whose
+     prompt is past the `Last report reviewed by the planner: NN_name` line in its
+     `HANDOFF.md`, in natural order (12 < 12a < 13), each with its `status:` line (one
+     of its first five non-blank lines) or *no status line*, and its path;
+   - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
+     general audit, cleanup, test perf audit, claude.md cleanup, disk space audit) the
+     last finished item that ran it, when and its status, or *never*, the number of
+     non-template items finished since (or in all), and any in flight; the repo's
+     `CLAUDE.md` size (KB and lines, from the main checkout); its unused audit notes;
+     and each `slow:` component (the words before ` ~` or the first comma) named in two
+     or more of its last five finished reports, with their numbers;
+3. a `read` event through the last event the digest shows (detail `session`: the
+   checkpoint's id), so the next inbox and the next digest start after it.
+
+The digest stays as written until the next `session:`; `inbox.md` carries on as
+before. The planner decides what to recommend from the facts.
+
+## Inbox
+
+`inbox.md` is regenerated whenever the log or the read mark changes (and every 30s
+for the *Now* section). Its header names the current checkpoint (see *Checkpoints*).
+First **Questions**: every open ask, regardless of the read
+mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
+oldest first, with its status, finish time, finish event id, report path and `carry:`
+line (and ` · slow: …` unless its report said `slow: none` or nothing, and
+` · pick: <ref>` when its report named a picker); it shows on every inbox,
+read mark or not, until a `reviewed:` signal names the item. Then **Picks**, also
+standing (see `picks.md`, *Pending*): each pending picker, then any picker saved since the
+checkpoint (any time without one) that no pending item names, as the saved line
+without the item:
+
+```
+- art_alts_009 saved 4:52pm: 6 changed, 2 notes; `picks/art_alts_009.choices.json` (code/012_art_alts)
+- code/013_more opened 4:40pm, not saved — `code/picks/more.json`
+- code/014_faces waiting for Matt — signal `pick: code/picks/faces.json`
+```
+
+Then every event after the read mark, grouped **Red** (tamper first,
+then `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`,
+`pick_failed`, `amend_refused`, `memory_critical`, `daemon_died`),
+**Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**
+(answers, defaults taken, late answers, closes), **Requests and commits** (merges
+included), **Other**; then **Now**: first the memory line (`memory.line`: commit of
+limit, percent, free GiB, the biggest item from the daemon's latest sample, and the
+level, bold with *launches and stages paused* when not ok), then per repo, what is running (or merging), staged
+(`staging`/`staged`), queued, waiting or held, and *audit pending* if notes are unused,
+plus proposed items. A hold stays in
+the Holds section until the item starts, merges, finishes or is cancelled, or a
+reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
+`stage` and `worktree` events are left out of the inbox (they are in
+`conductor events`). `conductor status` prints the daemon (running, **not answering**
+with a stale heartbeat, **died**, or not running) and the same memory line, then per repo: running (pid, branch,
+`readonly`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
+*audit pending* line when the repo has unused audit notes.
+`conductor inbox` prints the same thing without moving the mark.
+
+## Toasts
+
+The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
+`ask`, `red`, `tamper`, `hold`, `run_failed`, `pick_failed` and `queue_empty` events. Each title names the project and
+the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
+history records. Toasts use Command Prompt's registered app id, with "Conductor" as
+the attribution line, so nothing has to be installed. A toast that fails is logged as a
+`warning` and never stops the daemon. `toasts = false` in `[defaults]` turns them off;
+on other platforms each would fail, so turn them off there.
+
+`queue_empty` is logged when an item finishes and its repo has nothing queued or
+running.

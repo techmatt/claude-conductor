@@ -1,0 +1,114 @@
+# Worktrees, merges and staging
+
+## Worktrees and merges
+
+Unless its repo sets `worktrees = false`, each item runs in its own git worktree,
+`<worktree_root>/<repo>/<NNN_name>`, on a branch `conductor/<NNN_name>` cut from `main`
+at launch. Executors never touch each other's files or Matt's checkout. The preamble
+tells the executor to commit to its branch, leave nothing uncommitted, and never touch
+`main` or the main checkout.
+
+- **Untracked state.** A worktree holds only tracked files. Each `shared` folder of the
+  repo is linked into the worktree at the same path (a directory junction on Windows,
+  a symlink elsewhere), so data, a venv or build output is shared, not copied; a change
+  there is a change everywhere. A shared folder that does not exist yet in the main
+  checkout is created there first (noted on the `worktree` event), so every worktree
+  links the same one; a *file* at that path is a `warning` and is not linked. A shared
+  folder should be git-ignored in the repo —
+  conductor logs a `warning` if it is not, since an executor could commit it. Then the
+  `setup` commands run in the worktree through the shell, output to
+  `reports/<repo>__NNN_name.setup.log`; a failing or timed-out command is a launch
+  failure (red). Setup runs inside the daemon's loop, so a slow one delays everything
+  else for its duration. Links are always removed before a worktree is deleted, so
+  removing a worktree never reaches into a shared folder.
+- **Merging.** When an item finishes `done` or `partial`, it waits in `running/` (phase
+  `merge`) and is merged serially per repo, in finish order: rebase the branch onto
+  current `main` inside its worktree, fast-forward the main checkout, remove the
+  worktree and the branch (`merge`, `worktree` events), then log `finish`. So
+  `finish` means merged, and a `depends_on` item never starts before its dependency's
+  changes are on `main`.
+  - *Prose conflict:* when every conflicted file is prose (the repo's `prose` globs,
+    see `items.md`), the rebase is left stopped and a short **merge executor** (headless
+    Claude Code, no ask tool, no messages, at most `merge_minutes`) runs in the item's
+    worktree, logged `resolve`. Its prompt names the files, says which side of the
+    markers is `main` and which is the item, lists the commits that landed on `main`
+    and the item's commit and prompt (for intent only), and tells it to keep both
+    sides' intent, touch nothing else and run no git command. When it exits, conductor
+    checks its work: a result, no conflict marker (`<<<<<<<`/`>>>>>>>` lines) left,
+    the stopped rebase where it was, no other tracked or untracked file changed, no
+    control-folder change. Then conductor stages the files and continues the rebase
+    (`--skip` if the resolution leaves the replayed commit empty); a later stop does
+    the same again, and the merge goes on as usual. The `merge` event lists
+    `resolved` files. Output: `reports/<repo>__NNN_name.merge.log` (and
+    `.merge.prompt.md`, `.merge.stderr.log`). A merge executor that fails any check
+    is a *rebase conflict* below: the rebase is aborted, so the branch keeps the
+    item's version and `main` its own, and the `conflict` event carries `resolver`
+    (its log) and the failed check as `error`. While it runs, later merges in that
+    repo wait, and the tamper guard counts it as a running executor. A restart adopts
+    it by pid. A conflict touching any non-prose file is never handed to it.
+  - *Rebase conflict:* the rebase is aborted, a `conflict` event names the files, the
+    item ends red; branch and worktree are kept, `main` is untouched. A rebase that
+    fails with no conflicted file (a stale lock, an untracked file in the way, a file
+    held open) is a hold and is retried each tick.
+  - *Left its branch:* an executor whose worktree HEAD is no longer on
+    `conductor/<NNN_name>` (another branch, detached) ends red, worktree kept — its
+    commits are not on the branch conductor would merge.
+  - *Main checkout not clean* (tracked changes) or not on `main`: the merge waits,
+    logged once as a `hold` (with `merge: true`), and proceeds once it is. Merges
+    behind it in the same repo wait too. Untracked files never hold a merge unless the
+    fast-forward would overwrite one.
+  - *Uncommitted changes* left in the worktree make the item red (they would be lost).
+  - *Red item:* never merged; branch and worktree kept for inspection (links removed).
+  - *readonly item:* never merged; its worktree and branch are discarded.
+
+  *Leftover worktrees.* Removing a merged, readonly or discarded item's worktree can
+  fail while another process holds a file in it (a dev server an executor left
+  running, an editor): `PermissionError 13` on Windows. The failure is a `warning` and
+  a row in `.conductor/leftovers.json`; the item concludes as usual. Conductor retries
+  each row at daemon start and whenever that repo's queue empties (`queue_empty`, but
+  not the row of the item that just emptied it, since whatever held its files a
+  moment ago still does). A retry that works logs the `worktree` event the first try
+  would have (`removed`/`discarded`, note `leftover removed on retry (...)`) and drops
+  the row; one that still fails logs a `warning` and keeps it. A row whose path a live
+  item has since taken over (a stage discarded, then the item launched fresh there) is
+  dropped without touching the path.
+
+  To remove a kept worktree, delete its folder, then `git worktree prune` and
+  `git branch -D conductor/<NNN_name>`. Never `git worktree remove --force` a tree
+  that still holds a junction: Git for Windows follows it and empties the target
+  (proven on this box). Conductor itself never calls it: it unlinks every directory
+  link in the tree (whatever `shared` says now), deletes the files, then prunes.
+
+  A `conductor.toml` request that drops a repo with items in `running/` is refused
+  (`invalid`); the previous config stays in force.
+
+## Staging
+
+When a repo's queue head is blocked **only** by a busy lock (the repo's or a named one)
+or by a dependency that is still running, and the repo uses worktrees with `stage` on
+(an item's `stage:` overrides), conductor stages it: it creates the item's worktree and
+launches a session with a stage preamble — read the prompt and what it points at, run
+read-only commands only, nothing long or heavy, no edits, no asks (no `--mcp-config`),
+write a plan as the final message, stop. The item stays in `queue/`; its record is
+`running/<repo>/NNN_name.stage.json` (`stage` event, then `staged` with the plan's
+first 500 characters). At most one staged item per repo. A `template: cleanup` or
+`template: disk_audit` item never stages: what it is handed (audit notes, sizes) is
+fixed at launch, and the item it waits on may still change it.
+
+When the head can run, conductor checks the worktree is still exactly as cut (HEAD,
+tracked files, and no untracked files beyond what setup made), moves it to current
+`main` (`git reset --hard`), reruns setup, and resumes the **same session in the same
+worktree** with `claude -p --resume <session id>`. The resume message says the lock
+is held, how many commits landed since staging (`git log <old>..HEAD`), and then gives
+the full execution preamble. The `start` event carries `resumed: true` and `landed`.
+
+A stage is discarded — `warning` event, worktree removed, the item launches fresh
+later — if it changed its worktree, left no result or errored, ran past
+`stage_minutes`, tampered with the control folder, or the item file changed or left
+the queue after staging. The head waits for a stage still running when it could
+otherwise start.
+
+**Resume and working directory.** Claude Code stores sessions per working directory
+(`~/.claude/projects/<cwd>/<session>.jsonl`). In 2.1.301 `--resume <id>` also found a
+session started in a different directory, but conductor resumes in the stage's own
+worktree path anyway, so it never depends on that.

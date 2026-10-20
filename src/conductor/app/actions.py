@@ -107,6 +107,12 @@ def checkpoint(control: Path, label: str = "", by: str = BY) -> Path:
     return write_signal(control, f"checkpoint: {one}".rstrip(), by=by)
 
 
+def session(control: Path, label: str = "start", by: str = BY) -> Path:
+    """A planner session's start: a checkpoint plus the `session.md` digest, read mark moved."""
+    one = " ".join(label.split())
+    return write_signal(control, f"session: {one}".rstrip(), by=by)
+
+
 def open_session(cfg, item_id: str, session_id: str, spawn=None):
     """A new console running `<executor command> --resume <session id>` in the item's
     worktree when it still exists, else the repo's main checkout. Returns (cwd, argv)."""

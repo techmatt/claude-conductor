@@ -550,6 +550,44 @@ def test_a_checkpoint_hides_settled_items_and_carries_the_rest(env):
     assert state.scan(env.d.cfg, env.d.log).settled("code/003_bad")
 
 
+@pytest.mark.slow
+def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp_path, monkeypatch):
+    from conductor import session
+    root = tmp_path / "conductor"                      # a stand-in for conductor's own repo
+    (root / "reports").mkdir(parents=True)
+    (root / "HANDOFF.md").write_text("## Status\n\nLast report reviewed by the planner: 12_x\n", encoding="utf-8")
+    for name, text in [("3_old", "status: done"), ("12_x", "status: done"), ("12a_y", "# 12a\n\nstatus: partial"),
+                       ("13_z", "# 13\n\nno header")]:
+        (root / "reports" / f"{name}_report.md").write_text(text + "\n", encoding="utf-8")
+    monkeypatch.setattr(session, "CONDUCTOR_ROOT", root)
+    env.queue("001_feat", "FAKE slow tests ~20m, full lane each time, split it\nFAKE report done")
+    env.queue("002_perf", "FAKE report done", template="test_perf")
+    env.queue("003_more", "FAKE slow tests ~25m, again; build ~16m, cold cache, warm it\nFAKE report done")
+    env.queue("004_last", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/004_last"))
+    (env.repo / "CLAUDE.md").write_text("one\ntwo\n", encoding="utf-8", newline="\n")
+    send(env, "by: planner\nsession: start", "planner-1.signal")
+    cp = env.events("checkpoint")[-1]
+    assert (cp.detail["label"], cp.detail["session"], cp.detail["by"]) == ("start", "session.md", "planner")
+    read = env.events("read")[-1]
+    assert read.id > cp.id and read.detail["session"] == cp.id and read.detail["through"] == read.id - 1
+    text = (env.control / "session.md").read_text(encoding="utf-8")
+    assert text.startswith("# Session start — ") and "`signals/planner-1.signal`" in text
+    assert "Mark read:" not in text and "code/004_last finished" in text      # the inbox since the old mark
+    reports = text.split("## Conductor reports", 1)[1].split("\n## ", 1)[0]
+    assert "12a_y: status: partial" in reports and "13_z: no status line" in reports
+    assert "12_x:" not in reports and "3_old" not in reports
+    facts = text.split("## Maintenance facts", 1)[1]
+    assert "- test perf audit: 002_perf, " in facts and "· 2 non-template item(s) finished since" in facts
+    assert "- bug hunt: never · 3 non-template item(s) finished" in facts
+    assert "- `CLAUDE.md`: 0.0 KB, 2 lines" in facts and "- unused audit notes: 0" in facts
+    assert "repeated in the last 4 report(s): tests (001, 003)" in facts
+    # The next session's digest starts after this one's read mark.
+    send(env, "session: again", "planner-2.signal")
+    text = (env.control / "session.md").read_text(encoding="utf-8")
+    assert "code/004_last finished" not in text and '"again"' in text
+
+
 def test_events_since_checkpoint_on_the_cli(env, capsys):
     from conductor import cli
     send(env, "checkpoint: one", "cp")

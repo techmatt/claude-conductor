@@ -1,4 +1,4 @@
-"""`conductor init`: a new control folder with the README's layout and a first commit."""
+"""`conductor init`: a new control folder with the layout in docs/control-folder.md and a first commit."""
 
 from __future__ import annotations
 

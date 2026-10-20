@@ -21,6 +21,7 @@ picks/
 requests/
 signals/
 inbox.md
+session.md
 events.db*
 .conductor/
 """

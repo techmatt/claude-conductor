@@ -27,6 +27,7 @@ import psutil
 from . import config as config_mod
 from . import (audits, executor, git, globs, guard, inbox, items, memory, notify, picker, picks, procs, questions,
                request, state, talk, targets, worktrees)
+from . import session as session_mod
 from .config import RUNTIME, Config
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import (FrontMatterError, clock, duration, now, parse_stamp, read_text, retry_io, split_front_matter, stamp,
@@ -626,7 +627,7 @@ class Daemon:
             key, sep, value = s.partition(":")
             key = key.strip().lower()
             # A message is free text: a ` # ` in it is part of it, not a comment.
-            value = value.strip() if key in ("tell", "checkpoint") else _strip_comment(value)
+            value = value.strip() if key in ("tell", "checkpoint", "session") else _strip_comment(value)
             if not sep or not key:
                 raise ValueError(f"line {n}: expected `key: value`, got {s!r}")
             if key == "by":
@@ -651,7 +652,7 @@ class Daemon:
                 parts = value.split()
                 if not 1 <= len(parts) <= 2 or (len(parts) == 2 and parts[1].lower() != "stop"):
                     raise ValueError(f"line {n}: run: expects `<target>` or `<target> stop`, got {value!r}")
-            elif key == "checkpoint":
+            elif key in ("checkpoint", "session"):
                 pass                                    # any label, or none
             elif key == "pick":
                 repo, sep, path = value.partition("/")
@@ -688,6 +689,8 @@ class Daemon:
             self._tell(f"{value} {talk.OUTLINE_REQUEST}", rel, outline_request=True)
         elif key == "checkpoint":
             self._checkpoint(value, rel)
+        elif key == "session":
+            self._session(value, rel)
         elif key == "run":
             name, *stop = value.split()
             (self.runner.stop if stop else self.runner.request)(name, self._by)
@@ -786,14 +789,25 @@ class Daemon:
         self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
                         status=fin.detail.get("status"), by=self._by or "unknown")
 
-    def _checkpoint(self, label: str, rel: str) -> None:
+    def _checkpoint(self, label: str, rel: str, **extra) -> Event:
         """A session boundary: its event id is its number. Every report still unreviewed
         gets a `warning` naming it, so the new session raises it first."""
-        cp = self.log.append("checkpoint", paths=[rel], label=label, by=self._by or "unknown")
+        cp = self.log.append("checkpoint", paths=[rel], label=label, by=self._by or "unknown", **extra)
         for fin in state.scan(self.cfg, self.log).unreviewed():
             self.log.append("warning", item=fin.item, paths=fin.paths[:1], checkpoint=cp.id, finish=fin.id,
                             note=f"{fin.item} is still unreviewed at checkpoint #{cp.id} (finished "
                                  f"{fin.detail.get('status')} {clock(fin.ts)}); it carries forward: raise it first")
+        return cp
+
+    def _session(self, label: str, rel: str) -> None:
+        """A planner session's start in one signal: a checkpoint with the label, then
+        `session.md` (the inbox since the read mark, conductor's reports past HANDOFF's
+        marker, each repo's maintenance facts), then the read mark moved past it all."""
+        cp = self._checkpoint(label, rel, session="session.md")
+        top = self.log.max_id()
+        view = state.scan(self.cfg, self.log)
+        write_text(self.cfg.path("session.md"), session_mod.render(self.cfg, self.log, view, cp, rel, top))
+        self.log.append("read", paths=[rel, "session.md"], through=max(top, self.log.read_mark()), session=cp.id)
 
     def _tell(self, value: str, rel: str, **extra) -> None:
         """A message for a running executor: logged `tell`, then left in its mailbox for

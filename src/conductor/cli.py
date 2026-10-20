@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | open | run-target | pick | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | run-target | pick | init | app`."""
 
 from __future__ import annotations
 
@@ -333,6 +333,14 @@ def cmd_checkpoint(args) -> int:
     return 0
 
 
+def cmd_session(args) -> int:
+    from .app import actions
+    cfg = config_mod.load(_control(args.control))
+    path = actions.session(cfg.control, " ".join(args.label) or "start", by="cli")
+    print(f"wrote signals/{path.name}: the daemon logs a checkpoint, writes session.md and moves the read mark")
+    return 0
+
+
 def _since(log: EventLog, text: str) -> tuple[int | None, object]:
     """`parse_since`, plus `checkpoint` (the latest) and `checkpoint N`: from that
     checkpoint's own event on."""
@@ -425,6 +433,10 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("label", nargs="*", help="e.g. session start")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_checkpoint)
+    sp = sub.add_parser("session", help="start a planner session: a checkpoint, the session.md digest, read mark moved")
+    sp.add_argument("label", nargs="*", help="default: start")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_session)
     sp = sub.add_parser("open", help="open a finished item's session in a new console (claude --resume)")
     sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")

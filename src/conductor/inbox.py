@@ -135,7 +135,7 @@ def describe(ev: Event) -> str:
         case "reviewed":
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
         case "checkpoint":
-            text = checkpoint_name(ev)
+            text = checkpoint_name(ev) + (f", session start digest `{d['session']}`" if d.get("session") else "")
         case "red":
             text = f"{who} red: {'; '.join(d.get('reasons', []))}"
             if d.get("after_red", "stop") == "stop":
@@ -313,7 +313,9 @@ def _line(ev: Event) -> str:
     return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}"
 
 
-def render(cfg: Config, log: EventLog, view: View) -> str:
+def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -> str:
+    """The inbox; with `heading` (the session digest's), that replaces its title and
+    the mark-read hint, since the digest moves the read mark itself."""
     mark = log.read_mark()
     events = log.query(since_id=mark)
     top = log.max_id()
@@ -339,10 +341,11 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
     other = [e for e in events if e not in red + holds + finished + changes + asked
              and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress")]
 
-    out = [f"# Inbox — {cfg.project}", ""]
+    out = [heading or f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
     out.append(f"Generated {clock(now())} · {len(events)} event(s) {since}, through #{top}.")
-    out.append(f"Mark read: write a file in `signals/` containing `read: {top}`.")
+    if heading is None:
+        out.append(f"Mark read: write a file in `signals/` containing `read: {top}`.")
     if cp := view.checkpoint:
         hidden = sum(1 for i in view.finishes if view.settled(i))
         out.append(f"Current checkpoint: {checkpoint_name(cp)}, {clock(cp.ts)}"
