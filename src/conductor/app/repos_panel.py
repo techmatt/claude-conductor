@@ -14,7 +14,7 @@ from ..util import clock, duration, now
 from . import actions, theme
 from .model import Project, Snapshot
 from .trail import TrailView
-from .widgets import (AMBER, KeepColourDelegate, Panel, compact_button, compact_buttons, confirm, muted, open_session,
+from .widgets import (AMBER, KeepColourDelegate, Panel, compact_button, compact_buttons, confirm, open_session,
                       pick_note, when)
 
 
@@ -40,9 +40,6 @@ class ReposPanel(Panel):
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
-        hint = muted(QLabel("Select an item to follow it on the right; double-click opens it in Events. Clear, "
-                            "Cancel, Mark reviewed and Pick… are signals the daemon carries out."))
-        lay.addWidget(hint)
         # The tree on the left, the selected item's detail (Conversation first) on the right.
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(self.tree)
@@ -260,6 +257,8 @@ class ReposPanel(Panel):
                     w.setFont(0, bold)
                     w.setForeground(0, QBrush(QColor(theme.MUTED)))
                     continue
+                if item_id:
+                    w.setToolTip(0, f"{item_id}: double-click to open it in Events")
                 look, _, pick_state = look.partition("|pick:")
                 state, row, bg, strong = looks.get(look, (None, None, None, False))
                 for c in range(len(self.COLS)):
@@ -280,12 +279,17 @@ class ReposPanel(Panel):
                     w.setFont(0, bold)
                 if key[0] == "red":
                     # The one action that releases the hold: drawn as the row's main action.
-                    self.tree.setItemWidget(w, 4, compact_button("Clear hold", lambda _=False, r=repo: self._clear(r),
-                                                                 tone="danger"))
+                    holder = compact_button("Clear hold", lambda _=False, r=repo: self._clear(r), tone="danger")
+                    holder.button.setToolTip(f"Release {repo}'s hold so its queue runs again "
+                                             "(a `clear:` signal the daemon carries out)")
+                    self.tree.setItemWidget(w, 4, holder)
                 elif key[0] == "queued":
-                    self.tree.setItemWidget(w, 4, compact_buttons(
+                    holder = compact_buttons(
                         ("Cancel", lambda _=False, i=key[1]: self._cancel(i), None),
-                        ("Amend…", lambda _=False, i=key[1]: self._amend(i), None)))
+                        ("Amend…", lambda _=False, i=key[1]: self._amend(i), None))
+                    holder.buttons["Cancel"].setToolTip("Move it to .conductor/cancelled/, kept, not deleted "
+                                                        "(a `cancel:` signal the daemon carries out)")
+                    self.tree.setItemWidget(w, 4, holder)
                 elif key[0] == "run" and look == "run":
                     self.tree.setItemWidget(w, 4, compact_buttons(
                         ("Tell…", lambda _=False, i=key[1]: self._tell(i), None),
@@ -301,6 +305,9 @@ class ReposPanel(Panel):
                     holder = compact_buttons(*specs)
                     if b := holder.buttons.get("Mark reviewed"):
                         b.clicked.connect(lambda _=False, i=key[1], b=b: self._reviewed(i, b))
+                        b.setToolTip("Mark its report read (a `reviewed:` signal the daemon carries out)")
+                    if b := holder.buttons.get("Pick…"):
+                        b.setToolTip("Open its picker in the browser (a `pick:` signal the daemon carries out)")
                     term = holder.buttons["Terminal"]
                     term.setToolTip("Open this item's session in a terminal (claude --resume)")
                     term.setEnabled(bool(self._sessions.get(key[1])))

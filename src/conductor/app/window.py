@@ -81,10 +81,10 @@ class ProjectView(QWidget):
         head.addWidget(self.start_btn)
         head.addWidget(self.stop_btn)
         lay.addLayout(head)
-        # The header's second line: the box's memory (`memory.line`), amber under
-        # pressure, red when critical.
+        # The header's second line: the box's memory (`memory.line`), only when it needs
+        # Matt: amber under pressure, red when critical. Hidden (and its space collapsed) at ok.
         self.memory_label = QLabel()
-        self.memory_label.setStyleSheet(f"color: {theme.MUTED}")
+        self.memory_label.hide()
         lay.addWidget(self.memory_label)
         self.tabs = QTabWidget()
         self.repos_panel = ReposPanel(project, notify)
@@ -163,7 +163,8 @@ class ProjectView(QWidget):
             self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>not running</b>")
         text, level = snap.memory
         colour = {"pressure": theme.AMBER, "critical": theme.RED}.get(level)
-        self.memory_label.setText(f"<b style='color:{colour}'>{text}</b>" if colour else text)
+        self.memory_label.setText(f"<b style='color:{colour}'>{text}</b>" if colour else "")
+        self.memory_label.setVisible(bool(colour))
         self.start_btn.setEnabled(not d.alive)
         self.stop_btn.setEnabled(d.alive)
         self._update_run_buttons(snap)

@@ -164,6 +164,7 @@ def test_signal_files(tmp_path):
     assert actions.stop_daemon(tmp_path).read_text(encoding="utf-8").endswith("stop: daemon\n")
     assert actions.clear(tmp_path, "code").read_text(encoding="utf-8").endswith("clear: code\n")
     assert actions.pick(tmp_path, "code/picks/m.json").read_bytes() == b"by: app\npick: code/picks/m.json\n"
+    assert actions.reviewed(tmp_path, "code/001_x", by="cli").read_bytes() == b"by: cli\nreviewed: code/001_x\n"
 
 
 def test_app_signals_land_as_daemon_events(env):
@@ -409,6 +410,23 @@ def test_window_renders_every_panel(qapp, env, tmp_path):
         w._quitting = True
         w.close()
     assert not (bare / "events.db").exists()
+
+
+def test_memory_line_shows_only_when_it_needs_matt(qapp, env, tmp_path, monkeypatch):
+    from conductor.app import model
+    from conductor.app.window import MainWindow
+    level = ["ok"]
+    monkeypatch.setattr(model.memory, "line", lambda cfg: (f"memory 1.0 of 2.0 GiB · {level[0]}", level[0]))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    for lv, colour in (("ok", None), ("pressure", theme.AMBER), ("critical", theme.RED), ("ok", None)):
+        level[0] = lv
+        win.refresh()
+        assert view.memory_label.isHidden() == (colour is None), lv
+        assert (colour in view.memory_label.text() and lv in view.memory_label.text()) if colour \
+            else view.memory_label.text() == ""
+    win._quitting = True
+    win.close()
 
 
 def test_a_staged_head_is_one_repos_row(qapp, tmp_path):

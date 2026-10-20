@@ -62,9 +62,9 @@ def swap(control: Path, where: str, names: list[str], index: int, delta: int) ->
     return reorder(control, where, [names[j], names[index]] if delta > 0 else [names[index], names[j]])
 
 
-def reviewed(control: Path, item_id: str) -> Path:
+def reviewed(control: Path, item_id: str, by: str = BY) -> Path:
     """`item_id`: a finished item's `repo/NNN_name`."""
-    return write_signal(control, f"reviewed: {item_id}")
+    return write_signal(control, f"reviewed: {item_id}", by=by)
 
 
 def tell(control: Path, item_id: str, text: str, by: str = BY) -> Path:

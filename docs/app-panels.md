@@ -46,6 +46,9 @@ an item's detail in `trail.py`.
   *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the
   latest checkpoint sit in *Earlier checkpoints* (the 10 newest; the count is all of
   them).
+  The tab has no help line: an item's name tooltip says double-click opens it in Events,
+  and **Clear hold**, **Cancel**, **Mark reviewed** and **Pick…** each have a tooltip
+  naming what it does and the signal it sends.
   The tab is a split: the tree on the left, the selected item's detail on the right,
   so Matt follows one prompt end to end here and leaves *Events* for investigating
   conductor. Selecting an item row shows it (a group or repo row changes nothing); the

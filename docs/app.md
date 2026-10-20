@@ -36,8 +36,10 @@ files, its own settings, starting the daemon, and opening a console on a finishe
 **Header.** The project's state, its daemon (`.conductor/daemon.json`, pid + creation
 time: **running**, amber **not answering** when its heartbeat is stale, red **died**
 when its lock outlived it, or **not running**; see `memory.md`), and a count of the app's
-signals still waiting in `signals/` (or rejected as `.bad`). A second line is the memory
-line (`memory.line`, as in the inbox's *Now*), amber under pressure, red when critical.
+signals still waiting in `signals/` (or rejected as `.bad`). A second line, the memory
+line (`memory.line`, as in the inbox's *Now*), shows only when it needs Matt: amber under
+pressure, red when critical (with the biggest item). At `ok` it is hidden and takes no
+space; `conductor status` and the inbox's *Now* still show it always.
 *Start daemon* spawns `<python> -m conductor run <folder>` (the
 console `python.exe` even when the app runs under `pythonw.exe`; git calls pass
 `CREATE_NO_WINDOW` too, so nothing flashes a console window)
