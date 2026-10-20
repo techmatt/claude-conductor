@@ -76,6 +76,11 @@ def tell(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     return write_signal(control, f"tell: {item_id} {one}", by=by)
 
 
+def outline(control: Path, item_id: str, by: str = BY) -> Path:
+    """Ask running `item_id` for an updated outline: a tell of the fixed request."""
+    return write_signal(control, f"outline: {item_id}", by=by)
+
+
 def amend(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     """An addition to queued, staged or running `item_id`'s instructions, any length:
     `queue/<repo>/NNN_name.amend[.N].md` (after any already waiting), written as `.tmp`

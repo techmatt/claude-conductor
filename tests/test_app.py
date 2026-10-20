@@ -607,6 +607,34 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     win.close()
 
 
+def test_outline_pinned_and_requested_from_the_conversation(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    outline = [{"title": "Read", "eta": "10:40am", "done": True}, {"title": "Re-cut images", "eta": "11:05am"},
+               {"title": "Report", "eta": "11:20am"}]
+    env.queue("001_o", f"FAKE progress {json.dumps({'outline': outline})}\n"
+                       f"FAKE reply-with 30 {json.dumps({'outline': outline[:2] + [dict(outline[2], eta='11:30am')]})}")
+    env.tick_until(lambda: env.events("progress"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    chat = view.repos_panel.detail.conversation
+    assert chat.outline_btn.isEnabled() and chat.pin.isVisibleTo(chat)
+    pin = chat.pin.text()
+    assert "1/3 done" in pin and "✓" in pin and "<b>Re-cut images</b>" in pin and "· next" in pin
+    assert pin.index("Re-cut images") < pin.index("Report") and "11:20am" in pin
+    chat.outline_btn.click()
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\noutline: code/001_o\n"
+    env.tick_until(lambda: env.finished("code/001_o"))
+    win.refresh()
+    assert "11:30am" in chat.pin.text() and "11:20am" not in chat.pin.text()
+    assert not chat.outline_btn.isEnabled()
+    [req] = [t for t in chat.turns if t.title.startswith("Outline request")]
+    assert req.under[-1][0] == "reply" and "finish ~11:30am" in req.under[-1][2]
+    win._quitting = True
+    win.close()
+
+
 @pytest.mark.slow
 def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
     from conductor.app.window import MainWindow

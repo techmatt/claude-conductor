@@ -20,7 +20,7 @@ from .. import config as config_mod
 from .. import git, items, memory, picks, questions, state, talk, targets
 from ..events import RED_KINDS, EventLog, Event
 from ..executor import RunPaths
-from ..inbox import checkpoint_name, describe, progress_line, reply_to, slow_text
+from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
 from ..state import DaemonInfo, daemon_info
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
 
@@ -285,7 +285,9 @@ def activity_text(ev: Event) -> str:
         case "checkpoint":
             return f"new {checkpoint_name(ev)}{by}"
         case "progress":
-            return f"{name}{reply_to(ev)}: {progress_line(ev)}"
+            return f"{name}{reply_to(ev)}: {progress_text(ev).replace(chr(10), ' · ')}"
+        case "tell" if d.get("outline_request"):
+            return f"outline request #{ev.id} to {name}{by}"
         case "tell":
             return f"message #{ev.id} to {name}{by}: {d.get('text')}"
         case "delivered":
@@ -566,6 +568,20 @@ QUESTION_ENDS = {"answer": "Matt answered", "default": "default taken (nobody an
                  "late": "late answer, ignored", "question_closed": "closed unanswered"}
 
 
+def progress_text(ev: Event) -> str:
+    """A progress line in the thread: its note, and an outline it carries in the compact
+    one-line form (the latest is pinned in full above the thread)."""
+    text = progress_line(ev)
+    if ev.detail.get("note") and ev.detail.get("outline"):
+        text += "\n" + outline_line(ev, posted=False)
+    return text
+
+
+def current_outline(events: list[Event]) -> Event | None:
+    """The item's latest outline: its newest `progress` event carrying one."""
+    return next((e for e in reversed(events) if e.kind == "progress" and outline_rows(e)), None)
+
+
 def conversation(events: list[Event]) -> list[Turn]:
     """An item's events (oldest first) as a chat thread. Replies sit under their tell:
     a `progress` event tagged `reply_to` is not a turn of its own."""
@@ -606,8 +622,10 @@ def conversation(events: list[Event]) -> list[Turn]:
                 amend = e.kind == "amended"
                 by = d.get("by")
                 who = "conductor" if by == "conductor" else "matt"
-                title = f"{'Amendment' if amend else 'Message'} #{e.id}" + (f" (by {by})" if by and who == "matt" else "")
-                t = Turn(e.id, e.ts, who, title, str(d.get("text") or ""))
+                asks = d.get("outline_request")         # the fixed text: the title says it
+                what = "Amendment" if amend else "Outline request" if asks else "Message"
+                title = f"{what} #{e.id}" + (f" (by {by})" if by and who == "matt" else "")
+                t = Turn(e.id, e.ts, who, title, "" if asks else str(d.get("text") or ""))
                 if amend:
                     t.title += f", while {d.get('state')}"
                     t.under.append(("delivery", "", str(d.get("delivery") or "")))
@@ -615,7 +633,7 @@ def conversation(events: list[Event]) -> list[Turn]:
                     t.under.append(("delivered", dv.ts, f"via {dv.detail.get('via')}"
                                     + (f", after {dv.detail['waited_seconds']}s" if dv.detail.get("waited_seconds") is not None else "")))
                 if r := replies.get(e.id):
-                    t.under.append(("reply", r.ts, progress_line(r)))
+                    t.under.append(("reply", r.ts, progress_text(r)))
                 elif w := undelivered.get(e.id):
                     t.note, t.tone = str(w.detail.get("note") or "never delivered"), "warn"
                 elif dv and dv.detail.get("via") in ("hook", "progress"):
@@ -639,8 +657,9 @@ def conversation(events: list[Event]) -> list[Turn]:
             case "progress":
                 if (ids := talk.reply_ids(d)) and all(i in talked for i in ids):
                     continue                    # shown under its tell
-                title = "Progress" + (f" (reply to {', '.join(f'#{i}' for i in ids)})" if ids else "")
-                out.append(Turn(e.id, e.ts, "executor", title, progress_line(e)))
+                title = ("Outline" if d.get("outline") and not d.get("note") else "Progress") + (
+                    f" (reply to {', '.join(f'#{i}' for i in ids)})" if ids else "")
+                out.append(Turn(e.id, e.ts, "executor", title, progress_text(e)))
             case "pick_open" | "pick_saved" | "pick_failed":
                 out.append(Turn(e.id, e.ts, "conductor", "Picker", activity_text(e),
                                 tone="red" if e.kind == "pick_failed" else ""))

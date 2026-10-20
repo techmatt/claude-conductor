@@ -19,6 +19,8 @@
     FAKE progress <json arguments>           call the progress tool; its text goes into the report
     FAKE until-message <seconds>             "work" (a tool call every 0.2s) until a message
                                              arrives or the time is up; then answer it with progress
+    FAKE reply-with <seconds> <json>         the same, answering with these progress arguments
+                                             (an outline request's reply)
     FAKE leave <seconds>                     start a process in cwd that outlives the executor
                                              (`LEFT=<pid>` in the report)
     FAKE hog <MB> <seconds>                  a child process holding <MB> of touched memory
@@ -156,12 +158,13 @@ for ln in lines:
                 time.sleep(0.05)
         case "progress":
             progress(json.loads(ln.split(" ", 2)[2]))
-        case "until-message":
+        case "until-message" | "reply-with":
             end = time.time() + float(parts[2])
             # A message may already have come with the previous line's hook.
             while contexts or time.time() < end:
                 if contexts or post_tool_use("Bash"):
-                    progress({"note": f"got it: {contexts[-1].splitlines()[1]}"})
+                    progress(json.loads(parts[3]) if parts[1] == "reply-with"
+                             else {"note": f"got it: {contexts[-1].splitlines()[1]}"})
                     break
                 time.sleep(0.2)
         case "report":

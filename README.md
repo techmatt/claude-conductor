@@ -21,6 +21,7 @@ uv run conductor questions [<control folder>] [--all]      # open asks (--all: r
 uv run conductor audits [<control folder>] [--all]         # unused audit notes per repo (--all: used too)
 uv run conductor answer <id> <text…> [--control <folder>]  # writes the answer file
 uv run conductor tell <item> <text…> [--control <folder>]  # a message to a running executor
+uv run conductor outline <item> [--control <folder>]       # ask a running executor for an updated outline
 uv run conductor amend <item> <text…|file> [--control <folder>]  # add to an item's instructions (see Amendments)
 uv run conductor checkpoint [<label…>] [--control <folder>]   # a new checkpoint (see Checkpoints)
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
@@ -70,7 +71,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
                                .stage.prompt.md for a stage; .audit.md (audit notes);
                                .amend.md (every amendment delivered, in order, with times)
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, pick, stop
+signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, outline, checkpoint, run, pick, stop
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 picks/                         Matt's saved picker choices: <name>.choices.json (see Picks)
 inbox.md                       generated digest since the read mark
@@ -384,7 +385,7 @@ rule (ask only when a wrong guess would waste real work or be hard to undo, give
 default whenever one exists, block only when every default is worse than waiting;
 everything else is a branch); the progress rule (a `progress` line at the start, with a
 first ETA once it can estimate, at real milestones, and when the estimate changes
-materially; not chatter); that a message from Matt may arrive after a tool call,
+materially; not chatter); the *Outline* rule (see *Progress and messages*); that a message from Matt may arrive after a tool call,
 outranks the prompt where they conflict, and is answered through `progress`; the *Short calls* rule (background anything over `foreground_seconds`, poll it in calls no longer, don't idle; see *Progress and messages*); the time limit and kill time; the **absolute report
 path** (the only file the executor may write outside its repo); the report header and
 what each status means; the *Pickers* paragraph (when to write a picker manifest, its
@@ -663,7 +664,8 @@ read mark says, each with the answer file to write. `conductor questions` lists 
 **Progress.** The executor's second tool, `progress` (`mcp__conductor__progress`):
 
 ```
-progress(note, eta?, done?, remaining?)     # eta: free text (5:40pm, 25m); done/remaining: numbers
+progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm, 25m); done/remaining: numbers
+                                                    # outline: [{title, eta, done}], see Outline
 ```
 
 It returns at once (`Logged; carry on.`). The ask server appends a line (`seq`, `at`,
@@ -672,6 +674,24 @@ It returns at once (`Logged; carry on.`). The ask server appends a line (`seq`, 
 per new line (`seq` dedupes across restarts). The latest line of a running item shows
 in the inbox's *Now*, `conductor status`, the app's Repos tab and the Activity view;
 `progress` events are left out of the inbox's *Other* section.
+
+**Outline.** `progress` also takes `outline`: the item's sections in order, the report
+last, each `{title, eta, done}` (a few words, a local clock time, a bool; ~8 rows asked,
+12 taken). With an outline, `note` may be left out. It is stored on the progress line
+and logged on the `progress` event (`outline`); the newest one per item is its current
+outline (`inbox.latest_outline`). The preamble's *Outline* rule: post one once oriented
+with a plan, again whenever a message asks, and resend it with a row `done` when that
+section finishes, re-estimating the others only if they moved a lot; coarse, no
+descriptions, no effort on accuracy. A staging session ends its plan with the
+outline's sections and posts it first thing after resume (a stage has no `progress`
+tool). One line, `outline 2/5 · next: Re-cut images by 11:05am · finish ~11:20am
+(posted 10:52am)` (`inbox.outline_line`; *next* is the first undone row, *finish* the
+last row's time), stands after the progress note on the inbox's *Now* line (alone
+when the latest line was only an outline) and under the item in `conductor status`.
+The **request** is `outline: <item>` (the app's **Outline?**, `conductor outline
+<item>`): a `tell` of the fixed text `talk.OUTLINE_REQUEST` ("Post an updated outline
+now: …"), logged with `outline_request: true`, refused exactly as a tell is, and
+delivered like one, so its reply tag pairs it with the outline it produced.
 
 **Messages.** `tell: <item> <message>` is a signal verb (the app's **Tell…**, `conductor
 tell` — which writes `signals/cli-….signal` with `by: cli` — and the planner all use
@@ -1113,7 +1133,7 @@ the runtime paths. A bad request is logged `request_failed` (red) and renamed
 `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.
 
-## Signals: read, clear, approve, cancel, reorder, reviewed, tell, checkpoint, run, pick, stop
+## Signals: read, clear, approve, cancel, reorder, reviewed, tell, outline, checkpoint, run, pick, stop
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -1129,6 +1149,7 @@ cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
 reviewed: sandbox/003        # the planner has acted on that finished item's report
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see Progress and messages)
+outline: sandbox/005         # ask running sandbox/005 for an updated outline (a tell of fixed text)
 checkpoint: session start    # a session boundary (see Checkpoints)
 run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
 pick: code/picks/art_alts_009.json   # serve that picker manifest and open it in the browser
@@ -1175,6 +1196,8 @@ value is ignored.
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
   waits on the read mark. Several `reviewed:` lines may share a file.
 - **tell** — `tell: <item> <message>`: see *Progress and messages*.
+- **outline** — `outline: <item>`: a tell of the fixed outline request; see *Progress
+  and messages*, *Outline*.
 - **checkpoint** — `checkpoint: <label>` (any text, a ` # ` included, or none): see
   *Checkpoints*.
 - **run** — `run: <target>` or `run: <target> stop`: see *Run targets*. An unknown
@@ -1389,9 +1412,15 @@ stop` (no confirmation: a click is cheap to undo with Run).
   *waiting for an answer*. The finish shows its header (status with reasons, blocks,
   carry, slow, pick) and a **Report** link to the Report tab; other reds show as their
   Activity line. Plumbing (`delivered`, `merge`, `reaped`, `enqueue`, `edited`,
-  `commit`, `worktree`, …) stays in the detail's Events tab. **Tell…** and **Amend…**
-  at the bottom act on the item on screen, enabled by the tree's rules (Tell while it
-  executes; Amend queued, staged or executing). The thread is `model.conversation`.
+  `commit`, `worktree`, …) stays in the detail's Events tab. The item's latest outline
+  (*Outline*) is pinned above the thread, outside its scroll, with when it was posted:
+  done rows ticked, the next undone row bold and marked *next*. Every outline also sits
+  in the thread at its time as a compact one-line turn (*Outline*, or under a
+  *Progress* note it came with), and an outline request is a turn of Matt's titled
+  *Outline request #N* with the outline that answered it as its reply. **Tell…**,
+  **Outline?** (sends `outline: <item>`) and **Amend…** at the bottom act on the item
+  on screen, enabled by the tree's rules (Tell and Outline? while it executes; Amend
+  queued, staged or executing). The thread is `model.conversation`.
 - *Questions* — open asks, blocking ones first, then by soonest default; each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
@@ -1504,8 +1533,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `read` / `clear` | signals | through / repo |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
 | `checkpoint` | a `checkpoint:` signal started a new session view (its id is its number) | label, by |
-| `progress` | the executor called `progress` | seq, at, note, eta, done, remaining; reply_to (the tell or running amendment it answers) |
-| `tell` | a `tell:` signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message | text, by |
+| `progress` | the executor called `progress` | seq, at, note (absent on an outline-only line), eta, done, remaining, outline ([{title, eta, done}]); reply_to (the tell or running amendment it answers) |
+| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message | text, by; outline_request (an `outline:` signal's fixed request) |
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`/`progress`; an amendment also `prompt`/`resume`), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |

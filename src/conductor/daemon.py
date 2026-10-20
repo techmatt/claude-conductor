@@ -637,7 +637,7 @@ class Daemon:
             elif key == "clear":
                 if value not in self.cfg.repos:
                     raise ValueError(f"line {n}: clear: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed"):
+            elif key in ("approve", "cancel", "reviewed", "outline"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reorder":
@@ -684,6 +684,8 @@ class Daemon:
             self._reviewed(value, rel)
         elif key == "tell":
             self._tell(value, rel)
+        elif key == "outline":
+            self._tell(f"{value} {talk.OUTLINE_REQUEST}", rel, outline_request=True)
         elif key == "checkpoint":
             self._checkpoint(value, rel)
         elif key == "run":
@@ -793,29 +795,31 @@ class Daemon:
                             note=f"{fin.item} is still unreviewed at checkpoint #{cp.id} (finished "
                                  f"{fin.detail.get('status')} {clock(fin.ts)}); it carries forward: raise it first")
 
-    def _tell(self, value: str, rel: str) -> None:
+    def _tell(self, value: str, rel: str, **extra) -> None:
         """A message for a running executor: logged `tell`, then left in its mailbox for
-        the PostToolUse hook (or its next `progress` call) to deliver."""
+        the PostToolUse hook (or its next `progress` call) to deliver. An `outline:`
+        signal is a tell of the fixed request, marked `outline_request`."""
         ref, text = value.split(None, 1)
+        verb = "outline" if extra.get("outline_request") else "tell"
         prefix, slash, name_ref = ref.rpartition("/")
         if slash and prefix not in self.cfg.repos:
-            raise ValueError(f"tell: {prefix!r} is not a repo")
+            raise ValueError(f"{verb}: {prefix!r} is not a repo")
         repos = [prefix] if slash else list(self.cfg.repos)
         hits = [f"{r}/{p.stem}" for r in repos if (p := self._running_file(r, name_ref))]
         if len(hits) > 1:
-            raise ValueError(f"tell: {ref!r} is ambiguous: {hits}")
+            raise ValueError(f"{verb}: {ref!r} is ambiguous: {hits}")
         run = self.runs.get(hits[0]) if hits else None
         if run is None or run.rec.get("phase", "exec") != "exec" or run.exited():
             view = state.scan(self.cfg, self.log)
             ids = [i for i in [*view.finishes, *view.running, *(it.id for q in view.queued.values() for it in q)]
                    if i.split("/", 1)[0] in repos and items.number_matches(i.split("/", 1)[1], name_ref)]
             if not ids:
-                raise ValueError(f"tell: no running item {ref!r}")
+                raise ValueError(f"{verb}: no running item {ref!r}")
             started = ids[0] in view.finishes or ids[0] in view.running
-            raise ValueError(f"tell: {ids[0]} " + ("has exited; a message reaches only a running executor"
+            raise ValueError(f"{verb}: {ids[0]} " + ("has exited; a message reaches only a running executor"
                                                    if started else "has not started; a message reaches only a running executor"))
         item_id = hits[0]
-        ev = self.log.append("tell", item=item_id, paths=[rel], text=text, by=self._by or "unknown")
+        ev = self.log.append("tell", item=item_id, paths=[rel], text=text, by=self._by or "unknown", **extra)
         talk.post(self.cfg.control, item_id, ev.id, text, self._by)
 
     def _cancel_file(self, src: Path, origin: str, item_id: str, repo: str, rel: str) -> None:
@@ -1120,7 +1124,7 @@ class Daemon:
                     extra["reply_to"] = replied[0] if len(replied) == 1 else replied
                     self.awaiting_reply[item_id] = [w for w in waiting if w[0] not in replied]
                 self.log.append("progress", item=item_id, paths=[self.cfg.rel(path)],
-                                **{k: v for k, v in line.items() if k in ("seq", "at", "note", "eta", "done", "remaining")},
+                                **{k: v for k, v in line.items() if k in ("seq", "at", "note", "eta", "done", "remaining", "outline")},
                                 **extra)
 
     def _awaiting_reply(self) -> dict[str, list[tuple[int, int]]]:

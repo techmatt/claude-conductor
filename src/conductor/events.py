@@ -108,8 +108,13 @@ class EventLog:
             rows = [e for e in rows if e.item and item_matches(e.item, item)]
         return rows
 
-    def last(self, kind: str, item: str | None = None, repo: str | None = None) -> Event | None:
+    def last(self, kind: str, item: str | None = None, repo: str | None = None,
+             has: str | None = None) -> Event | None:
+        """The newest `kind` event; `has` names a detail key it must carry."""
         sql, args = "SELECT * FROM events WHERE kind = ?", [kind]
+        if has is not None:
+            sql += " AND json_type(detail, ?) IS NOT NULL"
+            args.append(f"$.{has}")
         if item is not None:
             sql += " AND item = ?"
             args.append(item)

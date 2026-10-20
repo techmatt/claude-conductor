@@ -112,7 +112,9 @@ def test_ask_server_protocol(env, tmp_path):
     try:
         tool, prog = c.start()
         assert tool["name"] == "ask" and tool["inputSchema"]["required"] == ["question"]
-        assert prog["name"] == "progress" and prog["inputSchema"]["required"] == ["note"]
+        # `note` may be left out with an `outline`, so the server checks it, not the schema.
+        assert prog["name"] == "progress" and "required" not in prog["inputSchema"]
+        assert prog["inputSchema"]["properties"]["outline"]["items"]["required"] == ["title", "eta"]
         bad = c.request("tools/call", {"name": "ask", "arguments": {"question": ""}})
         assert bad["isError"]
         assert c.request("ping") == {}

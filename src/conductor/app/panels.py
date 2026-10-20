@@ -29,10 +29,11 @@ from PySide6.QtWidgets import (
 
 from .. import audits, items
 from ..events import RED_KINDS, Event
-from ..inbox import describe
+from ..inbox import describe, outline_rows
 from ..util import clock, duration, now, parse_stamp
 from . import actions, theme
-from .model import ACTIVITY_KINDS, ALWAYS_KINDS, Project, Snapshot, activity_text, conversation, git_trail
+from .model import (ACTIVITY_KINDS, ALWAYS_KINDS, Project, Snapshot, activity_text, conversation, current_outline,
+                    git_trail)
 
 RED = QColor(theme.RED)
 AMBER = QColor(theme.AMBER)
@@ -221,6 +222,8 @@ class ReposPanel(Panel):
         self.detail = TrailView(project, conversation=True)
         self.detail.setMinimumWidth(320)
         self.detail.conversation.tell.connect(self._tell)
+        self.detail.conversation.outline.connect(
+            lambda item_id: self.signal_sent(f"outline request to {item_id}", actions.outline(self.control, item_id)))
         self.detail.conversation.amend.connect(self._amend)
         split.addWidget(self.detail)
         split.setStretchFactor(0, 3)
@@ -862,10 +865,12 @@ class TrailHighlighter(QSyntaxHighlighter):
 class ConversationView(QWidget):
     """One item as a chat thread (`model.conversation`): Matt's messages and amendments on
     the right with their replies under them, the executor's questions and progress on
-    the left, conductor's start, picker and finish lines across. Tell… and Amend… at the
-    bottom act on the item on screen. It follows the newest entry unless Matt scrolled up."""
+    the left, conductor's start, picker and finish lines across. The latest outline is
+    pinned above the thread. Tell…, Outline? and Amend… at the bottom act on the item on
+    screen. It follows the newest entry unless Matt scrolled up."""
     report = Signal()               # the finish's "Report" link
     tell = Signal(str)
+    outline = Signal(str)
     amend = Signal(str)
 
     LOOK = {"matt": (theme.SELECT, "Matt"), "executor": (theme.BASE, "executor"), "conductor": (theme.BAND, "conductor")}
@@ -876,6 +881,14 @@ class ConversationView(QWidget):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
+        # Outside the scrolling thread, so it stays in view.
+        self.pin = QLabel()
+        self.pin.setWordWrap(True)
+        self.pin.setTextFormat(Qt.TextFormat.RichText)
+        self.pin.setStyleSheet(f"QLabel {{ background: {theme.BASE}; padding: 6px 8px; "
+                               f"border-bottom: 1px solid {theme.MUTED}; }}")
+        self.pin.hide()
+        lay.addWidget(self.pin)
         self.view = QTextBrowser()
         self.view.setOpenLinks(False)
         self.view.anchorClicked.connect(lambda url: self.report.emit() if url.toString() == "report" else None)
@@ -888,11 +901,16 @@ class ConversationView(QWidget):
         self.amend_btn = QPushButton("Amend…")
         self.amend_btn.setToolTip("An addition to this item's prompt: queued, appended at launch; staged, "
                                   "in the resume message; running, after its next tool call")
+        self.outline_btn = QPushButton("Outline?")
+        self.outline_btn.setToolTip("Ask the running executor for an updated outline: its remaining "
+                                    "sections and finish times, pinned above the thread when it answers")
         self.tell_btn.clicked.connect(lambda: self.item and self.tell.emit(self.item))
+        self.outline_btn.clicked.connect(lambda: self.item and self.outline.emit(self.item))
         self.amend_btn.clicked.connect(lambda: self.item and self.amend.emit(self.item))
         self.hint = muted(QLabel())
         bar.addWidget(self.hint, 1)
         bar.addWidget(self.tell_btn)
+        bar.addWidget(self.outline_btn)
         bar.addWidget(self.amend_btn)
         lay.addLayout(bar)
         self.item: str | None = None
@@ -902,11 +920,16 @@ class ConversationView(QWidget):
 
     def set_actions(self, tell: bool, amend: bool) -> None:
         self.tell_btn.setEnabled(tell)
+        self.outline_btn.setEnabled(tell)           # the Tell rule: only while it executes
         self.amend_btn.setEnabled(amend)
         self.hint.setText("" if tell or amend else "Tell and Amend reach a queued, staged or running item only.")
 
-    def show_turns(self, item_id: str | None, turns: list, fresh: bool) -> None:
+    def show_turns(self, item_id: str | None, turns: list, fresh: bool, outline: Event | None = None) -> None:
         self.item, self.turns = item_id, turns
+        pin = self.render_outline(outline)
+        if pin != self.pin.text():
+            self.pin.setText(pin)
+        self.pin.setVisible(bool(pin))
         html = self.render(turns)
         if html == self._html and not fresh:
             return
@@ -916,6 +939,28 @@ class ConversationView(QWidget):
         self._html = html
         self.view.setHtml(html)
         sb.setValue(sb.maximum() if bottom else value)
+
+    @staticmethod
+    def render_outline(ev: Event | None) -> str:
+        """The pinned outline: done rows ticked, the next undone one marked."""
+        rows = outline_rows(ev)
+        if not rows:
+            return ""
+        done = sum(1 for r in rows if r.get("done"))
+        nxt = next((i for i, r in enumerate(rows) if not r.get("done")), None)
+        out = [f"<b>Outline</b> <span style='color:{theme.MUTED}'>· {done}/{len(rows)} done · posted "
+               f"{when(ev.ts)} · #{ev.id}</span>"]
+        for i, r in enumerate(rows):
+            eta = f" <span style='color:{theme.MUTED}'>· {_esc(r.get('eta') or '?')}</span>"
+            if r.get("done"):
+                out.append(f"<span style='color:{theme.GREEN}'>✓</span> "
+                           f"<span style='color:{theme.MUTED}'>{_esc(r.get('title'))}</span>{eta}")
+            elif i == nxt:
+                out.append(f"<span style='color:{theme.AMBER}'>▶</span> <b>{_esc(r.get('title'))}</b>{eta}"
+                           f" <span style='color:{theme.AMBER}'>· next</span>")
+            else:
+                out.append(f"<span style='color:{theme.MUTED}'>○</span> {_esc(r.get('title'))}{eta}")
+        return "<br>".join(out)
 
     @classmethod
     def render(cls, turns: list) -> str:
@@ -1066,7 +1111,7 @@ class TrailView(QWidget):
         self.title.setText(" · ".join(bits))
         self.open_btn.setEnabled(self.session_id() is not None)
         if self.conversation is not None:
-            self.conversation.show_turns(self.item, conversation(tr.events), fresh)
+            self.conversation.show_turns(self.item, conversation(tr.events), fresh, current_outline(tr.events))
         self._render_events(center=fresh)
         self._set("Prompt", tr.prompt or "(no prompt file: not launched and not in any queue folder)", fresh)
         self._set("Report", tr.report or "(no report)", fresh)

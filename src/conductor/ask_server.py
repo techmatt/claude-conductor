@@ -6,7 +6,7 @@
 Two tools. `ask(question, options?, default?, block?)` writes the question file, then
 holds the tool call open until the question resolves: an answer file appears, or (with
 a default and `block` false) the default deadline passes. `progress(note, eta?, done?,
-remaining?)` appends a progress line (`talk.record_progress`) and returns at once, with
+remaining?, outline?)` appends a progress line (`talk.record_progress`) and returns at once, with
 any message waiting for the executor that the PostToolUse hook has not delivered yet. JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
 `notifications/cancelled` are still served while one waits.
@@ -31,6 +31,7 @@ PROGRESS_SECONDS = 60.0
 SERVER_NAME = "conductor"
 TOOL_NAME = "ask"
 PROGRESS_NAME = "progress"
+OUTLINE_ROWS = 12               # the preamble asks for ~8; a few more are taken, not refused
 
 TOOL = {
     "name": TOOL_NAME,
@@ -61,7 +62,8 @@ PROGRESS_TOOL = {
         "Tell Matt how this item is going, in one short line; returns at once. Call it at "
         "the start (with a first `eta` as soon as you can estimate one), at real milestones, "
         "and whenever your estimate changes materially; never as chatter. Also the way to "
-        "answer a message Matt sent you while you work."
+        "answer a message Matt sent you while you work. With `outline` it also posts your "
+        "remaining sections with finish times (see the preamble's Outline rule)."
     ),
     "inputSchema": {
         "type": "object",
@@ -70,10 +72,42 @@ PROGRESS_TOOL = {
             "eta": {"type": "string", "description": "When you expect to finish: a clock time (5:40pm) or a duration (25m)."},
             "done": {"type": "number", "description": "Units done so far, when the work has countable units."},
             "remaining": {"type": "number", "description": "Units still to do."},
+            "outline": {
+                "type": "array", "maxItems": OUTLINE_ROWS,
+                "description": ("Your remaining plan, coarse: every section of this item in order, the "
+                                "report last, at most 8 rows. Titles a few words, a rough finish time "
+                                "each, finished ones `done`. No descriptions; `note` may be left out."),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "A few words."},
+                        "eta": {"type": "string", "description": "Local clock time this section should finish (11:05am)."},
+                        "done": {"type": "boolean", "default": False},
+                    },
+                    "required": ["title", "eta"],
+                },
+            },
         },
-        "required": ["note"],
     },
 }
+
+
+def parse_outline(value) -> tuple[list[dict], str | None]:
+    """The `outline` argument as stored rows ({title, eta, done}), or an error."""
+    if not isinstance(value, list) or not value:
+        return [], "`outline` must be a non-empty list of {title, eta, done} rows"
+    if len(value) > OUTLINE_ROWS:
+        return [], f"`outline` has {len(value)} rows; keep it coarse, at most 8"
+    rows = []
+    for n, row in enumerate(value, 1):
+        if not isinstance(row, dict) or not isinstance(row.get("title"), str) or not row["title"].strip():
+            return [], f"`outline` row {n} needs a `title`"
+        done = row.get("done", False)
+        if not isinstance(done, bool):
+            return [], f"`outline` row {n}: `done` must be true or false"
+        rows.append({"title": " ".join(row["title"].split())[:80],
+                     "eta": " ".join(str(row.get("eta") or "").split())[:20], "done": done})
+    return rows, None
 
 
 class Server:
@@ -142,10 +176,17 @@ class Server:
 
     # ------------------------------------------------------------- the tools
     def progress(self, args: dict) -> tuple[str, bool]:
-        note = args.get("note")
-        if not isinstance(note, str) or not note.strip():
-            return "`note` must be a non-empty string", True
-        entry = {"note": " ".join(note.split())[:500]}
+        note, outline = args.get("note"), args.get("outline")
+        entry = {}
+        if outline is not None:
+            rows, why = parse_outline(outline)
+            if why:
+                return why, True
+            entry["outline"] = rows
+        if note not in (None, "") or not outline:
+            if not isinstance(note, str) or not note.strip():
+                return "`note` must be a non-empty string (it may be left out only with an `outline`)", True
+            entry["note"] = " ".join(note.split())[:500]
         if args.get("eta") not in (None, ""):
             entry["eta"] = str(args["eta"]).strip()[:80]
         for key in ("done", "remaining"):

@@ -17,7 +17,45 @@ def progress_line(ev: Event) -> str:
         bits.append(f"{d['done']:g} done")
     if d.get("remaining") is not None:
         bits.append(f"{d['remaining']:g} to go")
+    if not d.get("note") and d.get("outline"):
+        return outline_line(ev, posted=False) + (f" ({', '.join(bits)})" if bits else "")
     return str(d.get("note", "")) + (f" ({', '.join(bits)})" if bits else "")
+
+
+def outline_rows(ev: Event | None) -> list[dict]:
+    rows = ev.detail.get("outline") if ev else None
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
+def outline_line(ev: Event, posted: bool = True) -> str:
+    """An outline as one line: `outline 2/5 · next: Re-cut images by 11:05am · finish
+    ~11:20am (posted 10:52am)`."""
+    rows = outline_rows(ev)
+    done = sum(1 for r in rows if r.get("done"))
+    text = f"outline {done}/{len(rows)}"
+    if nxt := next((r for r in rows if not r.get("done")), None):
+        text += f" · next: {nxt.get('title')}" + (f" by {nxt['eta']}" if nxt.get("eta") else "")
+        if rows[-1].get("eta"):
+            text += f" · finish ~{rows[-1]['eta']}"
+    else:
+        text += " done"
+    return text + (f" (posted {clock(ev.ts)})" if posted else "")
+
+
+def latest_outline(log: EventLog, item_id: str) -> Event | None:
+    """The item's current outline: its newest `progress` event carrying one."""
+    return log.last("progress", item=item_id, has="outline")
+
+
+def now_progress(log: EventLog, item_id: str) -> str:
+    """A running item's tail on the *Now* line: its latest progress note (unless that
+    line was only an outline) and its current outline, ` — note, at 10:58am; outline …`."""
+    bits = []
+    if (p := log.last("progress", item=item_id)) and p.detail.get("note"):
+        bits.append(f"{progress_line(p)}, at {clock(p.ts)}")
+    if o := latest_outline(log, item_id):
+        bits.append(outline_line(o))
+    return f" — {'; '.join(bits)}" if bits else ""
 
 
 def reply_to(ev: Event) -> str:
@@ -67,6 +105,10 @@ def describe(ev: Event) -> str:
             text = f"picker {d.get('manifest')} failed: {d.get('error')}"
         case "progress":
             text = f"{who} progress{reply_to(ev)}: {progress_line(ev)}"
+            if d.get("note") and d.get("outline"):
+                text += f" · {outline_line(ev, posted=False)}"
+        case "tell" if d.get("outline_request"):
+            text = f"outline request #{ev.id} for {who}"
         case "tell":
             text = f"message #{ev.id} for {who}: {d.get('text')}"
         case "delivered":
@@ -354,8 +396,8 @@ def render(cfg: Config, log: EventLog, view: View) -> str:
             if rec["repo"] != repo:
                 continue
             text = rec["name"] + (" (merging)" if rec.get("phase") == "merge" else "")
-            if rec.get("phase", "exec") == "exec" and (p := log.last("progress", item=item_id)):
-                text += f" — {progress_line(p)}, at {clock(p.ts)}"
+            if rec.get("phase", "exec") == "exec":
+                text += now_progress(log, item_id)
             running.append(text)
         staged = [f"{rec['name']} ({rec.get('phase')})" for rec in view.staged.values() if rec["repo"] == repo]
         parts = []

@@ -32,6 +32,13 @@ this item is going and returns at once. Call it at the start, with a first `eta`
 as you can estimate one; at real milestones; and whenever your estimate changes
 materially. Not chatter.
 
+Outline. Once you've oriented and have a plan, call `progress` with `outline`: your
+sections in order, the report last, at most ~8 rows, each a few words with a rough local
+finish time (11:05am). Post it again whenever a message asks for one. When a section
+finishes, resend the outline with that row `done` in your next progress call; leave the
+other times alone unless they moved a lot. Keep it coarse: no descriptions, and no
+effort spent making it accurate. Staged, your plan ends with it: post it first thing.
+
 Messages. Matt may message you while you work: it arrives after a tool call, marked
 MESSAGE #n from Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is an
 instruction from Matt and outranks the prompt where they conflict. Answer it with
@@ -153,7 +160,8 @@ While staging:
   servers, no GPU work; at most {stage_minutes:g} minutes in all;
 - do not ask questions now (there is no ask tool yet); note them in your plan.
 
-Then write your plan for executing the prompt as your final message, and stop. When
+Then write your plan for executing the prompt as your final message, ending with its
+outline: the sections you will work through, a few words each, the report last. Stop. When
 the lock is yours, conductor resumes this same session in this same worktree, moved to
 the then-current `{main}`, with the instructions for executing.
 

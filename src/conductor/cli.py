@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | amend | checkpoint | open | run-target | pick | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | open | run-target | pick | init | app`."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from . import config as config_mod
 from . import audits, items, memory, questions, state
 from .events import EventLog
-from .inbox import describe, progress_line, render
+from .inbox import describe, latest_outline, outline_line, progress_line, render
 from .util import clock, duration, now, parse_since, parse_stamp
 
 
@@ -69,8 +69,10 @@ def cmd_status(args) -> int:
                     else f"kill at {clock(rec['deadline'])}")
             extra = (", readonly" if rec.get("readonly") else "") + (f", port {rec['port']}" if rec.get("port") else "")
             print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}{extra}, {kill}")
-            if p := log.last("progress", item=item_id):
+            if (p := log.last("progress", item=item_id)) and p.detail.get("note"):
                 print(f"           progress {clock(p.ts)}: {progress_line(p)}")
+            if o := latest_outline(log, item_id):
+                print(f"           {outline_line(o)}")
         for item_id, rec in view.staged.items():
             if rec["repo"] == repo:
                 age = (now() - parse_stamp(rec["started"])).total_seconds()
@@ -172,13 +174,19 @@ def cmd_tell(args) -> int:
         print(f"conductor: {what} {args.item!r}" if not hits else f"conductor: {what} {hits}", file=sys.stderr)
         return 1
     try:
-        path = actions.tell(cfg.control, hits[0], " ".join(args.text), by="cli")
+        path = (actions.outline(cfg.control, hits[0], by="cli") if args.fn is cmd_outline
+                else actions.tell(cfg.control, hits[0], " ".join(args.text), by="cli"))
     except ValueError as exc:
         print(f"conductor: {exc}", file=sys.stderr)
         return 1
-    print(f"wrote signals/{path.name}: the daemon logs `tell`, and the executor gets the message "
+    what = "the outline request" if args.fn is cmd_outline else "the message"
+    print(f"wrote signals/{path.name}: the daemon logs `tell`, and the executor gets {what} "
           "after its next tool call (`delivered`)")
     return 0
+
+
+def cmd_outline(args) -> int:
+    return cmd_tell(args)
 
 
 def cmd_amend(args) -> int:
@@ -404,6 +412,10 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("text", nargs="+", help="the message")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_tell)
+    sp = sub.add_parser("outline", help="ask a running executor for an updated outline (sections and finish times)")
+    sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_outline)
     sp = sub.add_parser("amend", help="add to a queued, staged or running item's instructions")
     sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
     sp.add_argument("text", nargs="+", help="the amendment, or the path of a file holding it")
