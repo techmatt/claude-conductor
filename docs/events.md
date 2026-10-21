@@ -16,7 +16,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
-| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `items.md`, *Alongside items*); error (launch failed, setup included) |
+| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `items.md`, *Alongside items*); resume_of, resume_session (a resume item and the session it forks; `resume.md`); error (launch failed, setup included) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
 | `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
@@ -28,7 +28,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; audit (it kept notes), template |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; audit (it kept notes), template, resume_of (a resume item) |
 | `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
@@ -36,7 +36,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing) / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through; session (a `session:` signal's checkpoint id) / repo |
-| `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
+| `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by; hashes (`report`, `audit`: sha256 or null) |
+| `report_changed` | a reviewed report or its `.audit.md` no longer matches the hashes of its `reviewed` (or last `report_changed`): unreviewed again (`inbox.md`, *Reviewed*) | files (`report`, `audit`: what differs from the review), reviewed (its id), hashes; opened, opened_by (the latest `session_opened` since it finished) |
+| `session_opened` | a finished item's session opened by hand (the app's Terminal, `conductor open`: a `session_opened:` signal) | session_id, by |
 | `review` | a `review:` signal wrote `review.md`; paths: the signal, `review.md`; item: the ref's (none for `all`) | which (`all` or the item id), items (inlined, oldest first), conductor (conductor reports inlined), by |
 | `checkpoint` | a `checkpoint:` (or `session:`) signal started a new session view (its id is its number) | label, by; session (`session.md`, from a `session:` signal) |
 | `progress` | the executor called `progress` | seq, at, note (absent on an outline-only line), eta, done, remaining, outline ([{title, eta, done}]); reply_to (the tell or running amendment it answers) |

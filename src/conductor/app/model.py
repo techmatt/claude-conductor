@@ -7,7 +7,6 @@ through `actions.py`.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import urllib.parse
@@ -21,13 +20,14 @@ from .. import git, items, memory, picks, questions, state, talk, targets
 from ..events import RED_KINDS, Event, EventLog
 from ..executor import RunPaths
 from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
+from ..resume import label as resume_label
 from ..state import DaemonInfo, daemon_info
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
+from .streamlog import TEXT_LIMIT, render_stream_json
 
 # Overall state, most urgent first: the tray shows the first that applies anywhere.
 PRIORITY = ("red", "asking", "running", "idle")
 PHASES = {"exec": "running", "setup": "setting up", "merge": "merging", "concluding": "concluding", "done": "done"}
-TEXT_LIMIT = 400_000          # characters of a log, report or diff shown at once
 FINISHED_SHOWN = 10           # finished items per repo in Repos (every unreviewed one besides)
 
 
@@ -116,6 +116,7 @@ class Activity:
     port: int | None = None     # its CONDUCTOR_PORT
     alongside: str | None = None    # its `alongside` line; `beside`: what it started beside
     beside: list[str] = field(default_factory=list)
+    resumed: str = ""           # a resume item's `resume of <orig>` / `post-audit of <orig>`
 
     def elapsed(self, at: datetime | None = None) -> float:
         if not self.started:
@@ -135,6 +136,7 @@ class Finished:
     session_id: str | None = None
     pick: str | None = None     # the manifest ref its report's `pick:` line named
     slow: str | None = None     # its report's `slow:`, unless `none` or absent
+    resumed: str = ""           # a resume item's `resume of <orig>` / `post-audit of <orig>`
 
 
 @dataclass
@@ -219,8 +221,8 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
 
 def _finished(view: state.View, e: Event) -> Finished:
     return Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
-                    e.item in view.reviews, e.detail.get("carry"), e.detail.get("session_id"),
-                    e.detail.get("pick") or None, slow_text(e.detail))
+                    view.reviewed(e.item), e.detail.get("carry"), e.detail.get("session_id"),
+                    e.detail.get("pick") or None, slow_text(e.detail), resume_label(e.detail))
 
 
 def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
@@ -231,7 +233,7 @@ def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
     evs = sorted((e for e in view.finishes.values()
                   if e.repo == repo and (e.item in keep or not view.settled(e.item))),
                  key=lambda e: e.id, reverse=True)
-    shown = [e for n, e in enumerate(evs) if n < recent or e.item not in view.reviews or e.item in keep]
+    shown = [e for n, e in enumerate(evs) if n < recent or not view.reviewed(e.item) or e.item in keep]
     return [_finished(view, e) for e in shown], len(evs)
 
 
@@ -273,6 +275,8 @@ def activity_text(ev: Event) -> str:
             return f"prompt {name} started" + (" (resuming its staged session)" if d.get("resumed") else "")
         case "finish":
             text = f"report {name} written — {d.get('status')}"
+            if resumed := resume_label(d):
+                text += f" ({resumed})"
             if d.get("carry") not in (None, "none"):
                 text += f" (carry: {d['carry']})"
             if slow := slow_text(d):
@@ -475,7 +479,8 @@ class Project:
                     a = Activity(rec.get("item", "?"), rec.get("name", "?"), PHASES.get(rec.get("phase", "exec"), rec.get("phase")),
                                  rec.get("started"), rec.get("branch") or "", session_id=rec.get("session_id"),
                                  readonly=bool(rec.get("readonly")), port=rec.get("port"),
-                                 alongside=rec.get("alongside"), beside=rec.get("beside") or [])
+                                 alongside=rec.get("alongside"), beside=rec.get("beside") or [],
+                                 resumed=resume_label(rec))
                     if a.phase == "running" and (p := self.log.last("progress", item=a.item)):
                         a.progress = f"{progress_line(p)} · {clock(p.ts)}"
                     rs.running.append(a)
@@ -682,6 +687,8 @@ def conversation(events: list[Event]) -> list[Turn]:
                 lines.append(f"slow: {slow_text(d) or 'none'}")
                 if d.get("pick"):
                     lines.append(f"pick: {d['pick']}")
+                if resumed := resume_label(d):
+                    lines.append(resumed)
                 out.append(Turn(e.id, e.ts, "conductor", f"Finished {status}", "\n".join(lines),
                                 tone=status if status in ("done", "partial", "red") else "", report=True))
             case _:
@@ -795,102 +802,3 @@ def git_trail(cfg: config_mod.Config, item_id: str, events: list[Event]) -> str:
 
 def _cap(text: str) -> str:
     return text if len(text) <= TEXT_LIMIT else text[:TEXT_LIMIT] + "\n… (diff truncated)\n"
-
-
-# ---------------------------------------------------------------- stream-json
-_RENDERED: dict[tuple, str] = {}
-
-
-def render_stream_json(path: Path, limit: int = TEXT_LIMIT) -> str:
-    """An executor's stream-json log as readable text: what it said, each tool call
-    and a short form of each result, then the final result line. Cached per file
-    version: moving through a trail never re-parses a log that has not changed."""
-    try:
-        st = path.stat()
-    except OSError:
-        return ""
-    key = (str(path), st.st_mtime_ns, st.st_size, limit)
-    if key in _RENDERED:
-        return _RENDERED[key]
-    text = _render_stream_json(path, limit)
-    for k in [k for k in _RENDERED if k[0] == key[0]]:
-        del _RENDERED[k]
-    if len(_RENDERED) >= 32:
-        _RENDERED.pop(next(iter(_RENDERED)))
-    _RENDERED[key] = text
-    return text
-
-
-def _render_stream_json(path: Path, limit: int) -> str:
-    try:
-        raw = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-    out: list[str] = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except ValueError:
-            out.append(line)
-            continue
-        out += _render_obj(obj)
-    text = "\n".join(out) + "\n"
-    return text if len(text) <= limit else text[:limit] + "\n… (log truncated)\n"
-
-
-def _short(value, n: int = 300) -> str:
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    text = text.strip()
-    return text if len(text) <= n else text[:n] + f" … (+{len(text) - n})"
-
-
-def _tool_input(name: str, data: dict) -> str:
-    for key in ("command", "file_path", "pattern", "path", "url", "query", "description"):
-        if isinstance(data, dict) and data.get(key):
-            return _short(data[key], 200)
-    return _short(data, 200)
-
-
-def _render_obj(obj: dict) -> list[str]:
-    t = obj.get("type")
-    if t == "system":
-        if obj.get("subtype") == "init":
-            bits = [f"{k} {obj[k]}" for k in ("session_id", "model", "cwd") if obj.get(k)]
-            return ["── " + " · ".join(bits).replace("session_id", "session", 1)]
-        return []
-    if t == "assistant":
-        out = []
-        for c in (obj.get("message") or {}).get("content") or []:
-            if c.get("type") == "text" and c.get("text", "").strip():
-                out.append("")
-                out += [f"  {ln}" for ln in c["text"].strip().splitlines()]
-            elif c.get("type") == "tool_use":
-                out.append(f"→ {c.get('name')}: {_tool_input(c.get('name', ''), c.get('input') or {})}")
-        return out
-    if t == "user":
-        out = []
-        content = (obj.get("message") or {}).get("content")
-        for c in content if isinstance(content, list) else []:
-            if c.get("type") == "tool_result":
-                body = c.get("content")
-                if isinstance(body, list):
-                    body = " ".join(x.get("text", "") for x in body if isinstance(x, dict))
-                mark = "✗" if c.get("is_error") else "←"
-                out.append(f"    {mark} {_short(body or '', 240)}".replace("\n", " ⏎ "))
-        return out
-    if t == "result":
-        bits = [f"status {obj.get('subtype')}", f"is_error {obj.get('is_error')}"]
-        if obj.get("num_turns") is not None:
-            bits.append(f"{obj['num_turns']} turns")
-        if obj.get("duration_ms") is not None:
-            bits.append(f"{obj['duration_ms'] / 1000:.0f}s")
-        if obj.get("total_cost_usd") is not None:
-            bits.append(f"${obj['total_cost_usd']:.2f}")
-        out = ["", f"══ result: {', '.join(bits)}"]
-        if obj.get("result"):
-            out += [f"  {ln}" for ln in str(obj["result"]).strip().splitlines()]
-        return out
-    return []

@@ -2,12 +2,13 @@
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`cleanup.md`, `general_audit.md`, `test_perf.md`,
-`disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`; `audit.md` is the *Audit notes*
+`disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`, `self_audit.md`; `audit.md` is the *Audit notes*
 paragraph, not a template) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
-`.prompt.md`). The texts use `{{name}}` placeholders. Every template but `bug_hunt` is
+`.prompt.md`). The texts use `{{name}}` placeholders (`repo`, `project`, `notes`, `usage`,
+`original`). Every template but `bug_hunt` and `self_audit` is
 *exclusive* (`audits.EXCLUSIVE`): it runs alone in its repo, and a template item with
 `alongside` is invalid (`items.md`, *Exclusive templates*).
 
@@ -64,16 +65,36 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
   where that is cheap); review contact sheets and use the app at real speed; fix clear
   bugs and make each automatable check a test; keep a findings list in the repo
   (`docs/qa-findings.md` unless it has a convention), read first so nothing known is
-  re-reported. `max_hours` is the hunt's target plus an hour for setup and the report
-  (the vocab queues N + 1), and the target is not a cap. The planner's body, if any,
-  usually names a focus. With `readonly: true` it is *notes only*: the text's own
-  paragraph has it find and record but change nothing tracked (checker and
-  screenshots in a `shared` folder or nowhere, findings in the report only). The
-  report has **Checker**, **Fixed** (notes only: **Found**) and **Deferred**, most
-  important first, each with options and the executor's pick.
+  re-reported. **The clock**: `max_hours` is the hunt's length plus an hour for setup,
+  merge and the report (the vocab queues N + 1), and the length is a target to use, not
+  a cap: the first progress line names the start and the hunt-end time (the limit minus
+  the hour), and each round ends with a progress line. A dry round widens the hunt by
+  the next lens (paths not yet driven, odd input, long runs, a content sweep, recent
+  changes, code reading for bugs, the checker itself); it stops early only when every
+  lens has had a real round and found nothing new, and spends its last stretch making
+  its fixes committed and green. The planner's body, if any, usually names a focus.
+  With `readonly: true` it is *notes only*: the text's own paragraph has it find and
+  record but change nothing tracked (checker and screenshots in a `shared` folder or
+  nowhere, findings in the report only); the clock applies in full. The report has
+  **Time** (start, target, actual end, one line per round; why, lens by lens, if it
+  ended over 15 minutes early), **Checker**, **Fixed** (notes only: **Found**) and
+  **Deferred**, most important first, each with options and the executor's pick. It is
+  `partial` when it ended early without exhausting the lenses, or left clear bugs
+  unfixed for lack of time.
+- **`template: self_audit`** (only on a resume item, `resume.md`; **post-audit X**). The
+  original's own session, forked, looks back over its run, from memory and its record,
+  and changes nothing. It behaves as `audit: true`: its notes, at the resume item's own
+  `.audit.md` path, start `Self-audit of <orig>.` and use the four headings plus
+  *What happened vs. what was asked* (each divergence and when it started), *What
+  misled you* (quoted, with the wording that would have worked) and *Where the time
+  went*. They count as unused notes for the repo's next cleanup, whose inlined heading
+  names the original (`… : a self-audit of <orig>, written by its own session`). The
+  report has **Summary** and **About conductor** (findings about the template,
+  preamble, planner or tools, for the planner to carry to conductor's HANDOFF). Not
+  exclusive: it may run beside anything.
 
 **Which notes are unused.** A note is a finished item whose `finish` event has
-`audit: true` and whose `.audit.md` exists and is not blank, in any status (a red
+`audit: true` (an `audit: true`, general audit or self-audit item) and whose `.audit.md` exists and is not blank, in any status (a red
 item's notes are still notes). It is *used* once an `audit_used` event names it, and
 *claimed* while a running cleanup's `.run.json` lists it under `notes`. A cleanup takes
 every note neither used nor claimed at the moment it launches (they are in its `start`

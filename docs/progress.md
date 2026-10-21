@@ -160,5 +160,6 @@ has made its last tool call (then it is undelivered). A non-shell tool that runs
 Repos tab, **Open in terminal** in its trail) opens a new console window running `<executor command> --resume <session id>`
 (the session id from the item's `finish` event) in the item's worktree while it exists,
 else the repo's main checkout: `--resume` finds a session from any folder. Refused
-while the item is running or staged (resuming a live session forks it). Windows only;
+while the item is running or staged (resuming a live session forks it). A queued
+`resume:` item asks unattended instead (`resume.md`). Windows only;
 elsewhere the error prints the command to run.

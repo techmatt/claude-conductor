@@ -114,14 +114,16 @@ def session(control: Path, label: str = "start", by: str = BY) -> Path:
     return write_signal(control, f"session: {one}".rstrip(), by=by)
 
 
-def open_session(cfg, item_id: str, session_id: str, spawn=None):
+def open_session(cfg, item_id: str, session_id: str, spawn=None, by: str = BY):
     """A new console running `<executor command> --resume <session id>` in the item's
-    worktree when it still exists, else the repo's main checkout. Returns (cwd, argv)."""
+    worktree when it still exists, else the repo's main checkout, and a `session_opened:`
+    signal (the daemon logs it; a later `report_changed` names it). Returns (cwd, argv)."""
     repo, _, name = item_id.partition("/")
     wt = cfg.worktree(repo, name)
     cwd = wt if wt.is_dir() else cfg.repos[repo]
     argv = [procs.resolve(cfg.command[0]), *cfg.command[1:], "--resume", session_id]
     (spawn or procs.open_console)(argv, cwd)
+    write_signal(cfg.control, f"session_opened: {item_id}", by=by)
     return cwd, argv
 
 

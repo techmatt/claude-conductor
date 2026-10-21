@@ -92,8 +92,18 @@ First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`
 line (and ` · slow: …` unless its report said `slow: none` or nothing, and
-` · pick: <ref>` when its report named a picker); it shows on every inbox,
-read mark or not, until a `reviewed:` signal names the item. Then **Picks**, also
+` · pick: <ref>` when its report named a picker; ` · resume of <orig>` for a resume
+item, `resume.md`); it shows on every inbox, read mark or not, until a `reviewed:`
+signal names the item.
+
+**Reviewed reports that change.** A reviewed report, or the `.audit.md` beside it,
+edited afterwards (a session resumed by hand through **Terminal** can write to it) is
+unreviewed again: `report_changed` (`signals.md`, *reviewed*) puts it back in
+*Unreviewed reports*, `session.md` and `review.md` with
+` · **report changed since review <time> (after it was opened by <by>, #<id>)**`
+(the files changed since the review; the opened part when a `session_opened` came
+after the item finished), until a new `reviewed:`. A file that can't be read (held,
+mid-save) is looked at again next scan, never taken as a change. Then **Picks**, also
 standing (see `picks.md`, *Pending*): each pending picker, then any picker saved since the
 checkpoint (any time without one) that no pending item names, as the saved line
 without the item:
@@ -119,7 +129,7 @@ reorder renames it (its old id is gone; the renamed item gets its own hold). `en
 `stage` and `worktree` events are left out of the inbox (they are in
 `conductor events`). `conductor status` prints the daemon (running, **not answering**
 with a stale heartbeat, **died**, or not running) and the same memory line, then per repo: running (pid, branch,
-`readonly`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
+`readonly` or `resume of <orig>`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
 *audit pending* line when the repo has unused audit notes.
 `conductor inbox` prints the same thing without moving the mark.
 

@@ -41,6 +41,11 @@ lines; `FAKE merge-fail` in the item leaves the markers, `FAKE merge-stray` also
 A staging prompt obeys only `FAKE stage-sleep <seconds>` and `FAKE stage-write <path>
 <text>`, remembers the prompt under its session id, and ends with a plan. `--resume`
 recalls that prompt, runs its FAKE lines, and says so in the report.
+
+Every session appends its prompt to a transcript under `$CLAUDE_CONFIG_DIR/projects/fake/`.
+`--resume <orig> --fork-session --session-id <new>` starts <new> from <orig>'s transcript
+(leaving <orig>'s alone) and writes `FORKED FROM <orig>` and a `FORK MEMORY: <line>` for
+each `REMEMBER ...` line the original was sent; it never reruns the original's FAKE lines.
 """
 
 import json
@@ -52,12 +57,31 @@ import time
 from pathlib import Path
 
 args = sys.argv[1:]
-resume = "--resume" in args
+# `--resume <orig> --fork-session --session-id <new>` (a resume item) is a new session that
+# remembers the original's; plain `--resume` continues a staged session.
+fork = args[args.index("--resume") + 1] if "--fork-session" in args else None
+resume = "--resume" in args and not fork
 session = args[args.index("--resume" if resume else "--session-id") + 1] if (
     resume or "--session-id" in args) else "none"
 prompt = sys.stdin.read()
 lines = prompt.splitlines()
 store = Path(tempfile.gettempdir()) / "conductor-fake-sessions" / f"{session}.txt"
+
+
+def transcript(sid: str) -> Path | None:
+    """Where Claude Code would keep the session (`CLAUDE_CONFIG_DIR`, set per test)."""
+    root = os.environ.get("CLAUDE_CONFIG_DIR")
+    return Path(root) / "projects" / "fake" / f"{sid}.jsonl" if root else None
+
+
+if (mine := transcript(session)) is not None:
+    # Every session leaves a transcript of the prompts it was sent; a fork starts from
+    # its original's (when that is missing, the real CLI silently starts afresh).
+    old = transcript(fork).read_text(encoding="utf-8") if fork and transcript(fork).is_file() else ""
+    old = "" if mine.is_file() else old
+    mine.parent.mkdir(parents=True, exist_ok=True)
+    with open(mine, "a", encoding="utf-8") as fh:
+        fh.write(old + json.dumps({"prompt": prompt}) + "\n")
 
 
 def emit(obj):
@@ -106,6 +130,12 @@ if resume:
     staged = store.read_text(encoding="utf-8") if store.is_file() else ""
     memory = "STAGED MEMORY: " + ("recalled the staged prompt" if staged else "none") + "\n"
     lines = lines + staged.splitlines()
+if fork:
+    # What the forked session remembers: the original's `REMEMBER` lines, never its FAKE lines.
+    told = [json.loads(ln)["prompt"] for ln in transcript(session).read_text(encoding="utf-8").splitlines()[:-1]] \
+        if transcript(session) else []
+    kept = [ln for p in told for ln in p.splitlines() if ln.startswith("REMEMBER ")]
+    memory += "FORKED FROM " + fork + "\n" + "".join(f"FORK MEMORY: {ln}\n" for ln in kept)
 
 settings = json.loads(Path(args[args.index("--settings") + 1]).read_text(encoding="utf-8")) \
     if "--settings" in args else {}

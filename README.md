@@ -60,7 +60,8 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/items.md` | Queue items: front-matter, rewriting, scheduling, holds, readonly and `alongside` items, exclusive templates, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, setup, log compaction, the report header, the outcome |
-| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general audit, test perf, disk audit, claude.md cleanup, bug hunt) |
+| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general audit, test perf, disk audit, claude.md cleanup, bug hunt, self audit) |
+| `docs/resume.md` | Resume items: asking a finished item's own session (forked), and its self-audit |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress` and outlines, messages (`tell:`), short calls, amendments, opening a finished session |
 | `docs/signals.md` | Every signal verb and how a signal file is applied |

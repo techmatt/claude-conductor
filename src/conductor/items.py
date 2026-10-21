@@ -12,7 +12,7 @@ from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage", "ultracode", "audit", "template", "alongside"}
+          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume"}
 GIST_CHARS = 160
 
 
@@ -34,6 +34,7 @@ class Item:
     audit: bool = False                                 # keep audit notes beside the report
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     alongside: str | None = None                        # what it touches: may start beside running items
+    resume_of: str | None = None                        # `resume:` the finished item whose session it forks
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -46,13 +47,14 @@ class Item:
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
                 "ultracode": self.ultracode, "audit": self.audit, "template": self.template,
-                "alongside": self.alongside}
+                "alongside": self.alongside, "resume_of": self.resume_of}
 
     def gist(self) -> str:
         """One line on what the item does, for the items started beside it: its `alongside`
         line, else its title (the body's first heading), else its template or name."""
         title = next((ln.lstrip("#").strip() for ln in self.body.splitlines() if ln.startswith("#")), "")
-        text = self.alongside or title or (f"the {self.template} template" if self.template else self.name)
+        text = self.alongside or title or (f"the {self.template} template" if self.template else
+                                           f"questions for {self.resume_of}" if self.resume_of else self.name)
         return text if len(text) <= GIST_CHARS else text[:GIST_CHARS - 1] + "…"
 
 
@@ -131,9 +133,36 @@ def parse(path: Path, repo: str) -> Item:
             item.errors.append("`alongside` is refused on a template item: templates are repo-wide and wait their turn")
         else:
             item.alongside = value.strip()
+    if meta.get("resume") is not None:
+        _resume(item, meta)
+    elif item.template in RESUME_TEMPLATES:
+        item.errors.append(f"`template: {item.template}` needs `resume: <repo>/<NNN_name>`, the finished item it looks back on")
     if not body.strip() and item.template is None:          # a template is a whole prompt
         item.errors.append("the prompt body is empty")
     return item
+
+
+RESUME_TEMPLATES = ("self_audit",)     # the templates a resume item may use, and only it
+
+
+def _resume(item: Item, meta: dict) -> None:
+    """`resume: <repo>/<NNN_name>`: always readonly, in its own repo. Whether that item has
+    finished with a session is the queue's to say (`resume.problem`, from `state.scan`)."""
+    value = meta["resume"]
+    repo, slash, name = str(value).partition("/") if isinstance(value, str) else ("", "", "")
+    if not slash or not NAME_RE.match(name):
+        item.errors.append("`resume` must name a finished item as <repo>/<NNN_name>")
+        return
+    if repo != item.repo:
+        item.errors.append(f"`resume`: {value} is in another repo; queue the item in `{repo}`")
+        return
+    if meta.get("readonly") is False:
+        item.errors.append("`readonly: false` is refused on a resume item: it is always readonly")
+    if item.template is not None and item.template not in RESUME_TEMPLATES:
+        item.errors.append(f"`template: {item.template}` is refused on a resume item (only "
+                           f"{', '.join(RESUME_TEMPLATES)})")
+    item.readonly = True
+    item.resume_of = f"{repo}/{name}"
 
 
 def front_repo(path: Path) -> str | None:

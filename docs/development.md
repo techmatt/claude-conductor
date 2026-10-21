@@ -36,7 +36,11 @@ past HANDOFF's marker and `inbox.unreviewed_lines` builds the unreviewed summary
 shared by the digest, the inbox and the review bundle.
 A staging prompt makes the fake obey only `FAKE stage-…` lines and remember the prompt
 under its session id; `--resume` recalls it, so a test can see that a resumed session
-kept what it read while staging. `FAKE slow <text>` adds `slow: <text>` and
+kept what it read while staging. Every session also appends its prompt to a transcript
+under `$CLAUDE_CONFIG_DIR/projects/fake/` (an autouse fixture points that at the test's
+own folder); `--resume <orig> --fork-session --session-id <new>` starts from the
+original's transcript, leaves it alone, and writes `FORKED FROM <orig>` and a
+`FORK MEMORY:` line per `REMEMBER …` line the original was sent. `FAKE slow <text>` adds `slow: <text>` and
 `FAKE pick <path>` adds `pick: <path>` to the report header after `carry:` (a test writes the manifest and images with `FAKE commit` first);
 picker tests stub the browser and bind port 0. `FAKE leave <s>` starts a process in the
 worktree that outlives the executor and `FAKE hog <MB> <s>` a child holding touched

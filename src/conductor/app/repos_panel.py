@@ -10,12 +10,19 @@ from PySide6.QtWidgets import (QHeaderView, QInputDialog, QPushButton, QSplitter
 
 from .. import audits
 from ..events import Event
+from ..resume import label as resume_label
 from ..util import clock, duration, now
 from . import actions, theme
-from .model import Project, Snapshot
+from .model import Finished, Project, Snapshot
 from .trail import TrailView
 from .widgets import (AMBER, KeepColourDelegate, Panel, compact_button, compact_buttons, confirm, open_session,
                       pick_note, when)
+
+
+def finished_note(f: Finished, when) -> str:
+    """A finished row's note: when, then a resume item's original, carry and `slow:`."""
+    return (f"finished {when(f.ts)}" + (f" · {f.resumed}" if f.resumed else "")
+            + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "") + (f" · slow: {f.slow}" if f.slow else ""))
 
 
 class ReposPanel(Panel):
@@ -45,6 +52,10 @@ class ReposPanel(Panel):
         split.addWidget(self.tree)
         self.detail = TrailView(project, conversation=True)
         self.detail.setMinimumWidth(320)
+        # A resume item's link to its original opens the original's trail in Events: here the
+        # detail follows the tree's selection, which would switch it straight back.
+        self.detail.title.linkActivated.disconnect()
+        self.detail.title.linkActivated.connect(self.open_item.emit)
         self.detail.conversation.tell.connect(self._tell)
         self.detail.conversation.outline.connect(
             lambda item_id: self.signal_sent(f"outline request to {item_id}", actions.outline(self.control, item_id)))
@@ -94,11 +105,12 @@ class ReposPanel(Panel):
             for a in rs.running:
                 running = a.phase == "running"
                 beside = "beside " + ", ".join(i.split("/", 1)[-1] for i in a.beside) if a.beside else ""
-                note = " · ".join(x for x in (a.progress, f"on {a.detail}" if a.detail else "",
+                note = " · ".join(x for x in (a.resumed, a.progress, f"on {a.detail}" if a.detail else "",
                                               f"port {a.port}" if a.port and running else "", beside,
                                               f"alongside: {a.alongside}" if a.alongside else "") if x)
                 # A readonly or alongside item runs beside the others; the summary still counts it as running.
-                tag = "readonly" if a.readonly else "alongside" if a.alongside else ""
+                tag = ("resume" if a.resumed else "readonly" if a.readonly else "alongside" if a.alongside
+                       else "")
                 phase = f"{a.phase} · {tag}" if tag and running else a.phase
                 # Only an executing item takes a message: merging and concluding ones have exited.
                 items.append((("run", a.item), [a.name, phase, duration(a.elapsed(at)), note], a.item,
@@ -127,6 +139,8 @@ class ReposPanel(Panel):
                     state += " · next"
                     if rs.action in ("wait", "stage", "run", "resume"):
                         note = rs.action + (f": {rs.reason}" if rs.reason else "")
+                if it.resume_of:
+                    note = " · ".join(x for x in (resume_label(it.meta()), note) if x)
                 if it.errors:
                     note = "invalid: " + "; ".join(it.errors)
                 items.append((("queued", it.id), [it.name, state, elapsed, note], it.id, look, flight))
@@ -145,8 +159,7 @@ class ReposPanel(Panel):
                 rows.append((group, [label, "", "", ""], None, "group|" + tip, None))
             for f in rs.finished:
                 mark = "reviewed" if f.reviewed else "unreviewed"
-                note = (f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
-                        + (f" · slow: {f.slow}" if f.slow else ""))
+                note = finished_note(f, when)
                 look = f"done:{f.status}:{mark}"
                 if f.pick:
                     # The pick state is part of the look: a save changes the button's tone.
@@ -164,8 +177,7 @@ class ReposPanel(Panel):
                 rows.append((("group", rs.name, "earlier"), [f"Earlier checkpoints ({rs.earlier_total})", "", "", ""],
                              None, f"group|finished and reviewed before {cp}{more}", None))
             for f in rs.earlier:
-                note = (f"finished {when(f.ts)}" + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "")
-                        + (f" · slow: {f.slow}" if f.slow else ""))
+                note = finished_note(f, when)
                 look = f"done:{f.status}:reviewed"
                 if f.pick:                          # settled: no longer waits, but reopens
                     note += f" · pick: {f.pick}"

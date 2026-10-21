@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -31,6 +32,33 @@ def _signal_by(text: str) -> str | None:
         if sep and key.strip().lower() == "by" and _strip_comment(value):
             return _strip_comment(value)
     return None
+
+
+def review_paths(cfg, item_id: str) -> dict[str, Path]:
+    """What a review covers: the report and the audit notes beside it."""
+    from .executor import RunPaths
+    p = RunPaths.for_name(cfg, *item_id.split("/", 1))
+    return {"report": p.report, "audit": p.audit}
+
+
+def report_hashes(cfg, item_id: str) -> dict[str, str | None]:
+    """{"report": sha256 or None, "audit": ...}: None for a file that does not exist. A file
+    that exists but can't be read raises OSError: unreadable is not the same as gone."""
+    out: dict[str, str | None] = {}
+    for k, p in review_paths(cfg, item_id).items():
+        try:
+            out[k] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            out[k] = None
+    return out
+
+
+def _stat(path: Path) -> tuple | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return st.st_size, st.st_mtime_ns
 
 
 class SignalsMixin:
@@ -129,7 +157,7 @@ class SignalsMixin:
             elif key == "clear":
                 if value not in self.cfg.repos:
                     raise ValueError(f"line {n}: clear: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed", "outline", "review"):
+            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reorder":
@@ -181,6 +209,8 @@ class SignalsMixin:
             self._cancel(value, rel)
         elif key == "reviewed":
             self._reviewed(value, rel)
+        elif key == "session_opened":
+            self._session_opened(value, rel)
         elif key == "review":
             self._review(value, rel)
         elif key == "tell":
@@ -289,15 +319,58 @@ class SignalsMixin:
 
     def _reviewed(self, ref: str, rel: str) -> None:
         """Mark one finished item's report reviewed. Reviewed state is the event log's:
-        an item is reviewed once a `reviewed` event names it."""
+        an item is reviewed once a `reviewed` event names it, until its report changes
+        (`report_changed`); the event keeps the hashes the change is checked against."""
         item_id, view = self._finished_item("reviewed", ref)
-        if prior := view.reviews.get(item_id):
+        if view.reviewed(item_id):
+            prior = view.reviews[item_id]
             self.log.append("warning", item=item_id, paths=[rel],
                             note=f"{item_id} was already reviewed (#{prior.id}, {clock(prior.ts)}); nothing changed")
             return
         fin = view.finishes[item_id]
         self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
-                        status=fin.detail.get("status"), by=self._by or "unknown")
+                        status=fin.detail.get("status"), by=self._by or "unknown",
+                        hashes=retry_io(report_hashes, self.cfg, item_id))
+
+    def check_reviewed_reports(self, view: state.View) -> None:
+        """Log `report_changed` when a reviewed report or its audit notes no longer match the
+        hashes its `reviewed` (or last `report_changed`) recorded: by hand, after review (a
+        session resumed through Terminal can write to it). Files are hashed only when their
+        size or mtime moved, so the daemon's scan stays cheap; the first call (at start) hashes all."""
+        for item_id, rev in view.reviews.items():
+            chg = view.changed.get(item_id)
+            base = chg if chg is not None and chg.id > rev.id else rev
+            if not isinstance(base.detail.get("hashes"), dict):
+                continue                    # reviewed before hashes were recorded
+            paths = review_paths(self.cfg, item_id)
+            key = tuple(_stat(p) for p in paths.values())
+            if self.report_stats.get(item_id) == key:
+                continue
+            try:
+                now_hashes = retry_io(report_hashes, self.cfg, item_id)
+            except OSError:
+                continue                    # held or mid-save: never a change; looked at again next scan
+            self.report_stats[item_id] = key
+            if now_hashes == base.detail["hashes"]:
+                continue
+            # What differs from the review, not just from the last change: the flag names it all.
+            what = [k for k in now_hashes if now_hashes[k] != rev.detail["hashes"].get(k)]
+            if not what:
+                what = [k for k in now_hashes if now_hashes[k] != base.detail["hashes"].get(k)]
+            # A session opened by hand since it finished, before or after the review, is the likely writer.
+            opened = self.log.last("session_opened", item=item_id)
+            fin = view.finishes.get(item_id)
+            extra = ({"opened": opened.id, "opened_by": opened.detail.get("by")}
+                     if opened and (fin is None or opened.id > fin.id) else {})
+            self.log.append("report_changed", item=item_id, paths=[self.cfg.rel(paths[k]) for k in what],
+                            files=what, reviewed=rev.id, hashes=now_hashes, **extra)
+
+    def _session_opened(self, ref: str, rel: str) -> None:
+        """`session_opened: <item>`: a finished item's session was opened by hand (the app's
+        Terminal, `conductor open`), so a later change to its report can name it."""
+        item_id, view = self._finished_item("session_opened", ref)
+        self.log.append("session_opened", item=item_id, paths=[rel], session_id=view.finishes[item_id].detail.get("session_id"),
+                        by=self._by or "unknown")
 
     def _review(self, value: str, rel: str) -> None:
         """`review.md`: every unreviewed report inlined (and conductor's own past HANDOFF's
@@ -438,6 +511,9 @@ class SignalsMixin:
                 if target := items.resolve_ref(ref, d.repo, renamed):
                     raise ValueError(f"reorder: {d.path.stem} has depends_on {ref!r}, which names {target}; "
                                      "renumbering it would break the dependency")
+            if d.resume_of in renamed:
+                raise ValueError(f"reorder: {d.path.stem} has resume {d.resume_of!r}; renumbering it would "
+                                 "leave the resume naming an item that never finishes")
         if where != "proposed":
             for o, _ in pairs:
                 self._drop_stage(where, o, "the item was renumbered by a reorder")

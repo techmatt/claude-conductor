@@ -99,6 +99,7 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
     how many other items finished since, `CLAUDE.md`'s size, unused audit notes, and
     `slow:` causes repeated in recent reports."""
     fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo), key=lambda e: e.id)
+    fins = [ev for ev in fins if not ev.detail.get("resume_of")]     # questions about work, not work
     plain = [ev for ev in fins if not ev.detail.get("template")]
     live = {it.template: it.name for it in view.queued.get(repo, []) if it.template}
     live |= {rec.get("template"): rec["name"] for rec in view.running.values()

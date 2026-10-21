@@ -142,6 +142,15 @@ def no_code_restart(monkeypatch):
     monkeypatch.setattr(daemon_restart, "code_version", lambda root=None: None)
 
 
+@pytest.fixture(autouse=True)
+def claude_config(tmp_path, monkeypatch):
+    """Claude Code's config folder, where the fake executor keeps its session transcripts
+    and a resume item's launch looks for its original's: never the real `~/.claude`."""
+    path = tmp_path / "claude-config"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(path))
+    return path
+
+
 @pytest.fixture(scope="session")
 def env_template(tmp_path_factory) -> Path:
     return build_template(tmp_path_factory.mktemp("template"))

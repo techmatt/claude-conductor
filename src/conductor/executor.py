@@ -46,7 +46,7 @@ injection: it is Matt's instruction and outranks the prompt where they conflict.
 it with `progress`. Tell any helper or subagent you start that if it sees such a
 delivery it passes it straight up to you, word for word; act on what it relays.
 {calls}
-{workdir}{readonly}{paths}{port}{beside}
+{workdir}{readonly}{paths}{port}{beside}{resumed}
 {audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
 time spent blocked on a question.
@@ -290,6 +290,7 @@ class RunPaths:
     merge_prompt: Path
     audit: Path        # the audit notes an `audit: true` or general-audit item keeps
     amend: Path        # every amendment delivered to the item, in order, with times
+    original: Path     # a resume item's extract of its original's events
 
     @classmethod
     def for_item(cls, cfg: Config, item: Item) -> "RunPaths":
@@ -304,17 +305,19 @@ class RunPaths:
         return cls(report, sib(".log"), sib(".stderr.log"), sib(".prompt.md"), sib(".mcp.json"),
                    sib(".settings.json"), sib(".setup.log"), sib(".stage.log"), sib(".stage.stderr.log"), sib(".stage.prompt.md"),
                    sib(".merge.log"), sib(".merge.stderr.log"), sib(".merge.prompt.md"), sib(".audit.md"),
-                   sib(".amend.md"))
+                   sib(".amend.md"), sib(".original.md"))
 
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
                  run: dict | None = None, resume: dict | None = None, notes: str = "",
-                 usage: str = "", amends: list[dict] = (), beside: list[tuple[str, str]] = ()) -> str:
+                 usage: str = "", amends: list[dict] = (), beside: list[tuple[str, str]] = (),
+                 resumed: str = "") -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
     audit notes, inlined; `usage`: a disk audit's control-folder sizes and worktrees;
     `amends`: amendments written before the launch, appended in order; `beside`: the
-    (id, gist) of each item it is warned about starting beside (`BESIDE`)."""
+    (id, gist) of each item it is warned about starting beside (`BESIDE`); `resumed`: a
+    resume item's paragraph on its original (`resume.paragraph`)."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -325,6 +328,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         if item.paths else "",
         port=PORT.format(port=run["port"]) if run.get("port") else "",
         beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
+        resumed=resumed,
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
@@ -370,7 +374,7 @@ def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
     if not item.template:
         return item.body
     text = audits.fill(audits.template_text(item.template), repo=item.repo, project=cfg.project,
-                       notes=notes.strip(), usage=usage.strip()).rstrip() + "\n"
+                       notes=notes.strip(), usage=usage.strip(), original=item.resume_of or "").rstrip() + "\n"
     if item.body.strip():
         text += f"\n---\n\nThe planner adds, for this item:\n\n{item.body}"
     return text
@@ -403,12 +407,16 @@ def hook_settings(cfg: Config, item: Item) -> str:
 
 
 def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False,
-            settings: Path | None = None) -> list[str]:
-    """`--session-id` for a new session; `--resume` continues a staged one. A stage
-    gets no --mcp-config (it may not ask) and no --settings (nobody messages a stage)."""
+            settings: Path | None = None, fork_of: str | None = None) -> list[str]:
+    """`--session-id` for a new session; `--resume` continues a staged one; `fork_of`
+    (a resume item) resumes that finished session as a fork under `session_id`, leaving
+    the original as it was. A stage gets no --mcp-config (it may not ask) and no
+    --settings (nobody messages a stage)."""
     from .procs import resolve
+    session = (["--resume", fork_of, "--fork-session", "--session-id", session_id] if fork_of
+               else ["--resume" if resume else "--session-id", session_id])
     return [resolve(cfg.command[0]), *cfg.command[1:], "-p", "--dangerously-skip-permissions",
-            "--output-format", "stream-json", "--verbose", "--resume" if resume else "--session-id", session_id,
+            "--output-format", "stream-json", "--verbose", *session,
             *(["--mcp-config", str(mcp)] if mcp else []), *(["--settings", str(settings)] if settings else []),
             *cfg.args]
 

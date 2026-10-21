@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import audits, git, globs, items, procs
+from . import audits, git, globs, items, procs, resume
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
@@ -60,7 +60,8 @@ class View:
     staged: dict[str, dict] = field(default_factory=dict)      # item id → stage record (item still queued)
     done: set[str] = field(default_factory=set)
     finishes: dict[str, Event] = field(default_factory=dict)   # item id → last finish event
-    reviews: dict[str, Event] = field(default_factory=dict)    # item id → its `reviewed` event
+    reviews: dict[str, Event] = field(default_factory=dict)    # item id → its latest `reviewed` event
+    changed: dict[str, Event] = field(default_factory=dict)    # item id → its latest `report_changed` event
     read_mark: int = 0
     red_hold: dict[str, Event] = field(default_factory=dict)   # repo → red event holding it
     planner_hold: dict[str, Event] = field(default_factory=dict)  # repo → unread finish
@@ -80,15 +81,26 @@ class View:
             return ev.detail.get("status", "unknown") if ev else "unknown"
         return "queued"
 
+    def reviewed(self, item_id: str) -> bool:
+        """Its report has a `reviewed` event, and no `report_changed` since (a reviewed report
+        or its audit notes edited afterwards is unreviewed again until the next `reviewed`)."""
+        rev, chg = self.reviews.get(item_id), self.changed.get(item_id)
+        return rev is not None and (chg is None or chg.id < rev.id)
+
+    def changed_since_review(self, item_id: str) -> Event | None:
+        """The `report_changed` that made a reviewed report unreviewed again, or None."""
+        chg = self.changed.get(item_id)
+        return chg if chg is not None and not self.reviewed(item_id) else None
+
     def unreviewed(self) -> list[Event]:
-        """The finish events of items whose report has no `reviewed` event, oldest first."""
-        return sorted((ev for i, ev in self.finishes.items() if i not in self.reviews), key=lambda e: e.id)
+        """The finish events of items whose report is not reviewed (`reviewed`), oldest first."""
+        return sorted((ev for i, ev in self.finishes.items() if not self.reviewed(i)), key=lambda e: e.id)
 
     def settled(self, item_id: str) -> bool:
         """Hidden from the current view: finished before the latest checkpoint and reviewed
         before it too, and not the red holding its queue. Everything else carries forward."""
         cp, fin, rev = self.checkpoint, self.finishes.get(item_id), self.reviews.get(item_id)
-        if cp is None or fin is None or rev is None or fin.id > cp.id or rev.id > cp.id:
+        if cp is None or fin is None or rev is None or fin.id > cp.id or rev.id > cp.id or not self.reviewed(item_id):
             return False
         return not any(ev.item == item_id for ev in self.red_hold.values())
 
@@ -127,7 +139,9 @@ def scan(cfg: Config, log: EventLog) -> View:
     for ev in log.query(kinds=["finish"]):
         view.finishes[ev.item] = ev
     for ev in log.query(kinds=["reviewed"]):
-        view.reviews.setdefault(ev.item, ev)
+        view.reviews[ev.item] = ev
+    for ev in log.query(kinds=["report_changed"]):
+        view.changed[ev.item] = ev
     for ev in log.query(kinds=["audit_used"]):
         for note in ev.detail.get("notes", []):
             view.audit_used.setdefault(note, ev)
@@ -138,6 +152,9 @@ def scan(cfg: Config, log: EventLog) -> View:
     for ev in view.finishes.values():
         if ev.detail.get("needs_planner") and ev.id > view.read_mark:
             view.planner_hold.setdefault(ev.repo, ev)
+    for item in (i for q in view.queued.values() for i in q if i.resume_of and not i.errors):
+        if why := resume.problem(view, item):
+            item.errors.append(why)
     return view
 
 
@@ -164,8 +181,10 @@ def may_stage(cfg: Config, view: View, head: Item) -> bool:
     wanted = head.stage if head.stage is not None else opts.stage
     others = [i for i, rec in view.staged.items() if rec["repo"] == head.repo and i != head.id]
     # A cleanup or disk audit never stages: what it is handed (notes, sizes) is fixed at
-    # launch, and an item running meanwhile may still change it.
-    return opts.worktrees and wanted and not others and head.template not in audits.NO_STAGE
+    # launch, and an item running meanwhile may still change it. A resume item never
+    # does: a stage is a new session, and its whole point is the original's.
+    return (opts.worktrees and wanted and not others and head.template not in audits.NO_STAGE
+            and not head.resume_of)
 
 
 def running_locks(view: View) -> dict[str, str]:
@@ -286,7 +305,7 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
         return hold("invalid item: " + "; ".join(head.errors))
     if head.id in view.done or head.id in view.running:
         return hold(f"{head.id} already ran; a re-run needs a new item number")
-    if ev := view.red_hold.get(repo):
+    if (ev := view.red_hold.get(repo)) and not head.resume_of:   # asking why it went red is the point
         return hold(f"queue held after red {ev.item} (event #{ev.id}); write `clear: {repo}` to signals/")
     if ev := view.planner_hold.get(repo):
         return hold(f"needs_planner: report for {ev.item} unread (finish #{ev.id}); move the read mark past it")

@@ -12,6 +12,7 @@ from . import inbox, session
 from .config import Config
 from .events import Event
 from .executor import RunPaths
+from .resume import label as resume_label
 from .state import View
 from .util import clock, now, read_text
 
@@ -35,11 +36,16 @@ def _inline(path: Path) -> list[str]:
 def _item_section(cfg: Config, view: View, ev: Event) -> list[str]:
     repo, name = ev.item.split("/", 1)
     paths = RunPaths.for_name(cfg, repo, name)
-    reviewed = f" · reviewed #{r.id}" if (r := view.reviews.get(ev.item)) else ""
+    reviewed = f" · reviewed #{r.id}" if (r := view.reviews.get(ev.item)) and view.reviewed(ev.item) else ""
+    if chg := view.changed_since_review(ev.item):
+        reviewed = f" · **{inbox.changed_text(chg)}**"
     out = ["", f"## {ev.item} — **{ev.detail.get('status')}**, finished {clock(ev.ts)} (#{ev.id}){reviewed}",
            f"- report: `{cfg.rel(paths.report)}`"]
     if ev.detail.get("status") == "red" and ev.detail.get("reasons"):      # often not in the report
         out.append(f"- red: {'; '.join(ev.detail['reasons'])}")
+    if orig := ev.detail.get("resume_of"):
+        o_repo, _, o_name = orig.partition("/")
+        out.append(f"- {resume_label(ev.detail)}: its report `{cfg.rel(RunPaths.for_name(cfg, o_repo, o_name).report)}`")
     for label, p in (("amendments", paths.amend), ("audit notes", paths.audit), ("setup log", paths.setup)):
         if p.is_file():
             out.append(f"- {label}: `{cfg.rel(p)}`")

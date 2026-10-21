@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import executor, git, items, procs, talk, worktrees
+from . import resume as resume_items           # `resume` here is a staged item's move record
 from .util import file_hash, now, parse_stamp, retry_io, stamp, write_text
 
 if TYPE_CHECKING:
@@ -198,16 +199,18 @@ class SetupMixin:
         amends = talk.take(cfg.control, item.id, "resume" if stage else "prompt")
         rec["beside"], warn = self._beside(item)
         rec["warned"] = [i for i, _ in warn]        # named in its paragraph: no tell about them later
+        resumed = resume_items.paragraph(cfg, self.log, rec, paths.original) if rec.get("resume_of") else ""
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, item.max_hours or cfg.max_hours,
                                                        parse_stamp(rec["deadline"]), rec, resume,
                                                        notes=self._notes_text(rec), usage=self._disk_usage(rec),
-                                                       amends=[m for m in amends if talk.is_amend(m)], beside=warn))
+                                                       amends=[m for m in amends if talk.is_amend(m)], beside=warn,
+                                                       resumed=resumed))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
-                                                     settings=paths.settings),
+                                                     settings=paths.settings, fork_of=rec.get("resume_session")),
                                     cwd, paths.prompt, paths.log, paths.stderr, env={executor.PORT_VAR: str(rec["port"])})
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
@@ -227,6 +230,8 @@ class SetupMixin:
             extra |= {"resumed": True, "landed": resume["landed"]}
         if item.alongside:
             extra["alongside"] = item.alongside
+        if rec.get("resume_of"):
+            extra |= {"resume_of": rec["resume_of"], "resume_session": rec["resume_session"]}
         if rec["beside"]:
             extra["beside"] = rec["beside"]
         extra |= self._setup_seconds(rec)

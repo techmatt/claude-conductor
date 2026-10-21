@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPlainTextEdit, QPushButton,
 
 from ..events import RED_KINDS, Event
 from ..inbox import describe, outline_rows
+from ..resume import label as resume_label
 from ..util import clock
 from . import theme
 from .model import Project, conversation, current_outline, git_trail
@@ -228,7 +229,9 @@ class TrailView(QWidget):
         lay.setContentsMargins(4, 0, 0, 0)
         self.title = QLabel("Select an item to follow it." if conversation else "Select an event to see its item's trail.")
         self.title.setWordWrap(True)
-        self.title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse
+                                           | Qt.TextInteractionFlag.LinksAccessibleByMouse)
+        self.title.linkActivated.connect(self.show_item)        # a resume item's original
         self.title.setStyleSheet(f"font-size: {theme.BASE_POINT_SIZE + 0.5}pt; padding: 2px 0 4px 0")
         head = QHBoxLayout()
         head.addWidget(self.title, 1)
@@ -311,6 +314,9 @@ class TrailView(QWidget):
         bits = [f"<b>{self.item}</b>", f"now in {tr.where}", f"{len(tr.events)} event(s)"]
         if status:
             bits.append(f"finished <b>{status}</b>")
+        if d := next((e.detail for e in reversed(tr.events) if e.detail.get("resume_of")), None):
+            orig = d["resume_of"]
+            bits.append(resume_label(d).replace(orig, f"<a href='{orig}'>{orig}</a>"))
         if reds:
             bits.append(f"<b style='color:{theme.RED}'>{len(reds)} red</b>")
         self.title.setText(" · ".join(bits))

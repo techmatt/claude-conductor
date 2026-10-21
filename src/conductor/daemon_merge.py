@@ -193,6 +193,8 @@ class MergeMixin:
             extra["merged"] = out["merged"]
         if rec.get("template"):
             extra["template"] = rec["template"]
+        if rec.get("resume_of"):
+            extra["resume_of"] = rec["resume_of"]
         report_paths = [cfg.rel(Path(rec["report"])), cfg.rel(Path(rec["log"])), done_md]
         notes = executor.RunPaths.for_name(cfg, repo, rec["name"]).audit
         if audits.writes_notes(rec):

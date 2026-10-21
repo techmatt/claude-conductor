@@ -36,6 +36,7 @@ When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup"
 
 ## Standing prompt contract
 
+- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): the very first action of every prompt or cleanup pass appends `<time> start <NN_name>`, and the last `<time> done <NN_name> → <report path>` (or `stopped`). The planner reads it to see what is running.
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored), starting with a `status: done | partial | red` line (the planner's `session.md` digest shows it). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
 - Clock times are local 12-hour (`5:25pm`).
 - A step estimated over ~30 seconds is backgrounded, with a completion waiter on the real process, never on a launcher wrapper.

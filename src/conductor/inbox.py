@@ -5,6 +5,7 @@ from __future__ import annotations
 from . import audits, memory, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
+from .resume import label as resume_label
 from .state import View, decide
 from .util import clock, now, parse_stamp
 
@@ -70,6 +71,15 @@ def checkpoint_name(ev: Event) -> str:
     return f"checkpoint #{ev.id}" + (f' "{label}"' if label else "")
 
 
+def changed_text(ev: Event) -> str:
+    """`report changed since review 3:10pm (after it was opened by app, #812)`: a
+    `report_changed` event, as the inbox, the digest and `review.md` flag it."""
+    d = ev.detail
+    what = " and ".join("audit notes" if f == "audit" else "report" for f in d.get("files") or ["report"])
+    opened = f" (after it was opened by {d.get('opened_by')}, #{d['opened']})" if d.get("opened") else ""
+    return f"{what} changed since review {clock(ev.ts)}{opened}"
+
+
 def slow_text(detail: dict) -> str | None:
     """A finish's `slow:` worth showing: what its report said took long, or None when
     it said `none` or (an older report) nothing."""
@@ -86,6 +96,8 @@ def describe(ev: Event) -> str:
             text = f"{who} finished **{d.get('status')}**"
             if d.get("reasons"):
                 text += f" ({'; '.join(d['reasons'])})"
+            if resumed := resume_label(d):
+                text += f" · {resumed}"
             if d.get("blocks") not in (None, "none"):
                 text += f" · blocks: {d['blocks']}"
             if d.get("carry") not in (None, "none"):
@@ -140,6 +152,10 @@ def describe(ev: Event) -> str:
             text = f"toast: {d.get('text')}"
         case "reviewed":
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
+        case "report_changed":
+            text = f"{who} {changed_text(ev)}: unreviewed again until the next `reviewed:`"
+        case "session_opened":
+            text = f"{who} session opened by hand (by {d.get('by')}, session {d.get('session_id')})"
         case "checkpoint":
             text = checkpoint_name(ev) + (f", session start digest `{d['session']}`" if d.get("session") else "")
         case "review":
@@ -166,6 +182,8 @@ def describe(ev: Event) -> str:
                 text += f" on `{d['branch']}`"
             if d.get("alongside"):
                 text += f", alongside: {d['alongside']}"
+            if resumed := resume_label(d):
+                text += f", {resumed} (forking session {d.get('resume_session')})"
             if d.get("beside"):
                 text += f"; beside {', '.join(d['beside'])}"
             if d.get("error"):
@@ -219,6 +237,7 @@ def describe(ev: Event) -> str:
             extras += [k for k in ("needs_planner", "readonly", "ultracode", "audit") if d.get(k)]
             extras += [f"template: {d['template']}"] if d.get("template") else []
             extras += [f"alongside: {d['alongside']}"] if d.get("alongside") else []
+            extras += [resume_label(d)] if d.get("resume_of") else []
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
         case "edited":
             text = f"{who} rewritten in the queue; it runs the new text" + (
@@ -348,9 +367,11 @@ def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
         carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
         slow = f" · slow: {s}" if (s := slow_text(d)) else ""
         pick = f" · pick: {d['pick']}" if d.get("pick") else ""
+        resumed = f" · {r}" if (r := resume_label(d)) else ""
+        resumed += f" · **{changed_text(chg)}**" if (chg := view.changed_since_review(ev.item)) else ""
         old = (" · **carried from before checkpoint "
                f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
-        out.append(f"- {ev.item} **{d.get('status')}**{why}, finished {clock(ev.ts)} (#{ev.id})"
+        out.append(f"- {ev.item} **{d.get('status')}**{why}{resumed}, finished {clock(ev.ts)} (#{ev.id})"
                    f"{report}{carry}{slow}{pick}{old}")
     return out
 
@@ -425,13 +446,14 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
     decisions = decide(cfg, view)
     for repo in cfg.repos:
         d = decisions[repo]
-        queued = [i.name for i in view.queued.get(repo, [])]
+        queued = [i.name + (f" ({resume_label(i.meta())})" if i.resume_of else "") for i in view.queued.get(repo, [])]
         running = []
         for item_id, rec in view.running.items():
             if rec["repo"] != repo:
                 continue
             text = rec["name"] + {"merge": " (merging)", "setup": " (setting up)"}.get(rec.get("phase"), "")
-            if tags := (["alongside"] if rec.get("alongside") else []) + (
+            if tags := ([resume_label(rec)] if rec.get("resume_of") else []) + (
+                    ["alongside"] if rec.get("alongside") else []) + (
                     [f"beside {', '.join(rec['beside'])}"] if rec.get("beside") else []):
                 text += f" ({', '.join(tags)})"
             if rec.get("phase", "exec") == "exec":

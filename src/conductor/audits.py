@@ -1,6 +1,6 @@
 """Audit notes and the standard prompt templates conductor owns.
 
-An item with `audit: true` (or `template: general_audit`) keeps notes beside its
+An item with `audit: true` (or `template: general_audit` or `self_audit`) keeps notes beside its
 report, `reports/<repo>__NNN_name.audit.md`. A `template: cleanup` item is handed every
 note of its repo not yet used by an earlier cleanup; an `audit_used` event records the
 notes a cleanup (or a general audit, its own) used, so the next one sees only newer ones.
@@ -20,7 +20,8 @@ from .util import clock, read_text
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
 TEMPLATES = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_cleanup",
-             "bug_hunt")  # what `template:` may name
+             "bug_hunt", "self_audit")  # what `template:` may name
+NOTE_TEMPLATES = ("general_audit", "self_audit")           # keep audit notes without `audit: true`
 USES_NOTES = ("cleanup", "general_audit")                  # a finish not red logs `audit_used`
 NO_STAGE = ("cleanup", "disk_audit")       # what they are handed is fixed at launch, so they never stage
 # Repo-wide templates that run alone in their repo: never beside another item, readonly ones
@@ -52,7 +53,7 @@ def note_path(cfg: Config, repo: str, name: str) -> Path:
 
 def writes_notes(meta: dict) -> bool:
     """An item (its front-matter or run record) that keeps audit notes."""
-    return bool(meta.get("audit")) or meta.get("template") == "general_audit"
+    return bool(meta.get("audit")) or meta.get("template") in NOTE_TEMPLATES
 
 
 @dataclass
@@ -99,6 +100,10 @@ def render_notes(cfg: Config, ids: list[str], finishes: dict[str, Event]) -> str
         repo, _, name = item_id.partition("/")
         ev = finishes.get(item_id)
         when = f", finished {ev.detail.get('status')} {clock(ev.ts)}" if ev else ""
+        if ev and ev.detail.get("template") == "self_audit" and ev.detail.get("resume_of"):
+            when += f": a self-audit of {ev.detail['resume_of']}, written by its own session"
+        elif ev and ev.detail.get("resume_of"):
+            when += f": notes from a resume of {ev.detail['resume_of']}"
         try:
             text = read_text(note_path(cfg, repo, name)).strip()
         except (OSError, UnicodeDecodeError) as exc:

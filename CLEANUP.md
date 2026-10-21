@@ -6,6 +6,7 @@ The report is `reports/cleanup_<YYYY-MM-DD>_report.md` (a second pass the same d
 
 ## 0. Baseline, before touching anything
 
+- First of all, append `<time> start cleanup_<YYYY-MM-DD>[b]` to `prompts/ledger.md`; the pass ends by appending its `done` line (`CLAUDE.md`, *Run ledger*).
 - `uv run python tools/sizes.py --all`: every doc and code file against its budget (below). Keep the output for the report's before column.
 - Test timings: `uv run pytest -q` (the fast lane's wall time), `uv run pytest -m "" -q --durations=25` (everything), and `uv run pytest -n0 -q --durations=15` (the fast lane serially: the `slow` rule is serial time). Run them in the background while reading; any failure is a flake or a bug to fix, never to retry past.
 - `HANDOFF.md` *Status* `Last cleanup:` names the last pass. Skim the reports since it (`reports/NN_*_report.md`): their surprises and *Deferred* lines are leads.

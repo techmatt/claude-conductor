@@ -19,7 +19,8 @@ paths: ['src/ui/**']     # legacy: globs the item may change (see `paths:`)
 stage: false             # override the repo's `stage` setting for this item
 ultracode: true          # launch with Claude Code's ultracode on (see executors.md, *Ultracode*)
 audit: true              # keep audit notes beside the report (see templates.md)
-template: cleanup        # cleanup | general_audit | test_perf | disk_audit | claude_md_cleanup | bug_hunt: a conductor-owned prompt (templates.md)
+template: cleanup        # cleanup | general_audit | test_perf | disk_audit | claude_md_cleanup | bug_hunt | self_audit: a conductor-owned prompt (templates.md)
+resume: sandbox/001_x    # ask a finished item's own session, forked; always readonly (resume.md)
 ---
 Prompt body.
 ```
@@ -77,7 +78,7 @@ them and they wait for nothing in the repo: a readonly item starts as soon as it
 queued, **wherever it sits in the queue**, beside whatever runs, waits to merge, waits
 or is staged; the items around it keep their order, numbers and stages (a staged head
 stays staged and resumes later). Behind the head it starts only when: the repo is a git
-repo with worktrees; no red or unread `needs_planner` holds the repo; it is valid, not
+repo with worktrees; no red (a `resume:` item excepted, `resume.md`) or unread `needs_planner` holds the repo; it is valid, not
 run before and not staged; its named locks are declared and free (not held by a running
 item, a head starting this tick or another readonly item started this tick); every
 `depends_on` finished `done` (one queued or running makes it wait); it is not
@@ -118,7 +119,7 @@ also gains each item that starts later beside it, so the inbox's *Now* line read
 reads `running · alongside` with `beside …` and the line in its note.
 
 **Exclusive templates** (`cleanup`, `general_audit`, `test_perf`, `disk_audit`,
-`claude_md_cleanup`; not `bug_hunt`) run alone in their repo: one at the head waits for
+`claude_md_cleanup`; not `bug_hunt` or `self_audit`) run alone in their repo: one at the head waits for
 every running item, readonly and `alongside` ones included; nothing, readonly items
 included, starts beside one running; and nothing behind one in the queue starts early,
 so a stream of small items never starves it. Readonly yields here because a perf or

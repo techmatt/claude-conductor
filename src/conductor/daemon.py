@@ -29,6 +29,7 @@ import psutil
 
 from . import (audits, desktop, executor, git, globs, guard, inbox, items, memory, notify, picker, picks, procs, request, state,
                talk, targets, worktrees)
+from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
 from .daemon_merge import MergeMixin
@@ -133,6 +134,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.opener = desktop.Opener(cfg, self.log)
         self.blocked: set[str] = set()          # items waiting on a blocking question
         self.invalid_seen: dict[str, str] = {}
+        self.report_stats: dict[str, tuple] = {}    # reviewed item → its files' (size, mtime) last hashed
         self.queued_hashes: dict[str, str | None] = {}  # queued item → its file's hash: a change is `edited`
         self._inbox_key: tuple | None = None
         self._inbox_at = 0.0
@@ -588,6 +590,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
     # ---------------------------------------------------------------- scheduling
     def schedule(self) -> None:
         view = state.scan(self.cfg, self.log)
+        self.check_reviewed_reports(view)
         for d in view.stray:
             key = f"queue/{d.name}"
             if self.invalid_seen.get(key) != "stray":
@@ -614,7 +617,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                                     staged=item.id in view.staged)
                 self.queued_hashes[item.id] = digest
                 if item.errors:
-                    key = f"{item.id}:{item.path.stat().st_mtime}"
+                    # Per file version and reason: a `resume:` item's reason moves with the queue.
+                    key = f"{item.id}:{item.path.stat().st_mtime}:{'; '.join(item.errors)}"
                     if self.invalid_seen.get(item.id) != key:
                         self.invalid_seen[item.id] = key
                         self.log.append("invalid", item=item.id, paths=[self.cfg.rel(item.path)],
@@ -760,10 +764,12 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             landed = git.commits_between(repo_path, stage["base"], rec["base"]) if not error else []
             rec["resume"] = {"old": stage["base"], "new": rec["base"] or stage["base"], "landed": len(landed)}
             self._worktree_event(rec, "moved", f"{stage['base'][:10]} → {(rec['base'] or '?')[:10]}")
-        elif cfg.opts(item.repo).worktrees:
+        elif cfg.opts(item.repo).worktrees or item.resume_of:      # a resume item: always a fresh worktree
             error = self._make_worktree(item, rec, paths.setup)
         if item.template == "cleanup" and not rec["notes"] and not error:
             error = f"cleanup: no unused audit notes for {item.repo}"
+        if item.resume_of and not error:
+            error = resume_items.prepare(cfg, self.log, rec)
         rec["repo_head"] = rec["base"] or git.head(repo_path)
         rec["repo_status"] = None
         if not error:

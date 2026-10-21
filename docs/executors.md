@@ -9,7 +9,8 @@ claude -p --dangerously-skip-permissions --output-format stream-json --verbose -
 
 with cwd = the item's worktree (the repo itself when `worktrees = false`) and the
 prompt on stdin: a conductor preamble followed by the item body. A staged item is
-resumed with `--resume <session id>` instead of `--session-id` (see `worktrees.md`, *Staging*). The
+resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, *Staging*; a fork:
+`resume.md`). The
 preamble names the item and says the session is unattended; says where it works (the
 worktree, its branch and cut point, shared folders, the commit rule) and any declared
 `paths`; gives its *Port* (below) and any *Beside you* warning (`items.md`, *Alongside items*); gives the asking

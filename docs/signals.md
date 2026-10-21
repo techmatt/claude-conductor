@@ -1,7 +1,7 @@
 # Signals
 
-The verbs: read, clear, approve, cancel, reorder, review, reviewed, tell, outline,
-checkpoint, session, run, pick, open, notify, stop.
+The verbs: read, clear, approve, cancel, reorder, review, reviewed, session_opened, tell,
+outline, checkpoint, session, run, pick, open, notify, stop.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -70,7 +70,15 @@ value is ignored.
   not rejected. Reviewed state is derived from the event log (an item is reviewed once a
   `reviewed` event names it), so it survives restarts, and it is independent of the
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
-  waits on the read mark. Several `reviewed:` lines may share a file.
+  waits on the read mark. Several `reviewed:` lines may share a file. The event keeps
+  `hashes` of the report and its `.audit.md`: when either changes later, the daemon's
+  scan (and its first, at start) logs `report_changed` and the item is unreviewed again
+  until the next `reviewed:`, which is then accepted (`inbox.md`, *Reviewed reports
+  that change*). A report reviewed before hashes were kept is never checked.
+- **session_opened** — `session_opened: <item>` (one finished item, resolved as for
+  `reviewed:`), written by the app's **Terminal** and `conductor open` beside the console
+  they open, logs `session_opened` (`session_id`, `by`), so a later `report_changed`
+  can name it.
 - **review** — `review: all` or `review: <ref>` (one token; the ref resolves as for
   `reviewed:`, so `code/2` works) rewrites `review.md` whole: the unreviewed reports
   (or that one finished item's, reviewed or not) inlined, plus conductor's own past

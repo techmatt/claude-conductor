@@ -14,8 +14,8 @@ exits 0; the running app adds those folders (remembered), selects the last one n
 and comes forward. So repeating a launch never adds a second tray icon, and no second
 app rewrites the remembered list from its own stale copy. If the name can't be claimed
 the app runs alone, as before. Code: `app/single.py`.
-Code: `src/conductor/app/` — `model.py` and `actions.py` have no Qt (they reuse
-`state.scan`, `state.decide`, `questions`, `config`). The widgets are `window.py`, one
+Code: `src/conductor/app/` — `model.py`, `streamlog.py` (a stream-json log as text) and
+`actions.py` have no Qt (they reuse `state.scan`, `state.decide`, `questions`, `config`). The widgets are `window.py`, one
 `*_panel.py` per tab, `trail.py` (an item's detail and Conversation) and `widgets.py`
 (what the panels share).
 

@@ -11,6 +11,7 @@ from . import config as config_mod
 from . import audits, desktop, items, memory, questions, state
 from .events import EventLog
 from .inbox import describe, latest_outline, outline_line, progress_line, render
+from .resume import label as resume_label
 from .util import clock, duration, now, parse_since, parse_stamp, write_text
 
 
@@ -95,7 +96,8 @@ def cmd_status(args) -> int:
             blocked = [q.id for q in open_qs if q.item == item_id and q.block]
             kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
                     else f"kill at {clock(rec['deadline'])}")
-            extra = (", readonly" if rec.get("readonly") else "") + (f", port {rec['port']}" if rec.get("port") else "")
+            extra = (f", {resume_label(rec)}" if rec.get("resume_of") else ", readonly" if rec.get("readonly") else "")
+            extra += f", port {rec['port']}" if rec.get("port") else ""
             extra += (", alongside" if rec.get("alongside") else "") + (
                 f", beside {', '.join(rec['beside'])}" if rec.get("beside") else "")
             print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}{extra}, {kill}")
@@ -115,7 +117,7 @@ def cmd_status(args) -> int:
             note = ""
             if i == 0 and decisions[repo].action in ("hold", "wait", "run", "resume", "stage"):
                 note = f"  — {decisions[repo].action}" + (f": {decisions[repo].reason}" if decisions[repo].reason else "")
-            print(f"  queued   {item.name}{note}")
+            print(f"  queued   {item.name}" + (f" ({resume_label(item.meta())})" if item.resume_of else "") + note)
         if ev := view.red_hold.get(repo):
             print(f"  held     after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
         if not (view.queued.get(repo) or view.red_hold.get(repo)
@@ -273,7 +275,7 @@ def cmd_open(args) -> int:
         print(f"conductor: {hits[0]}'s finish event names no session", file=sys.stderr)
         return 1
     try:
-        cwd, argv = actions.open_session(cfg, hits[0], sid)
+        cwd, argv = actions.open_session(cfg, hits[0], sid, by="cli")
     except OSError as exc:
         print(f"conductor: {exc}", file=sys.stderr)
         return 1
