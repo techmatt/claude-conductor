@@ -117,6 +117,7 @@ def test_alongside_item_starts_beside_a_running_one_and_both_are_warned(env):
     assert "code/002_recorder started beside you" in report(env, "001_voice")
     assert all(e.detail["status"] == "done" for e in env.events("finish"))
     assert len(env.events("merge")) == 2 and (env.repo / "a.txt").is_file() and (env.repo / "b.txt").is_file()
+    assert [e.detail["commits"] for e in env.events("merge")] == [1, 1]   # the neighbour's isn't counted
     assert "alongside: the recorder's save path only; beside code/001_voice" in inbox.describe(start)
 
 

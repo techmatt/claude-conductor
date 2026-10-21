@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import (QHeaderView, QInputDialog, QLabel, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
+from PySide6.QtWidgets import (QHeaderView, QInputDialog, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout)
 
 from .. import audits

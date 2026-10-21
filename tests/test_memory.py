@@ -152,6 +152,7 @@ def test_pressure_pauses_starts_and_tells_running_items(env):
     assert not env.events("kill")
 
 
+@pytest.mark.slow
 def test_a_level_rises_at_once_and_falls_only_once_calm(env):
     """Found live: a leaking service swung this box's free RAM by gigabytes every few
     minutes, so a fall waits for `memory_calm_seconds` of clear readings."""

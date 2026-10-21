@@ -218,7 +218,7 @@ def test_a_stop_signal_written_during_the_restart_is_this_daemons(started):
 
 @pytest.mark.parametrize("blocker", ["checkout", "run_target"])
 def test_a_dirty_checkout_or_a_starting_run_target_blocks_the_restart(started, blocker):
-    env, d = started, started.d
+    d = started.d
     spawned, dirty = [], ["conductor's checkout: a rebase is in progress"]
     stand_in(d, ["v2"], spawned, checkout=dirty if blocker == "checkout" else ())
     if blocker == "run_target":

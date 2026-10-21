@@ -158,6 +158,8 @@ class SetupMixin:
         rec, repo = run.rec, run.rec["repo"]
         proc = procs.find_by_marker(rec["session_id"])
         if proc is not None or (rec.get("log") and Path(rec["log"]).exists()):
+            rec["phase"] = "exec"
+            self._save(run)
             self._recover_spawned(run, proc)
             return
         self._kill_setup(rec)
@@ -170,10 +172,9 @@ class SetupMixin:
                         reason="daemon stopped during setup")
 
     def _recover_spawned(self, run: Run, proc: psutil.Process | None) -> None:
-        """A run recorded in setup whose executor had spawned: `recover`'s exec path."""
+        """Restart rule for a run whose executor spawned: adopt it while it lives, else
+        harvest its result, else finish it as interrupted. `recover` and setup's both."""
         rec, item_id = run.rec, run.rec["item"]
-        rec["phase"] = "exec"
-        self._save(run)
         self.runs[item_id] = run
         if proc is not None:
             run.proc = proc

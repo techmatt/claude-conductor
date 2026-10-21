@@ -228,15 +228,27 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, data, picks.IMAGE_TYPES[image.suffix.lower()], Cache_Control="no-cache", **extra)
         return self._not_found()
 
+    def _drain(self) -> None:
+        """Read a refused request's body (up to the cap) first: unread bytes reset the
+        connection on Windows before the client reads the refusal."""
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            length = -1
+        if 0 <= length <= MAX_BODY_BYTES:
+            self.rfile.read(length)
+        else:
+            self.close_connection = True
+
     def do_POST(self) -> None:
         route = self._route()
-        if route is None:
+        if route is None or route[2] != ["save"] or route[3]:
+            self._drain()
             return self._not_found()
-        manifest, item, rest, query = route
-        if rest != ["save"] or query:
-            return self._not_found()
+        manifest, item, _, _ = route
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if ctype != "application/json":
+            self._drain()
             return self._json(400, {"error": "a save must be application/json"})
         try:
             length = int(self.headers.get("Content-Length") or "")

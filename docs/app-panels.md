@@ -126,7 +126,7 @@ an item's detail in `trail.py`.
   selected item without problems), **Cancel** (asks
   first), **Move up / Move down** (`reorder: proposed <a> <b>` swapping the two
   neighbours' numbers; the selection follows the moved item to its new name, and a
-  second move waits until the first has landed).
+  second move waits until the first has landed), **Open trail** (the proposal in Events).
 
 The *Questions* and *Proposed* tab labels carry their counts and are coloured from any
 panel: red with `N blocking` while a question blocks, amber while only defaults are

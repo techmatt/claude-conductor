@@ -13,6 +13,7 @@ import os
 import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -272,19 +273,38 @@ def alive(pid: int | None, created: float | None) -> bool:
 
 
 def find_by_marker(marker: str) -> psutil.Process | None:
-    """A live process whose command line contains `marker` (the executor's session id)."""
+    """A live process whose command line contains `marker` (the executor's session id).
+    A command line unreadable on the first pass (a process still starting, under load,
+    reads as None) gets one second look: restart recovery must not miss a live executor."""
     me = os.getpid()
-    for p in psutil.process_iter(["pid", "cmdline"]):
+    unread = []
+    young = time.time() - 30                # protected system processes never read; skip those
+    for p in psutil.process_iter(["pid", "cmdline", "create_time"]):
+        if p.pid != me and p.info["cmdline"] is None:
+            if (p.info["create_time"] or 0) > young:
+                unread.append(p)
+        elif p.pid != me and _outermost(p, marker, p.info["cmdline"]):
+            return p
+    if unread:
+        time.sleep(0.2)
+    for p in unread:
         try:
-            if p.pid != me and marker in " ".join(p.info["cmdline"] or []):
-                # Prefer the outermost match: skip a child whose parent also matches.
-                parent = p.parent()
-                if parent and marker in " ".join(parent.cmdline() or []):
-                    continue
+            if _outermost(p, marker, p.cmdline()):
                 return p
         except psutil.Error:
             continue
     return None
+
+
+def _outermost(p: psutil.Process, marker: str, cmdline: list[str] | None) -> bool:
+    """`cmdline` holds `marker` and its parent's doesn't: a child of a match is skipped."""
+    if marker not in " ".join(cmdline or []):
+        return False
+    try:
+        parent = p.parent()
+        return not (parent and marker in " ".join(parent.cmdline() or []))
+    except psutil.Error:
+        return False
 
 
 def kill_tree(pid: int) -> None:

@@ -326,7 +326,8 @@ def cmd_pick(args) -> int:
     log = EventLog(cfg.events_db)
 
     def refuse(exc: ValueError) -> int:
-        # Red like the signal's `invalid`, so the inbox, a toast and the app show it too.
+        # Red like the signal's `invalid`, so the inbox and the app show it too (no toast:
+        # only events the daemon appends raise one).
         log.append("pick_failed", manifest=args.ref, error=str(exc), by="cli")
         print(f"conductor: {exc}", file=sys.stderr)
         return 1

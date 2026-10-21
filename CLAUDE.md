@@ -32,7 +32,7 @@ There is no "run all prompts" phrase.
 
 ## "Cleanup conductor"
 
-When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup", "run a cleanup on conductor" and the like), follow `CLEANUP.md` as written: a maintenance pass with its report at `reports/cleanup_<YYYY-MM-DD>_report.md`. It is not a numbered prompt, so "run next prompt" never picks it, and it never runs unasked. `uv run python tools/sizes.py` shows any file over its size budget at a glance, in any session.
+When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup", "run a cleanup on conductor" and the like), follow `CLEANUP.md` as written: a maintenance pass with its report in `reports/` (named in `CLEANUP.md`). It is not a numbered prompt, so "run next prompt" never picks it, and it never runs unasked. `uv run python tools/sizes.py` shows any file over its size budget at a glance, in any session.
 
 ## Standing prompt contract
 

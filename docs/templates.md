@@ -1,8 +1,9 @@
 # Audits and templates
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
-live in `src/conductor/templates/` (`audit.md`, `cleanup.md`, `general_audit.md`,
-`test_perf.md`, `disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`) and are versioned with this repo: the `start` event of a template item
+live in `src/conductor/templates/` (`cleanup.md`, `general_audit.md`, `test_perf.md`,
+`disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`; `audit.md` is the *Audit notes*
+paragraph, not a template) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in

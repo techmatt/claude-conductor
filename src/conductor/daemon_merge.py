@@ -32,7 +32,9 @@ class MergeMixin:
         rec = run.rec
         wt = Path(rec["worktree"])
         res = rec.get("resolve")
+        repo_path = self.cfg.repos[rec["repo"]]
         try:
+            before = git.rev(repo_path, self.cfg.opts(rec["repo"]).main)   # pre-merge main
             if res and res["state"] == "running":
                 if not self._resolver_exited(run):
                     return False
@@ -67,7 +69,10 @@ class MergeMixin:
             self._conflict(run, m.files, m.reason, f"rebase onto {self.cfg.opts(rec['repo']).main} conflicted",
                            note="branch kept; main untouched")
             return True
-        commits = git.commits_between(self.cfg.repos[rec["repo"]], rec["base"], m.sha) if m.sha else []
+        # The item's own commits: from pre-merge main, so an alongside neighbour merged since
+        # the cut isn't counted; from the cut point when main already held them (a restart).
+        since = before if before and before != m.sha else rec["base"]
+        commits = git.commits_between(repo_path, since, m.sha) if m.sha else []
         out["merged"] = m.sha
         extra = {"resolved": rec["resolved"]} if rec.get("resolved") else {}
         self.log.append("merge", item=rec["item"], branch=rec["branch"], sha=m.sha, commits=len(commits),

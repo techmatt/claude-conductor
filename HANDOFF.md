@@ -33,7 +33,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 ## Status
 
 Last report reviewed by the planner: 30_alongside_and_lead_delivery
-Last cleanup: 2026-10-20, after prompt 25
+Last cleanup: 2026-10-20, after prompt 31
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`) and Word Warriors (`C:\Code\wordwarriors-control`, the newest). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
@@ -50,7 +50,6 @@ A next prompt should know:
 
 - Tamper is attributed (30) only to an item whose hook saw it name a changed control path; a change made by a script that never names the path, or by a stage or merge executor (no hook), still ends every active item red.
 - Messages and amendments (30) are delivered only on the lead's own tool calls (`agent_id` absent in the hook input, Claude Code 2.1.305), so mail waits out a whole subagent or Workflow call. `progress` no longer delivers mail. If the `agent_id` field ever disappears, every call counts as the lead's again.
-- A `merge` event's `commits` counts from the item's cut point, so a branch merged after an `alongside` neighbour counts the neighbour's commits too (sandbox 064: 2 for 1). Count from pre-merge `main`.
 - `alongside` is proven in the sandbox with real executors (one pair, one tell during a helper); its first real use is worth a look: did both reports say whether they touched the other's area?
 - Each code repo's `CLAUDE.md` must say "commit to the branch you are on", not "commit to `main`". The sandbox's was changed; any real repo's first prompt carries this.
 - A fast-forward of the main checkout interrupted mid-write (the daemon killed during `git merge --ff-only`) leaves tracked files dirty, and the merge holds as "uncommitted changes" until Matt resets the checkout. Rare; needs a person.
@@ -68,11 +67,13 @@ A next prompt should know:
 - A cleanup's deferred design calls live only in its report's **Deferred** and, once raised, `state.md`'s *Paged*; conductor tracks none. If they get lost, they could become a standing inbox section.
 - **Proven with the fake executor only**, worth a look at first real use: a readonly item beside others (`CONDUCTOR_PORT` passed through?), `bug_hunt`, `disk_audit` (junctions removed as links), `claude_md_cleanup`, and `memory_critical` with its tell.
 - Word Warriors needs `open_roots = ["C:/Code/gdrive-sync/wordwarriors"]` in its `conductor.toml`, by request (its planner's job), before **open X** reaches its Drive folder.
-- `planner.md` sits at its 20 KB budget (19,996 B after 31, trimmed to fit); the next addition needs a cut or a budget revision by a cleanup. `HANDOFF.md` is at its 16 KB budget too.
+- `planner.md` sits at its 20 KB budget (19,996 B after 31, trimmed to fit); the next addition needs a cut or a budget revision by a cleanup. `docs/control-folder.md`, `executors.md` and `progress.md` are at their 12 KB too.
+- On 2026-10-20 after 31, `HANDOFF.md` was found uncommitted as 30's text plus one *Status* line, undoing 31's lines: a write over the bridge from a stale copy. The cleanup restored 31's. A planner rereads `HANDOFF.md` before writing it.
+- The Repos tab puts a reviewed row's **Terminal** button in the *Mark reviewed* column (sandbox screenshot, cleanup 2026-10-20b).
 - Window focus needs a human look: an `open:` window, a forwarded app launch (`AllowSetForegroundWindow`) or a picker from an app-started daemon may come up behind others or only flash the taskbar.
 - `picks/`, `session.md` and (28) `review.md` joined the runtime paths after the sandbox, Corelight and Word Warriors were made, so each logs a startup `warning` until a request adds them to its `.gitignore`: each project's planner's job (`planner.md`, *Requests*).
 - The self-restart worked live (Word Warriors, 10:47pm 2026-10-20: restarted on commit 30, adopted 065, delivered its pending tell). A second commit during a blocked wait is not re-checked: `daemon_restart`'s `to` names the first, the new daemon runs what is on disk. The handshake wait (up to 20s) holds the old daemon's loop.
-- A run adopted by session marker (spawned, pid not yet saved) has no `start` event. The exec-recovery branch exists twice (`daemon.recover`, `daemon_setup._recover_spawned`); a cleanup could merge them.
+- A run adopted by session marker (spawned, pid not yet saved) has no `start` event.
 - `tests/test_ask.py::test_default_taken_then_late_answer` failed once in a full parallel run (1 of 264) and passed alone: a flake under load.
 - A daemon restart loses the picker server's port and token, so an open picker tab can't save until `pick:` is resent; a fixed port and a token in `.conductor/` would fix it.
 - `uv run conductor app` runs `.venv\Scripts\conductor.exe`, locked while the app is open, so any `pyproject.toml` change makes every `uv run` fail until the app closes. `uv run python -m conductor app` would avoid the lock (the "launch the conductor" line in `CLAUDE.md` would change with it).
@@ -84,6 +85,5 @@ A next prompt should know:
 - A reply is the first `progress` line after a delivery, by position: an executor that posts a milestone first has it shown as the reply. If that misfires in real use, the preamble could ask for `re #N` and conductor tag by that.
 - Log compaction drops images' base64 and `originalFile` copies; run logs still stay big (Word Warriors' 78 MB, largest 7.7 MB, per its 051 disk audit). Compaction could also trim long tool outputs.
 - `session.md` carries every event since the previous read mark, so after a long gap it is large (the sandbox's first was 39 KB). If a real digest grows past comfortable, summarise *Other* by kind beyond a cap. `session:` has no app button by design.
-- `tests/test_picker.py::test_save_refusals` is flaky on Windows (`ConnectionAbortedError`, ~1 run in 3): the picker server refuses some saves before reading the body, so the unread bytes reset the connection. Drain the body (capped) before refusing.
 - A queue file written after its item launched stays in `queue/` as `.md.bad` (31), like a refused amend file; move both to `.conductor/` if they clutter.
 - 31's planner action rules (signals only from Matt's words, `reviewed:` only inside processing) are rules, not checks: worth a look in Word Warriors' next sessions.

@@ -2,7 +2,7 @@
 
 When Matt says **cleanup conductor**, a Claude Code session in this repo follows this file as written. It is a maintenance pass between prompts, not a numbered prompt: it never counts for "run next prompt". It keeps behaviour unchanged: a fix that changes behaviour is named in the report, and every design call goes to **Deferred** in the report with its options and a pick, never acted on. If following this file shows it is wrong or missing something, fix this file first, then go on, and say so in the report.
 
-The report is `reports/cleanup_<YYYY-MM-DD>_report.md`, under the standing report contract in `CLAUDE.md` (a `status:` line first). Steps over ~30 seconds run in the background.
+The report is `reports/cleanup_<YYYY-MM-DD>_report.md` (a second pass the same day adds `b`, `c`: `cleanup_<YYYY-MM-DD>b_report.md`, and its screenshot likewise), under the standing report contract in `CLAUDE.md` (a `status:` line first). Steps over ~30 seconds run in the background.
 
 ## 0. Baseline, before touching anything
 
@@ -34,6 +34,7 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 - **Facts against code.** Every command and flag (`cli.py`), signal verb (`daemon_signals.py`), event kind (`log.append("…"` across `src/`) and its detail, front-matter field (`items.py`), `conductor.toml` key and default (`config.py`), control-folder path (`config.RUNTIME`, `executor.RunPaths`), toast kind (`notify.py`), template name, and app button named in `docs/`. A list a doc presents as complete must be complete. A read-only subagent can sweep this and report quoted snippets; apply the fixes yourself.
 - **One home per fact.** `docs/` holds mechanics; `planner.md` what a planner does; `claude-ai-new-project.md` new / park / resume and project setup; README the overview, commands and index. A fact explained in two places keeps one and the other points to it.
 - **`planner.md`**: every line must change what a planner does. Its vocab matches the signal verbs.
+- **`CLAUDE.md`**: every line must change what a Claude Code session here does; mechanics it repeats from `docs/` become a pointer. Everything it names exists and is current: commands, tools and their flags (`tools/restart_all.py --check`, `tools/sizes.py`), `docs/` files, the sandbox paths, the newest control folder in *Launch the conductor* (re-derive it by its rule), and the phrases' examples (prompt names, report paths).
 - **`HANDOFF.md`**: *Status* is current state only. *Open* drops lines that are resolved, stale or proven, and says each remaining one in as few lines as it can.
 - **Test counts and timings** live in `docs/development.md` only; update them from the step 4 numbers.
 

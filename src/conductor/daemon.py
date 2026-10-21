@@ -459,22 +459,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     self.log.append("requeue", item=item_id, paths=[f"queue/{repo}/{md.name}"],
                                     reason="daemon stopped before the executor was launched")
                     continue
-                proc = None
-                if procs.alive(rec.get("pid"), rec.get("create_time")):
-                    proc = psutil.Process(rec["pid"])
-                else:
-                    proc = procs.find_by_marker(rec["session_id"])
-                if proc is not None:
-                    run.proc = proc
-                    self.runs[item_id] = run
-                    self.log.append("adopt", item=item_id, pid=proc.pid, session_id=rec["session_id"])
-                    continue
-                self.runs[item_id] = run
-                if executor.read_result(Path(rec["log"])) is not None:
-                    self.log.append("recover", item=item_id, note="executor finished while conductor was down")
-                    self.finish(run)
-                else:
-                    self.finish(run, interrupted=True)
+                alive = procs.alive(rec.get("pid"), rec.get("create_time"))
+                self._recover_spawned(run, psutil.Process(rec["pid"]) if alive
+                                      else procs.find_by_marker(rec["session_id"]))
             for md in sorted(rdir.glob("*.md")):
                 if md.with_name(md.stem + ".run.json").exists():
                     continue

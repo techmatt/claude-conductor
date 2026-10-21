@@ -32,6 +32,7 @@ uv run conductor session [<label…>] [--control <folder>]      # a checkpoint p
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
 uv run conductor pick <repo>/<manifest path> [--control <folder>]  # open a picker in the browser (docs/picks.md)
+uv run conductor open-path <folder|reveal|file|text|url> <target…> [--control <folder>]  # the open: verbs (docs/signals.md)
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
 uv run conductor app [<control folder> …]                  # the desktop app (docs/app.md)
 ```

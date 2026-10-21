@@ -298,6 +298,7 @@ def test_merge_resumes_after_restart(env):
     assert len(env.events("start")) == 1
 
 
+@pytest.mark.slow
 def test_shared_folder_is_linked_not_copied(env):
     (env.repo / ".gitignore").write_text("data/\n", encoding="utf-8")
     git(env.repo, "add", ".gitignore")
@@ -372,6 +373,7 @@ def test_readonly_item_runs_beside_others_with_its_own_port(env):
     assert f"uses port {ports['code/002_ro']}, also in your environment as `CONDUCTOR_PORT`" in text
 
 
+@pytest.mark.slow
 def test_readonly_item_still_takes_its_named_locks(env):
     gate = env.control / "gate"
     env.queue("001_a", f"FAKE wait-for {gate.as_posix()} 20", locks="['gpu']", stage="false")

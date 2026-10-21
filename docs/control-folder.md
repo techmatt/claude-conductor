@@ -31,6 +31,8 @@ events.db                      append-only event log (SQLite, WAL)
                                cancelled items), reorder.json and signal.json (crash journals),
                                daemon.out.log (a daemon started by the app), progress/ and
                                mail/ (progress lines, messages to executors: see `progress.md`),
+                               touch/ (paths each item's tools named: tamper attribution),
+                               open.log (`open:` launches), restart.ready (self-restart handshake),
                                memory.jsonl (memory samples: see `memory.md`), leftovers.json
                                (worktrees to retry: see `worktrees.md`), run-<name>.log and
                                run-<name>.json (run targets: see `run-targets.md`),
