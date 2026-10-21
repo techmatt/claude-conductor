@@ -93,10 +93,13 @@ class ReposPanel(Panel):
             items = []
             for a in rs.running:
                 running = a.phase == "running"
+                beside = "beside " + ", ".join(i.split("/", 1)[-1] for i in a.beside) if a.beside else ""
                 note = " · ".join(x for x in (a.progress, f"on {a.detail}" if a.detail else "",
-                                              f"port {a.port}" if a.port and running else "") if x)
-                # A readonly item runs beside the others; the summary still counts it as running.
-                phase = f"{a.phase} · readonly" if a.readonly and running else a.phase
+                                              f"port {a.port}" if a.port and running else "", beside,
+                                              f"alongside: {a.alongside}" if a.alongside else "") if x)
+                # A readonly or alongside item runs beside the others; the summary still counts it as running.
+                tag = "readonly" if a.readonly else "alongside" if a.alongside else ""
+                phase = f"{a.phase} · {tag}" if tag and running else a.phase
                 # Only an executing item takes a message: merging and concluding ones have exited.
                 items.append((("run", a.item), [a.name, phase, duration(a.elapsed(at)), note], a.item,
                               "run" if a.phase == "running" else "run:after", flight))

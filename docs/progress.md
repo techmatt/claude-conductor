@@ -44,19 +44,23 @@ id>.json`.
 Delivery is a Claude Code **PostToolUse hook**. The executor's `--settings` file
 (`reports/<repo>__NNN_name.settings.json`) names one hook on every tool (`matcher: ""`):
 `<python> -m conductor.talk hook --control … --item …` (the `command` + `args` form, so
-no shell quoting; 15s timeout). After each tool call it claims every waiting message
+no shell quoting; 15s timeout). After each of the lead session's tool calls (never a
+subagent's: `executors.md`, *Delivery*) it claims every waiting message
 by renaming `<id>.json` → `<id>.delivered.json` and prints
 `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": …}}`:
-`MESSAGE #<id> from Matt via <by> …`, the text, and that it is an instruction from
-Matt that wins over the prompt and is answered with `progress`. With no mail it prints
-nothing. A `progress` call also hands over any message still waiting (the rename makes
-either path deliver it once). The claim also records `after_seq`, how many progress
-lines the item had written by then. The daemon logs `delivered` (tell, via `hook` or
-`progress`, text, waited_seconds, after_seq), and tags the item's first progress line
+`MESSAGE #<id> from Matt via <by> …`, the text, and that it is Matt's instruction
+through conductor's channel, wins over the prompt and is answered with `progress`.
+With no mail it prints nothing. First, the control-folder paths any agent's writing call
+(`Write`, `Edit`, a shell …) names are noted in `.conductor/touch/` for the tamper guard
+(`control-folder.md`). A `progress` call hands out no mail (the server can't tell a
+helper's call from the lead's); the hook after it delivers, as after any call (`via:
+progress` is older logs only). The claim also records `after_seq`, how many progress
+lines the item had written by then. The daemon logs `delivered` (tell, via `hook`,
+text, waited_seconds, after_seq), and tags the item's first progress line
 with a higher `seq` as the **reply** (`reply_to: <tell id>`; a list when several
-messages reached it before the same line). A message handed over by a `progress` call
+messages reached it before the same line). A message delivered after a `progress` call
 comes after that call's own line, so its reply is the next one. A running amendment
-(via `hook` or `progress`) is tagged the same way; one delivered at launch or resume is
+(via `hook`) is tagged the same way; one delivered at launch or resume is
 not. The daemon logs deliveries before progress lines in each pass, and rebuilds what
 still waits for a reply from the log at start. `conductor events`, the inbox and the
 Activity view show a tagged line as `progress (reply to #N)`; the app's Repos tab shows
@@ -139,7 +143,7 @@ delivery; its id is the amendment's number) and moves it into the item's mailbox
   item yet logs one `warning` and waits; it is taken once the item appears, so an amend
   file written with its item still lands at launch.
 
-`delivered` follows each (amend, via `prompt`, `resume`, `hook` or `progress`), and
+`delivered` follows each (amend, via `prompt`, `resume` or `hook`), and
 every amendment is appended to `reports/<repo>__NNN_name.amend.md` as delivered: number,
 when amended, by, state, when delivered and via, and the text, so a postmortem shows
 what the executor was told and when. One the executor exited before taking is marked

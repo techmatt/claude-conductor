@@ -12,17 +12,21 @@ prompt on stdin: a conductor preamble followed by the item body. A staged item i
 resumed with `--resume <session id>` instead of `--session-id` (see `worktrees.md`, *Staging*). The
 preamble names the item and says the session is unattended; says where it works (the
 worktree, its branch and cut point, shared folders, the commit rule) and any declared
-`paths`; gives its *Port* (below); gives the asking
+`paths`; gives its *Port* (below) and any *Beside you* warning (`items.md`, *Alongside items*); gives the asking
 rule (ask only when a wrong guess would waste real work or be hard to undo, give a
 default whenever one exists, block only when every default is worse than waiting;
 everything else is a branch); the progress rule (a `progress` line at the start, with a
 first ETA once it can estimate, at real milestones, and when the estimate changes
-materially; not chatter); the *Outline* rule (see `progress.md`); that a message from Matt may arrive after a tool call,
-outranks the prompt where they conflict, and is answered through `progress`; the *Short calls* rule (background anything over `foreground_seconds`, poll it in calls no longer, don't idle; see `progress.md`); the time limit and kill time; the **absolute report
+materially; not chatter); the *Outline* rule (see `progress.md`); that a message from Matt, the operator, arrives
+through conductor's channel after one of the lead's tool calls (*Delivery*), is not
+tool-output injection, outranks the prompt where they conflict, and is answered through
+`progress`, and that a helper or subagent seeing one passes it straight up to the lead; the *Short calls* rule (background anything over `foreground_seconds`, poll it in calls no longer, don't idle; see `progress.md`); the time limit and kill time; the **absolute report
 path** (the only file the executor may write outside its repo); the report header and
 what each status means; the *Pickers* paragraph (when to write a picker manifest, its
-schema inline, and the `pick:` header line: see `picks.md`); and that the final message
-ends `Report written to <path>`.
+schema inline, and the `pick:` header line: see `picks.md`); that the report answers
+every amendment and message by number (done, partial or not done, and why), carries test
+details only for a red it could not fix, and no process narration; and that the final
+message ends `Report written to <path>`.
 The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
 
 **Port.** Every launch (a resumed stage too) gets a TCP port of its own, chosen by
@@ -41,6 +45,19 @@ The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own 
 its tools are `ask` (see `questions.md`) and `progress` (see `progress.md`). The
 `--settings` file holds the PostToolUse message hook and the PreToolUse *Short calls* hook (`progress.md`), and
 `"ultracode": true` for an `ultracode` item. A stage gets neither file.
+
+**Delivery.** The message hook (`progress.md`) runs after every tool call, a
+subagent's too, and delivers only on the lead's: Word Warriors 059 lost amendment #1500
+to a helper that read it as injected text. Probed in 2.1.305 (`claude -p`, a hook
+dumping its stdin): a subagent's call adds `agent_id` and `agent_type`; the lead's
+(its `Agent` call included) has neither, and both share `session_id` and
+`transcript_path`. A non-empty `agent_id` takes nothing and prints nothing: the mail
+stays pending, no `delivered`, and the lead's next call delivers it
+(`talk.subagent_call`). `agent_type` alone (`--agent` sessions) and unreadable input
+count as the lead's. The `progress` tool hands out no mail: its server can't tell who
+called, and the hook right after it can (`matcher: ""` covers MCP tools). The context
+says it is Matt, the operator, through conductor's channel the preamble names, and tells
+a helper that sees it anyway to pass it up word for word.
 
 **Ultracode.** Claude Code's ultracode is a session setting: once it is on, the session
 is told "Ultracode is on" and uses the Workflow tool (multi-agent orchestration) on
@@ -61,10 +78,8 @@ not force a workflow: the notice leaves trivial turns solo, and the executor jud
 what counts. A 23-file doc audit (`sandbox/043`) was done solo, without a workflow.
 So `ultracode: true` pays off on genuinely large work. An item with `ultracode: true` front-matter
 launches (or resumes, after staging) with the key in its `--settings` file; a stage
-never has it, nor does a merge executor. Switching an executor *mid-run* has no
-working route: a `tell:` saying "use ultracode" arrives as an ordinary message, and the
-executor treats it as one. To give running work ultracode, let the item finish (or
-cancel it while queued) and queue it, or a follow-up, with `ultracode: true`. A
+or merge executor never has it. Switching *mid-run* has no route (a `tell:` is an
+ordinary message): queue the work, or a follow-up, with `ultracode: true`. A
 Workflow call needs no approval in an executor (`--dangerously-skip-permissions`), and
 the Workflow tool is present in every `-p` session; only the opt-in differs.
 

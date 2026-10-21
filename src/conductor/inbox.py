@@ -152,7 +152,10 @@ def describe(ev: Event) -> str:
                 text += f" — queue `{ev.repo}` held"
         case "tamper":
             text = f"{who} changed the control folder; reverted: {'; '.join(d.get('changes', []))}"
-            if d.get("concurrent"):
+            if d.get("attributed"):
+                text = (f"{', '.join(d['attributed'])} changed the control folder (its own tool calls named it); "
+                        f"reverted: {'; '.join(d.get('changes', []))} (running then: {', '.join(d['concurrent'])})")
+            elif d.get("concurrent"):
                 text += f" (also running: {', '.join(d['concurrent'])})"
         case "hold":
             text = f"{who} held: {d.get('reason')}"
@@ -161,6 +164,10 @@ def describe(ev: Event) -> str:
             text = f"{who} {how} (session {d.get('session_id')}, pid {d.get('pid')})"
             if d.get("branch"):
                 text += f" on `{d['branch']}`"
+            if d.get("alongside"):
+                text += f", alongside: {d['alongside']}"
+            if d.get("beside"):
+                text += f"; beside {', '.join(d['beside'])}"
             if d.get("error"):
                 text += f"; launch failed: {d['error']}"
         case "setup":
@@ -211,6 +218,7 @@ def describe(ev: Event) -> str:
             extras = [f"{k}: {d[k]}" for k in ("depends_on", "locks") if d.get(k)]
             extras += [k for k in ("needs_planner", "readonly", "ultracode", "audit") if d.get(k)]
             extras += [f"template: {d['template']}"] if d.get("template") else []
+            extras += [f"alongside: {d['alongside']}"] if d.get("alongside") else []
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
         case "edited":
             text = f"{who} rewritten in the queue; it runs the new text" + (
@@ -423,6 +431,9 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
             if rec["repo"] != repo:
                 continue
             text = rec["name"] + {"merge": " (merging)", "setup": " (setting up)"}.get(rec.get("phase"), "")
+            if tags := (["alongside"] if rec.get("alongside") else []) + (
+                    [f"beside {', '.join(rec['beside'])}"] if rec.get("beside") else []):
+                text += f" ({', '.join(tags)})"
             if rec.get("phase", "exec") == "exec":
                 text += now_progress(log, item_id)
             running.append(text)

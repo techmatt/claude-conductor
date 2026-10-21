@@ -6,8 +6,8 @@
 Two tools. `ask(question, options?, default?, block?)` writes the question file, then
 holds the tool call open until the question resolves: an answer file appears, or (with
 a default and `block` false) the default deadline passes. `progress(note, eta?, done?,
-remaining?, outline?)` appends a progress line (`talk.record_progress`) and returns at once, with
-any message waiting for the executor that the PostToolUse hook has not delivered yet. JSON-RPC 2.0 over
+remaining?, outline?)` appends a progress line (`talk.record_progress`) and returns at once; it
+hands out no waiting message (the PostToolUse hook after it does, on the lead's call only). JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
 `notifications/cancelled` are still served while one waits.
 """
@@ -195,10 +195,10 @@ class Server:
                     return f"`{key}` must be a number", True
                 entry[key] = args[key]
         talk.record_progress(self.control, self.item, entry)
-        text = "Logged; carry on."
-        if messages := talk.take(self.control, self.item, "progress"):
-            text += "\n\n" + talk.context_text(messages)
-        return text, False
+        # Waiting mail is never handed out here: the server can't tell a helper's call from
+        # the lead's, and a helper ignores it (Word Warriors 059). The PostToolUse hook that
+        # runs right after this call can (`talk.subagent_call`), so it delivers.
+        return "Logged; carry on.", False
 
     def ask(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
         question = args.get("question")

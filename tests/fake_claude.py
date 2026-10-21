@@ -4,7 +4,8 @@
     FAKE wait-for <path> <seconds>           # touch <path>.waiting, then wait until <path> exists
                                              # (at most <seconds>); not a tool call
     FAKE report <done|partial|red|none>      (default done)
-    FAKE write <path> <text>                 write a file (absolute, or relative to cwd)
+    FAKE write <path> <text>                 write a file (absolute, or relative to cwd); its hooks
+                                             see a `Write` call with `file_path` and `content`
     FAKE audit <text>                        append a line to the audit notes file the preamble names
     FAKE commit <file> <text>                write <file> in cwd and commit it
     FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
@@ -26,6 +27,9 @@
     FAKE hog <MB> <seconds>                  a child process holding <MB> of touched memory
                                              (`HOG=<pid>` in the report)
     FAKE detach-hog <MB> <seconds>           the same, detached: an orphan in cwd
+    FAKE subagent <tool>                     a helper subagent's tool call: its hooks get the
+                                             `agent_id` / `agent_type` Claude Code adds
+    FAKE subagent progress <json arguments>  a helper's progress call: the tool, then its hooks
 
 After every FAKE line but `sleep` (each counts as a tool call), the PostToolUse hooks named in
 --settings run as Claude Code runs them: input JSON on stdin, `additionalContext` from
@@ -108,20 +112,25 @@ settings = json.loads(Path(args[args.index("--settings") + 1]).read_text(encodin
 contexts = []
 
 
-def post_tool_use(tool: str) -> str | None:
+def post_tool_use(tool: str, agent: bool = False, tool_input: dict | None = None) -> str | None:
     got = []
+    event = {"hook_event_name": "PostToolUse", "tool_name": tool, "session_id": session}
+    if agent:                           # what Claude Code 2.1.305 adds for a subagent's call
+        event |= {"agent_id": "a0fake0subagent", "agent_type": "general-purpose"}
+    if tool_input:
+        event["tool_input"] = tool_input
     for group in settings.get("hooks", {}).get("PostToolUse", []):
         for h in group.get("hooks", []):
             # The hook is a whole Python process: run it only when a message waits for it
-            # (what it would find otherwise is nothing). Tests that send messages still
-            # run the real hook end to end.
+            # or the call wrote a file (it may note a control-folder touch); what it would
+            # find otherwise is nothing. Tests that send messages still run the real hook.
             a = h.get("args", [])
-            if "--control" in a and "--item" in a:
+            if "--control" in a and "--item" in a and not tool_input:
                 from conductor import talk
                 if not talk.pending(Path(a[a.index("--control") + 1]), a[a.index("--item") + 1]):
                     continue
             out = subprocess.run([h["command"], *h.get("args", [])], capture_output=True, text=True,
-                                 input=json.dumps({"hook_event_name": "PostToolUse", "tool_name": tool}),
+                                 input=json.dumps(event),
                                  encoding="utf-8", timeout=h.get("timeout", 60)).stdout
             if out.strip():
                 got.append(json.loads(out)["hookSpecificOutput"]["additionalContext"])
@@ -227,9 +236,15 @@ for ln in lines:
             pick = parts[2]
         case "slow":
             slow = ln.split(" ", 2)[2]
+        case "subagent":
+            if parts[2] == "progress":          # a helper's progress call: the tool, then its hook
+                progress(json.loads(parts[3]))
+            post_tool_use("mcp__conductor__progress" if parts[2] == "progress" else parts[2], agent=True)
         case "env":
             memory += f"{parts[2]}={os.environ.get(parts[2])}\n"
-    if parts[1] not in ("sleep", "wait-for"):   # waiting is thinking, not a tool call
+    if parts[1] == "write":                                 # Claude Code's Write tool, with its input
+        post_tool_use("Write", tool_input={"file_path": str(Path(parts[2]).resolve()), "content": parts[3]})
+    elif parts[1] not in ("sleep", "wait-for", "subagent"):   # waiting is thinking, not a tool call
         post_tool_use(parts[1])
 if status != "none":
     report.write_text(f"status: {status}\nblocks: none\ncarry: none\n"

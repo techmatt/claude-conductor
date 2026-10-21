@@ -12,7 +12,8 @@ from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage", "ultracode", "audit", "template"}
+          "paths", "stage", "ultracode", "audit", "template", "alongside"}
+GIST_CHARS = 160
 
 
 @dataclass
@@ -32,6 +33,7 @@ class Item:
     ultracode: bool = False                             # launch with Claude Code's ultracode on
     audit: bool = False                                 # keep audit notes beside the report
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
+    alongside: str | None = None                        # what it touches: may start beside running items
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -43,7 +45,15 @@ class Item:
         return {"locks": self.locks, "depends_on": self.depends_on, "after_red": self.after_red,
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
-                "ultracode": self.ultracode, "audit": self.audit, "template": self.template}
+                "ultracode": self.ultracode, "audit": self.audit, "template": self.template,
+                "alongside": self.alongside}
+
+    def gist(self) -> str:
+        """One line on what the item does, for the items started beside it: its `alongside`
+        line, else its title (the body's first heading), else its template or name."""
+        title = next((ln.lstrip("#").strip() for ln in self.body.splitlines() if ln.startswith("#")), "")
+        text = self.alongside or title or (f"the {self.template} template" if self.template else self.name)
+        return text if len(text) <= GIST_CHARS else text[:GIST_CHARS - 1] + "…"
 
 
 def _list(value, what: str, errors: list[str]) -> list[str]:
@@ -112,6 +122,15 @@ def parse(path: Path, repo: str) -> Item:
             item.errors.append(f"`template` must be one of {', '.join(TEMPLATES)}")
         else:
             item.template = meta["template"]
+    if meta.get("alongside") is not None:
+        value = meta["alongside"]
+        if not isinstance(value, str) or not value.strip() or "\n" in value.strip():
+            item.errors.append("`alongside` must be one line on what this item touches")
+        elif meta.get("template") is not None:
+            # A template is repo-wide: it waits its turn (the exclusive ones run alone).
+            item.errors.append("`alongside` is refused on a template item: templates are repo-wide and wait their turn")
+        else:
+            item.alongside = value.strip()
     if not body.strip() and item.template is None:          # a template is a whole prompt
         item.errors.append("the prompt body is empty")
     return item

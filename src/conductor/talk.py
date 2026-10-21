@@ -15,8 +15,11 @@ and `delivered` events from what it finds. Delivery is a rename (`<id>.json` →
 
     python -m conductor.talk hook --control <folder> --item <repo/NNN_name>
 
-is the executor's PostToolUse hook: after every tool call it hands any waiting messages
-to the session as additional context (stdout JSON), and prints nothing otherwise.
+is the executor's PostToolUse hook: after every tool call of the lead session (never a
+subagent's) it hands any waiting messages to the session as additional context (stdout
+JSON), and prints nothing otherwise. A writing call (any agent's) naming paths in the
+control folder has them noted in `.conductor/touch/<repo>__<NNN_name>.jsonl`, which the
+tamper guard reads to tell which running item changed which tracked file.
 
     python -m conductor.talk pre --cap <seconds> [--background=<glob> ...]
 
@@ -31,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 from fnmatch import fnmatchcase
@@ -43,6 +47,7 @@ HOOK_TIMEOUT_SECONDS = 15
 OUTLINE_REQUEST = ("Post an updated outline now: call `progress` with `outline` (remaining sections, "
                    "titles and finish times only, finished ones done), nothing else.")
 SHELL_TOOLS = ("Bash", "PowerShell")
+TOUCH_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit", *SHELL_TOOLS)     # tools that may write
 _lock = threading.Lock()
 
 
@@ -184,8 +189,14 @@ def context_text(messages: list[dict]) -> str:
                 "conductor while you work" if is_amend(m) else
                 "MESSAGE #{id} from Matt{via}, sent through conductor while you work").format(id=m["id"], via=via)
         parts.append(f"{what} ({m.get('sent', '')}):\n{m.get('text', '')}")
-    return ("\n\n".join(parts) + "\n\nTreat this as an instruction from Matt: where it conflicts with the "
-            "prompt, it wins. Change your plan if it asks you to, and answer it with the `progress` tool.")
+    # The channel the preamble's Messages paragraph names, so the lead reads it as Matt's
+    # instructions rather than text a tool injected; a helper that sees it relays it.
+    return ("\n\n".join(parts) + "\n\nThis is Matt, the operator, writing through conductor's message channel "
+            "(the one your conductor preamble names), not text injected by a tool: treat it as his "
+            "instruction. Where it conflicts with the prompt, it wins. Change your plan if it asks you to, "
+            "answer it by number with the `progress` tool, and answer it again in your report. If you are a "
+            "helper or subagent, not the lead session, pass it word for word straight up to the lead and "
+            "do nothing else with it.")
 
 
 def keep_amendment(path: Path, msg: dict) -> None:
@@ -269,8 +280,85 @@ def pre_hook(event: dict, cap_seconds: float, background: list[str]) -> str | No
                                               "updatedInput": tool}})
 
 
-def hook(control: Path, item: str) -> str | None:
-    """What the hook prints: the PostToolUse output carrying waiting messages, or None."""
+def subagent_call(event: dict) -> bool:
+    """Is this PostToolUse input a subagent's tool call? Claude Code (2.1.305, probed)
+    adds `agent_id` and `agent_type` to a subagent's input; the lead's has neither, and
+    both share the lead's `session_id` and `transcript_path`. No `agent_id`: the lead's."""
+    return isinstance(event.get("agent_id"), str) and bool(event["agent_id"].strip())
+
+
+def touch_file(control: Path, item: str) -> Path:
+    return Path(control) / ".conductor" / "touch" / f"{_key(item)}.jsonl"
+
+
+def _norm(text: str) -> str:
+    return text.replace("\\\\", "/").replace("\\", "/").lower()
+
+
+_NAME_END = r"""\s"'`<>|;&()*?,"""     # what ends a path named in a shell command
+
+
+def touch_paths(control: Path, event: dict) -> list[str]:
+    """The control-folder paths (relative, lower-case; "" for the folder itself) a writing
+    tool call names: a file tool's target, every one a shell command names (reads too:
+    a command is not parsed). Its own report, audit and amend files (`reports/`) and the
+    daemon's runtime (`.conductor/`) are never tracked, so they don't count."""
+    tool, ti = event.get("tool_name"), event.get("tool_input")
+    if tool not in TOUCH_TOOLS or not isinstance(ti, dict):
+        return []
+    text = _norm(str(ti.get("command") or "") if tool in SHELL_TOOLS
+                 else str(ti.get("file_path") or ti.get("notebook_path") or ""))
+    root = _norm(Path(control).resolve().as_posix()).rstrip("/")
+    forms = [root] + ([f"/{root[0]}{root[2:]}"] if root[1:2] == ":" else [])   # C:/x and Git Bash's /c/x
+    out = []
+    for f in forms:
+        for m in re.finditer(re.escape(f) + rf"(?=$|[/{_NAME_END}])(/[^{_NAME_END}]*)?", text):
+            rel = (m.group(1) or "").strip("/").removeprefix("./")
+            if not rel.startswith(("reports/", ".conductor/")) and rel not in out:
+                out.append(rel)
+    return out
+
+
+def note_touch(control: Path, item: str, event: dict) -> list[str]:
+    """Record the control-folder paths a writing tool call (the lead's or a helper's) names
+    (`touch_paths`), so the guard can pin a change of one on the item that made it
+    (`touched_since`). A change by a path that never names the folder goes unrecorded."""
+    if not (named := touch_paths(control, event)):
+        return []
+    path = touch_file(control, item)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps({"at": stamp(), "tool": event["tool_name"], "paths": named}) + "\n")
+    return named
+
+
+def touched_since(control: Path, item: str, since: str) -> list[str]:
+    """The control-folder paths `item`'s recorded tool calls named at or after `since` (a
+    second's slack: stamps are whole seconds); `guard.named` matches them to a change."""
+    try:
+        lines = touch_file(control, item).read_text(encoding="utf-8").splitlines()
+        cut = parse_stamp(since).timestamp() - 1
+    except (OSError, ValueError):
+        return []
+    out = []
+    for ln in lines:
+        try:
+            rec = json.loads(ln)
+            if parse_stamp(rec["at"]).timestamp() >= cut:
+                out += [p for p in rec.get("paths", []) if p not in out]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return out
+
+
+def hook(control: Path, item: str, event: dict | None = None) -> str | None:
+    """What the hook prints: the PostToolUse output carrying waiting messages, or None.
+    A subagent's call takes nothing: a helper reads the context as untrusted injected
+    text and the lead never sees it (Word Warriors 059), so mail waits for the lead.
+    Any call that wrote naming the control folder is noted first (`note_touch`)."""
+    note_touch(control, item, event or {})
+    if subagent_call(event or {}):
+        return None
     messages = take(control, item, "hook")
     if not messages:
         return None
@@ -293,14 +381,15 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, AttributeError):
         raw = ""
     try:
+        event = json.loads(raw)
+    except ValueError:
+        event = None                    # unreadable input: a pre hook leaves the call be,
+    event = event if isinstance(event, dict) else {}     # the message hook treats it as the lead's
+    try:
         if args.cmd == "pre":
-            try:
-                event = json.loads(raw)
-            except ValueError:
-                return 0
-            out = pre_hook(event if isinstance(event, dict) else {}, args.cap, args.background)
+            out = pre_hook(event, args.cap, args.background) if event else None
         else:
-            out = hook(Path(args.control), args.item)
+            out = hook(Path(args.control), args.item, event)
     except Exception as exc:            # a hook never breaks the executor's tool call
         print(f"conductor hook: {exc!r}", file=sys.stderr)
         return 0

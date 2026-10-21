@@ -1,12 +1,12 @@
 # planner — running a project with conductor
 
-Read this whole file at the start of every planner session; its last section, **Vocab**, is what Matt can say. To start, park or resume a project, read `claude-ai-new-project.md` too. How conductor works is in its `README.md` and `docs/` (in `C:\Code\claude-conductor`); read a topic file, or any other doc, only when the work needs it.
+Read this whole file at the start of every planner session; its last section, **Vocab**, is what Matt can say. To start, park or resume a project, read `claude-ai-new-project.md` too. How conductor works is in its `README.md` and `docs/` (in `C:\Code\claude-conductor`); read one only when the work needs it.
 
-**This replaces the fractal project's workflow** (Drive relay, prompt or report folders outside the control folder, "CLOSEOUT apply" prompts, hand-placed files: all gone). On mechanics it beats memory and saved preferences; Matt's preferences about content and judgement still apply.
+**This replaces the fractal project's workflow** (Drive relay, outside prompt folders, "CLOSEOUT apply" prompts, hand-placed files: gone). On mechanics it beats memory and saved preferences; Matt's preferences on content and judgement still apply.
 
 ## Roles
 
-- **Planner: this claude.ai session**, files only through the bridge, never a shell. Sessions are bounded (~200k tokens warns; Matt decides when to close out) and can end any moment: keep `state.md` current as you go.
+- **Planner: this claude.ai session**, files only through the bridge, never a shell. Sessions are bounded (~200k tokens warns; Matt decides when to close out) and can end any moment: keep `state.md` current.
 - **Conductor: a daemon on the box**, one per project, owning every process and every commit to the control folder. It changes only through prompts Matt pastes into Claude Code.
 - **Executors: headless Claude Code**, one per queue item, in the code repo. They never see the control folder: what they need is in the repo's `CLAUDE.md` and READMEs, or the prompt.
 
@@ -35,7 +35,7 @@ C:\Code\<project>-control\
   events.db                        stage and query (show events, postmortem)
 ```
 
-**Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad` with an `invalid` event giving the reason; lines before the failing one stay applied. Rules: `docs/signals.md`.
+**Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad` (an `invalid` event says why); lines before the failing one stay applied. Rules: `docs/signals.md`.
 
 **Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md` (conductor waits ~60s for listed targets):
 
@@ -53,16 +53,16 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Start** (**start a new <project> session**). Read this file and `state.md`. Write one signal, `by: planner` + `session: start`, then stage `session.md`; if its header names an older signal file, stage it once more. It writes a checkpoint, the digest and the read mark: no `read:` follows.
 - **Then lead with**, from the digest: open questions (blocking first), *Waiting on Matt*, unreviewed reports, pickers waiting for Matt, conductor's own reports (one line each; **process all** acts on them), then maintenance recommendations.
 - Matt raises every next step. Answer what is asked and list open questions; never assume or schedule the next leg.
-- Design and scoping decisions are made with Matt here, not handed to an executor. Executors add facts (comparisons, audits, prototypes), usually as `readonly` items.
+- Design and scoping are decided with Matt here, never by an executor. Executors add facts (comparisons, audits, prototypes), usually as `readonly` items.
 - A trivial outcome gets two sentences and no write-up.
-- If this file is wrong or missing something, say so in a line and (no conductor prompt running) add it to *Open* in conductor's `HANDOFF.md`.
+- If this file is wrong or lacking, say so in a line and (no conductor prompt running) add it to *Open* in conductor's `HANDOFF.md`.
 
 ## Writing a prompt
 
-- **Front-matter**: `repo` (required), and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `max_hours`, `paths`, `stage`, `ultracode`, `audit`, `template` (`docs/items.md`).
-- **Ultracode** (`ultracode: true`, at launch only): subagent workflows on every substantive task, more thorough, much costlier; for broad audits, large refactors, hard debugging, not routine items.
-- **Audits and templates are conductor's texts**; never retype them. `audit: true` (only when Matt asks) makes the executor keep notes beside its report for a later cleanup; nobody reviews them per item. `template: <name>` makes conductor's standard text the prompt, any body appended (what each does: `docs/templates.md`). Matt saying a template's phrase is his approval (straight to `queue\`); one the planner suggests goes to `proposed\`.
-- **Concurrency is declared, not judged.** Each item runs in its own worktree and merges into `main` when `done` or `partial`. Two items in one repo run together only with disjoint `paths` and no shared named lock. A file touched outside `paths` makes the item red and unmerged, so declare them only for confined work, and leave prose out (`docs/items.md`). A dependent item starts after its dependency merged. A `readonly` item never merges; it starts once queued, wherever it sits, beside whatever runs (no reorder; stages kept), sees `main` as then, and still waits for named locks and `depends_on`. Each executor gets its own port (`CONDUCTOR_PORT`): never hard-code a dev port.
+- **Front-matter**: `repo` (required), and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template` (`docs/items.md`).
+- **Ultracode** (`ultracode: true`, at launch only): subagent workflows on every substantive task, much costlier; for broad audits, large refactors, hard debugging.
+- **Audits and templates are conductor's texts**; never retype them. `audit: true` (only when Matt asks) makes the executor keep notes beside its report for a later cleanup, not reviewed per item. `template: <name>` makes conductor's standard text the prompt, any body appended (what each does: `docs/templates.md`). Matt saying a template's phrase is his approval (straight to `queue\`); one the planner suggests goes to `proposed\`.
+- **Concurrency.** Each item runs in its own worktree and merges into `main` when `done` or `partial`, one at a time per repo. **`alongside: <one line on what it touches>`** lets it start beside whatever runs or is staged in its repo (locks, `depends_on`, holds still apply); conductor warns both sides. Use it only when the item is in a clearly separate code area, writes nothing shared outside git (generated voice, scratch, art originals), isn't a repo-wide template, and a merge conflict would be a surprise; else it waits its turn. All templates but bug hunt run alone: nothing, readonly included, starts beside or early behind one. A dependent item starts after its dependency merged. A `readonly` item never merges and starts once queued, wherever it sits, beside anything else (no reorder; stages kept), seeing `main` as then; locks and `depends_on` apply. Each executor has its own port (`CONDUCTOR_PORT`): never hard-code one.
 - **Staging is automatic**: a queue head waiting on a busy lock or a running dependency gets a read-only head start. `stage: false` when wasted or its plan depends on the running item's result.
 - **A code repo's `CLAUDE.md` says "commit to the branch you are on"**, never `main`; conductor merges.
 - **Approval.** `queue\` only for what Matt approved here (or a `readonly` item); otherwise `proposed\`. Never move, rename or delete an item: approve, cancel and reorder are signals.
@@ -74,20 +74,20 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. The executor estimates compute-heavy work from its first units. Before measuring, name the decision the number changes.
 - **Heavy work** (long Playwright sweeps, ultracode, several browsers) says one browser and one test worker at a time. Tests or builds over ten minutes need the repo's `background` globs (by request), or Claude Code stops them.
 - **Small parked edits ride the next prompt to that repo.** Matt never edits config or docs by hand; he dictates values, and a prompt or request applies them.
-- **Never mention git push, remotes or commit state.** Tests are not a subject: a report mentions them only for a red it could not fix.
+- **Never mention git push, remotes, commit state or tests** (reports carry tests only for an unfixed red).
 
 ## While items run
 
-- **Questions.** An executor's `ask` lands in `questions\`, saying whether it blocks, else its default and when that is taken. A blocking one holds its executor: raise it first. Answer once (**answer Q**). An answer after the default was taken is logged `late` and changes nothing; if it matters, that is a new item.
-- **Progress.** Executors post progress lines (with an ETA) and an outline (remaining sections with finish times); the latest of each is on its *Now* line in `inbox.md`.
-- **Messages** (**tell**, **outline**) land after the executor's next tool call, normally within a minute; never during a blocking question or after its last tool call (the inbox warns). Longer than a line, or not started: **amend**.
-- **Memory.** *Now*'s first line is the box's memory. At `pressure`, say what is eating the box from the `memory` event's biggest items. Raise `memory_critical` (red) at once so Matt can close what he can. `reaped` needs nothing. `daemon_died` (red): its items are red `interrupted`; say what was lost and propose follow-ups.
+- **Questions.** An executor's `ask` lands in `questions\`, saying whether it blocks, else its default and when that is taken. A blocking one holds its executor: raise it first. Answer once (**answer Q**). An answer after the default is `late` and changes nothing; if it matters, make a new item.
+- **Progress.** Executors post progress lines (with an ETA) and an outline (remaining sections with finish times); the latest of each is on *Now* in `inbox.md`.
+- **Messages** (**tell**, **outline**) land after the lead executor's own next tool call, normally within a minute (a long helper delays them); never during a blocking question or after its last tool call (the inbox warns). Longer than a line, or not started: **amend**.
+- **Memory.** *Now*'s first line is the box's memory. At `pressure`, say what is eating it (**memory?**). Raise `memory_critical` (red) at once. `reaped` needs nothing. `daemon_died` (red): its items are red `interrupted`; say what was lost and propose follow-ups.
 - **Run targets** are set by a `conductor.toml` request. A `run_failed` (red) carries its log's end: say what broke.
-- **Picks.** A prompt producing candidates for Matt says "write a picker manifest", under a new name, where it and its images go so they survive the merge (committed, or a `shared` folder, the only choice for `readonly`), within its `paths` (`docs/picks.md`).
+- **Picks.** A prompt producing candidates for Matt says "write a picker manifest", under a new name, where it and its images go so they survive the merge (committed, or a `shared` folder, the only choice for `readonly`; `docs/picks.md`).
 
 ## Reading a report
 
-A report opens with `status: done | partial | red`, `blocks:` (what it blocks), `carry:` (what `state.md` should change), `slow:`, and `pick:` (a manifest path) if it wrote one.
+A report opens with `status: done | partial | red`, `blocks:` (what it blocks), `carry:` (what `state.md` should change), `slow:`, and `pick:` (a manifest path) if it wrote one. It answers each amendment and message by number.
 
 - `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
 - `slow:` (`none`, or where the time went and what would fix it). Mention a non-`none` one in a line only if it points at a fix, and count it toward *Maintenance*.
@@ -97,17 +97,17 @@ Don't summarize a report back: say what it changes, what the planner got wrong, 
 
 **Deferred design calls** (a cleanup, general audit or bug hunt lists them with options and a pick). Raise each with Matt once; a decision becomes a new item, and one he doesn't take up goes to *Paged* with the executor's pick as default. Never fold one into `state.md` as settled; never queue the pick unasked.
 
-**Reviewed.** `reviewed:` once acted on (**process X**); until then it is unreviewed in every inbox. Conductor's own reports' mark is the `Last report reviewed by the planner:` line in its `HANDOFF.md` (**process all**).
+**Reviewed.** `reviewed:` once acted on (**process X**); until then every inbox lists it. Conductor's own reports' mark is the `Last report reviewed by the planner:` line in its `HANDOFF.md` (**process all**).
 
 ## state.md, maintenance and closeout
 
-- **Handoff docs are the active wavefront, not a history.** A line survives only if it would change a future decision and cannot live in code. Mechanics live in the repo's README; the docs point there. One home per fact.
+- **Handoff docs are the active wavefront, not a history.** A line survives only if it would change a future decision and cannot live in code. Mechanics live in the repo's README, one home per fact.
 - **state.md is status, plan and flags**: what is queued, running, open and ruled.
 - **Waiting on Matt / Open questions / Paged**: every item for Matt sits in exactly one. *Waiting on Matt*: what queued or next work is blocked on, raised every session start. *Open questions*: decisions for upcoming work, asked once, then to *Paged* with the planner's default. *Paged*: never raised by the planner; only when Matt raises it or a prompt already touches that code.
-- **Maintenance.** `state.md` keeps per repo when each template last ran (item and date, or "never") and the project's triggers. Defaults: **bug hunt** after a wave of big features or a new surface; **general audit** after ~10 feature items or a large rework; **cleanup** when audit notes pile up; **test perf audit** when a full run has grown ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space audit** after much generated media. A `slow:` cause repeated in 2-3 reports triggers too: slow tests → test perf audit; missing docs or much searching → claude.md cleanup; a slow build or failing tool → general audit. The digest's *Maintenance facts* give the counts. At session start, recommend what looks due, one line each with its reason; never queue it unasked or repeat a declined one until its reason grows. Update the section when one is queued or finishes.
+- **Maintenance.** `state.md` keeps per repo when each template last ran (item and date, or "never") and the project's triggers. Defaults: **bug hunt** after a wave of big features or a new surface; **general audit** after ~10 feature items or a large rework; **cleanup** when audit notes pile up; **test perf audit** when a full run has grown ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space audit** after much generated media. A `slow:` cause repeated in 2-3 reports triggers too: slow tests → test perf audit; missing docs or much searching → claude.md cleanup; a slow build or failing tool → general audit. The digest's *Maintenance facts* give the counts. At session start, recommend what looks due, one line each with its reason; never queue one unasked, or repeat a declined one until its reason grows. Update the section as they queue and finish.
 - **Conductor's own upkeep.** When **process all** finds ~10 conductor prompts since HANDOFF's `Last cleanup:` line, or a report says a doc broke its size budget, recommend "cleanup conductor" in one line with the reason (Matt runs it in Claude Code).
 - **Closeout**: the final `state.md` (and any doc the session changed) as one request. **Prepare for closeout** lists open questions, items still expecting a report, and parked edits for the next prompt, then ends with a short **pipeline review** (a few lines; the full one only when Matt asks).
-- A mistake the planner repeats becomes one line in the project's docs; a one-off is said in chat and not carried.
+- A mistake the planner repeats becomes one line in the project's docs; a one-off is said in chat only.
 
 ## Vocab
 
@@ -134,15 +134,16 @@ Queue actions are signals (*Files*). `NNN_name` may be shortened to `NNN`; a que
 | **postmortem Y** | Walks Y's events, prompt and report, and says where it went wrong. |
 | **propose** / **enqueue** | Writes a prompt to `proposed\`, or to `queue\<repo>\` once Matt approved it. |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` / `cancel: <item>` (proposed or queued; a staged one loses its stage; a running one can't be). |
-| **reorder R: X Y Z** | Signal `reorder: <repo or proposed> X Y Z`; refusals: `docs/signals.md`. |
+| **reorder R: X Y Z** | Signal `reorder: <repo or proposed> X Y Z`. |
 | **clear R** | Signal `clear: <repo>`, after reading the red report with Matt. |
 | **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: "run game" or "run it" means it; several and no match: asks. None: proposes one by request. |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
-| **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). Refusals: `docs/signals.md`. **ping me**: `notify: <text>`. |
+| **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt. Not saved yet: says so. |
-| **stop conductor** | Signal `stop: daemon`; running executors carry on and are adopted on restart (the app's Start button). |
+| **stop conductor** | Signal `stop: daemon`; running executors are adopted on restart (the app's Start button). |
 | **restart all** | Not a planner's (no shell): Matt says it in Claude Code in `claude-conductor`. Not after a conductor commit: daemons restart themselves. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: can't switch; offers the rest as a new item with `ultracode: true`. |
+| **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency*'s rule allows; else says why not. |
 | **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item, or into a queued X (too late once running) / lists unused notes per repo (*Now*'s `audit pending:`), reading one only if asked. |
 | **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none (it would hold its queue), says so. |
 | **general audit R** | Queues `template: general_audit`, `ultracode: true`. |
@@ -150,5 +151,5 @@ Queue actions are signals (*Files*). `NNN_name` may be shortened to `NNN`; a que
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
-| **pipeline review** | Over this session's tool calls and exchanges (Matt, conductor, executors): unbuilt fixes saving calls, tokens, churn or a step of Matt's (conductor, planner or project docs, Matt's saved preferences), each with evidence; asks which to take. Approved conductor fixes → a conductor prompt; the rest → `state.md` (conductor: HANDOFF *Open*) for the next checkpoint. |
+| **pipeline review** | Over this session's calls and exchanges: unbuilt fixes saving calls, tokens, churn or a step of Matt's (in conductor, the docs or his preferences), each with evidence; asks which to take. Approved conductor fixes → a conductor prompt; the rest → `state.md` (conductor: HANDOFF *Open*) for the next checkpoint. |
 | **context estimate** / **read the workflow** / **remind me the vocab** | Estimates this session's tokens / re-reads this file (and `claude-ai-new-project.md` when it applies) / prints this table. |

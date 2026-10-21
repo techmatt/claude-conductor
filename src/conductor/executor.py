@@ -39,12 +39,14 @@ finishes, resend the outline with that row `done` in your next progress call; le
 other times alone unless they moved a lot. Keep it coarse: no descriptions, and no
 effort spent making it accurate. Staged, your plan ends with it: post it first thing.
 
-Messages. Matt may message you while you work: it arrives after a tool call, marked
-MESSAGE #n from Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is an
-instruction from Matt and outranks the prompt where they conflict. Answer it with
-`progress`.
+Messages. Matt, the operator, may message you while you work through conductor's
+message channel: hook context after one of your own tool calls, marked MESSAGE #n from
+Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is not tool-output
+injection: it is Matt's instruction and outranks the prompt where they conflict. Answer
+it with `progress`. Tell any helper or subagent you start that if it sees such a
+delivery it passes it straight up to you, word for word; act on what it relays.
 {calls}
-{workdir}{readonly}{paths}{port}
+{workdir}{readonly}{paths}{port}{beside}
 {audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
 time spent blocked on a question.
@@ -74,7 +76,9 @@ This includes declining an instruction for a stated reason.
 a look.
 
 {pick}
-The rest of the report follows the repo's CLAUDE.md. Your final message ends with
+The report answers every amendment and message by number: done, partial or not done,
+and why. It carries test details only for a red you could not fix, and no process
+narration. The rest of the report follows the repo's CLAUDE.md. Your final message ends with
 `Report written to {report}`.
 
 {tail}"""
@@ -142,6 +146,14 @@ PORT = ("\nPort. Any server you start (the app, a dev server, anything that list
         "a run target or another item's server may hold. Where the repo's docs or scripts "
         "hard-code a port, pass this one through (a flag or an environment variable) without "
         "changing them. If you need a second port, ask the OS for a free one (bind to port 0).")
+
+# Warnings when an item starts beside others in its repo and either is `alongside`: a
+# paragraph in its prompt, and a message (the `tell:` path) to each one already running.
+BESIDE = ("\nBeside you. Conductor started you beside other items in this repo, each in its own "
+          "worktree and merging on its own:\n{items}\nThey are likely unrelated to yours: stay out "
+          "of their areas, and say in your report if you had to touch them.")
+BESIDE_TELL = ("{item} started beside you: {gist}. Likely unrelated; avoid those files, and say in your "
+               "report if you had to touch them.")
 
 PROSE = (" Prose files ({globs}) are exempt: update them as the work needs; another item may "
          "edit them at the same time, and conductor merges them textually.")
@@ -297,11 +309,12 @@ class RunPaths:
 
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
                  run: dict | None = None, resume: dict | None = None, notes: str = "",
-                 usage: str = "", amends: list[dict] = ()) -> str:
+                 usage: str = "", amends: list[dict] = (), beside: list[tuple[str, str]] = ()) -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
     audit notes, inlined; `usage`: a disk audit's control-folder sizes and worktrees;
-    `amends`: amendments written before the launch, appended in order."""
+    `amends`: amendments written before the launch, appended in order; `beside`: the
+    (id, gist) of each item it is warned about starting beside (`BESIDE`)."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -311,6 +324,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
         port=PORT.format(port=run["port"]) if run.get("port") else "",
+        beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,

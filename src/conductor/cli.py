@@ -96,6 +96,8 @@ def cmd_status(args) -> int:
             kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
                     else f"kill at {clock(rec['deadline'])}")
             extra = (", readonly" if rec.get("readonly") else "") + (f", port {rec['port']}" if rec.get("port") else "")
+            extra += (", alongside" if rec.get("alongside") else "") + (
+                f", beside {', '.join(rec['beside'])}" if rec.get("beside") else "")
             print(f"  running  {rec['name']}  {duration(age)}, pid {rec.get('pid')}{where}{extra}, {kill}")
             if (p := log.last("progress", item=item_id)) and p.detail.get("note"):
                 print(f"           progress {clock(p.ts)}: {progress_line(p)}")

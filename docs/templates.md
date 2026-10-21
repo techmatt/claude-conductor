@@ -6,7 +6,9 @@ live in `src/conductor/templates/` (`audit.md`, `cleanup.md`, `general_audit.md`
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
-`.prompt.md`). The texts use `{{name}}` placeholders.
+`.prompt.md`). The texts use `{{name}}` placeholders. Every template but `bug_hunt` is
+*exclusive* (`audits.EXCLUSIVE`): it runs alone in its repo, and a template item with
+`alongside` is invalid (`items.md`, *Exclusive templates*).
 
 - **`audit: true`** (any item; explicit, never automatic). The preamble gains an
   *Audit notes* paragraph (`audit.md`) naming an absolute path,

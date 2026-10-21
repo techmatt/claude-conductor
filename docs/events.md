@@ -16,7 +16,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `invalid` | bad item, signal, stray queue folder, bad config | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
-| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); error (launch failed, setup included) |
+| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `items.md`, *Alongside items*); error (launch failed, setup included) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
 | `staged` | the stage finished cleanly | session_id, plan (first 500 chars), cost_usd |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
@@ -31,7 +31,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; audit (it kept notes), template |
 | `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
-| `tamper` | control folder changed during an executor's window | changes, concurrent, found (the check that saw it) |
+| `tamper` | control folder changed during an executor's window | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
 | `drift` | control folder changed with no executor running | changes |
 | `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
@@ -40,8 +40,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `review` | a `review:` signal wrote `review.md`; paths: the signal, `review.md`; item: the ref's (none for `all`) | which (`all` or the item id), items (inlined, oldest first), conductor (conductor reports inlined), by |
 | `checkpoint` | a `checkpoint:` (or `session:`) signal started a new session view (its id is its number) | label, by; session (`session.md`, from a `session:` signal) |
 | `progress` | the executor called `progress` | seq, at, note (absent on an outline-only line), eta, done, remaining, outline ([{title, eta, done}]); reply_to (the tell or running amendment it answers) |
-| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message | text, by; outline_request (an `outline:` signal's fixed request) |
-| `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`/`progress`; an amendment also `prompt`/`resume`), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
+| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message or a started-beside warning (`beside`: the item that started) | text, by; outline_request (an `outline:` signal's fixed request); beside |
+| `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`; an amendment also `prompt`/`resume`; `progress` in older logs), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
 | `run_start` / `run_ready` / `run_open` / `run_stop` | a run target started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url / note |

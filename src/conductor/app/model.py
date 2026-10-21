@@ -114,6 +114,8 @@ class Activity:
     session_id: str | None = None
     readonly: bool = False      # runs beside the repo's other items, never merges
     port: int | None = None     # its CONDUCTOR_PORT
+    alongside: str | None = None    # its `alongside` line; `beside`: what it started beside
+    beside: list[str] = field(default_factory=list)
 
     def elapsed(self, at: datetime | None = None) -> float:
         if not self.started:
@@ -472,7 +474,8 @@ class Project:
                 if rec.get("repo") == repo:
                     a = Activity(rec.get("item", "?"), rec.get("name", "?"), PHASES.get(rec.get("phase", "exec"), rec.get("phase")),
                                  rec.get("started"), rec.get("branch") or "", session_id=rec.get("session_id"),
-                                 readonly=bool(rec.get("readonly")), port=rec.get("port"))
+                                 readonly=bool(rec.get("readonly")), port=rec.get("port"),
+                                 alongside=rec.get("alongside"), beside=rec.get("beside") or [])
                     if a.phase == "running" and (p := self.log.last("progress", item=a.item)):
                         a.progress = f"{progress_line(p)} · {clock(p.ts)}"
                     rs.running.append(a)

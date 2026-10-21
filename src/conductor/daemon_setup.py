@@ -192,10 +192,12 @@ class SetupMixin:
         rec["repo_status"] = git.tracked_status(cwd) if item.readonly else None
         # Amendments written before the launch: into the prompt, or the resume message.
         amends = talk.take(cfg.control, item.id, "resume" if stage else "prompt")
+        rec["beside"], warn = self._beside(item)
+        rec["warned"] = [i for i, _ in warn]        # named in its paragraph: no tell about them later
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, item.max_hours or cfg.max_hours,
                                                        parse_stamp(rec["deadline"]), rec, resume,
                                                        notes=self._notes_text(rec), usage=self._disk_usage(rec),
-                                                       amends=[m for m in amends if talk.is_amend(m)]))
+                                                       amends=[m for m in amends if talk.is_amend(m)], beside=warn))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
@@ -219,10 +221,50 @@ class SetupMixin:
             extra["notes"] = rec["notes"]
         if resume:
             extra |= {"resumed": True, "landed": resume["landed"]}
+        if item.alongside:
+            extra["alongside"] = item.alongside
+        if rec["beside"]:
+            extra["beside"] = rec["beside"]
         extra |= self._setup_seconds(rec)
         self.log.append("start", item=item.id,
                         paths=[cfg.rel(md_path), cfg.rel(paths.report), cfg.rel(paths.log)],
                         session_id=rec["session_id"], pid=run.popen.pid, deadline=rec["deadline"], **extra)
+        # The other side: each executing item it starts beside now runs beside it too (one in
+        # setup works its own list out), and each it was warned about hears of it, unless its
+        # own Beside-you paragraph already named this one (it was in setup or staged then).
+        for other in rec["beside"]:
+            o = self.runs.get(other)
+            if o and o.rec.get("phase", "exec") == "exec" and item.id not in o.rec.setdefault("beside", []):
+                o.rec["beside"].append(item.id)
+                self._save(o)
+        for other, _ in warn:
+            o = self.runs.get(other)
+            if (o and o.rec.get("phase", "exec") == "exec" and not o.exited()
+                    and item.id not in o.rec.get("warned", [])):
+                text = executor.BESIDE_TELL.format(item=item.id, gist=item.gist())
+                ev = self.log.append("tell", item=other, text=text, by="conductor", beside=item.id)
+                talk.post(cfg.control, other, ev.id, text, "conductor")
+
+    def _beside(self, item: items.Item) -> tuple[list[str], list[tuple[str, str]]]:
+        """What `item` starts beside in its repo: the ids of the items executing or in
+        setup there, and the (id, gist) of each one, staged ones too, it is warned about:
+        those where either is `alongside`. A pair sharing only by readonly or `paths`
+        hears nothing, as before `alongside`."""
+        repo = item.repo
+        others = {r.item_id: r.md_path for r in self.runs.values() if r.rec["repo"] == repo
+                  and r.item_id != item.id and r.rec.get("phase", "exec") in ("setup", "exec")}
+        beside = sorted(others)
+        rdir = self.cfg.path("running", repo)
+        for spath in sorted(rdir.glob("*.stage.json")) if rdir.is_dir() else []:
+            name = spath.name.removesuffix(".stage.json")
+            others.setdefault(f"{repo}/{name}", self.cfg.path("queue", repo, f"{name}.md"))
+        others.pop(item.id, None)
+        warn = []
+        for other, md in sorted(others.items()):
+            o = items.parse(md, repo) if md.is_file() else None
+            if o is not None and (item.alongside or o.alongside):
+                warn.append((other, o.gist()))
+        return beside, warn
 
     def _start_stage(self, run: Run, item: items.Item) -> None:
         """The second half of staging, once the worktree and its setup are ready."""

@@ -1,5 +1,6 @@
 """Progress lines, messages into a running executor, and opening a finished session."""
 
+import io
 import json
 
 import pytest
@@ -77,8 +78,9 @@ def test_conversation_ties_replies_to_their_tells(env):
     [am] = env.events("amended")
     go.touch()
     env.tick_until(lambda: env.finished("code/001_talk"))
-    # The amendment came back with the first progress call's result ("progress" delivery):
-    # that line was written before it was seen, so the reply is the next one.
+    # The amendment came with the hook after the first progress call (`progress` hands out
+    # no mail): that line was written before it was seen, so the reply is the next one.
+    assert env.d.log.last("delivered", item="code/001_talk").detail["via"] == "hook"
     by_note = {e.detail["note"]: e for e in env.events("progress")}
     assert "reply_to" not in by_note["reading"].detail and "reply_to" not in by_note["noted"].detail
     assert by_note["got it: how is it going"].detail["reply_to"] == tell.id
@@ -162,10 +164,51 @@ def test_hook_prints_context_once(tmp_path):
     assert ctx.index("MESSAGE #7 from Matt via planner") < ctx.index("MESSAGE #9 from Matt,") and "second" in ctx
     assert talk.hook(tmp_path, "code/001_x") is None       # delivered once
     assert [m["id"] for m in talk.delivered(tmp_path)] == [7, 9]
+    assert "Matt, the operator, writing through conductor's message channel" in ctx
+    assert "pass it word for word straight up to the lead" in ctx
     settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x"))
     [group] = settings["hooks"]["PostToolUse"]
     assert group["matcher"] == "" and group["hooks"][0]["args"][:3] == ["-m", "conductor.talk", "hook"]
     assert "PreToolUse" not in settings
+
+
+def test_only_the_lead_takes_mail(tmp_path, monkeypatch, capsys):
+    """A subagent's call (Claude Code's `agent_id`) leaves the mail waiting; the lead's
+    next call, or one whose input carries no readable marker, takes it."""
+    talk.post(tmp_path, "code/001_x", 7, "first", "app")
+    sub = {"hook_event_name": "PostToolUse", "tool_name": "Read", "agent_id": "a1b2", "agent_type": "Explore"}
+    assert talk.subagent_call(sub) and not talk.subagent_call({"agent_id": ""})
+    assert not talk.subagent_call({"agent_type": "reviewer"})   # a session started with --agent is the lead
+    assert talk.hook(tmp_path, "code/001_x", sub) is None
+    argv = ["hook", "--control", str(tmp_path), "--item", "code/001_x"]
+    for raw in (json.dumps(sub), json.dumps({**sub, "agent_id": "x"})):
+        monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(raw.encode())))
+        assert talk.main(argv) == 0 and capsys.readouterr().out == ""
+    assert len(talk.pending(tmp_path, "code/001_x")) == 1 and not talk.delivered(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"not json")))
+    assert talk.main(argv) == 0 and "MESSAGE #7" in capsys.readouterr().out
+    assert [m["id"] for m in talk.delivered(tmp_path)] == [7]
+
+
+def test_a_message_waits_out_a_subagent_call_for_the_lead(env):
+    go, again = env.root / "go", env.root / "again"
+    # Neither a helper's plain call nor its `progress` call (Word Warriors 059) takes the mail.
+    env.queue("001_helper", f"FAKE wait-for {go.as_posix()} 30\nFAKE subagent Read\n"
+                            'FAKE subagent progress {"note": "helper reading"}\n'
+                            f"FAKE wait-for {again.as_posix()} 30\nFAKE write lead.txt mine")
+    env.tick_until(lambda: (env.root / "go.waiting").exists())
+    send(env, "by: app\ntell: 001 check the lead gets this")
+    [tell] = env.events("tell")
+    go.touch()
+    env.tick_until(lambda: (env.root / "again.waiting").exists())
+    env.d.tick()
+    assert talk.pending(env.control, "code/001_helper") and not env.events("delivered")
+    assert [e.detail["note"] for e in env.events("progress")] == ["helper reading"]
+    again.touch()
+    env.tick_until(lambda: env.finished("code/001_helper"))
+    [got] = env.events("delivered")
+    assert (got.detail["tell"], got.detail["via"]) == (tell.id, "hook")
+    assert report(env, "001_helper").count(f"CONTEXT: MESSAGE #{tell.id} from Matt via app") == 1
 
 
 def test_pre_hook_keeps_shell_calls_short(tmp_path):

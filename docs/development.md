@@ -19,7 +19,9 @@ lever. Keep new tests deterministic under load: hold an executor open with `env.
 (a `FAKE wait-for` line) and let it go with `env.release()` rather than a fixed `FAKE
 sleep`, which races a loaded machine. Every `Env` copies a code repo and control folder
 built once per worker. The fake runs the real message hook only when a message is
-waiting. A conftest fixture turns the self-restart's code probe off, so a commit to
+waiting; `FAKE subagent <tool>` is a helper subagent's call, its hook input carrying the
+`agent_id` / `agent_type` Claude Code adds (`executors.md`, *Delivery*), and `FAKE
+subagent progress <json>` a helper's `progress` call followed by that hook. A conftest fixture turns the self-restart's code probe off, so a commit to
 conductor during a run never restarts a test's daemon; `tests/test_restart.py` swaps
 `code_probe`, `head_probe`, `import_check` and `restart_spawner` for stand-ins.
 `tests/test_setup.py` covers setup runners (a slow one waits on a file, like
@@ -28,8 +30,8 @@ conductor during a run never restarts a test's daemon; `tests/test_restart.py` s
 Where things live, beyond the obvious: `Daemon` is `daemon.py` plus `daemon_*` mixins
 (signals, messages, reap, merge, `daemon_restart` for the self-restart, `daemon_setup`
 for setup runners and the second half of a launch or stage); `setup_run.py` is the
-runner; `review.py` renders `review.md`; `state.early_readonly` picks readonly items
-that start behind the head; `session.reports_past_marker` finds conductor's reports
+runner; `review.py` renders `review.md`; `state.early_starts` picks readonly and
+`alongside` items that start behind the head (`tests/test_alongside.py`); `session.reports_past_marker` finds conductor's reports
 past HANDOFF's marker and `inbox.unreviewed_lines` builds the unreviewed summary, each
 shared by the digest, the inbox and the review bundle.
 A staging prompt makes the fake obey only `FAKE stage-…` lines and remember the prompt

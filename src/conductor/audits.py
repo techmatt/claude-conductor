@@ -23,6 +23,10 @@ TEMPLATES = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_c
              "bug_hunt")  # what `template:` may name
 USES_NOTES = ("cleanup", "general_audit")                  # a finish not red logs `audit_used`
 NO_STAGE = ("cleanup", "disk_audit")       # what they are handed is fixed at launch, so they never stage
+# Repo-wide templates that run alone in their repo: never beside another item, readonly ones
+# included (a perf or disk measurement is skewed by anything else running), and nothing
+# behind one in its queue starts early (`state.early_starts`), so they are never starved.
+EXCLUSIVE = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_cleanup")
 
 
 def template_text(name: str) -> str:

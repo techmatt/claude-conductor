@@ -535,13 +535,22 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                             note=f"changed while no executor ran ({context}); accepted")
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
             return
+        taken = self.snapshot.taken
         guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
         running = sorted(active)
-        self.log.append("tamper", item=running[0] if len(running) == 1 else None,
+        # Pinned on the items whose own writing tool calls named a changed path since the
+        # snapshot (`talk.note_touch`, `guard.named`): writing its report, or naming any other
+        # file, is no evidence. None did (a change from outside, a script or a relative path
+        # that never names the folder, a stage or merge executor, which runs no hook, a call
+        # still running): every active item takes it, as before.
+        made = [i for i in running if guard.named(talk.touched_since(self.cfg.control, i, taken), changes)]
+        blamed = made or running
+        self.log.append("tamper", item=blamed[0] if len(blamed) == 1 else None,
                         paths=guard.changed_paths(changes), changes=changes,
-                        concurrent=running if len(running) > 1 else [], found=context)
-        for run in active.values():
-            run.tamper += changes
+                        concurrent=running if len(running) > 1 else [], found=context,
+                        attributed=made if made and len(running) > 1 else [])
+        for item_id in blamed:
+            active[item_id].tamper += changes
 
     # ---------------------------------------------------------------- requests
     def process_requests(self) -> None:
@@ -653,8 +662,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 self.resume(d.item, view.staged[d.item.id])
             elif d.action == "stage" and d.item.id not in self.no_stage and d.item.id not in self.stages:
                 self.stage(d.item)
-        # A readonly item behind its head starts now, wherever it sits; its neighbours keep their order and stages.
-        for item in state.early_readonly(self.cfg, view, decisions) if self.mem_level == "ok" else []:
+        # A readonly or alongside item behind its head starts now; its neighbours keep their order and stages.
+        for item in state.early_starts(self.cfg, view, decisions) if self.mem_level == "ok" else []:
             if item.repo != reordering and item.id not in amending:
                 self.launch(item)
 

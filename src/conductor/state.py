@@ -143,13 +143,17 @@ def scan(cfg: Config, log: EventLog) -> View:
 
 def can_share(cfg: Config, head: Item, rec: dict) -> bool:
     """May `head` run beside the running item `rec` in the same repo, as far as the repo
-    lock goes? Only in worktrees. A readonly item (either one) never merges, so it neither
-    holds the repo lock nor waits for it; its named locks are `decide`'s. Otherwise both
-    declared `paths`, the globs are disjoint (prose aside) and they share no named lock."""
+    lock goes? Only in worktrees, and never when either is an exclusive template
+    (`audits.EXCLUSIVE`). A readonly item (either one) never merges, so it neither holds
+    the repo lock nor waits for it; an `alongside` item (either one) is the planner's word
+    that they are unrelated. Their named locks are `decide`'s. Otherwise (legacy `paths`)
+    both declared `paths`, the globs are disjoint (prose aside) and they share no named lock."""
     opts = cfg.opts(head.repo)
     if not (opts.worktrees and rec.get("worktree")):
         return False
-    if head.readonly or rec.get("readonly"):
+    if head.template in audits.EXCLUSIVE or rec.get("template") in audits.EXCLUSIVE:
+        return False
+    if head.readonly or rec.get("readonly") or head.alongside or rec.get("alongside"):
         return True
     return (globs.disjoint(head.paths, rec.get("paths") or [], opts.prose)
             and not set(head.locks) & set(rec.get("locks") or []))
@@ -166,7 +170,7 @@ def may_stage(cfg: Config, view: View, head: Item) -> bool:
 
 def running_locks(view: View) -> dict[str, str]:
     """{named lock: item} held by running items: one executing or still in setup holds its
-    named locks; one merging or concluding has let them go. `decide` and `early_readonly` both
+    named locks; one merging or concluding has let them go. `decide` and `early_starts` both
     use this, so the rule lives in one place."""
     return {lock: item_id for item_id, rec in view.running.items() if rec.get("phase", "exec") in ("exec", "setup")
             for lock in rec.get("locks", [])}
@@ -178,8 +182,9 @@ def decide(cfg: Config, view: View) -> dict[str, Decision]:
     A finished item still waiting to merge keeps its repo lock but not its named locks;
     one still in setup holds both.
     A readonly item takes no repo lock (`can_share`): at the head it starts beside
-    whatever runs, and the items after it never wait for it. One behind the head may start
-    before it reaches the head (`early_readonly`).
+    whatever runs, and the items after it never wait for it. An `alongside` item, or any
+    item once an `alongside` one is all that runs, starts beside the others too. Either
+    kind behind the head may start before it reaches the head (`early_starts`).
     """
     held_locks = running_locks(view)
     known = view.known()
@@ -199,12 +204,15 @@ def decide(cfg: Config, view: View) -> dict[str, Decision]:
     return out
 
 
-def early_readonly(cfg: Config, view: View, decisions: dict[str, Decision]) -> list[Item]:
-    """Readonly items behind their queue's head that may start now, in queue order. A
-    readonly item takes no repo lock (`can_share`), so it need not wait to reach the head;
-    it still waits for its named locks (held by running items, or by heads that `decisions`
-    starts) and for every `depends_on` to finish done. A held repo starts none of them;
-    a readonly item that `_hold` would hold waits until it is the head, which logs why."""
+def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> list[Item]:
+    """Readonly and `alongside` items behind their queue's head that may start now, in
+    queue order. Neither takes the repo lock (`can_share`), so it need not wait to reach
+    the head; it still waits for its named locks (held by running items, or by heads that
+    `decisions` starts), for every `depends_on` to finish done, and for any running item it
+    may not share with (an exclusive template). An exclusive template in the queue is a
+    barrier: nothing behind it starts early, so a stream of small items never starves it.
+    A held repo starts none of them; one that `_hold` would hold waits until it is the
+    head, which logs why."""
     held = set(running_locks(view))
     held |= {lock for d in decisions.values() if d.action in ("run", "resume") for lock in d.item.locks}
     known = view.known()
@@ -212,9 +220,15 @@ def early_readonly(cfg: Config, view: View, decisions: dict[str, Decision]) -> l
     for repo in cfg.repos:
         if not cfg.opts(repo).worktrees:
             continue
-        for item in view.queued.get(repo, [])[1:]:
-            if (not item.readonly or item.id in view.staged or item.template in audits.NO_STAGE
-                    or set(item.locks) & held or _hold(cfg, view, repo, item, known)):
+        queue = view.queued.get(repo, [])
+        running_here = [r for r in view.running.values() if r["repo"] == repo]
+        for i, item in enumerate(queue[1:], 1):
+            if any(q.template in audits.EXCLUSIVE for q in queue[:i]):
+                break
+            if (not (item.readonly or item.alongside) or item.id in view.staged
+                    or item.template in audits.NO_STAGE + audits.EXCLUSIVE
+                    or set(item.locks) & held or _hold(cfg, view, repo, item, known)
+                    or not all(can_share(cfg, item, rec) for rec in running_here)):
                 continue
             if any(view.status_of(items.resolve_ref(ref, repo, known)) != "done" for ref in item.depends_on):
                 continue

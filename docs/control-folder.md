@@ -145,7 +145,17 @@ restart is judged against the snapshot it launched under.
   deleted or newly tracked file, a new commit, a moved ref or branch, a staged change)
   is reverted to the snapshot and logged as a red `tamper` event naming the item. The
   item ends red. When several executors were running, the event lists them all
-  (`concurrent`) and each ends red, since conductor cannot tell which did it.
+  (`concurrent`). It is pinned on those whose own writing tool calls (`Write`, `Edit`,
+  a shell command…, the lead's or a helper's) named a changed path since the snapshot:
+  only they end red (`attributed`). The message hook notes the control-folder paths
+  each call names in `.conductor/touch/<repo>__<NNN_name>.jsonl` (`talk.touch_paths`:
+  a file tool's target, every path in a shell command, reads too; never `reports/` or
+  `.conductor/`, so writing its report is no evidence). A path covers a change of
+  itself or a file under it; the bare folder (`git -C <control> …`) covers only a
+  commit, ref, HEAD or index change (`guard.named`). When no item's calls cover the
+  change (a change from outside, a script or relative path that never names the folder,
+  a stage or merge executor, which runs no hook, a call still running at the check),
+  each running item ends red, as conductor cannot tell which did it.
 - Untracked files are not guarded (the report itself is one).
 - Tamper is the first entry of the inbox's Red section.
 

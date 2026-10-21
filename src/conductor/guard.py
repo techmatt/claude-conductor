@@ -112,6 +112,23 @@ def changed_paths(changes: list[str]) -> list[str]:
     return [c.split(":", 1)[0] for c in changes if ":" in c and not c.startswith(("new commit", "HEAD"))]
 
 
+def named(touched: list[str], changes: list[str]) -> bool:
+    """Do these control-folder paths a tool call named (`talk.touch_paths`: relative,
+    lower-case, "" the folder itself) cover one of `changes`? A changed file is covered by
+    itself or a folder holding it; a change with no path (a commit, a ref, HEAD, the
+    index) by the folder itself or `.git`. A bare folder mention never covers a file:
+    `cd <control> && …` proves nothing about which file."""
+    files = [p.lower() for p in changed_paths(changes)]
+    pathless = len(files) < len(changes)
+    for t in touched:
+        if t in ("", ".git") or t.startswith(".git/"):
+            if pathless:
+                return True
+        elif any(f == t or f.startswith(t + "/") for f in files):
+            return True
+    return False
+
+
 def restore(control: Path, state_dir: Path, snap: Snapshot) -> None:
     """Put refs, HEAD, index and every tracked file back exactly as snapshotted."""
     now_refs = git.refs(control)
