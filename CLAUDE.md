@@ -42,5 +42,5 @@ When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup"
 - A step estimated over ~30 seconds is backgrounded, with a completion waiter on the real process, never on a launcher wrapper.
 - A prompt that changes conductor's user-facing behaviour (commands, signals, front-matter, files the planner reads or writes, the app) updates `planner.md` — method and **Vocab** — in the same commit, and `claude-ai-new-project.md` where it covers the topic (new / park / resume, memory, run targets, picks). Keep `planner.md` compressed: it is read whole each session.
 - Before committing, update `HANDOFF.md` *Status* and *Open* to match what the prompt left behind, moving in the lines under *For HANDOFF Open* in `planner-notes.md` (then delete them there), and commit it with the rest.
-- Commit to `main` only, by explicit path. "Commit when done." in a prompt means one commit at the end unless the prompt asks for one per phase.
+- Commit to `main` only, by explicit path, then `git push`. "Commit when done." in a prompt means one commit at the end unless it asks per phase.
 - Every prompt names this repo; if the working directory is not `claude-conductor`, stop and say so.

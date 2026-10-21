@@ -17,7 +17,7 @@ RUNTIME = (
     "signals", "receipts", "backlog", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
 )
 
-REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background"}
+REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background", "push"}
 
 # Shared prose nearly every item touches: exempt from `paths`, merged textually.
 DEFAULT_PROSE = ["CLAUDE.md", "README.md", "docs/**/*.md"]
@@ -34,6 +34,7 @@ class RepoOptions:
     worktrees: bool = True       # false: run in the main checkout, one item at a time
     stage: bool = True           # stage the queue head while the repo is busy (needs worktrees)
     main: str = "main"           # the branch items are cut from and merged into
+    push: bool = False           # push `main` to the remote after each merge (daemon_push)
     shared: list[str] = field(default_factory=list)      # untracked dirs junctioned into worktrees
     setup: list[str] = field(default_factory=list)       # shell commands run in a new worktree
     prose: list[str] = field(default_factory=lambda: list(DEFAULT_PROSE))   # globs outside `paths`
@@ -150,7 +151,7 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
     if unknown:
         raise ConfigError(f"{where}: unknown keys {sorted(unknown)}")
     opts = RepoOptions()
-    for key in ("worktrees", "stage"):
+    for key in ("worktrees", "stage", "push"):
         if key in table:
             if not isinstance(table[key], bool):
                 raise ConfigError(f"{where}.{key} must be true or false")

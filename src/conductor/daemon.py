@@ -6,12 +6,13 @@ so several repos (and disjoint items within one) run at once. The one exception 
 picker server (`picker`), whose handler threads touch only files and a queue that the
 loop drains into the event log.
 
-`Daemon` is this module plus nine mixins, one per concern: `daemon_signals` (signal
+`Daemon` is this module plus ten mixins, one per concern: `daemon_signals` (signal
 files and their verbs), `daemon_messages` (questions, progress, deliveries, amendments),
 `daemon_receipts` (a receipt per planner write), `daemon_reap` (leftover processes and
 worktrees), `daemon_merge` (merges and concluding an item), `daemon_setup` (a repo's
 setup commands, off the loop), `daemon_restart` (restarting itself when its code changes),
-`daemon_templates` (what a template item is handed) and `daemon_watch` (the night shift).
+`daemon_templates` (what a template item is handed), `daemon_watch` (the night shift) and
+`daemon_push` (pushing main to a remote).
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from . import config as config_mod
 from .config import RUNTIME, Config
 from .daemon_merge import MergeMixin
 from .daemon_messages import MessagesMixin
+from .daemon_push import PushMixin
 from .daemon_receipts import ReceiptsMixin
 from .daemon_reap import ReapMixin
 from .daemon_restart import RestartMixin
@@ -113,7 +115,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
 
 
 class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
-             TemplatesMixin, WatchMixin):
+             TemplatesMixin, WatchMixin, PushMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -157,6 +159,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about
         self._init_restart()
         self._init_watch()
+        self._init_push()
 
     def _live_enqueued(self) -> set[str]:
         """Ids whose `enqueue` still stands: a cancel or a reorder retires an id, so the
@@ -259,6 +262,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._recover_signal()
         self.recover()
         self._retry_leftovers("daemon start")
+        self.push_ahead()
         self._compact_logs(sorted(state.scan(self.cfg, self.log).done))
         if not self._active():
             if self.snapshot and (changes := guard.diff(self.cfg.control, self.snapshot)):
@@ -345,6 +349,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.check_stages()
         self.check_runs()
         self.process_merges()
+        self.process_pushes()
         self.sample_memory()
         self.night_shift()
         self.schedule()
@@ -589,6 +594,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                                     subject=req.message.splitlines()[0])
                 if request.is_closeout(req.message):     # the session ended: what it saw is read
                     self.log.append("read", paths=[rel], through=self.log.max_id(), closeout=d.name)
+                    self.closeout_pushes(d.name)         # and its work goes to the remotes (daemon_push)
                 shutil.rmtree(d)
                 self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
                 if "conductor.toml" in req.targets:

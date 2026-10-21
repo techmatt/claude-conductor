@@ -155,9 +155,9 @@ class SignalsMixin:
             if key == "read":
                 if value.lower() not in ("latest", "all") and not value.lstrip("#").isdigit():
                     raise ValueError(f"line {n}: read: expects an event id or `latest`, got {value!r}")
-            elif key == "clear":
+            elif key in ("clear", "push"):
                 if value not in self.cfg.repos:
-                    raise ValueError(f"line {n}: clear: {value!r} is not a repo")
+                    raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
             elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
@@ -207,6 +207,8 @@ class SignalsMixin:
             self.log.append("read", paths=[rel], through=through)
         elif key == "clear":
             self.log.append("clear", repo=value, paths=[rel])
+        elif key == "push":
+            self.want_push(value, "signal")     # its `push` or `push_failed` follows (daemon_push)
         elif key == "approve":
             self._approve(value, rel)
         elif key == "cancel":

@@ -314,6 +314,16 @@ def describe(ev: Event) -> str:
             text = f"watch flag ({d.get('flag')}): {d.get('text')}" + (f" — watch {d['watch']}" if d.get("watch") else "")
         case "watch":
             text = f"watch {who} launched: {d.get('reason')}"
+        case "push":
+            text = (f"pushed {d.get('target')} {d.get('branch')} to {d.get('remote')} ({str(d.get('sha'))[:8]}"
+                    + (", up to date" if d.get("up_to_date") else "") + f"; {', '.join(d.get('why', []))})")
+        case "push_failed":
+            text = f"push of {d.get('target')} {d.get('branch')} failed: {d.get('error')}"
+            if d.get("output") and not d.get("rejected"):
+                text += " — git: " + " ⏎ ".join(d["output"].splitlines()[-3:])
+        case "closeout_push":
+            text = (f"closeout push: {', '.join(d.get('pushed', [])) or 'nothing'} pushed"
+                    + (f"; FAILED: {', '.join(d['failed'])}" if d.get("failed") else ""))
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
         case _:

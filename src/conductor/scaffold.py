@@ -38,8 +38,9 @@ def _repo_value(control: Path, repo: Path) -> str:
 
 def conductor_toml(project: str, repos: dict[str, str]) -> str:
     lines = [f"project = {_toml_str(project)}", "locks = []", "", "[defaults]",
-             "max_hours = 2", "ask_default_minutes = 10", "", "[repos]"]
-    lines += [f"{name} = {_toml_str(value)}" for name, value in repos.items()]
+             "max_hours = 2", "ask_default_minutes = 10"]
+    for name, value in repos.items():       # `push = true`: main goes to the remote after each merge
+        lines += ["", f"[repos.{name}]", f"path = {_toml_str(value)}", "push = false"]
     return "\n".join(lines) + "\n"
 
 

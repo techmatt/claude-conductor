@@ -48,7 +48,7 @@ SCROLL = "#7d848e"         # scrollbar handle
 ROUTINE_KINDS = {"enqueue", "worktree", "stage", "queued", "queue_empty", "adopt", "read",
                  "moved", "config_reload", "idle", "recover", "created", "item"}
 QUESTION_KINDS = {"ask", "answer", "default", "late", "question_closed"}
-HOLD_KINDS = {"hold", "warning", "drift"}
+HOLD_KINDS = {"hold", "warning", "drift", "push_failed"}
 GOOD_KINDS = {"finish", "merge"}
 
 BASE_POINT_SIZE = 10.5

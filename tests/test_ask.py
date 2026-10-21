@@ -173,6 +173,7 @@ def test_init_creates_folder_that_runs_an_item(env, tmp_path, capsys):
     cfg = config.load(control)
     assert cfg.project == "fresh" and cfg.repos["code"] == env.repo.resolve()
     assert '"../code"' in (control / "conductor.toml").read_text(encoding="utf-8")
+    assert "push = false" in (control / "conductor.toml").read_text(encoding="utf-8") and not cfg.opts("code").push
     assert git(control, "ls-files").split() == [".gitattributes", ".gitignore", "conductor.toml", "state.md"]
     assert len(git(control, "log", "--format=%H").split()) == 1
     assert (control / "queue" / "code").is_dir()

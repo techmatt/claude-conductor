@@ -96,6 +96,7 @@ path = "../app"
 worktrees = true              # false: run in the main checkout, one item at a time (phase 1)
 stage = true                  # stage the queue head while the repo is busy (needs worktrees)
 main = "main"                 # the branch items are cut from and merged into
+push = false                  # true: push main to the remote after each merge (see push.md)
 shared = ["data", ".venv"]    # untracked folders linked into every worktree (junctions)
 setup = ["uv sync"]           # shell commands run in a new worktree before launch
 prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]   # the default: exempt from `paths`, merged textually
@@ -118,8 +119,9 @@ the previous config stays in force.
 conductor init C:\Code\<project>-control --project <project> --repo app=C:\Code\app [--repo …]
 ```
 
-creates the folder with the layout above: `conductor.toml` (the project, the repos —
-relative like `../app` when beside or under the control folder, else absolute —, `max_hours = 2`,
+creates the folder with the layout above: `conductor.toml` (the project, a `[repos.<name>]`
+table per repo with `push = false` and its path — relative like `../app` when beside or
+under the control folder, else absolute —, `max_hours = 2`,
 `ask_default_minutes = 10`), a stub `state.md`, `.gitignore` covering every runtime
 path, `.gitattributes` (`* text=auto eol=lf`), the runtime folders and a queue folder
 per repo; then `git init -b main` and a first commit of the four tracked files. An

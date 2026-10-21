@@ -259,8 +259,8 @@ ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "as
                   "approve", "cancel", "reorder", "clear", "edited", "request", "request_failed", "daemon_restart",
                   "daemon_start", "daemon_stop", "progress", "tell", "amended", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed",
-                  "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify"}
-ALWAYS_KINDS = RED_KINDS | {"warning"}
+                  "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify", "closeout_push"}
+ALWAYS_KINDS = RED_KINDS | {"warning", "push_failed"}
 
 
 def is_activity(ev: Event) -> bool:

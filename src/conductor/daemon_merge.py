@@ -79,6 +79,7 @@ class MergeMixin:
                         note=m.reason, **extra)
         rec["phase"] = "concluding"
         self._save(run)
+        self.want_push(rec["repo"], "merge")       # off the loop, in process_pushes (daemon_push)
         self._worktree_op(rec, "removed", "merged")
         self._conclude(run)
         return True

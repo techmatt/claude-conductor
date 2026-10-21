@@ -104,7 +104,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 **Deferred design calls** (a cleanup, general cleanup or bug hunt lists them with options and a pick). Raise each with Matt once; a decision becomes a new item, one he doesn't take up goes to *Paged* with the executor's pick as default. Never fold one into `state.md` as settled, or queue the pick unasked.
 
-**Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn. A report noticed in passing gets one line ("061 finished; say process 061"). One changed after review (`report_changed`) needs processing again. Conductor's reports' mark: `Last report reviewed by the planner:` in its `planner-notes.md` (**process all**).
+**Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn. A report noticed in passing gets one line ("061 finished"). One changed after review (`report_changed`) needs processing again. Conductor's reports' mark: `Last report reviewed by the planner:` in its `planner-notes.md` (**process all**).
 
 ## state.md, maintenance and closeout
 
@@ -131,7 +131,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal. **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls raised as for a cleanup); then rewrite the marker in `planner-notes.md`. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
 | **check questions** | Open asks with their items, blocking first, others with default and when it's taken. |
-| **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short, e.g. `012__1`); if the default was taken, says it will be `late`. |
+| **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short: `012__1`); if the default was taken, says it will be `late`. |
 | **queue status** | Per repo: the running item (elapsed, latest progress and outline), queued items in order; then proposed items. |
 | **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
 | **ETA on X?** | X's latest outline, else progress line, with when posted; neither: says so, never a guess. |
@@ -141,8 +141,9 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **postmortem Y** | Y's events, prompt and report: where it went wrong. |
 | **propose** / **enqueue** | Writes a prompt to `proposed\`, or to `queue\<repo>\` once Matt approved it. |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` / `cancel: <item>` (proposed or queued, never running). |
-| **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap): numbers swap, each renamed item is a new id, its amendments move with it. Fix old names in `state.md`. |
+| **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap): numbers swap, each renamed item is a new id. Fix old names in `state.md`. |
 | **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
+| **push R** | Signal `push: <repo>` (retry). |
 | **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: any "run …" means it; several and no match: asks; none: proposes one by request. |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
