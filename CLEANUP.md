@@ -36,7 +36,7 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 - **One home per fact.** `docs/` holds mechanics; `planner.md` what a planner does; `claude-ai-new-project.md` new / park / resume and project setup; README the overview, commands and index. A fact explained in two places keeps one and the other points to it.
 - **`planner.md`**: every line must change what a planner does. Its vocab matches the signal verbs.
 - **`CLAUDE.md`**: every line must change what a Claude Code session here does; mechanics it repeats from `docs/` become a pointer. Everything it names exists and is current: commands, tools and their flags (`tools/restart_all.py --check`, `tools/sizes.py`), `docs/` files, the sandbox paths, the newest control folder in *Launch the conductor* (re-derive it by its rule), and the phrases' examples (prompt names, report paths).
-- **`HANDOFF.md`**: *Status* is current state only. *Open* drops lines that are resolved, stale or proven, and says each remaining one in as few lines as it can.
+- **`HANDOFF.md`**: *Status* is current state only. *Open* takes in the lines under *For HANDOFF Open* in `planner-notes.md` (the planner's, git-ignored; delete them there), drops lines that are resolved, stale or proven, and says each remaining one in as few lines as it can.
 - **Test counts and timings** live in `docs/development.md` only; update them from the step 4 numbers.
 
 ## 3. Code

@@ -581,7 +581,7 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     from conductor import session
     root = tmp_path / "conductor"                      # a stand-in for conductor's own repo
     (root / "reports").mkdir(parents=True)
-    (root / "HANDOFF.md").write_text("## Status\n\nLast report reviewed by the planner: 12_x\n", encoding="utf-8")
+    (root / "planner-notes.md").write_text("## Status\n\nLast report reviewed by the planner: 12_x\n", encoding="utf-8")
     for name, text in [("3_old", "status: done"), ("12_x", "status: done"), ("12a_y", "# 12a\n\nstatus: partial"),
                        ("13_z", "# 13\n\nno header")]:
         (root / "reports" / f"{name}_report.md").write_text(text + "\n", encoding="utf-8")

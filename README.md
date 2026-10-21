@@ -66,6 +66,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress` and outlines, messages (`tell:`), short calls, amendments, opening a finished session |
 | `docs/signals.md` | Every signal verb and how a signal file is applied |
+| `docs/receipts.md` | The receipt each planner write gets: where, what it says, how long it lives |
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |

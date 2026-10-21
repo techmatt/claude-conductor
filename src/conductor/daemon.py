@@ -6,11 +6,11 @@ so several repos (and disjoint items within one) run at once. The one exception 
 picker server (`picker`), whose handler threads touch only files and a queue that the
 loop drains into the event log.
 
-`Daemon` is this module plus six mixins, one per concern: `daemon_signals` (signal
+`Daemon` is this module plus seven mixins, one per concern: `daemon_signals` (signal
 files and their verbs), `daemon_messages` (questions, progress, deliveries, amendments),
-`daemon_reap` (leftover processes and worktrees), `daemon_merge` (merges and
-concluding an item), `daemon_setup` (a repo's setup commands, off the loop) and
-`daemon_restart` (restarting itself when its code changes).
+`daemon_receipts` (a receipt per planner write), `daemon_reap` (leftover processes and
+worktrees), `daemon_merge` (merges and concluding an item), `daemon_setup` (a repo's
+setup commands, off the loop) and `daemon_restart` (restarting itself when its code changes).
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ from . import config as config_mod
 from .config import RUNTIME, Config
 from .daemon_merge import MergeMixin
 from .daemon_messages import MessagesMixin
+from .daemon_receipts import ReceiptsMixin
 from .daemon_reap import ReapMixin
 from .daemon_restart import RestartMixin
 from .daemon_setup import SetupMixin
@@ -108,12 +109,13 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
     return f"{repo}/{picks.normal(value)}" if value and value.lower() != "none" else None
 
 
-class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin):
+class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
         self.echo = echo
         self.notifier = notifier if notifier is not None else notify.Toaster()
+        self._init_receipts()                     # before the log: every event may be a receipt's
         self.log = EventLog(cfg.events_db, on_append=self._on_event)
         self.runs: dict[str, Run] = {}              # executing, or finished and waiting to merge
         self.stages: dict[str, Run] = {}            # staging processes still running
@@ -175,6 +177,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
 
     # ---------------------------------------------------------------- lifecycle
     def _on_event(self, ev: Event) -> None:
+        self._receipt_event(ev)
         if self.echo:
             self.echo(f"{clock(ev.ts)} #{ev.id} {inbox.describe(ev)}")
         if not (self.cfg.toasts and self.notifier):
@@ -234,6 +237,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             self.cfg.path(d).mkdir(parents=True, exist_ok=True)
         for repo in self.cfg.repos:
             self.cfg.path("queue", repo).mkdir(exist_ok=True)
+        self._prepare_receipts()
         self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control))
         self._read_code()
         if self._died:
@@ -327,6 +331,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         if self.stop_requested is not None:
             return                  # `stop: daemon`: nothing more starts; run_forever exits
         self.process_requests()
+        self.process_proposed()
         self.process_questions()
         self.process_talk()
         self.runner.poll()
@@ -546,48 +551,49 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         waiting: set[str] = set()   # targets of earlier requests still waiting: stamp order holds for them
         for d in request.pending(self.cfg):
             rel = f"requests/{d.name}"
-            if waiting and request.listed_targets(d) & waiting:
-                waiting |= request.listed_targets(d)
-                continue
-            try:
-                req = request.ready(d)
-            except request.RequestError as exc:
-                self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
-                os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
-                continue
-            if req is None:      # still being written: unsettled, or targets not all here yet
-                waiting |= request.listed_targets(d)
-                continue
-            self._guard_check(f"before request {d.name}")
-            try:
-                sha = request.apply(self.cfg, req)
-            except (git.GitError, OSError) as exc:
-                self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
-                os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
-                if self.snapshot:
-                    guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
-                continue
-            self.log.append("request", paths=req.targets, request=d.name, message=req.message,
-                            targets=req.targets, no_change=sha is None)
-            if sha:
-                self.log.append("commit", paths=req.targets, scope="control", sha=sha,
-                                subject=req.message.splitlines()[0])
-            if request.is_closeout(req.message):     # the session ended: what it saw is read
-                self.log.append("read", paths=[rel], through=self.log.max_id(), closeout=d.name)
-            shutil.rmtree(d)
-            self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
-            if "conductor.toml" in req.targets:
+            with self._receipt(rel):     # one receipt: the request, its commit, or why it failed
+                if waiting and request.listed_targets(d) & waiting:
+                    waiting |= request.listed_targets(d)
+                    continue
                 try:
-                    new = config_mod.load(self.cfg.control)
-                    busy = {r.rec["repo"] for r in [*self.runs.values(), *self.stages.values()]}
-                    busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
-                    if gone := sorted(busy - set(new.repos)):
-                        raise config_mod.ConfigError(f"repos {gone} still have items in running/")
-                    self.cfg = self.runner.cfg = self.picker.cfg = self.opener.cfg = new
-                    self.log.append("config_reload", paths=["conductor.toml"])
-                except config_mod.ConfigError as exc:
-                    self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",
-                                    error=f"{exc}; still using the previous config")
+                    req = request.ready(d)
+                except request.RequestError as exc:
+                    self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
+                    os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
+                    continue
+                if req is None:      # still being written: unsettled, or targets not all here yet
+                    waiting |= request.listed_targets(d)
+                    continue
+                self._guard_check(f"before request {d.name}")
+                try:
+                    sha = request.apply(self.cfg, req)
+                except (git.GitError, OSError) as exc:
+                    self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
+                    os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
+                    if self.snapshot:
+                        guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
+                    continue
+                self.log.append("request", paths=req.targets, request=d.name, message=req.message,
+                                targets=req.targets, no_change=sha is None)
+                if sha:
+                    self.log.append("commit", paths=req.targets, scope="control", sha=sha,
+                                    subject=req.message.splitlines()[0])
+                if request.is_closeout(req.message):     # the session ended: what it saw is read
+                    self.log.append("read", paths=[rel], through=self.log.max_id(), closeout=d.name)
+                shutil.rmtree(d)
+                self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
+                if "conductor.toml" in req.targets:
+                    try:
+                        new = config_mod.load(self.cfg.control)
+                        busy = {r.rec["repo"] for r in [*self.runs.values(), *self.stages.values()]}
+                        busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
+                        if gone := sorted(busy - set(new.repos)):
+                            raise config_mod.ConfigError(f"repos {gone} still have items in running/")
+                        self.cfg = self.runner.cfg = self.picker.cfg = self.opener.cfg = new
+                        self.log.append("config_reload", paths=["conductor.toml"])
+                    except config_mod.ConfigError as exc:
+                        self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",
+                                        error=f"{exc}; still using the previous config")
 
     # ---------------------------------------------------------------- scheduling
     def schedule(self) -> None:

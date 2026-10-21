@@ -43,6 +43,7 @@ file can't reach it: it is set aside as `NNN_name.md.bad` with an `invalid` even
 left to hold the queue (the same for a queue file named like an item in `done/`). A stage
 found changed after a restart logs `edited` too. To add to a plan that still stands,
 keeping a stage, or to change a running item, amend it instead (`progress.md`, *Amendments*).
+Each write's outcome is its receipt, `receipts/queue/<repo>/NNN_name.md` (`receipts.md`).
 
 An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numbers
 numerically, so it still resolves.

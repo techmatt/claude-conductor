@@ -28,7 +28,8 @@ Options:
 - **Answer.** The planner (or `conductor answer <id> <text>`) writes
   `questions/<id>.answer.md`: the answer as plain text (front-matter, if any, is
   dropped; a `by:` field in it — the app writes `by: app` — goes on the `answer` or
-  `late` event). It is read once it has been unchanged for 1 second. The tool returns
+  `late` event). It is read once it has been unchanged for 1 second; its receipt is
+  `receipts/questions/<id>.answer.md` (`receipts.md`). The tool returns
   `Answer to <id>:` and the text.
 - **Default.** With a default and `block: false`, an unanswered question returns the
   default at its `deadline`; the tool result says nobody answered and the default was

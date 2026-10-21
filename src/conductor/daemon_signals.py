@@ -71,26 +71,27 @@ class SignalsMixin:
                 continue
             rel = f"signals/{f.name}"
             by, applied = None, []
-            try:
-                text = read_text(f)
-                by = _signal_by(text)
-                lines = self._parse_signal(text)        # every line checked before any applies
-                with self._attributed(by):
-                    for key, value in lines:
-                        # Journalled before each line: a crash from here until the file
-                        # is gone must never apply its lines a second time.
-                        write_text(self._signal_journal, json.dumps({"rel": rel, "applied": applied}))
-                        self._apply_signal(key, value, rel)
-                        applied.append(f"{key}: {value}")
-                retry_io(f.unlink)
-            except (ValueError, UnicodeDecodeError, OSError) as exc:
-                with self._attributed(by):
-                    extra = {"applied": applied} if applied else {}
-                    self.log.append("invalid", paths=[rel], path=rel, error=str(exc), **extra)
+            with self._receipt(rel, always=True):       # every event its lines log, or why it was refused
                 try:
-                    os.replace(f, f.with_name(f.name + ".bad"))
-                except OSError:
-                    pass
+                    text = read_text(f)
+                    by = _signal_by(text)
+                    lines = self._parse_signal(text)    # every line checked before any applies
+                    with self._attributed(by):
+                        for key, value in lines:
+                            # Journalled before each line: a crash from here until the file
+                            # is gone must never apply its lines a second time.
+                            write_text(self._signal_journal, json.dumps({"rel": rel, "applied": applied}))
+                            self._apply_signal(key, value, rel)
+                            applied.append(f"{key}: {value}")
+                    retry_io(f.unlink)
+                except (ValueError, UnicodeDecodeError, OSError) as exc:
+                    with self._attributed(by):
+                        extra = {"applied": applied} if applied else {}
+                        self.log.append("invalid", paths=[rel], path=rel, error=str(exc), **extra)
+                    try:
+                        os.replace(f, f.with_name(f.name + ".bad"))
+                    except OSError:
+                        pass
             self._signal_journal.unlink(missing_ok=True)
 
     @property
@@ -373,7 +374,7 @@ class SignalsMixin:
                         by=self._by or "unknown")
 
     def _review(self, value: str, rel: str) -> None:
-        """`review.md`: every unreviewed report inlined (and conductor's own past HANDOFF's
+        """`review.md`: every unreviewed report inlined (and conductor's own past the planner's
         marker) for `all`, or one finished item's. Marks nothing reviewed."""
         if value.lower() == "all":
             item_id, view = None, state.scan(self.cfg, self.log)
@@ -396,7 +397,7 @@ class SignalsMixin:
 
     def _session(self, label: str, rel: str) -> None:
         """A planner session's start in one signal: a checkpoint with the label, then
-        `session.md` (the inbox since the read mark, conductor's reports past HANDOFF's
+        `session.md` (the inbox since the read mark, conductor's reports past the planner's
         marker, each repo's maintenance facts), then the read mark moved past it all."""
         cp = self._checkpoint(label, rel, session="session.md")
         top = self.log.max_id()

@@ -21,6 +21,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
                                .amend.md (every amendment delivered, in order, with times)
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner/app → conductor: the verbs in signals.md
+receipts/                      conductor → planner: what became of each write (see receipts.md)
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 picks/                         Matt's saved picker choices: <name>.choices.json (see picks.md)
 inbox.md                       generated digest since the read mark
@@ -51,6 +52,7 @@ questions/
 picks/
 requests/
 signals/
+receipts/
 inbox.md
 session.md
 review.md
@@ -191,4 +193,4 @@ one waits too. A bad request is logged `request_failed` (red)
 and renamed `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed. Requests apply in folder-name order; the planner names them
 `YYYYMMDD-HHMM-<tag>`. One whose message starts `closeout:` also moves the read mark
-(`inbox.md`).
+(`inbox.md`). Applied or failed, a request's outcome is `receipts/requests/<stamp>.md` (`receipts.md`).

@@ -90,7 +90,7 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
   went*. They count as unused notes for the repo's next cleanup, whose inlined heading
   names the original (`… : a self-audit of <orig>, written by its own session`). The
   report has **Summary** and **About conductor** (findings about the template,
-  preamble, planner or tools, for the planner to carry to conductor's HANDOFF). Not
+  preamble, planner or tools, for the planner to carry to conductor's `planner-notes.md`). Not
   exclusive: it may run beside anything.
 
 **Which notes are unused.** A note is a finished item whose `finish` event has

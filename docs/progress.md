@@ -115,7 +115,7 @@ suite's summary and failing test correctly and acted on the tell. The 60 s is a
 `timeout`, so a call can run a little past it (spawn and hook time under load).
 
 **Amendments.** An amendment adds to an item's instructions without rewriting its file,
-in any state but finished. The planner writes `queue/<repo>/NNN_name.amend.md` beside
+in any state but finished (receipt: `receipts.md`). The planner writes `queue/<repo>/NNN_name.amend.md` beside
 the item (the item may be queued, staged or already in `running/`; the amend file
 always goes in `queue/`), or any `NNN_name.amend.<anything>.md` (a timestamp, so no
 need to check for an existing one), taken in name order, numbers as numbers:

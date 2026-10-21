@@ -1,4 +1,4 @@
-"""`review:` writes `review.md`: unreviewed reports inlined, conductor's own past HANDOFF's marker."""
+"""`review:` writes `review.md`: unreviewed reports inlined, conductor's own past the planner's marker."""
 
 import pytest
 
@@ -13,7 +13,7 @@ def send(env, text: str, name: str) -> None:
 def conductor_root(tmp_path):
     root = tmp_path / "conductor"                      # a stand-in for conductor's own repo
     (root / "reports").mkdir(parents=True)
-    (root / "HANDOFF.md").write_text("Last report reviewed by the planner: 12_x\n", encoding="utf-8")
+    (root / "planner-notes.md").write_text("Last report reviewed by the planner: 12_x\n", encoding="utf-8")
     for name, text in [("12_x", "status: done\nold news"), ("13_z", "status: partial\nthe thirteenth body")]:
         (root / "reports" / f"{name}_report.md").write_text(text + "\n", encoding="utf-8")
     return root
@@ -91,15 +91,15 @@ def test_a_red_item_shows_its_reasons_and_setup_log(env, tmp_path):
     assert f"- red: {reasons}" in section and f"- setup log: `{env.d.cfg.rel(setup)}`" in section
 
 
-def write_handoff(root, text: str) -> None:
+def write_notes(root, text: str) -> None:
     (root / "reports").mkdir(parents=True, exist_ok=True)
-    (root / "HANDOFF.md").write_text(text, encoding="utf-8")
+    (root / "planner-notes.md").write_text(text, encoding="utf-8")
     for name in ("12_x", "13_z"):
         (root / "reports" / f"{name}_report.md").write_text("status: done\n", encoding="utf-8")
 
 
 def test_no_marker_line_lists_no_conductor_reports(tmp_path):
-    write_handoff(tmp_path, "# Handoff\n\nNothing about reports here.\n")
+    write_notes(tmp_path, "# Planner notes\n\nNothing about reports here.\n")
     assert session.reports_past_marker(tmp_path) == (None, [])
     [head] = session.conductor_reports(tmp_path)
     assert head.startswith("No `Last report reviewed by the planner:` line found in ") and "nothing listed" in head
@@ -109,12 +109,12 @@ def test_no_marker_line_lists_no_conductor_reports(tmp_path):
                                   "**Last report reviewed by the planner:** 12_x",
                                   "- **Last report reviewed by the planner: 12_x**"])
 def test_a_decorated_marker_line_still_counts(tmp_path, line):
-    write_handoff(tmp_path, f"## Status\n\n{line}\n")
+    write_notes(tmp_path, f"## Status\n\n{line}\n")
     marker, found = session.reports_past_marker(tmp_path)
     assert marker == "12_x" and [name for name, _ in found] == ["13_z"]
 
 
-def test_render_without_handoff(env, tmp_path):
+def test_render_without_notes(env, tmp_path):
     bundle = review.render(env.d.cfg, state.scan(env.d.cfg, env.d.log), "signals/x", root=tmp_path)
-    assert "- none" in bundle.text and "HANDOFF.md not found" in bundle.text
+    assert "- none" in bundle.text and "planner-notes.md not found" in bundle.text
     assert (bundle.items, bundle.conductor) == ([], [])

@@ -21,7 +21,7 @@ The report, after its header, has:
 - **Summary**: the main points of the three new headings, a few lines.
 - **About conductor**: findings about conductor itself (the template, the preamble, the
   planner's prompt, conductor's tools), each with the change you would make, for the
-  planner to carry to conductor's HANDOFF; `none` if there are none.
+  planner to carry to conductor's `planner-notes.md`; `none` if there are none.
 
 The status is `done` when the notes are written, `partial` when part of the record could
 not be read, and `red` only when something is broken.

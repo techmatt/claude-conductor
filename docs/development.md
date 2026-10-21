@@ -28,11 +28,11 @@ conductor during a run never restarts a test's daemon; `tests/test_restart.py` s
 `env.hold()`), `tests/test_review.py` the `review:` bundle.
 
 Where things live, beyond the obvious: `Daemon` is `daemon.py` plus `daemon_*` mixins
-(signals, messages, reap, merge, `daemon_restart` for the self-restart, `daemon_setup`
+(signals, messages, receipts, reap, merge, `daemon_restart` for the self-restart, `daemon_setup`
 for setup runners and the second half of a launch or stage); `setup_run.py` is the
 runner; `review.py` renders `review.md`; `state.early_starts` picks readonly and
 `alongside` items that start behind the head (`tests/test_alongside.py`); `session.reports_past_marker` finds conductor's reports
-past HANDOFF's marker and `inbox.unreviewed_lines` builds the unreviewed summary, each
+past the planner's marker (`planner-notes.md`) and `inbox.unreviewed_lines` builds the unreviewed summary, each
 shared by the digest, the inbox and the review bundle.
 A staging prompt makes the fake obey only `FAKE stage-…` lines and remember the prompt
 under its session id; `--resume` recalls it, so a test can see that a resumed session

@@ -1,6 +1,6 @@
 """`session.md`: the start digest a `session:` signal writes, so a planner session opens
 with one signal and one read. It is the inbox since the previous read mark, plus
-conductor's own reports past HANDOFF's marker and each repo's maintenance facts."""
+conductor's own reports past the planner's marker and each repo's maintenance facts."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ from .events import Event, EventLog
 from .state import View
 from .util import clock, read_text
 
-# Conductor's own checkout: `src/conductor/session.py` → the repo root. Its HANDOFF.md
-# holds the planner's marker for conductor's hand-pasted prompts' reports.
+# Conductor's own checkout: `src/conductor/session.py` → the repo root. Its `planner-notes.md`
+# (git-ignored, the planner's own file) holds the marker for conductor's hand-pasted prompts' reports.
 CONDUCTOR_ROOT = Path(__file__).resolve().parents[2]
+NOTES = "planner-notes.md"
 MARKER = "Last report reviewed by the planner:"
 
 # What `state.md`'s *Maintenance* section tracks, in the planner's words.
@@ -32,14 +33,15 @@ def _report_key(name: str) -> tuple[int, str] | None:
 
 
 def reports_past_marker(root: Path) -> tuple[str | None, list[tuple[str, Path]]] | None:
-    """HANDOFF's marker and every `reports/NN_name_report.md` of conductor's own repo whose
-    prompt is past it, in natural order, as (name, path); None without a HANDOFF.md. The
+    """The planner's marker (in `planner-notes.md`) and every `reports/NN_name_report.md` of
+    conductor's own repo whose prompt is past it, in natural order, as (name, path); None
+    without the notes file. The
     marker line may start with `- ` or `**`; without one the marker is None and nothing is
     past it, since listing every report ever written would bury the planner."""
-    handoff = root / "HANDOFF.md"
-    if not handoff.is_file():
+    notes = root / NOTES
+    if not notes.is_file():
         return None
-    marker = next((ln.lstrip("-* ").split(":", 1)[1].strip("* ") for ln in read_text(handoff).splitlines()
+    marker = next((ln.lstrip("-* ").split(":", 1)[1].strip("* ") for ln in read_text(notes).splitlines()
                    if ln.lstrip("-* ").startswith(MARKER)), None)
     if marker is None:
         return None, []
@@ -53,14 +55,14 @@ def reports_past_marker(root: Path) -> tuple[str | None, list[tuple[str, Path]]]
 
 
 def reports_head(root: Path, marker: str | None, found: list) -> str:
-    """`Past `<MARKER> 12_x` in `<root>/HANDOFF.md`:` (or `: none.`)."""
+    """`Past `<MARKER> 12_x` in `<root>/planner-notes.md`:` (or `: none.`)."""
     if marker is None:
-        return f"No `{MARKER}` line found in `{root / 'HANDOFF.md'}`; nothing listed."
-    return f"Past `{MARKER} {marker or '(none)'}` in `{root / 'HANDOFF.md'}`" + (":" if found else ": none.")
+        return f"No `{MARKER}` line found in `{root / NOTES}`; nothing listed."
+    return f"Past `{MARKER} {marker or '(none)'}` in `{root / NOTES}`" + (":" if found else ": none.")
 
 
 def missing_handoff(root: Path) -> str:
-    return f"- conductor's HANDOFF.md not found under `{root}`; nothing to list."
+    return f"- conductor's {NOTES} not found under `{root}`; nothing to list."
 
 
 def report_status(text: str) -> str:
@@ -70,7 +72,7 @@ def report_status(text: str) -> str:
 
 
 def conductor_reports(root: Path) -> list[str]:
-    """Conductor's own reports past HANDOFF's marker, one line each with its status line."""
+    """Conductor's own reports past the planner's marker, one line each with its status line."""
     if (past := reports_past_marker(root)) is None:
         return [missing_handoff(root)]
     marker, found = past

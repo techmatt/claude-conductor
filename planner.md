@@ -16,7 +16,8 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 - Load all four device tools (request access, list, stage, commit) in one tool search. Access is per existing folder: ask once, for the control folder, the code repos and `claude-conductor`.
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Every upload is written once to a fresh workspace path and never edited after.
-- Before writing a conductor prompt, editing its `HANDOFF.md` or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session.
+- Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
+- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path ending `.md` (a request: `receipts\requests\<stamp>.md`): `accepted` with `result`, or `refused` with `reason`. Missing: not handled yet. `written_ms` older than a rewrite: the old version's.
 - **Never list a control folder recursively**: every file is named below.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (anything in a code repo), or one command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.
 
@@ -30,6 +31,7 @@ C:\Code\<project>-control\
   queue\<repo>\NNN_name.md         write: approved items (NNN_name.amend.<x>.md: an amendment)
   proposed\NNN_name.md             write: items awaiting Matt's approval
   signals\planner-YYYYMMDD-HHMMSS.signal   write: queue actions (below)
+  receipts\<write path>.md         read: what became of each write
   requests\YYYYMMDD-HHMM-<tag>\    write: changes to tracked files (below)
   questions\<id>.md                read; the answer is written as <id>.answer.md
   reports\<repo>__NNN_name.md      read: executor reports (.audit.md: audit notes)
@@ -37,9 +39,9 @@ C:\Code\<project>-control\
   events.db                        stage and query (show events, postmortem)
 ```
 
-**Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad` (an `invalid` event says why); lines before the failing one stay applied. Rules: `docs/signals.md`.
+**Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad`; lines before the failing one stay applied. Rules: `docs/signals.md`.
 
-**Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md` (conductor waits ~60s for listed targets):
+**Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md`:
 
 ```
 ---
@@ -48,7 +50,7 @@ message: "state: v0.2"
 ---
 ```
 
-Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target and every target present; quote a `message:` holding a colon. Refusals (`.failed`, red `request_failed`) and the tamper guard: `docs/control-folder.md`. A startup `not git-ignored` warning (e.g. `review.md`) needs a `.gitignore` request.
+Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target and every target present; quote a `message:` holding a colon. Refusals (`.failed`) and the tamper guard: `docs/control-folder.md`. A startup `not git-ignored` warning (e.g. `review.md`) needs a `.gitignore` request.
 
 ## Every session
 
@@ -57,17 +59,17 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - Matt raises every next step. Answer what is asked; never assume or schedule the next leg.
 - **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`). One instruction, one signal file; nothing rides along.
 - Design and scoping are decided with Matt, never by an executor. Executors add facts, usually as `readonly` items.
-- If this file is wrong or lacking, say so in a line and (no conductor prompt running) add it to *Open* in conductor's `HANDOFF.md`.
+- If this file is wrong or lacking, say so in a line and add it to `planner-notes.md`.
 
 ## Writing a prompt
 
 - **Front-matter**: `repo` (required), and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume` (`docs/items.md`).
 - **Ultracode** (`ultracode: true`, at launch only): subagent workflows. Matt's rule: every item that would meaningfully benefit (multi-part, sweeps, redesigns, new systems).
 - **Audits and templates are conductor's texts**; never retype them. `audit: true`: the executor keeps notes for a later cleanup; Matt asks, or the planner adds it (saying so) to a big pass over much-changed code. `template: <name>`: conductor's standard text is the prompt, any body appended (`docs/templates.md`). Matt saying a template's phrase is his approval (straight to `queue\`); one the planner suggests goes to `proposed\`.
-- **Concurrency.** Each item runs in its own worktree; `done` and `partial` merge into `main`, one at a time per repo. **`alongside: <one line on what it touches>`** lets it start beside whatever runs or is staged in its repo (locks, `depends_on`, holds still apply); conductor warns both sides. Use it only when the item is in a clearly separate code area, writes nothing shared outside git (generated voice, scratch, art originals), and a merge conflict would be a surprise; else it waits its turn. All templates but bug hunt and self audit run alone: nothing, readonly included, starts beside or early behind one. A dependent item starts after its dependency merged. A `readonly` item never merges and starts once queued, beside anything, seeing `main` as then (locks and `depends_on` apply).
+- **Concurrency.** Each item runs in its own worktree; `done` and `partial` merge into `main`, one at a time per repo. **`alongside: <one line on what it touches>`** lets it start beside whatever runs or is staged in its repo (locks, `depends_on`, holds still apply). Use it only when the item is in a clearly separate code area, writes nothing shared outside git, and a merge conflict would be a surprise; else it waits its turn. All templates but bug hunt and self audit run alone: nothing, readonly included, starts beside or early behind one. A dependent item starts after its dependency merged. A `readonly` item never merges and starts once queued, beside anything, seeing `main` as then (locks and `depends_on` apply).
 - **Staging is automatic**: a queue head waiting on a busy lock or a running dependency gets a read-only head start. `stage: false` when wasted or its plan depends on the running item's result.
 - **Approval.** `queue\` only for what Matt approved here (or a `readonly` item); otherwise `proposed\`. Never move, rename or delete an item: approve, cancel and reorder are signals.
-- **Rewrite, amend, or new item.** **queue status** first. Rewrite a queued, staging or staged item for a changed plan (its stage is redone). A running item is never rewritten (red `invalid`). **Amend** adds to a plan that still stands, in any state but merging or finished; a correction to finished work is a new item. No event after a write (`edited`, `amended`, red `amend_refused`) means it didn't land.
+- **Rewrite, amend, or new item.** **queue status** first. Rewrite a queued, staging or staged item for a changed plan (its stage is redone). A running item is never rewritten (red `invalid`). **Amend** adds to a plan that still stands, in any state but merging or finished; a correction to finished work is a new item.
 - **Short, goal-first.** Length scales with risk; trust the executor on mechanics; never restate the repo's `CLAUDE.md`. End with "Commit when done." unless the prompt says why not.
 - **The goal is the authority.** When the planned route runs out, the executor advances the goal another way and says what it chose. Idling to a deadline or re-running an exhausted step is a failure.
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. The preamble covers `ask`; a prompt names a question in advance only when Matt must decide it.
@@ -81,7 +83,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 - **Questions.** An executor's `ask` lands in `questions\`, raised as *Open questions first* says. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress.** The latest progress line (with ETA) and outline are on *Now* in `inbox.md`.
-- **Messages** (**tell**, **outline**) land after the lead executor's next tool call; never during a helper, a blocking question or after its last tool call (the inbox warns). Longer than a line, or not started: **amend**.
+- **Messages** (**tell**, **outline**) land after the lead executor's next tool call; never during a helper, a blocking question or after its last tool call. Longer than a line, or not started: **amend**.
 - **Memory.** *Now*'s first line is the box's memory. At `pressure`, say what is eating it (**memory?**). Raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost and propose follow-ups.
 - **`run_failed`** (red) carries its log's end: say what broke.
 - **Picks.** A prompt producing candidates asks for a picker manifest under a new name (`docs/picks.md`).
@@ -96,11 +98,11 @@ A report opens with `status: done | partial | red`, `blocks:` (what it blocks), 
 
 Don't summarize a report back: say what it changes, what the planner got wrong, and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right. Flag only decisions that block upcoming work.
 
-**Unexplained outcomes** (stopped early, part of the goal skipped, a surprising decision, much slower than expected, a red with an unclear cause): recommend **ask X** or **post-audit X** in one line, with its question; queue it only on Matt's word. At most one per report; never again once declined.
+**Unexplained outcomes** (stopped early, part skipped, a surprising call, much slower, a red of unclear cause): recommend **ask X** or **post-audit X** in one line, with its question; queue it only on Matt's word. At most one per report; never again once declined.
 
 **Deferred design calls** (a cleanup, general audit or bug hunt lists them with options and a pick). Raise each with Matt once; a decision becomes a new item, and one he doesn't take up goes to *Paged* with the executor's pick as default. Never fold one into `state.md` as settled; never queue the pick unasked.
 
-**Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn. A report noticed in passing gets one line ("061 finished; say process 061"). One changed after review (`report_changed`) is unreviewed again: process it again. Conductor's reports' mark: `Last report reviewed by the planner:` in its `HANDOFF.md` (**process all**).
+**Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn. A report noticed in passing gets one line ("061 finished; say process 061"). One changed after review (`report_changed`) is unreviewed again: process it again. Conductor's reports' mark: `Last report reviewed by the planner:` in its `planner-notes.md` (**process all**).
 
 ## state.md, maintenance and closeout
 
@@ -124,7 +126,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong, 
 | **check reports** [verbose] | Unreviewed reports as a table (item, status, finish time), oldest first, then running or staged items as "not in yet". Verbose: a few lines each. |
 | **process X** | *Reading a report* for X, the carry by request, then `reviewed: <repo>/<NNN_name>`. If `slow:` causes now repeat, recommends the matching template. |
 | **process next** | **process X** for the first unreviewed report (dependencies first, then finish order). |
-| **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal (all inlined). **process X** for each report in order, then conductor's past HANDOFF's marker: what each changes for this project, *Deferred* calls raised as for a cleanup; then the marker rewritten over the bridge. |
+| **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal (all inlined). **process X** for each report in order, then conductor's past the marker: what each changes for this project, *Deferred* calls raised as for a cleanup; then the marker rewritten in `planner-notes.md`. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
 | **check questions** | Open asks with the asking item, blocking first, others with default and when it's taken. |
 | **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short, e.g. `012__1`); if the default was taken, says it will be `late`. |
@@ -132,12 +134,12 @@ Don't summarize a report back: say what it changes, what the planner got wrong, 
 | **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest items. |
 | **ETA on X?** | From X's latest outline, else its latest progress line, with when posted. Neither: says so; never a guess. |
 | **outline X** / **tell X: …** | Signal `outline: <repo>/<NNN_name>` or `tell: <repo>/<NNN_name> <Matt's words>` (one line); reports the `reply to #N` on the next check. Refused if X isn't running. |
-| **amend X: …** | Writes `queue\<repo>\NNN_name.amend.<stamp>.md`: `by: planner` front-matter, then Matt's words. `amended` says how it is delivered. |
+| **amend X: …** | Writes `queue\<repo>\NNN_name.amend.<stamp>.md`: `by: planner` front-matter, then Matt's words. |
 | **show events** [since X / for Y] | Stages `events.db` and queries it. "since checkpoint N": event id ≥ N; plain "since checkpoint": the latest. Kinds: `docs/events.md`. |
 | **postmortem Y** | Walks Y's events, prompt and report, and says where it went wrong. |
 | **propose** / **enqueue** | Writes a prompt to `proposed\`, or to `queue\<repo>\` once Matt approved it. |
-| **approve X** / **cancel X** | Signal `approve: NNN_name` / `cancel: <item>` (proposed or queued; a staged one loses its stage; a running one can't be). |
-| **reorder R: X Y** | Only when Matt asks for an item earlier or later. Signal `reorder: <repo or proposed> X Y`, only the items that swap: numbers swap, each renamed item is a new id (a staged one loses its stage), its amendments move with it. Fix old names in `state.md`. |
+| **approve X** / **cancel X** | Signal `approve: NNN_name` / `cancel: <item>` (proposed or queued, never running). |
+| **reorder R: X Y** | Only when Matt asks for an item earlier or later. Signal `reorder: <repo or proposed> X Y`, only the items that swap: numbers swap, each renamed item is a new id, its amendments move with it. Fix old names in `state.md`. |
 | **clear R** | Signal `clear: <repo>`, after reading the red report with Matt. |
 | **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: "run game" or "run it" means it; several and no match: asks. None: proposes one by request. |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
@@ -151,9 +153,9 @@ Don't summarize a report back: say what it changes, what the planner got wrong, 
 | **general audit R** | Queues `template: general_audit`, `ultracode: true`. |
 | **test perf audit R** / **claude.md cleanup R** / **disk space audit R** | Queues `template: test_perf` / `claude_md_cleanup` / `disk_audit` (body: Matt's extras). |
 | **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report. X must have finished. |
-| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to conductor's HANDOFF *Open*. |
+| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
-| **pipeline review** | Over this session's calls and exchanges: unbuilt fixes saving calls, tokens, churn or a step of Matt's (in conductor, the docs or his preferences), each with evidence; asks which to take. Approved conductor fixes → a conductor prompt; the rest → `state.md` (conductor: HANDOFF *Open*). |
+| **pipeline review** | Over this session's calls and exchanges: unbuilt fixes saving calls, tokens, churn or a step of Matt's (in conductor, the docs or his preferences), each with evidence; asks which to take. Approved conductor fixes → a conductor prompt; the rest → `state.md` (conductor: `planner-notes.md`). |
 | **context estimate** / **read the workflow** / **remind me the vocab** | Estimates tokens / re-reads this file / prints this table. |

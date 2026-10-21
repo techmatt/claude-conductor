@@ -29,6 +29,7 @@ stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 ```
 
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
+What became of each file is its receipt, `receipts/signals/<name>.md` (`receipts.md`).
 Items are named `NNN_name` or `NNN` (numerically: `7` is `007`). A ` # comment` after a
 value is ignored.
 
@@ -82,7 +83,7 @@ value is ignored.
 - **review** — `review: all` or `review: <ref>` (one token; the ref resolves as for
   `reviewed:`, so `code/2` works) rewrites `review.md` whole: the unreviewed reports
   (or that one finished item's, reviewed or not) inlined, plus conductor's own past
-  HANDOFF's marker for `all` (layout: `inbox.md`, *Review bundle*), and logs `review`.
+  the planner's marker for `all` (layout: `inbox.md`, *Review bundle*), and logs `review`.
   It marks nothing reviewed. A queued or running item, an unknown or ambiguous ref, or
   a non-repo prefix is refused (`review: code/003_x has not finished; only a finished
   item's report can be reviewed`, `review: no finished item '009'`); a multi-word

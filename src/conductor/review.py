@@ -1,7 +1,7 @@
 """`review.md`: the bundle a `review:` signal writes, so a planner reviews in one read.
 The unreviewed-reports summary, then each report inlined whole (with a red item's reasons
 and the paths of its amendments, audit notes and setup log), then, for `review: all`, conductor's own reports past
-HANDOFF's marker. It marks nothing reviewed: that stays `reviewed:`."""
+the planner's marker (`planner-notes.md`). It marks nothing reviewed: that stays `reviewed:`."""
 
 from __future__ import annotations
 

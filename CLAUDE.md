@@ -16,7 +16,7 @@ When Matt says "launch the conductor" (or "launch conductor", "start the conduct
 
 ## "Restart all"
 
-When Matt says "restart all" (or "restart everything", "restart conductor and the app" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). Running executors are adopted by the new daemon, not killed. The warning still comes first, because a restart is a moment Matt should choose.
+When Matt says "restart all" (or "restart everything", "restart conductor and the app" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). Running executors are adopted by the new daemon, not killed. The warning comes first: Matt times a restart.
 
 ## "Run next prompt"
 
@@ -36,11 +36,11 @@ When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup"
 
 ## Standing prompt contract
 
-- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): the very first action of every prompt or cleanup pass appends `<time> start <NN_name>`, and the last `<time> done <NN_name> → <report path>` (or `stopped`). The planner reads it to see what is running.
+- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): the very first action of every prompt or cleanup pass appends `<time> start <NN_name>`, and the last `<time> done <NN_name> → <report path>` (or `stopped`).
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored), starting with a `status: done | partial | red` line (the planner's `session.md` digest shows it). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
 - Clock times are local 12-hour (`5:25pm`).
 - A step estimated over ~30 seconds is backgrounded, with a completion waiter on the real process, never on a launcher wrapper.
-- A prompt that changes conductor's user-facing behaviour (commands, signals, front-matter, files the planner reads or writes, the app) updates `planner.md` — method and **Vocab** — in the same commit, and `claude-ai-new-project.md` where it covers the topic (new / park / resume, memory, run targets, picks). Keep `planner.md` compressed: it is read in full at every session start.
-- Before committing, update `HANDOFF.md` *Status* and *Open* to match what the prompt left behind, and commit it with the rest.
+- A prompt that changes conductor's user-facing behaviour (commands, signals, front-matter, files the planner reads or writes, the app) updates `planner.md` — method and **Vocab** — in the same commit, and `claude-ai-new-project.md` where it covers the topic (new / park / resume, memory, run targets, picks). Keep `planner.md` compressed: it is read whole each session.
+- Before committing, update `HANDOFF.md` *Status* and *Open* to match what the prompt left behind, moving in the lines under *For HANDOFF Open* in `planner-notes.md` (then delete them there), and commit it with the rest.
 - Commit to `main` only, by explicit path. "Commit when done." in a prompt means one commit at the end unless the prompt asks for one per phase.
 - Every prompt names this repo; if the working directory is not `claude-conductor`, stop and say so.

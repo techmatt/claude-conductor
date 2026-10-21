@@ -47,7 +47,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    - **Conductor reports**: every `reports/NN_name_report.md` in conductor's own
      checkout (found from the installed package, `src/conductor/` → the repo root) whose
      prompt is past the `Last report reviewed by the planner: NN_name` line in its
-     `HANDOFF.md`, in natural order (12 < 12a < 13), each with its `status:` line (one
+     git-ignored `planner-notes.md` (the planner's file), in natural order (12 < 12a < 13), each with its `status:` line (one
      of its first five non-blank lines) or *no status line*, and its path;
    - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
      general audit, cleanup, test perf audit, claude.md cleanup, disk space audit) the
@@ -78,10 +78,10 @@ marks nothing reviewed. Layout:
    red item's `- red: <reasons>`, then `- amendments:`, `- audit notes:` and `- setup
    log:` paths only when those files exist (never their contents), then the report
    inlined whole and raw. A missing report is one line (`- the report file is missing: …`).
-4. `all` only: `## Conductor reports`: the marker line from conductor's `HANDOFF.md`
+4. `all` only: `## Conductor reports`: the marker line from conductor's `planner-notes.md`
    (or `: none.`), then each of conductor's reports past it, as for the digest
    (`session.reports_past_marker`), as `### <NN_name>`, its absolute path and its text
-   inlined whole. No `HANDOFF.md`, or no marker line in it (a leading `- ` or `**` is
+   inlined whole. No `planner-notes.md`, or no marker line in it (a leading `- ` or `**` is
    fine): one line saying so, nothing listed.
 
 ## Inbox

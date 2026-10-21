@@ -14,7 +14,7 @@ CONFIG_NAME = "conductor.toml"
 # committed. A request may not target anything under these.
 RUNTIME = (
     "queue", "proposed", "running", "done", "reports", "questions", "picks", "requests",
-    "signals", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
+    "signals", "receipts", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
 )
 
 REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background"}
