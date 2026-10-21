@@ -22,6 +22,7 @@ requests/
 signals/
 inbox.md
 session.md
+review.md
 events.db*
 .conductor/
 """
@@ -131,6 +132,14 @@ def no_claude_ancestor(monkeypatch):
     is tested on its own, never left to whoever runs the tests."""
     from conductor import procs
     monkeypatch.setattr(procs, "claude_ancestor", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def no_code_restart(monkeypatch):
+    """A commit to conductor during a test run never restarts a test's daemon: the
+    self-restart is off unless a test stands in a code version."""
+    from conductor import daemon_restart
+    monkeypatch.setattr(daemon_restart, "code_version", lambda root=None: None)
 
 
 @pytest.fixture(scope="session")

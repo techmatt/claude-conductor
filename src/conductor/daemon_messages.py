@@ -122,7 +122,7 @@ class MessagesMixin:
 
     # ---------------------------------------------------------------- amendments
     def process_amends(self, view: state.View) -> set[str]:
-        """Take every settled `queue/<repo>/NNN_name.amend[.N].md`, in order, and deliver
+        """Take every settled `queue/<repo>/NNN_name.amend[.<any>].md`, in name order, and deliver
         it by the item's state: a queued or staged item gets it at launch (in its prompt,
         or in the resume message, the stage kept); a running one after its next tool call.
         A finished or merging item's is refused and left in place. Returns the items with
@@ -132,7 +132,7 @@ class MessagesMixin:
         for repo in self.cfg.repos:
             qdir = self.cfg.path("queue", repo)
             found = sorted(((a, p) for p in qdir.glob("*.md") if (a := items.amend_of(p))) if qdir.is_dir() else [],
-                           key=lambda t: (t[0], t[1].name))
+                           key=lambda t: (t[0][0], items.amend_key(t[0][1]), t[1].name))
             for (name, _), p in found:
                 item_id, rel = f"{repo}/{name}", self.cfg.rel(p)
                 try:
@@ -180,7 +180,11 @@ class MessagesMixin:
 
     def _amend_state(self, item_id: str, view: state.View, queued: set[str]) -> str | None:
         """queued | staging | staged | running | merging | finished, or None (not seen)."""
-        if run := self.runs.get(item_id):
+        rec = run.rec if (run := self.runs.get(item_id)) else view.running.get(item_id)
+        if rec is not None and rec.get("phase") == "setup":
+            # Not started yet: taken into its prompt (or resume message) when setup is done.
+            return "staged" if rec.get("staged") else "queued"
+        if run:
             return "running" if run.rec.get("phase", "exec") == "exec" and not run.exited() else "merging"
         if item_id in view.running:
             return "running" if view.running[item_id].get("phase", "exec") == "exec" else "merging"

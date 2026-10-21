@@ -31,30 +31,57 @@ def _report_key(name: str) -> tuple[int, str] | None:
     return (int(m.group(1)), m.group(2)) if m else None
 
 
-def conductor_reports(root: Path) -> list[str]:
-    """Every `reports/NN_name_report.md` of conductor's own repo whose prompt is past
-    HANDOFF's marker line, in natural order, each with its status line."""
+def reports_past_marker(root: Path) -> tuple[str | None, list[tuple[str, Path]]] | None:
+    """HANDOFF's marker and every `reports/NN_name_report.md` of conductor's own repo whose
+    prompt is past it, in natural order, as (name, path); None without a HANDOFF.md. The
+    marker line may start with `- ` or `**`; without one the marker is None and nothing is
+    past it, since listing every report ever written would bury the planner."""
     handoff = root / "HANDOFF.md"
     if not handoff.is_file():
-        return [f"- conductor's HANDOFF.md not found under `{root}`; nothing to list."]
-    marker = next((ln.split(":", 1)[1].strip() for ln in read_text(handoff).splitlines()
-                   if ln.startswith(MARKER)), "")
+        return None
+    marker = next((ln.lstrip("-* ").split(":", 1)[1].strip("* ") for ln in read_text(handoff).splitlines()
+                   if ln.lstrip("-* ").startswith(MARKER)), None)
+    if marker is None:
+        return None, []
     floor = _report_key(marker) or (-1, "")
     found = []
     for p in (root / "reports").glob("*_report.md"):
         name = p.name.removesuffix("_report.md")
         if (key := _report_key(name)) and key > floor:
             found.append((key, name, p))
+    return marker, [(name, p) for _, name, p in sorted(found)]
+
+
+def reports_head(root: Path, marker: str | None, found: list) -> str:
+    """`Past `<MARKER> 12_x` in `<root>/HANDOFF.md`:` (or `: none.`)."""
+    if marker is None:
+        return f"No `{MARKER}` line found in `{root / 'HANDOFF.md'}`; nothing listed."
+    return f"Past `{MARKER} {marker or '(none)'}` in `{root / 'HANDOFF.md'}`" + (":" if found else ": none.")
+
+
+def missing_handoff(root: Path) -> str:
+    return f"- conductor's HANDOFF.md not found under `{root}`; nothing to list."
+
+
+def report_status(text: str) -> str:
+    """A report's `status:` line, from its first five non-blank lines."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return next((ln for ln in lines[:5] if ln.lower().startswith("status:")), "no status line")
+
+
+def conductor_reports(root: Path) -> list[str]:
+    """Conductor's own reports past HANDOFF's marker, one line each with its status line."""
+    if (past := reports_past_marker(root)) is None:
+        return [missing_handoff(root)]
+    marker, found = past
     out = []
-    for _, name, p in sorted(found):
+    for name, p in found:
         try:
-            lines = [ln.strip() for ln in read_text(p).splitlines() if ln.strip()]
+            status = report_status(read_text(p))
         except (OSError, UnicodeDecodeError):
-            lines = []
-        status = next((ln for ln in lines[:5] if ln.lower().startswith("status:")), "no status line")
+            status = "no status line"
         out.append(f"- {name}: {status} — `{p}`")
-    head = f"Past `{MARKER} {marker or '(none)'}` in `{handoff}`"
-    return [head + (":" if out else ": none."), *out]
+    return [reports_head(root, marker, found), *out]
 
 
 def slow_components(text: str | None) -> list[str]:

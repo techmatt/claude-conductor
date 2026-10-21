@@ -65,6 +65,8 @@ def parse(path: Path, repo: str) -> Item:
         item.errors.append("file name must be NNN_name.md")
     else:
         item.num = int(m.group(1))
+    if amend_of(path) is not None:          # the queue would take it for an amendment
+        item.errors.append("named like an amendment (.amend[.<tag>].md); rename it")
     try:
         meta, body = split_front_matter(read_text(path))
     except (FrontMatterError, OSError, UnicodeDecodeError) as exc:
@@ -131,15 +133,25 @@ def number_matches(name: str, ref: str) -> bool:
     return name == ref or num == ref or (ref.isdigit() and num.isdigit() and int(num) == int(ref))
 
 
-# An amendment to an item: `NNN_name.amend.md`, then `NNN_name.amend.2.md`, ... beside
-# it in `queue/<repo>/`, applied in that order. Never an item file itself.
-AMEND_RE = re.compile(r"^(.+)\.amend(?:\.(\d+))?$")
+# An amendment to an item: `NNN_name.amend.md`, or `NNN_name.amend.<anything>.md` (`.amend.2.md`,
+# a timestamp, ...) beside it in `queue/<repo>/`, applied in name order. Never an item file itself.
+AMEND_RE = re.compile(r"^(.+?)\.amend(?:\.(.+))?$")
 
 
-def amend_of(path: Path) -> tuple[str, int] | None:
-    """(item name, order) for an amend file's path, or None for anything else."""
+def amend_of(path: Path) -> tuple[str, int | str] | None:
+    """(item name, order) for an amend file's path, or None for anything else: the order
+    is 1 for `.amend.md`, N for `.amend.N.md`, else the free-form part."""
     m = AMEND_RE.match(path.stem) if path.suffix == ".md" else None
-    return (m.group(1), int(m.group(2) or 1)) if m else None
+    if not m:
+        return None
+    tag = m.group(2) or "1"
+    return m.group(1), int(tag) if tag.isdigit() else tag
+
+
+def amend_key(order: int | str) -> tuple:
+    """Name order of amend files, numbers compared as numbers: `.amend.md` < `.amend.2.md` <
+    `.amend.10.md` < `.amend.20261020-1530.md`."""
+    return tuple((0, int(c), "") if c.isdigit() else (1, 0, c) for c in re.split(r"(\d+)", str(order)) if c)
 
 
 def item_files(folder: Path) -> list[Path]:

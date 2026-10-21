@@ -7,6 +7,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | kind | when | notable detail |
 |---|---|---|
 | `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control; running items at stop; stop `reason` (`signal`: a `stop: daemon` signal, `interrupt`: Ctrl+C, `error`: three ticks in a row failed on an `OSError`) |
+| `daemon_restart` | logged by the old daemon as it restarts itself on a code change (`restart.md`, *Self-restart*); the new one then logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
 | `daemon_died` | at start: the previous daemon left `daemon.json` and is gone, so it never stopped cleanly (red) | pid, started, last_beat, gap, memory (its last sample: at, level, commit, limit, free), running |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
@@ -14,8 +15,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded) |
 | `invalid` | bad item, signal, stray queue folder, bad config | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
-| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); template, template_version, notes (a template item; a cleanup's notes); error (launch failed) |
-| `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline |
+| `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
+| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); error (launch failed, setup included) |
+| `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
 | `staged` | the stage finished cleanly | session_id, plan (first 500 chars), cost_usd |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
 | `merge` | an item's branch landed on main | branch, sha (main after), commits; resolved (prose files a merge executor resolved) |
@@ -24,17 +26,18 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `paths_violation` | the branch changed files outside `paths` (red) | files, paths_declared |
 | `adopt` | restart found the executor (or stage: `stage: true`) alive | pid, session_id |
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
-| `requeue` | restart found it never launched | reason |
+| `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached | pid, reason |
 | `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; audit (it kept notes), template |
 | `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window | changes, concurrent, found (the check that saw it) |
 | `drift` | control folder changed with no executor running | changes |
-| `request` / `request_failed` | a request applied or rejected | request, message, targets / error |
+| `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals | through; session (a `session:` signal's checkpoint id) / repo |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by |
+| `review` | a `review:` signal wrote `review.md`; paths: the signal, `review.md`; item: the ref's (none for `all`) | which (`all` or the item id), items (inlined, oldest first), conductor (conductor reports inlined), by |
 | `checkpoint` | a `checkpoint:` (or `session:`) signal started a new session view (its id is its number) | label, by; session (`session.md`, from a `session:` signal) |
 | `progress` | the executor called `progress` | seq, at, note (absent on an outline-only line), eta, done, remaining, outline ([{title, eta, done}]); reply_to (the tell or running amendment it answers) |
 | `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message | text, by; outline_request (an `outline:` signal's fixed request) |
@@ -59,4 +62,4 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `late` | an answer file after a default or close | question, text, outcome; by |
 | `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
-| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a stage discarded; a shared path that is a file, or not ignored; a worktree not removed (recorded for retry) or still not removed on a retry; a report still unreviewed at a checkpoint | note; checkpoint, finish (the unreviewed-at-checkpoint warning) |
+| `config_reload`, `warning` | config applied; runtime path not ignored; a toast failed; a self-restart blocked, not importing or not spawned; a stage discarded; a shared path that is a file, or not ignored; a worktree not removed (recorded for retry) or still not removed on a retry; a report still unreviewed at a checkpoint | note; checkpoint, finish (the unreviewed-at-checkpoint warning) |

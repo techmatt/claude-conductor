@@ -1,4 +1,4 @@
-# Checkpoints, the session digest, the inbox and toasts
+# Checkpoints, the session digest, the review bundle, the inbox and toasts
 
 ## Checkpoints
 
@@ -62,13 +62,35 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
 The digest stays as written until the next `session:`; `inbox.md` carries on as
 before. The planner decides what to recommend from the facts.
 
+## Review bundle
+
+`review: all` (or `review: <ref>`, `signals.md`) writes `review.md` (runtime,
+git-ignored, rewritten whole) so the planner reviews in one read (`review.py`). It
+marks nothing reviewed. Layout:
+
+1. `# Review — <project>`, then ``Written for `signals/<file>` at <clock>: `review: all`.``
+   (or the item ref) and a line saying nothing is marked reviewed: like `session.md`,
+   a stage that names an older signal is the previous bundle.
+2. `## Unreviewed reports` (`## Report` for one item): the inbox's one-line summaries
+   (`inbox.unreviewed_lines`), or `- none`.
+3. Per report, oldest first: `## <repo>/<NNN_name> — **<status>**, finished <clock>
+   (#<id>)` (plus ` · reviewed #N` if it already is), ``- report: `reports/…md` ``, a
+   red item's `- red: <reasons>`, then `- amendments:`, `- audit notes:` and `- setup
+   log:` paths only when those files exist (never their contents), then the report
+   inlined whole and raw. A missing report is one line (`- the report file is missing: …`).
+4. `all` only: `## Conductor reports`: the marker line from conductor's `HANDOFF.md`
+   (or `: none.`), then each of conductor's reports past it, as for the digest
+   (`session.reports_past_marker`), as `### <NN_name>`, its absolute path and its text
+   inlined whole. No `HANDOFF.md`, or no marker line in it (a leading `- ` or `**` is
+   fine): one line saying so, nothing listed.
+
 ## Inbox
 
 `inbox.md` is regenerated whenever the log or the read mark changes (and every 30s
 for the *Now* section). Its header names the current checkpoint (see *Checkpoints*).
 First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
-oldest first, with its status, finish time, finish event id, report path and `carry:`
+oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`
 line (and ` · slow: …` unless its report said `slow: none` or nothing, and
 ` · pick: <ref>` when its report named a picker); it shows on every inbox,
 read mark or not, until a `reviewed:` signal names the item. Then **Picks**, also

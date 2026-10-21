@@ -1,9 +1,13 @@
+import os
 import subprocess
+import time
+from datetime import timedelta
 
 import pytest
 
 from conductor import executor, procs
 from conductor.daemon import Daemon
+from conductor.util import now, stamp
 
 from conftest import git
 
@@ -117,6 +121,101 @@ def test_bad_request_fails(env):
     assert (env.control / "requests" / "bad.failed").is_dir()
 
 
+def test_request_waits_for_late_target(env):
+    req = env.control / "requests" / "20261015-1300"
+    req.mkdir(parents=True)
+    (req / "request.md").write_text("---\ntargets: [state.md, notes/plan.md]\n---\nOne call\n", encoding="utf-8")
+    (req / "state.md").write_text("# state\n\none call\n", encoding="utf-8")
+    env.d.tick()
+    assert req.is_dir() and not env.events("request_failed") and not env.events("request")
+    (req / "notes").mkdir()
+    (req / "notes" / "plan.md").write_text("# plan\n", encoding="utf-8")
+    env.d.tick()
+    assert not req.exists() and not env.events("request_failed")
+    assert env.events("request")[0].detail["targets"] == ["state.md", "notes/plan.md"]
+    assert (env.control / "notes" / "plan.md").read_text(encoding="utf-8") == "# plan\n"
+    assert git(env.control, "log", "-1", "--format=%s").strip() == "One call"
+
+
+def test_request_missing_target_fails_after_wait(env, monkeypatch):
+    from conductor import request
+    monkeypatch.setattr(request, "REQUEST_WAIT_SECONDS", 0.3)
+    req = env.control / "requests" / "late"
+    req.mkdir(parents=True)
+    (req / "request.md").write_text("---\ntargets: [state.md]\n---\nNever\n", encoding="utf-8")
+    env.d.tick()
+    assert req.is_dir() and not env.events("request_failed")
+    env.tick_until(lambda: env.events("request_failed"))
+    err = env.events("request_failed")[0].detail["error"]
+    assert "['state.md']" in err and "after waiting" in err
+    assert (env.control / "requests" / "late.failed").is_dir()
+
+
+def test_late_target_arriving_during_parse_waits(env, monkeypatch):
+    # The late target lands between the settle check and parse's scan, possibly half written:
+    # the request is not applied this time round, and is once the folder settles again.
+    from conductor import request
+    monkeypatch.setattr(request, "SETTLE_SECONDS", 1.0)
+    req = env.control / "requests" / "20261015-1400"
+    req.mkdir(parents=True)
+    (req / "request.md").write_text("---\ntargets: [state.md, big.md]\n---\nLate\n", encoding="utf-8")
+    (req / "state.md").write_text("# state\n", encoding="utf-8")
+    old = time.time() - 10
+    for p in req.iterdir():
+        os.utime(p, (old, old))
+    real = request.settled
+    calls = []
+
+    def settled(d):
+        ok = real(d)
+        if not calls:
+            (req / "big.md").write_text("HALF", encoding="utf-8")
+        calls.append(ok)
+        return ok
+
+    monkeypatch.setattr(request, "settled", settled)
+    assert request.ready(req) is None and calls == [True, False]
+    os.utime(req / "big.md", (old, old))
+    assert request.ready(req).targets == ["state.md", "big.md"]
+
+
+def test_waiting_request_is_not_overtaken(env):
+    # An earlier request waiting on a missing target holds back a later one with an overlapping
+    # target, so the later (newer) content is the one left committed.
+    early, late = env.control / "requests" / "20261015-1500", env.control / "requests" / "20261015-1501"
+    for d in (early, late):
+        d.mkdir(parents=True)
+    (early / "request.md").write_text("---\ntargets: [state.md]\n---\nEarly\n", encoding="utf-8")
+    (late / "state.md").write_text("# state\n\nnewer\n", encoding="utf-8")
+    (late / "request.md").write_text("---\ntargets: [state.md]\n---\nLate\n", encoding="utf-8")
+    env.d.tick()
+    assert early.is_dir() and late.is_dir() and not env.events("request")
+    (early / "state.md").write_text("# state\n\nolder\n", encoding="utf-8")
+    env.d.tick()
+    assert not early.exists() and not late.exists()
+    assert [e.detail["request"] for e in env.events("request")] == [early.name, late.name]
+    assert (env.control / "state.md").read_text(encoding="utf-8") == "# state\n\nnewer\n"
+
+
+def test_malformed_request_fails_at_once(env):
+    req = env.control / "requests" / "broken"
+    req.mkdir(parents=True)
+    (req / "request.md").write_text("---\nmessage: no targets\n---\n", encoding="utf-8")
+    env.d.tick()
+    assert "targets" in env.events("request_failed")[0].detail["error"]
+    assert (env.control / "requests" / "broken.failed").is_dir()
+
+
+def test_extra_file_fails_once_targets_present(env):
+    req = env.control / "requests" / "extra"
+    req.mkdir(parents=True)
+    (req / "state.md").write_text("# state\n", encoding="utf-8")
+    (req / "stray.md").write_text("x\n", encoding="utf-8")
+    (req / "request.md").write_text("---\ntargets: [state.md]\n---\nExtra\n", encoding="utf-8")
+    env.d.tick()
+    assert "stray.md" in env.events("request_failed")[0].detail["error"]
+
+
 @pytest.mark.slow
 def test_needs_planner_holds_until_read(env):
     env.queue("001_plan", "FAKE report done", needs_planner="true")
@@ -132,6 +231,20 @@ def test_max_hours_kill(env):
     env.tick_until(lambda: env.finished("code/001_slow"))
     assert env.events("kill")
     assert env.finished("code/001_slow").detail["status"] == "red"
+
+
+@pytest.mark.slow
+def test_default_max_hours_kill(env):
+    # No max_hours of its own: the record carries the config default, not the item's None.
+    env.queue("001_slow", "FAKE sleep 60")
+    env.tick_until(lambda: "code/001_slow" in env.d.runs and env.d.runs["code/001_slow"].rec.get("pid"))
+    run = env.d.runs["code/001_slow"]
+    assert run.rec["max_hours"] == 1
+    run.rec["deadline"] = stamp(now() - timedelta(minutes=1))
+    env.tick_until(lambda: env.finished("code/001_slow"))
+    assert env.events("kill")[0].detail["reason"] == "max_hours 1 reached"
+    fin = env.finished("code/001_slow").detail
+    assert fin["status"] == "red" and "killed at max_hours 1" in fin["reasons"]
 
 
 def test_readonly_violation_is_red(env):

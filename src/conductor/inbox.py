@@ -142,6 +142,10 @@ def describe(ev: Event) -> str:
             text = f"{who} report reviewed (finished {d.get('status')}, #{d.get('finish')})"
         case "checkpoint":
             text = checkpoint_name(ev) + (f", session start digest `{d['session']}`" if d.get("session") else "")
+        case "review":
+            what = "every unreviewed report" if d.get("which") == "all" else d.get("which")
+            text = (f"review bundle `review.md` written for {what}: {_count(len(d.get('items', [])), 'report')}"
+                    + (f", {_count(len(d.get('conductor', [])), 'conductor report')}" if d.get("which") == "all" else ""))
         case "red":
             text = f"{who} red: {'; '.join(d.get('reasons', []))}"
             if d.get("after_red", "stop") == "stop":
@@ -159,6 +163,9 @@ def describe(ev: Event) -> str:
                 text += f" on `{d['branch']}`"
             if d.get("error"):
                 text += f"; launch failed: {d['error']}"
+        case "setup":
+            text = (f"{who} {'stage ' if d.get('stage') else ''}setup running (pid {d.get('pid')}): "
+                    + "; ".join(d.get("commands") or []))
         case "stage":
             text = f"{who} staging (session {d.get('session_id')}, pid {d.get('pid')}) in {d.get('worktree')}"
         case "staged":
@@ -244,6 +251,9 @@ def describe(ev: Event) -> str:
         case "daemon_stop":
             text = "daemon stopped" + (" by a `stop: daemon` signal" if d.get("reason") == "signal" else "")
             text += f"; still running: {', '.join(d['running'])}" if d.get("running") else ""
+        case "daemon_restart":
+            text = f"daemon restarting ({d.get('reason')}): new daemon pid {d.get('new_pid')}"
+            text += f"; adopts {', '.join(d['running'] + d['staging'])}" if d.get("running") or d.get("staging") else ""
         case "approve":
             text = f"{who} approved from {d.get('from')}"
         case "cancel":
@@ -319,6 +329,24 @@ def _line(ev: Event) -> str:
     return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}"
 
 
+def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
+    """The *Unreviewed reports* summary: one line per finish, with its report, carry,
+    `slow:`, pick, a red item's reasons and whether it was carried from before the checkpoint."""
+    out = []
+    for ev in finishes:
+        d = ev.detail
+        why = f" ({'; '.join(d['reasons'])})" if d.get("status") == "red" and d.get("reasons") else ""
+        report = f" — {ev.paths[0]}" if ev.paths else ""
+        carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
+        slow = f" · slow: {s}" if (s := slow_text(d)) else ""
+        pick = f" · pick: {d['pick']}" if d.get("pick") else ""
+        old = (" · **carried from before checkpoint "
+               f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
+        out.append(f"- {ev.item} **{d.get('status')}**{why}, finished {clock(ev.ts)} (#{ev.id})"
+                   f"{report}{carry}{slow}{pick}{old}")
+    return out
+
+
 def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -> str:
     """The inbox; with `heading` (the session digest's), that replaces its title and
     the mark-read hint, since the digest moves the read mark itself."""
@@ -345,7 +373,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
              and not (e.kind == "ask" and e.detail.get("question") in open_ids)]
     changes += [e for e in events if e.kind == "merge"]
     other = [e for e in events if e not in red + holds + finished + changes + asked
-             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress")]
+             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress", "setup")]
 
     out = [heading or f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
@@ -370,17 +398,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
             out.append(f"  Answer: write `questions/{q.id}.answer.md`.")
     if unreviewed := view.unreviewed():
         # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
-        out += ["", "## Unreviewed reports"]
-        for ev in unreviewed:
-            d = ev.detail
-            report = f" — {ev.paths[0]}" if ev.paths else ""
-            carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
-            slow = f" · slow: {s}" if (s := slow_text(d)) else ""
-            pick = f" · pick: {d['pick']}" if d.get("pick") else ""
-            old = (" · **carried from before checkpoint "
-                   f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
-            out.append(f"- {ev.item} **{d.get('status')}**, finished {clock(ev.ts)} (#{ev.id})"
-                       f"{report}{carry}{slow}{pick}{old}")
+        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed)]
         out.append("  Mark one reviewed once acted on: signal `reviewed: <repo>/<NNN_name>`.")
     if pick_rows := pick_lines(cfg, log, view):
         # Standing too: a picker waits for Matt whatever the read mark says.
@@ -404,7 +422,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
         for item_id, rec in view.running.items():
             if rec["repo"] != repo:
                 continue
-            text = rec["name"] + (" (merging)" if rec.get("phase") == "merge" else "")
+            text = rec["name"] + {"merge": " (merging)", "setup": " (setting up)"}.get(rec.get("phase"), "")
             if rec.get("phase", "exec") == "exec":
                 text += now_progress(log, item_id)
             running.append(text)

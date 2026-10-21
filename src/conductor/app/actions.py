@@ -91,7 +91,8 @@ def amend(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     repo, _, name = item_id.partition("/")
     qdir = Path(control) / "queue" / repo
     qdir.mkdir(parents=True, exist_ok=True)
-    taken = [a[1] for p in qdir.glob(f"{name}.amend*.md") if (a := items.amend_of(p)) and a[0] == name]
+    taken = [a[1] for p in qdir.glob(f"{name}.amend*.md")
+             if (a := items.amend_of(p)) and a[0] == name and isinstance(a[1], int)]
     n = max(taken, default=0) + 1
     final = qdir / (f"{name}.amend.md" if n == 1 else f"{name}.amend.{n}.md")
     tmp = final.with_name(final.name + ".tmp")

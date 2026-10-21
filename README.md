@@ -58,17 +58,17 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/control-folder.md` | The control folder's layout and `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
 | `docs/items.md` | Queue items: front-matter, rewriting, scheduling, holds, readonly items, max_hours; `paths:` concurrency and prose files |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
-| `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, log compaction, the report header, the outcome |
+| `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, setup, log compaction, the report header, the outcome |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general audit, test perf, disk audit, claude.md cleanup, bug hunt) |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress` and outlines, messages (`tell:`), short calls, amendments, opening a finished session |
 | `docs/signals.md` | Every signal verb and how a signal file is applied |
-| `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), `inbox.md`, toasts |
+| `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
 | `docs/memory.md` | Memory sampling, pressure levels and the launch guard, the leftover reaper, a daemon's death made visible |
 | `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed |
 | `docs/events.md` | `events.db` and every event kind with its detail |
-| `docs/restart.md` | The restart rule; platform notes (process groups, detached launches) |
+| `docs/restart.md` | The restart rule, the self-restart on a code change; platform notes (process groups, detached launches) |
 | `docs/development.md` | The test suite, its lanes and the fake executor |

@@ -77,13 +77,15 @@ def console_python() -> str:
     return sys.executable
 
 
-def spawn_daemon(control: Path, log: Path) -> Detached:
+def spawn_daemon(control: Path, log: Path, after: int | None = None) -> Detached:
     """Start `python -m conductor run <control>` detached from the caller (the app):
     no console window, its own process group, out of any job object that allows it,
     output appended to `log`, unbuffered (`-u`: a file is block-buffered, so the log
     would otherwise stay empty for hours). Quitting the app never takes the daemon down,
-    and neither does killing the app's process tree (`spawn_detached`)."""
-    return spawn_detached([console_python(), "-u", "-m", "conductor", "run", str(control)], control, log)
+    and neither does killing the app's process tree (`spawn_detached`). `after`: the
+    pid of a daemon restarting itself, which the new one waits for (`--after`)."""
+    cmd = [console_python(), "-u", "-m", "conductor", "run", str(control)]
+    return spawn_detached(cmd + (["--after", str(after)] if after else []), control, log)
 
 
 @dataclass
@@ -275,9 +277,9 @@ def kill_tree(pid: int) -> None:
     """Hard-kill a process and every descendant."""
     try:
         root = psutil.Process(pid)
-    except psutil.Error:
+        procs = root.children(recursive=True) + [root]
+    except psutil.Error:            # gone already, or gone between the two calls
         return
-    procs = root.children(recursive=True) + [root]
     for p in procs:
         try:
             p.kill()

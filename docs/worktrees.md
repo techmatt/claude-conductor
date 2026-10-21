@@ -16,10 +16,8 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   links the same one; a *file* at that path is a `warning` and is not linked. A shared
   folder should be git-ignored in the repo —
   conductor logs a `warning` if it is not, since an executor could commit it. Then the
-  `setup` commands run in the worktree through the shell, output to
-  `reports/<repo>__NNN_name.setup.log`; a failing or timed-out command is a launch
-  failure (red). Setup runs inside the daemon's loop, so a slow one delays everything
-  else for its duration. Links are always removed before a worktree is deleted, so
+  `setup` commands run in the worktree, off the daemon loop (`executors.md`, *Setup*);
+  a failing or timed-out command is a launch failure (red). Links are always removed before a worktree is deleted, so
   removing a worktree never reaches into a shared folder.
 - **Merging.** When an item finishes `done` or `partial`, it waits in `running/` (phase
   `merge`) and is merged serially per repo, in finish order: rebase the branch onto
@@ -103,10 +101,13 @@ worktree** with `claude -p --resume <session id>`. The resume message says the l
 is held, how many commits landed since staging (`git log <old>..HEAD`), and then gives
 the full execution preamble. The `start` event carries `resumed: true` and `landed`.
 
-A stage is discarded — `warning` event, worktree removed, the item launches fresh
-later — if it changed its worktree, left no result or errored, ran past
-`stage_minutes`, tampered with the control folder, or the item file changed or left
-the queue after staging. The head waits for a stage still running when it could
+A stage runs setup too, before its session (untracked files are recorded after setup,
+so setup output is allowed in a stage). A stage is discarded — `warning` event,
+worktree removed, the item launches fresh later — if its setup failed (`stage
+discarded: could not stage: <error>; the item launches fresh`), it changed its
+worktree, left no result or errored, ran past `stage_minutes`, tampered with the
+control folder, or the item file changed or left the queue during setup or after
+staging. The head waits for a stage still running when it could
 otherwise start.
 
 **Resume and working directory.** Claude Code stores sessions per working directory

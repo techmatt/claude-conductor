@@ -7,7 +7,7 @@ conductor.toml                 tracked — project, repos, locks, defaults
 state.md, other docs           tracked — changed only through requests
 .gitignore, .gitattributes     tracked — must ignore every runtime path below
 queue/<repo>/NNN_name.md       approved work, run in NNN order
-queue/<repo>/NNN_name.amend.md an amendment to that item (`.amend.2.md`, … after it); never an item
+queue/<repo>/NNN_name.amend.md an amendment to that item (`.amend.<anything>.md` too); never an item
 proposed/NNN_name.md           awaiting approval (shown in status/inbox, never run)
 running/<repo>/NNN_name.md     the item while it runs or waits to merge, plus NNN_name.run.json
 running/<repo>/NNN_name.stage.json   a staged queue head (the item itself stays in queue/)
@@ -20,11 +20,12 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
                                .audit.md (audit notes);
                                .amend.md (every amendment delivered, in order, with times)
 requests/<stamp>/              planner → conductor: replacement files + request.md
-signals/                       planner/app → conductor: read, clear, approve, cancel, reorder, reviewed, tell, outline, checkpoint, session, run, pick, stop
+signals/                       planner/app → conductor: the verbs in signals.md
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 picks/                         Matt's saved picker choices: <name>.choices.json (see picks.md)
 inbox.md                       generated digest since the read mark
 session.md                     the start digest the last `session:` wrote (see inbox.md)
+review.md                      the review bundle the last `review:` wrote (see inbox.md)
 events.db                      append-only event log (SQLite, WAL)
 .conductor/                    daemon lock and heartbeat (daemon.json), guard snapshot, cancelled/ (kept
                                cancelled items), reorder.json and signal.json (crash journals),
@@ -32,11 +33,22 @@ events.db                      append-only event log (SQLite, WAL)
                                mail/ (progress lines, messages to executors: see `progress.md`),
                                memory.jsonl (memory samples: see `memory.md`), leftovers.json
                                (worktrees to retry: see `worktrees.md`), run-<name>.log and
-                               run-<name>.json (run targets: see `run-targets.md`)
+                               run-<name>.json (run targets: see `run-targets.md`),
+                               setup/<repo>__NNN_name.run.json or .stage.json and their
+                               .result.json (a setup runner's spec and result, removed
+                               once setup ends: see `executors.md`, *Setup*)
 ```
 
+A run record's `phase` is `setup`, `exec`, `merge` or `concluding`. Run and stage
+records carry `setup` (state `running | ok | failed | killed`, commands, spec, result,
+log, pid, create_time, started, finished, error); a stage record stays `phase: staging`
+with `pid: null` until its staging executor spawns. A run record from a staged resume
+carries `resume` (old, new, landed).
+
 Conductor creates the runtime folders on start and logs a `warning` event if any of
-them is not git-ignored. `conductor init` (below) writes all of this. A suitable `.gitignore`:
+them is not git-ignored (a folder made before a runtime path existed, e.g. `review.md`,
+warns `not git-ignored in the control folder: ['review.md']` until a request adds the
+line). `conductor init` (below) writes all of this. A suitable `.gitignore`:
 
 ```
 queue/
@@ -50,6 +62,7 @@ requests/
 signals/
 inbox.md
 session.md
+review.md
 events.db*
 .conductor/
 ```
@@ -147,7 +160,7 @@ change made from outside during a live executor's window.
 
 The only way a tracked control file changes. The planner creates
 `requests/<stamp>/` holding whole replacement files at their paths relative to the
-control folder, plus `request.md` — **written last**:
+control folder, plus `request.md`, all in one bridge call, in any order:
 
 ```
 ---
@@ -160,11 +173,19 @@ Commit message (used when `message:` is absent; first line is the subject).
 The front-matter is YAML: a `message:` containing a colon must be quoted
 (`message: "state: v0.2"`). Unquoted, the YAML fails and the request lands `.failed`.
 
-Conductor waits until nothing in the folder has changed for 2 seconds, checks the
-guard, copies the files in (UTF-8 text is written with LF endings; anything else byte
-for byte), stages and commits exactly the targets, logs `request` and `commit`, removes
-the request folder and re-snapshots. Every file in the folder must be a target and
-every target must be present; targets must be relative, inside the folder and outside
-the runtime paths. A bad request is logged `request_failed` (red) and renamed
-`requests/<stamp>.failed/`. A request that changes nothing is logged with
+Conductor waits until nothing in the folder has changed for 2 seconds
+(`SETTLE_SECONDS`) and every target is present, checks the guard, copies the files in
+(UTF-8 text is written with LF endings; anything else byte for byte), stages and
+commits exactly the targets, logs `request` and `commit`, removes the request folder
+and re-snapshots. Targets not there yet are waited for, with no event, until 60s
+(`REQUEST_WAIT_SECONDS`) after `request.md`'s mtime (so the wait survives a restart;
+rewriting `request.md` starts it again); then the request fails (`targets listed but
+not in the request folder after waiting 60s: [...]`). Every other error fails at once:
+bad front-matter, no `targets:`, a target that is absolute, uses `..` or points into
+the runtime paths or `.git`, no commit message. Every file in the folder must be a
+target, checked once nothing is missing. A target that lands while the folder is being
+checked sends it round once more (it is never applied half-written). Requests keep stamp
+order where their targets overlap: a later one naming a target of an earlier, waiting
+one waits too. A bad request is logged `request_failed` (red)
+and renamed `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed.

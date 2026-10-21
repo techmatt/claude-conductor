@@ -1,7 +1,7 @@
 # Signals
 
-The verbs: read, clear, approve, cancel, reorder, reviewed, tell, outline, checkpoint,
-session, run, pick, open, notify, stop.
+The verbs: read, clear, approve, cancel, reorder, review, reviewed, tell, outline,
+checkpoint, session, run, pick, open, notify, stop.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -15,6 +15,7 @@ clear: sandbox               # release the sandbox queue after a red
 approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
+review: all                  # write review.md: every unreviewed report inlined (or `review: sandbox/003`)
 reviewed: sandbox/003        # the planner has acted on that finished item's report
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see progress.md)
 outline: sandbox/005         # ask running sandbox/005 for an updated outline (a tell of fixed text)
@@ -67,7 +68,15 @@ value is ignored.
   `reviewed` event names it), so it survives restarts, and it is independent of the
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
   waits on the read mark. Several `reviewed:` lines may share a file.
-- **tell** — `tell: <item> <message>`: see `progress.md`.
+- **review** — `review: all` or `review: <ref>` (one token; the ref resolves as for
+  `reviewed:`, so `code/2` works) rewrites `review.md` whole: the unreviewed reports
+  (or that one finished item's, reviewed or not) inlined, plus conductor's own past
+  HANDOFF's marker for `all` (layout: `inbox.md`, *Review bundle*), and logs `review`.
+  It marks nothing reviewed. A queued or running item, an unknown or ambiguous ref, or
+  a non-repo prefix is refused (`review: code/003_x has not finished; only a finished
+  item's report can be reviewed`, `review: no finished item '009'`); a multi-word
+  value fails the syntax check.
+- **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,
   *Outline*.
 - **checkpoint** — `checkpoint: <label>` (any text, a ` # ` included, or none): see

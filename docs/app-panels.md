@@ -16,7 +16,7 @@ an item's detail in `trail.py`.
   (*In flight* and *Finished* start open, *Earlier checkpoints* closed). A hold row
   sits directly under the repo, before the groups (the next item then reads *blocked
   by hold*); a red hold has a **Clear hold** button (`clear: <repo>`).
-  *In flight*: each running item with its phase (`running`, `merging`, `concluding`;
+  *In flight*: each running item with its phase (`setting up`, `running`, `merging`, `concluding`;
   a readonly one beside the others reads `running · readonly`), its elapsed time and,
   while it runs, its port in the note, then the queue in order, the next one marked `· next` with its
   decision (`wait`, `stage`, …) in the note, and any invalid item. A staged item is

@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~38s; 169 tests; 2026-10-20)
+uv run pytest            # the fast lane, after every change (~37s; 196 tests; 2026-10-20)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~90s; 228 tests); run this before committing
+uv run pytest -m ""      # everything (~100s; 264 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -19,7 +19,19 @@ lever. Keep new tests deterministic under load: hold an executor open with `env.
 (a `FAKE wait-for` line) and let it go with `env.release()` rather than a fixed `FAKE
 sleep`, which races a loaded machine. Every `Env` copies a code repo and control folder
 built once per worker. The fake runs the real message hook only when a message is
-waiting.
+waiting. A conftest fixture turns the self-restart's code probe off, so a commit to
+conductor during a run never restarts a test's daemon; `tests/test_restart.py` swaps
+`code_probe`, `head_probe`, `import_check` and `restart_spawner` for stand-ins.
+`tests/test_setup.py` covers setup runners (a slow one waits on a file, like
+`env.hold()`), `tests/test_review.py` the `review:` bundle.
+
+Where things live, beyond the obvious: `Daemon` is `daemon.py` plus `daemon_*` mixins
+(signals, messages, reap, merge, `daemon_restart` for the self-restart, `daemon_setup`
+for setup runners and the second half of a launch or stage); `setup_run.py` is the
+runner; `review.py` renders `review.md`; `state.early_readonly` picks readonly items
+that start behind the head; `session.reports_past_marker` finds conductor's reports
+past HANDOFF's marker and `inbox.unreviewed_lines` builds the unreviewed summary, each
+shared by the digest, the inbox and the review bundle.
 A staging prompt makes the fake obey only `FAKE stage-…` lines and remember the prompt
 under its session id; `--resume` recalls it, so a test can see that a resumed session
 kept what it read while staging. `FAKE slow <text>` adds `slow: <text>` and

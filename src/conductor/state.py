@@ -164,18 +164,24 @@ def may_stage(cfg: Config, view: View, head: Item) -> bool:
     return opts.worktrees and wanted and not others and head.template not in audits.NO_STAGE
 
 
+def running_locks(view: View) -> dict[str, str]:
+    """{named lock: item} held by running items: one executing or still in setup holds its
+    named locks; one merging or concluding has let them go. `decide` and `early_readonly` both
+    use this, so the rule lives in one place."""
+    return {lock: item_id for item_id, rec in view.running.items() if rec.get("phase", "exec") in ("exec", "setup")
+            for lock in rec.get("locks", [])}
+
+
 def decide(cfg: Config, view: View) -> dict[str, Decision]:
     """One decision per configured repo. Items start strictly in NNN order per repo.
 
-    A finished item still waiting to merge keeps its repo lock but not its named locks.
+    A finished item still waiting to merge keeps its repo lock but not its named locks;
+    one still in setup holds both.
     A readonly item takes no repo lock (`can_share`): at the head it starts beside
-    whatever runs, and the items after it never wait for it.
+    whatever runs, and the items after it never wait for it. One behind the head may start
+    before it reaches the head (`early_readonly`).
     """
-    held_locks: dict[str, str] = {}
-    for item_id, rec in view.running.items():
-        if rec.get("phase", "exec") == "exec":
-            for lock in rec.get("locks", []):
-                held_locks[lock] = item_id
+    held_locks = running_locks(view)
     known = view.known()
     out: dict[str, Decision] = {}
     for repo in cfg.repos:
@@ -193,6 +199,30 @@ def decide(cfg: Config, view: View) -> dict[str, Decision]:
     return out
 
 
+def early_readonly(cfg: Config, view: View, decisions: dict[str, Decision]) -> list[Item]:
+    """Readonly items behind their queue's head that may start now, in queue order. A
+    readonly item takes no repo lock (`can_share`), so it need not wait to reach the head;
+    it still waits for its named locks (held by running items, or by heads that `decisions`
+    starts) and for every `depends_on` to finish done. A held repo starts none of them;
+    a readonly item that `_hold` would hold waits until it is the head, which logs why."""
+    held = set(running_locks(view))
+    held |= {lock for d in decisions.values() if d.action in ("run", "resume") for lock in d.item.locks}
+    known = view.known()
+    out: list[Item] = []
+    for repo in cfg.repos:
+        if not cfg.opts(repo).worktrees:
+            continue
+        for item in view.queued.get(repo, [])[1:]:
+            if (not item.readonly or item.id in view.staged or item.template in audits.NO_STAGE
+                    or set(item.locks) & held or _hold(cfg, view, repo, item, known)):
+                continue
+            if any(view.status_of(items.resolve_ref(ref, repo, known)) != "done" for ref in item.depends_on):
+                continue
+            held |= set(item.locks)
+            out.append(item)
+    return out
+
+
 def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str],
                  held_locks: dict[str, str], running_here: dict[str, dict]) -> Decision:
     if d := _hold(cfg, view, repo, head, known):
@@ -202,7 +232,7 @@ def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str
     waits: list[tuple[str, bool]] = []
     for item_id, rec in running_here.items():
         if not can_share(cfg, head, rec):
-            what = "merging" if rec.get("phase") == "merge" else "running"
+            what = {"merge": "merging", "setup": "setting up"}.get(rec.get("phase"), "running")
             waits.append((f"repo busy: {item_id} {what}", True))
             break
     for ref in head.depends_on:

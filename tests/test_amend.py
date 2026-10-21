@@ -23,6 +23,10 @@ def test_amend_files_are_never_items(tmp_path):
     assert items.amend_of(tmp_path / "001_x.amend.2.md") == ("001_x", 2)
     assert items.amend_of(tmp_path / "001_x.amend.md") == ("001_x", 1)
     assert items.amend_of(tmp_path / "001_x.md") is None
+    assert items.amend_of(tmp_path / "001_x.amend.20261020-1530.md") == ("001_x", "20261020-1530")
+    names = ["001_x.amend.20261020-1530.md", "001_x.amend.10.md", "001_x.amend.md", "001_x.amend.2.md"]
+    assert sorted(names, key=lambda n: items.amend_key(items.amend_of(tmp_path / n)[1])) == [
+        "001_x.amend.md", "001_x.amend.2.md", "001_x.amend.10.md", "001_x.amend.20261020-1530.md"]
     assert [p.name for p in items.item_files(tmp_path)] == ["001_x.md", "002_y.z.md"]
     assert [p.name for p in items.find(tmp_path, "001")] == ["001_x.md"]
     # The writer goes after any amendment already waiting.
@@ -34,13 +38,24 @@ def test_amend_files_are_never_items(tmp_path):
         actions.amend(tmp_path, "q/001_x", " \n")
 
 
+def test_an_item_named_like_an_amendment_is_invalid(env):
+    proposed = env.control / "proposed"
+    proposed.mkdir(exist_ok=True)
+    for name in ("005_parser.amend.notes.md", "006_x.amend.md", "007_ok.md"):
+        (proposed / name).write_text("---\nrepo: code\n---\n\ndo it\n", encoding="utf-8")
+    bad = "named like an amendment (.amend[.<tag>].md); rename it"
+    assert bad in items.parse(proposed / "005_parser.amend.notes.md", "code").errors
+    got = {p.name: p.errors for p in model.scan_proposed(env.d.cfg)}
+    assert got["005_parser.amend.notes"] == got["006_x.amend"] == [bad] and got["007_ok"] == []
+
+
 @pytest.mark.slow
 def test_queued_amendments_are_appended_at_launch(env):
     env.queue("001_long", env.hold())
     env.queue("002_next", "FAKE commit b.txt b", stage="false")
     env.tick_until(lambda: env.d.log.last("start", item="code/001_long"))
     first = amend_file(env, "002_next", "FAKE commit c.txt c")
-    second = amend_file(env, "002_next", "Also: keep it short.", n=2, by=None)
+    second = amend_file(env, "002_next", "Also: keep it short.", n="20261020-1530", by=None)    # any tag
     env.tick_until(lambda: len(env.events("amended")) == 2)
     a1, a2 = env.events("amended")
     assert (a1.item, a1.detail["state"], a1.detail["by"], a1.detail["text"]) == (

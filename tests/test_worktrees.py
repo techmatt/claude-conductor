@@ -380,6 +380,79 @@ def test_readonly_item_still_takes_its_named_locks(env):
 
 
 @pytest.mark.slow
+def test_readonly_item_behind_a_staged_head_starts_at_once(env):
+    env.queue("001_long", env.hold())
+    env.queue("002_next", "FAKE commit b.txt b")
+    env.queue("003_ro", "FAKE report done", readonly="true")
+    env.tick_until(lambda: env.events("staged") and env.finished("code/003_ro"))
+    assert not env.finished("code/001_long")
+    assert env.finished("code/003_ro").detail["status"] == "done"
+    enq, start = env.d.log.last("enqueue", item="code/003_ro"), env.d.log.last("start", item="code/003_ro")
+    assert enq.id < start.id
+    # The head's stage is untouched by the readonly item beside it.
+    srec = state.read_run(env.cfg.path("running", "code", "002_next.stage.json"))
+    assert srec["phase"] == "staged" and srec["item"] == "code/002_next"
+    view = state.scan(env.cfg, env.d.log)
+    assert state.decide(env.cfg, view)["code"].reason == "repo busy: code/001_long running; staged"
+    env.release()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    assert env.d.log.last("start", item="code/002_next").detail["resumed"]
+    assert env.finished("code/002_next").detail["status"] == "done"
+    assert not any("stage discarded" in e.detail.get("note", "") for e in env.events("warning"))
+    assert (env.control / "done" / "code" / "003_ro.md").is_file()
+
+
+@pytest.mark.slow
+def test_readonly_item_behind_the_head_waits_for_its_locks_and_dependencies(env):
+    env.queue("001_a", env.hold(), locks="['gpu']", stage="false")
+    env.queue("002_b", "FAKE commit b.txt b", stage="false")
+    env.queue("003_lock", "FAKE report done", readonly="true", locks="['gpu']")
+    env.queue("004_dep", "FAKE report done", readonly="true", depends_on="002")
+    env.queue("005_free", "FAKE report done", readonly="true")
+    env.tick_until(lambda: env.finished("code/005_free"))
+    for _ in range(3):
+        env.d.tick()
+    assert not env.d.log.last("start", item="code/003_lock") and not env.d.log.last("start", item="code/004_dep")
+    assert not env.finished("code/001_a")
+    env.release()
+    env.tick_until(lambda: env.finished("code/003_lock") and env.finished("code/004_dep"))
+    fin = {e.item: e.id for e in env.events("finish")}
+    assert env.d.log.last("start", item="code/003_lock").id > fin["code/001_a"]
+    assert env.d.log.last("start", item="code/004_dep").id > fin["code/002_b"]
+
+
+def test_an_item_in_setup_holds_its_named_locks_against_an_early_readonly_item(env):
+    """`decide` and `early_readonly` share one rule (`state.running_locks`): an item still
+    in setup holds its named locks, one merging has let them go."""
+    env.queue("002_b", "FAKE commit b.txt b")
+    env.queue("003_ro", "FAKE report done", readonly="true", locks="['gpu']")
+    view = state.scan(env.cfg, env.d.log)
+    rec = {"item": "code/001_a", "repo": "code", "name": "001_a", "locks": ["gpu"], "readonly": False,
+           "worktree": str(env.worktree("001_a")), "paths": None}
+    for phase, expected in (("setup", []), ("exec", []), ("merge", ["code/003_ro"])):
+        view.running = {"code/001_a": rec | {"phase": phase}}
+        assert state.running_locks(view) == ({} if phase == "merge" else {"gpu": "code/001_a"})
+        decisions = state.decide(env.cfg, view)
+        assert [i.id for i in state.early_readonly(env.cfg, view, decisions)] == expected, phase
+
+
+@pytest.mark.slow
+def test_held_repo_starts_no_readonly_item(env):
+    env.queue("001_bad", "FAKE report red")
+    env.tick_until(lambda: env.finished("code/001_bad"))
+    env.queue("002_next", "FAKE report done", stage="false")
+    env.queue("003_ro", "FAKE report done", readonly="true")
+    env.tick_until(lambda: env.events("hold"))
+    for _ in range(3):
+        env.d.tick()
+    assert not env.d.log.last("start", item="code/003_ro")
+    view = state.scan(env.cfg, env.d.log)
+    assert state.early_readonly(env.cfg, view, state.decide(env.cfg, view)) == []
+    env.signal("clear.txt", "clear: code")
+    env.tick_until(lambda: env.finished("code/003_ro"))
+
+
+@pytest.mark.slow
 def test_worktrees_off_runs_in_main_checkout(env):
     env.configure('[repos.code]\npath = "../code"\nworktrees = false\n')
     env.queue("001_a", "FAKE sleep 1\nFAKE commit a.txt a", paths="['a.txt']")

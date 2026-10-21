@@ -47,6 +47,48 @@ The launch order makes this sound: write `.run.json`, create the worktree, move 
 item to `running/`, drop the stage record (if resuming), spawn, record the pid; a
 `finish` event is logged before the item moves to `done/`.
 
+**Mid-setup** (run record `phase: setup`, or a stage record's `setup.state: running`;
+`executors.md`, *Setup*): never adopted. The setup runner's tree is killed (by pid and
+creation time, or found by its spec path on a command line). A run's worktree is
+discarded (note `daemon stopped during setup; requeued`), the item goes back to
+`queue/` and `requeue` is logged (reason `daemon stopped during setup`). A stage is
+discarded (`the daemon stopped during the stage's setup`). No executor ran, so the rule
+holds.
+
+## Self-restart
+
+A daemon restarts itself when conductor's code changes. The code version is `git -C
+<conductor checkout> rev-parse HEAD:./src HEAD:./pyproject.toml`, so only a commit that
+changes `src/` or `pyproject.toml` counts: uncommitted edits and commits touching only
+docs, prompts or tools never do. Not a git repo, or git failing: the feature is off.
+The daemon reads the version at start and again every 10s (`CODE_CHECK_SECONDS`),
+between ticks, after `stop: daemon` is handled.
+
+On a change it first checks the new code imports (`<console python> -c "import
+conductor.cli, conductor.daemon"`). It restarts only at a safe point. Blockers: the
+checkout itself not settled (uncommitted or untracked changes under `src/` or in
+`pyproject.toml`, or a rebase, merge or cherry-pick in progress: the new daemon runs the
+files on disk), a merge executor resolving (`resolve.state: running`), a setup running
+(above), an unfinished reorder journal, a run target still starting, or a picker opened
+in the last hour (`pick_open` with no later `pick_saved`) that it still serves (a
+restart loses the picker's port and token). Blocked past 5 minutes
+(`RESTART_PATIENCE_SECONDS`): one `warning` naming the blockers; it keeps waiting and
+never forces it.
+
+At the safe point it first applies pending signals: a `stop: daemon` among them wins (a
+normal stop, no restart). Then blockers and imports are checked once more, and the new
+daemon is spawned detached (`<console python> -u -m conductor run <control> --after <old
+pid>`, output appended to `.conductor/daemon.out.log`). The new process writes
+`.conductor/restart.ready` once its config loads and the daemon imports, then waits up
+to 60s for the old pid to exit. The old daemon waits up to 20s for that file
+(`RESTART_READY_SECONDS`); only then does it log `daemon_restart` and exit cleanly
+(picker closed, inbox written, lock released, no `daemon_stop`), and the new one adopts
+executors and keeps stages as for any restart. A version that fails (no import, no
+spawn, no ready file; a hung new process is killed) gets one `warning` naming
+`daemon.out.log`; the old daemon keeps running and tries that version again after 5
+minutes (`RESTART_RETRY_SECONDS`). A daemon started in a terminal hands that terminal
+back when it restarts itself. The app's Start/Stop and "restart all" are unchanged.
+
 ## Platform notes
 
 Windows-first, cross-platform by construction. Process handling specific to Windows
@@ -70,4 +112,5 @@ launcher starts it (own process group, no window, out of the caller's job when t
 allows breakaway) and exits, so the process has no live parent and no tree kill of the
 caller reaches it. What it returns is a `Detached` (pid, creation time), not a
 `Popen`: the exit code of a process that isn't your child is never known. Executors,
-stages and merge executors stay the daemon's own children, so their exit codes are kept.
+stages, merge executors and setup runners stay the daemon's own children, so their
+exit codes are kept.

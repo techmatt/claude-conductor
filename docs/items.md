@@ -2,7 +2,8 @@
 
 ## Queue items
 
-`queue/<repo>/NNN_name.md`: YAML front-matter, then the prompt body.
+`queue/<repo>/NNN_name.md`: YAML front-matter, then the prompt body. A name shaped like
+an amendment (`NNN_name.amend[.<tag>].md`) is never an item: it is invalid if parsed as one.
 
 ```
 ---
@@ -39,11 +40,12 @@ stage, or to change a running item, amend it instead (`progress.md`, *Amendments
 An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numbers
 numerically, so it still resolves.
 
-**Scheduling.** Each repo starts its items strictly in NNN order; the head of a queue
-that cannot run holds everything behind it. Different repos run in parallel. The head
+**Scheduling.** Each repo starts its items strictly in NNN order (readonly items
+excepted, below); the head of a queue that cannot run holds everything behind it. Different repos run in parallel. The head
 runs when all of these hold:
 
-- no item of that repo is running or waiting to merge (the implicit repo lock), unless
+- no item of that repo is in setup, running or waiting to merge (the implicit repo
+  lock; the wait reads `repo busy: <item> setting up` during setup), unless
   every such item may share the repo with it (see `paths:`), which a readonly item
   always may (*Readonly items* below);
 - the repo is not held after a red (below) and no `needs_planner` report is unread;
@@ -64,15 +66,22 @@ lock but releases its named locks.
 
 **Readonly items** take no repo lock (in a repo with worktrees; with `worktrees = false`
 they share the one checkout, so the lock stays). They never merge, so nothing waits for
-them and they wait for nothing in the repo: a readonly head starts at once beside
-whatever runs or waits to merge, and the items after it don't wait for it. Everything
-else still applies: its named locks, `depends_on`, the holds, its own worktree
-(discarded at the end), and the readonly and tamper checks. Start order is unchanged.
-A readonly item still starts only once it is the head, so one queued behind a waiting
-item waits for that item to *start*, not to finish. It sees `main` as it is when it
-launches, so one meant to look at an earlier item's work declares `depends_on` on it.
-`conductor status` marks it `readonly`, and the app's *In flight* row reads
-`running · readonly`.
+them and they wait for nothing in the repo: a readonly item starts as soon as it is
+queued, **wherever it sits in the queue**, beside whatever runs, waits to merge, waits
+or is staged; the items around it keep their order, numbers and stages (a staged head
+stays staged and resumes later). Behind the head it starts only when: the repo is a git
+repo with worktrees; no red or unread `needs_planner` holds the repo; it is valid, not
+run before and not staged; its named locks are declared and free (not held by a running
+item, a head starting this tick or another readonly item started this tick); every
+`depends_on` finished `done` (one queued or running makes it wait); it is not
+mid-amendment or in a repo being reordered; memory is `ok`. A `cleanup` or
+`disk_audit` template never starts early. One that would be held logs no `hold` until
+it reaches the head (`state.early_readonly`). Everything else still applies: its own
+worktree (discarded at the end), and the readonly and tamper checks. It sees `main` as
+it is when it launches, so one meant to look at an earlier item's work declares
+`depends_on` on it. `conductor status` marks it `readonly` (a non-head one shows under
+its repo while lower items still show queued or staged), and the app's *In flight* row
+reads `running · readonly`.
 
 Items move `queue → running → done` by atomic rename.
 

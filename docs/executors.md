@@ -86,6 +86,25 @@ stdout (stream-json, one JSON object per line, ending with a `"type": "result"` 
 goes to `reports/<repo>__NNN_name.log`; stderr to `.stderr.log`. Stream-json rather
 than plain JSON, so a killed run still leaves its transcript.
 
+**Setup.** A repo's `setup = [...]` commands run after a new worktree is created
+(launch or stage) and after a staged worktree moves to current `main` on resume; never
+for `worktrees = false`. They run off the daemon loop, in a runner process
+(`python -m conductor.setup_run <spec.json>`, started like an executor: own process
+group, no window, cwd `.conductor/` so a worktree's modules can't shadow `conductor`),
+which the daemon polls each tick, so signals, requests, questions and other repos keep
+moving. The runner runs each command in order in the worktree through the shell, each
+limited to `setup_minutes`, appending output (its own too) to
+`reports/<repo>__NNN_name.setup.log`, and writes its result JSON atomically. Meanwhile
+the run record has `phase: setup` (a stage's record `setup.state: running`), the item
+holds its repo and named locks, `setup` is logged, and status reads `setup NNN_name
+…, pid <runner>` (the inbox's *Now*: `NNN_name (setting up)`; the app: `setting up`;
+a stage in setup still shows `staging`). Success starts the executor (`start` or
+`stage` gains `setup_seconds`). A failing command, a timeout, a runner that exits
+without a result, or setup still running past `max_hours` (`stage_minutes` for a
+stage) is a red launch error for a run (`setup 'npm ci' exited 1 (see
+code__001_x.setup.log)`, worktree discarded) and discards a stage. Setup time counts
+toward those deadlines. Code: `daemon_setup.py` (`SetupMixin`), `setup_run.py`.
+
 **Log compaction.** Run logs are most of a control folder's size (Word Warriors: 144 MB
 of 150 MB after 29 items). Nearly all of it is file copies the stream repeats: each
 image an executor reads appears twice as base64 (the tool result and

@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import desktop, items, procs, state, talk
+from . import review as review_mod
 from . import session as session_mod
 from .events import Event
 from .util import clock, read_text, retry_io, write_text
@@ -128,7 +129,7 @@ class SignalsMixin:
             elif key == "clear":
                 if value not in self.cfg.repos:
                     raise ValueError(f"line {n}: clear: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed", "outline"):
+            elif key in ("approve", "cancel", "reviewed", "outline", "review"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reorder":
@@ -180,6 +181,8 @@ class SignalsMixin:
             self._cancel(value, rel)
         elif key == "reviewed":
             self._reviewed(value, rel)
+        elif key == "review":
+            self._review(value, rel)
         elif key == "tell":
             self._tell(value, rel)
         elif key == "outline":
@@ -264,12 +267,11 @@ class SignalsMixin:
         self._cancel_file(src, "queue", item_id, repo, rel)
         self._forget(item_id)
 
-    def _reviewed(self, ref: str, rel: str) -> None:
-        """Mark one finished item's report reviewed. Reviewed state is the event log's:
-        an item is reviewed once a `reviewed` event names it."""
+    def _finished_item(self, verb: str, ref: str) -> tuple[str, state.View]:
+        """The one finished item `ref` names (`<repo>/<NNN_name>`, `NNN`, ...), and the view."""
         prefix, slash, name_ref = ref.rpartition("/")
         if slash and prefix not in self.cfg.repos:
-            raise ValueError(f"reviewed: {prefix!r} is not a repo")
+            raise ValueError(f"{verb}: {prefix!r} is not a repo")
         view = state.scan(self.cfg, self.log)
         repos = [prefix] if slash else list(self.cfg.repos)
         def named(ids) -> list[str]:
@@ -278,12 +280,17 @@ class SignalsMixin:
         hits = named(view.finishes)
         if not hits:
             if live := named([it.id for q in view.queued.values() for it in q] + list(view.running)):
-                raise ValueError(f"reviewed: {live[0]} has not finished; only a finished item's report "
+                raise ValueError(f"{verb}: {live[0]} has not finished; only a finished item's report "
                                  "can be reviewed")
-            raise ValueError(f"reviewed: no finished item {ref!r}")
+            raise ValueError(f"{verb}: no finished item {ref!r}")
         if len(hits) > 1:
-            raise ValueError(f"reviewed: {ref!r} is ambiguous: {sorted(hits)}")
-        item_id = hits[0]
+            raise ValueError(f"{verb}: {ref!r} is ambiguous: {sorted(hits)}")
+        return hits[0], view
+
+    def _reviewed(self, ref: str, rel: str) -> None:
+        """Mark one finished item's report reviewed. Reviewed state is the event log's:
+        an item is reviewed once a `reviewed` event names it."""
+        item_id, view = self._finished_item("reviewed", ref)
         if prior := view.reviews.get(item_id):
             self.log.append("warning", item=item_id, paths=[rel],
                             note=f"{item_id} was already reviewed (#{prior.id}, {clock(prior.ts)}); nothing changed")
@@ -291,6 +298,18 @@ class SignalsMixin:
         fin = view.finishes[item_id]
         self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
                         status=fin.detail.get("status"), by=self._by or "unknown")
+
+    def _review(self, value: str, rel: str) -> None:
+        """`review.md`: every unreviewed report inlined (and conductor's own past HANDOFF's
+        marker) for `all`, or one finished item's. Marks nothing reviewed."""
+        if value.lower() == "all":
+            item_id, view = None, state.scan(self.cfg, self.log)
+        else:
+            item_id, view = self._finished_item("review", value)
+        bundle = review_mod.render(self.cfg, view, rel, item_id)
+        write_text(self.cfg.path("review.md"), bundle.text)
+        self.log.append("review", item=item_id, paths=[rel, "review.md"], which=item_id or "all",
+                        items=bundle.items, conductor=bundle.conductor)
 
     def _checkpoint(self, label: str, rel: str, **extra) -> Event:
         """A session boundary: its event id is its number. Every report still unreviewed
@@ -326,6 +345,9 @@ class SignalsMixin:
         if len(hits) > 1:
             raise ValueError(f"{verb}: {ref!r} is ambiguous: {hits}")
         run = self.runs.get(hits[0]) if hits else None
+        if run is not None and run.rec.get("phase") == "setup":
+            raise ValueError(f"{verb}: {run.item_id} is still in setup; a message reaches only a running executor "
+                             "(an amendment waits for its prompt)")
         if run is None or run.rec.get("phase", "exec") != "exec" or run.exited():
             view = state.scan(self.cfg, self.log)
             ids = [i for i in [*view.finishes, *view.running, *(it.id for q in view.queued.values() for it in q)]

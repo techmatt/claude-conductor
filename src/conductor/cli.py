@@ -11,7 +11,7 @@ from . import config as config_mod
 from . import audits, desktop, items, memory, questions, state
 from .events import EventLog
 from .inbox import describe, latest_outline, outline_line, progress_line, render
-from .util import clock, duration, now, parse_since, parse_stamp
+from .util import clock, duration, now, parse_since, parse_stamp, write_text
 
 
 def _control(arg: str | None) -> Path:
@@ -24,9 +24,32 @@ def _open(arg: str | None) -> tuple[config_mod.Config, EventLog]:
     return cfg, EventLog(cfg.events_db)
 
 
+AFTER_WAIT_SECONDS = 60
+
+
+def wait_exit(pid: int, timeout: float) -> bool:
+    """Wait for process `pid` to exit; False if it is still alive after `timeout`."""
+    import time
+    from .procs import alive
+    end = time.monotonic() + timeout
+    while alive(pid, None):
+        if time.monotonic() >= end:
+            return False
+        time.sleep(0.2)
+    return True
+
+
 def cmd_run(args) -> int:
     from .daemon import Daemon, DaemonError
     cfg = config_mod.load(_control(args.control))
+    if args.after:
+        # The handshake: the daemon restarting itself hands over only once this file shows
+        # the config loads and the code imports; the new daemon removes it under the lock.
+        from .daemon_restart import READY_FILE
+        write_text(cfg.state_dir / READY_FILE, f"{os.getpid()}\n")
+    if args.after and not wait_exit(args.after, AFTER_WAIT_SECONDS):
+        # A daemon restarting itself started this one first; the lock refuses while it lives.
+        print(f"conductor: pid {args.after} still running after {AFTER_WAIT_SECONDS}s", file=sys.stderr)
     print(f"conductor: {cfg.project} at {cfg.control} — Ctrl+C stops the daemon, not the executors")
     try:
         Daemon(cfg).run_forever()
@@ -64,6 +87,11 @@ def cmd_status(args) -> int:
                 print(f"  merging  {rec['name']}  {rec['outcome']['status']}{where}{why}")
                 continue
             age = (now() - parse_stamp(rec["started"])).total_seconds()
+            if rec.get("phase") == "setup":
+                s = rec.get("setup") or {}
+                print(f"  setup    {rec['name']}  {duration(age)}, pid {s.get('pid')}{where}: "
+                      + "; ".join(s.get("commands") or []))
+                continue
             blocked = [q.id for q in open_qs if q.item == item_id and q.block]
             kill = (f"blocked on {blocked[0]} (kill time moves)" if blocked
                     else f"kill at {clock(rec['deadline'])}")
@@ -76,7 +104,9 @@ def cmd_status(args) -> int:
         for item_id, rec in view.staged.items():
             if rec["repo"] == repo:
                 age = (now() - parse_stamp(rec["started"])).total_seconds()
-                what = (f"staging  {rec['name']}  {duration(age)}, pid {rec.get('pid')}" if rec["phase"] == "staging"
+                s = rec.get("setup") or {}
+                what = (f"staging  {rec['name']}  {duration(age)}, setup pid {s.get('pid')}" if s.get("state") == "running"
+                        else f"staging  {rec['name']}  {duration(age)}, pid {rec.get('pid')}" if rec["phase"] == "staging"
                         else f"staged   {rec['name']}  plan ready, resumes when it can run")
                 print(f"  {what}")
         for i, item in enumerate(view.queued.get(repo, [])):
@@ -203,7 +233,7 @@ def cmd_amend(args) -> int:
         print(f"conductor: {why}", file=sys.stderr)
         return 1
     item_id = hits[0]
-    if view.running.get(item_id, {}).get("phase", "exec") != "exec" or item_id in view.finishes:
+    if view.running.get(item_id, {}).get("phase", "exec") not in ("exec", "setup") or item_id in view.finishes:
         print(f"conductor: {item_id} has finished executing; a correction to finished work is a new item",
               file=sys.stderr)
         return 1
@@ -215,7 +245,11 @@ def cmd_amend(args) -> int:
     except ValueError as exc:
         print(f"conductor: {exc}", file=sys.stderr)
         return 1
-    how = ("after its next tool call" if item_id in view.running else
+    rec = view.running.get(item_id)
+    setup = rec is not None and rec.get("phase") == "setup"     # not started yet: taken in when setup is done
+    how = ("in the resume message when its setup finishes (the stage is kept)" if setup and rec.get("staged") else
+           "in its prompt when its setup finishes" if setup else
+           "after its next tool call" if rec is not None else
            "in the resume message (the stage is kept)" if item_id in view.staged else "in its prompt at launch")
     print(f"wrote {cfg.rel(path)}: the daemon logs `amended`, and the executor gets it {how}")
     return 0
@@ -405,6 +439,9 @@ def main(argv: list[str] | None = None) -> int:
         sp = sub.add_parser(name, help=help_)
         sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
         sp.set_defaults(fn=fn)
+        if name == "run":
+            sp.add_argument("--after", type=int, metavar="PID", help="wait (up to 60s) for this process to exit "
+                                                                    "first: a daemon restarting itself")
         if name == "events":
             sp.add_argument("--since", help="#id, 30m / 2h / 1d, 5:25pm, an ISO time, "
                                             "'checkpoint' (the latest) or 'checkpoint N'")

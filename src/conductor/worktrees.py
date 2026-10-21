@@ -12,7 +12,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import git, procs
+from . import git, procs, setup_run
 from .config import Config
 
 BRANCH_PREFIX = "conductor/"
@@ -36,9 +36,10 @@ class Created:
     notes: list[str] = field(default_factory=list)       # for the `worktree` event, not warnings
 
 
-def create(cfg: Config, repo: str, name: str, setup_log: Path) -> Created:
-    """A fresh worktree for an item, with shared links and setup done. Any leftover of
-    an earlier launch of the same item that never ran (a crash mid-launch) is replaced."""
+def create(cfg: Config, repo: str, name: str, setup_log: Path, setup: bool = True) -> Created:
+    """A fresh worktree for an item, with shared links and setup done (`setup=False`: the
+    caller runs it, as the daemon does off its loop). Any leftover of an earlier launch
+    of the same item that never ran (a crash mid-launch) is replaced."""
     repo_path, opts = cfg.repos[repo], cfg.opts(repo)
     path, branch = cfg.worktree(repo, name), branch_name(name)
     base = git.rev(repo_path, opts.main)
@@ -52,7 +53,7 @@ def create(cfg: Config, repo: str, name: str, setup_log: Path) -> Created:
         raise WorktreeError(str(exc)) from exc
     made = Created(path, branch, base)
     made.linked, made.warnings, made.notes = link_shared(cfg, repo, path)
-    error = run_setup(cfg, repo, path, setup_log)
+    error = run_setup(cfg, repo, path, setup_log) if setup else None
     if error:
         discard(cfg, repo, path, branch)
         raise WorktreeError(error)
@@ -89,14 +90,9 @@ def unlink_shared(path: Path) -> None:
 
 
 def run_setup(cfg: Config, repo: str, path: Path, log: Path) -> str | None:
-    """Run the repo's setup commands in the worktree; the first failure is the error."""
-    for command in cfg.opts(repo).setup:
-        code = procs.run_shell(command, path, log, cfg.setup_minutes * 60)
-        if code is None:
-            return f"setup {command!r} took longer than {cfg.setup_minutes:g} minutes"
-        if code:
-            return f"setup {command!r} exited {code} (see {log.name})"
-    return None
+    """Run the repo's setup commands in the worktree, blocking; the first failure is the
+    error. The daemon runs them off its loop instead (`setup_run`)."""
+    return setup_run.run_commands(cfg.opts(repo).setup, path, log, cfg.setup_minutes)
 
 
 def discard(cfg: Config, repo: str, path: Path, branch: str | None) -> None:

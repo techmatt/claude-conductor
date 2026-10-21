@@ -36,8 +36,8 @@ delivered like one, so its reply tag pairs it with the outline it produced.
 tell` — which writes `signals/cli-….signal` with `by: cli` — and the planner all use
 it). The message is the rest of the line, ` # ` included (it is not a comment there);
 the app joins a multi-line message with ` / `. It applies only to an executing item
-(`running/`, phase `exec`, process not exited): a queued or staged item is refused as
-not started, a merging or finished one as exited, an unknown one as no running item.
+(`running/`, phase `exec`, process not exited): a queued, staged or in-setup item is
+refused as not started, a merging or finished one as exited, an unknown one as no running item.
 The daemon logs `tell` (text, by) and writes `.conductor/mail/<repo>__<NNN_name>/<tell
 id>.json`.
 
@@ -113,8 +113,9 @@ suite's summary and failing test correctly and acted on the tell. The 60 s is a
 **Amendments.** An amendment adds to an item's instructions without rewriting its file,
 in any state but finished. The planner writes `queue/<repo>/NNN_name.amend.md` beside
 the item (the item may be queued, staged or already in `running/`; the amend file
-always goes in `queue/`), and more as `NNN_name.amend.2.md`, `.amend.3.md`, …, taken in
-that order. Optional front-matter carries `by:` (`by: planner`; none is `unknown`); the
+always goes in `queue/`), or any `NNN_name.amend.<anything>.md` (a timestamp, so no
+need to check for an existing one), taken in name order, numbers as numbers:
+`.amend.md` < `.amend.2.md` < `.amend.10.md` < `.amend.20261020-1530.md`. Optional front-matter carries `by:` (`by: planner`; none is `unknown`); the
 body is the amendment, any length. The app's **Amend…** and `conductor amend <item>
 <text…|file>` (one argument naming a file sends its contents; `by: cli`) write the next
 free name, as `.tmp` then renamed. An amend file is never an item: no `enqueue`, no
@@ -124,9 +125,9 @@ younger waits a tick before it launches or resumes), logs `amended` (text, by, s
 delivery; its id is the amendment's number) and moves it into the item's mailbox
 (`.conductor/mail/…/<id>.json`, `kind: amend`). Delivery by state:
 
-- **queued** (not staged): appended to the prompt at launch, each under `## Amendment #n
+- **queued** (not staged; or in setup): appended to the prompt at launch, each under `## Amendment #n
   (5:25pm, via planner): it amends the prompt above and wins where they conflict`.
-- **staging / staged**: the stage is kept; at resume the amendments follow the resume
+- **staging / staged** (a staged resume in setup too): the stage is kept; at resume the amendments follow the resume
   message, which tells the executor each amends the prompt it read and overrides the
   plan it made where they conflict.
 - **running**: through the message hook, whole (multi-line), as `AMENDMENT #n from

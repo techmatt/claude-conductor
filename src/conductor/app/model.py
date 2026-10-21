@@ -26,7 +26,7 @@ from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_f
 
 # Overall state, most urgent first: the tray shows the first that applies anywhere.
 PRIORITY = ("red", "asking", "running", "idle")
-PHASES = {"exec": "running", "merge": "merging", "concluding": "concluding", "done": "done"}
+PHASES = {"exec": "running", "setup": "setting up", "merge": "merging", "concluding": "concluding", "done": "done"}
 TEXT_LIMIT = 400_000          # characters of a log, report or diff shown at once
 FINISHED_SHOWN = 10           # finished items per repo in Repos (every unreviewed one besides)
 
@@ -107,7 +107,7 @@ class Activity:
     """A running, merging, staging or staged item, as the Repos panel shows it."""
     item: str
     name: str
-    phase: str                  # running | merging | concluding | staging | staged
+    phase: str                  # running | setting up | merging | concluding | staging | staged
     started: str | None
     detail: str = ""
     progress: str = ""          # the latest `progress` line, with its time
@@ -248,7 +248,7 @@ def earlier_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
 # stage, merge, commit, hold, enqueue, read, ...) only with Advanced. A red, a warning
 # or an invalid event is always activity, whatever its kind.
 ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "ask", "answer", "default", "late", "question_closed",
-                  "approve", "cancel", "reorder", "clear", "edited", "request", "request_failed",
+                  "approve", "cancel", "reorder", "clear", "edited", "request", "request_failed", "daemon_restart",
                   "daemon_start", "daemon_stop", "progress", "tell", "amended", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed",
                   "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify"}
@@ -326,6 +326,8 @@ def activity_text(ev: Event) -> str:
             return "daemon started"
         case "daemon_stop":
             return "daemon stopped" + by
+        case "daemon_restart":
+            return f"daemon restarting: {d.get('reason')}"
         case "run_start":
             return f"{d.get('target')} starting{by}"
         case "run_ready":

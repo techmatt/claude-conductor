@@ -6,10 +6,11 @@ so several repos (and disjoint items within one) run at once. The one exception 
 picker server (`picker`), whose handler threads touch only files and a queue that the
 loop drains into the event log.
 
-`Daemon` is this module plus four mixins, one per concern: `daemon_signals` (signal
+`Daemon` is this module plus six mixins, one per concern: `daemon_signals` (signal
 files and their verbs), `daemon_messages` (questions, progress, deliveries, amendments),
-`daemon_reap` (leftover processes and worktrees) and `daemon_merge` (merges and
-concluding an item).
+`daemon_reap` (leftover processes and worktrees), `daemon_merge` (merges and
+concluding an item), `daemon_setup` (a repo's setup commands, off the loop) and
+`daemon_restart` (restarting itself when its code changes).
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ from .config import RUNTIME, Config
 from .daemon_merge import MergeMixin
 from .daemon_messages import MessagesMixin
 from .daemon_reap import ReapMixin
+from .daemon_restart import RestartMixin
+from .daemon_setup import SetupMixin
 from .daemon_signals import SignalsMixin
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp, write_text
@@ -68,12 +71,20 @@ class Run:
     proc: psutil.Process | None = None          # adopted after a restart
     tamper: list[str] = field(default_factory=list)
     resolver: subprocess.Popen | None = None    # a merge executor resolving a prose conflict
+    setup: subprocess.Popen | None = None       # the setup runner (`setup_run`), before the executor
 
     @property
     def item_id(self) -> str:
         return self.rec["item"]
 
+    @property
+    def setting_up(self) -> bool:
+        """Setup still runs: no executor has spawned, so it has not exited either."""
+        return (self.rec.get("setup") or {}).get("state") == "running"
+
     def exited(self) -> bool:
+        if self.setting_up:
+            return False
         if self.popen is not None:
             return self.popen.poll() is not None
         if self.proc is not None:
@@ -84,6 +95,9 @@ class Run:
         return True
 
     def pid(self) -> int | None:
+        """The executor's, or while setup runs the setup runner's."""
+        if self.setting_up:
+            return self.setup.pid if self.setup else self.rec["setup"].get("pid")
         return self.popen.pid if self.popen else (self.proc.pid if self.proc else None)
 
 
@@ -93,7 +107,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
     return f"{repo}/{picks.normal(value)}" if value and value.lower() != "none" else None
 
 
-class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
+class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -133,6 +147,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         self._mem_at: float | None = None           # monotonic time of the last sample
         self._mem_clear_since: float | None = None  # below the level since (monotonic), not yet calm
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about
+        self._init_restart()
 
     def _live_enqueued(self) -> set[str]:
         """Ids whose `enqueue` still stands: a cancel or a reorder retires an id, so the
@@ -218,6 +233,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         for repo in self.cfg.repos:
             self.cfg.path("queue", repo).mkdir(exist_ok=True)
         self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control))
+        self._read_code()
         if self._died:
             self._log_death()
         if (owner := procs.claude_ancestor()) is not None:
@@ -274,6 +290,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
                 if self.stop_requested is not None:
                     self._log_stop("signal", **self.stop_requested)
                     break
+                if self.restart_due():
+                    break               # the new daemon is up and waits for this one to exit
                 time.sleep(self.cfg.poll_seconds)
         except KeyboardInterrupt:
             self._log_stop("interrupt")
@@ -339,7 +357,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
             phase = run.rec.get("phase", "exec")
             if phase == "merge" and run.resolver is not None and run.resolver.poll() is None:
                 trees[item_id] = memory.tree(run.resolver.pid)      # its merge executor
-            elif phase in ("exec", "staging") and not run.exited():
+            elif phase in ("exec", "staging", "setup") and not run.exited():     # setup: the runner's tree
                 # Plus what it detached in its worktree (`( cmd & )`, a server): an orphan
                 # is outside the tree. Found live: the prompt-20 proof's hog was.
                 left = [p.pid for p in procs.strays(Path(run.rec["worktree"]), parse_stamp(run.rec["started"]).timestamp() - 5,
@@ -389,10 +407,11 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
             self.mem_told[item_id] = lv
 
     def _active(self) -> dict[str, Run]:
-        """Executor processes that may be running: guard attribution covers these."""
+        """Executor processes that may be running: guard attribution covers these. Never
+        a setup, which is no executor and writes only in its worktree."""
         active = {i: r for i, r in self.runs.items() if r.rec.get("phase", "exec") == "exec"
                   or (r.rec.get("resolve") or {}).get("state") == "running"}
-        return {**active, **self.stages}
+        return {**active, **{i: r for i, r in self.stages.items() if not r.setting_up}}
 
     # ---------------------------------------------------------------- recovery
     def recover(self) -> None:
@@ -416,6 +435,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
                 item_id = rec["item"]
                 if self.log.last("finish", item=item_id):
                     self._move_to_done(run)       # finish was logged; only the move was lost
+                    continue
+                if rec.get("phase") == "setup":
+                    self._recover_setup_run(run)
                     continue
                 if rec.get("phase") == "merge":
                     self.runs[item_id] = run
@@ -477,6 +499,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
             return
         if rec.get("phase") == "staged":
             return                                  # waiting for the lock; nothing runs
+        if run.setting_up:
+            self._kill_setup(rec)
+            self._discard_stage(run, "the daemon stopped during the stage's setup")
+            return
         if rec.get("pid") is None and not procs.find_by_marker(rec["session_id"]):
             self._discard_stage(run, "the daemon stopped before the stage launched")
             return
@@ -519,15 +545,20 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
 
     # ---------------------------------------------------------------- requests
     def process_requests(self) -> None:
+        waiting: set[str] = set()   # targets of earlier requests still waiting: stamp order holds for them
         for d in request.pending(self.cfg):
-            if not request.settled(d):
-                continue
             rel = f"requests/{d.name}"
+            if waiting and request.listed_targets(d) & waiting:
+                waiting |= request.listed_targets(d)
+                continue
             try:
-                req = request.parse(d)
+                req = request.ready(d)
             except request.RequestError as exc:
                 self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
                 os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
+                continue
+            if req is None:      # still being written: unsettled, or targets not all here yet
+                waiting |= request.listed_targets(d)
                 continue
             self._guard_check(f"before request {d.name}")
             try:
@@ -605,7 +636,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         # stage checks (an amendment never discards a stage; an item change still does).
         amending = self.process_amends(view)
         reordering = self._reorder_pending()      # its items are under temp names: wait
-        for repo, d in state.decide(self.cfg, view).items():
+        decisions = state.decide(self.cfg, view)
+        for repo, d in decisions.items():
             if repo == reordering:
                 continue
             if self.mem_level != "ok" and d.action in ("run", "resume", "stage"):
@@ -621,6 +653,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
                 self.resume(d.item, view.staged[d.item.id])
             elif d.action == "stage" and d.item.id not in self.no_stage and d.item.id not in self.stages:
                 self.stage(d.item)
+        # A readonly item behind its head starts now, wherever it sits; its neighbours keep their order and stages.
+        for item in state.early_readonly(self.cfg, view, decisions) if self.mem_level == "ok" else []:
+            if item.repo != reordering and item.id not in amending:
+                self.launch(item)
 
     def _stage_run(self, srec: dict) -> Run:
         return Run(srec, self.cfg.path("running", srec["repo"], f"{srec['name']}.stage.json"),
@@ -638,9 +674,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         self._worktree_event(rec, action, note)
 
     def _make_worktree(self, item: items.Item, rec: dict, setup_log: Path) -> str | None:
-        """Create the item's worktree into `rec`; the error, if it failed."""
+        """Create the item's worktree into `rec`, without setup (`daemon_setup` runs it);
+        the error, if it failed."""
         try:
-            made = worktrees.create(self.cfg, item.repo, item.name, setup_log)
+            made = worktrees.create(self.cfg, item.repo, item.name, setup_log, setup=False)
         except (worktrees.WorktreeError, git.GitError, OSError) as exc:
             return f"worktree: {exc}"
         rec.update(worktree=str(made.path), branch=made.branch, base=made.base, shared=made.linked)
@@ -668,7 +705,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
             "item": item.id, "repo": item.repo, "name": item.name,
             "session_id": stage["session_id"] if stage else str(uuid.uuid4()),
             "started": stamp(started), "deadline": stamp(deadline),
-            "max_hours": max_hours, **item.meta(), "phase": "exec",
+            **item.meta(), "max_hours": max_hours, "phase": "exec",   # after meta: the item's may be None
             "report": str(paths.report), "log": str(paths.log), "stderr": str(paths.stderr),
             "prompt": str(paths.prompt),
             "worktree": None, "branch": None, "base": None, "shared": [], "staged": bool(stage),
@@ -683,25 +720,23 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         # Durable order: record, then worktree, then move, then launch, then the pid. A
         # restart that finds no pid and no live process with this session id requeues it.
         self._save(run)
-        error, resume = None, None
+        error = None
         if stage:
             rec.update(worktree=stage["worktree"], branch=stage["branch"], shared=stage.get("shared", []))
             wt = Path(stage["worktree"])
             try:
                 rec["base"] = worktrees.move_to(cfg, item.repo, wt)
-                error = worktrees.run_setup(cfg, item.repo, wt, paths.setup)
             except (git.GitError, OSError) as exc:
                 error = f"moving the staged worktree to {cfg.opts(item.repo).main}: {exc}"
             landed = git.commits_between(repo_path, stage["base"], rec["base"]) if not error else []
-            resume = {"old": stage["base"], "new": rec["base"] or stage["base"], "landed": len(landed)}
+            rec["resume"] = {"old": stage["base"], "new": rec["base"] or stage["base"], "landed": len(landed)}
             self._worktree_event(rec, "moved", f"{stage['base'][:10]} → {(rec['base'] or '?')[:10]}")
         elif cfg.opts(item.repo).worktrees:
             error = self._make_worktree(item, rec, paths.setup)
         if item.template == "cleanup" and not rec["notes"] and not error:
             error = f"cleanup: no unused audit notes for {item.repo}"
-        cwd = Path(rec["worktree"]) if rec["worktree"] else repo_path
         rec["repo_head"] = rec["base"] or git.head(repo_path)
-        rec["repo_status"] = git.tracked_status(cwd) if item.readonly and not error else None
+        rec["repo_status"] = None
         if not error:
             try:
                 rec["port"] = self._free_port()
@@ -716,41 +751,19 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
             if stale.exists():
                 stale.unlink()
         self.runs[item.id] = run
+        if not error and rec["worktree"] and cfg.opts(item.repo).setup:
+            # Setup runs off the loop; `check_runs` starts the executor once it is done.
+            rec["phase"] = "setup"
+            error = self._start_setup(run, "run", paths.setup)
+            if not error:
+                return
+            rec["phase"] = "exec"
         if error:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
                             pid=None, error=error)
             self.finish(run, launch_error=error)
             return
-        # Amendments written before the launch: into the prompt, or the resume message.
-        amends = talk.take(cfg.control, item.id, "resume" if stage else "prompt")
-        write_text(paths.prompt, executor.build_prompt(cfg, item, paths, max_hours, deadline, rec, resume,
-                                                       notes=self._notes_text(rec), usage=self._disk_usage(rec),
-                                                       amends=[m for m in amends if talk.is_amend(m)]))
-        write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
-        write_text(paths.settings, executor.hook_settings(cfg, item))
-        try:
-            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
-                                                     settings=paths.settings),
-                                    cwd, paths.prompt, paths.log, paths.stderr, env={executor.PORT_VAR: str(rec["port"])})
-        except OSError as exc:
-            self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
-                            pid=None, error=str(exc))
-            self.finish(run, launch_error=str(exc))
-            return
-        rec["pid"] = run.popen.pid
-        rec["create_time"] = procs.create_time(run.popen.pid)
-        self._save(run)
-        extra = {"worktree": rec["worktree"], "branch": rec["branch"]} if rec["worktree"] else {}
-        extra["port"] = rec["port"]
-        if item.template:
-            extra |= {"template": item.template, "template_version": rec["template_version"]}
-        if rec.get("notes"):
-            extra["notes"] = rec["notes"]
-        if resume:
-            extra |= {"resumed": True, "landed": resume["landed"]}
-        self.log.append("start", item=item.id,
-                        paths=[cfg.rel(md_path), cfg.rel(paths.report), cfg.rel(paths.log)],
-                        session_id=rec["session_id"], pid=run.popen.pid, deadline=rec["deadline"], **extra)
+        self._start_exec(run, item)
 
     def _free_port(self) -> int:
         """The port an executor's servers use (`CONDUCTOR_PORT`): free now, and never a
@@ -784,28 +797,19 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
             self.no_stage.add(item.id)
             self.log.append("warning", item=item.id, note=f"could not stage: {error}; it will launch fresh")
             return
-        rec["untracked"] = worktrees.untracked(Path(rec["worktree"]))      # setup's output is allowed
-        self._save(run)
-        paths.report.parent.mkdir(parents=True, exist_ok=True)
-        for stale in (paths.stage_log, paths.stage_stderr):
-            stale.unlink(missing_ok=True)
-        write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec))
-        try:
-            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], None), Path(rec["worktree"]),
-                                    paths.stage_prompt, paths.stage_log, paths.stage_stderr)
-        except OSError as exc:
-            self._discard_stage(run, f"stage launch failed: {exc}")
+        if cfg.opts(item.repo).setup:
+            # Setup runs off the loop; `check_stages` starts the stage once it is done.
+            self.stages[item.id] = run
+            if error := self._start_setup(run, "stage", paths.setup):
+                self._discard_stage(run, f"could not stage: {error}")
             return
-        rec["pid"] = run.popen.pid
-        rec["create_time"] = procs.create_time(run.popen.pid)
-        self._save(run)
-        self.stages[item.id] = run
-        self.log.append("stage", item=item.id, paths=[cfg.rel(paths.stage_log)], session_id=rec["session_id"],
-                        pid=run.popen.pid, worktree=rec["worktree"], deadline=rec["deadline"])
+        self._start_stage(run, item)
 
     def check_stages(self) -> None:
         for run in list(self.stages.values()):
-            if run.exited():
+            if run.setting_up:
+                self._poll_stage_setup(run)
+            elif run.exited():
                 self._stage_exited(run)
             elif now() > parse_stamp(run.rec["deadline"]):
                 procs.kill_tree(run.pid())
@@ -845,7 +849,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
 
     def _discard_stage(self, run: Run, reason: str) -> None:
         rec = run.rec
-        if run.pid() and not run.exited():
+        if run.setting_up:
+            self._end_setup(run, reason)         # kills the runner
+        elif run.pid() and not run.exited():
             procs.kill_tree(run.pid())
         self._reap(rec["item"], rec.get("worktree"), rec.get("started"), "its stage was discarded")
         if rec["item"] in self.stages:
@@ -905,7 +911,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin):
         for run in list(self.runs.values()):
             if run.rec.get("phase") == "merge":
                 continue
-            if run.exited():
+            if run.rec.get("phase") == "setup":
+                self._poll_run_setup(run)
+            elif run.exited():
                 self.finish(run)
             elif now() > parse_stamp(run.rec["deadline"]) and run.item_id not in self.blocked:
                 pid = run.pid()
