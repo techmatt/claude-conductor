@@ -5,6 +5,7 @@ from __future__ import annotations
 from . import audits, memory, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
+from .request import is_closeout
 from .resume import label as resume_label
 from .state import View, decide
 from .util import clock, now, parse_stamp
@@ -229,7 +230,7 @@ def describe(ev: Event) -> str:
         case "invalid":
             text = f"{who or d.get('path')} invalid: {d.get('error')}"
         case "read":
-            text = f"read mark → #{d.get('through')}"
+            text = f"read mark → #{d.get('through')}" + (f" (closeout {d['closeout']})" if d.get("closeout") else "")
         case "clear":
             text = f"queue `{ev.repo}` cleared"
         case "enqueue":
@@ -376,11 +377,32 @@ def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
     return out
 
 
+def closeout_id(events: list[Event]) -> int:
+    """The newest `closeout:` request (or its control commit) among `events`, else 0."""
+    return max((e.id for e in events
+                if (e.kind == "request" and is_closeout(e.detail.get("message") or ""))
+                or (e.kind == "commit" and e.detail.get("scope") == "control"
+                    and is_closeout(e.detail.get("subject") or ""))), default=0)
+
+
+def settled_event(ev: Event, view: View, closeout: int) -> bool:
+    """Already dealt with, so hidden behind a count: any event of an item whose report is
+    reviewed (a red aside), and the requests and control commits of a session that closed
+    out (up to its `closeout:`), which a mark older than the closeout still covers."""
+    if ev.kind in RED_KINDS:
+        return False
+    if ev.item and view.reviewed(ev.item):
+        return True
+    return ev.id <= closeout and (ev.kind == "request" or (ev.kind == "commit" and ev.detail.get("scope") == "control"))
+
+
 def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -> str:
     """The inbox; with `heading` (the session digest's), that replaces its title and
     the mark-read hint, since the digest moves the read mark itself."""
     mark = log.read_mark()
-    events = log.query(since_id=mark)
+    since_mark = log.query(since_id=mark)
+    closeout = closeout_id(since_mark)
+    events = [e for e in since_mark if not settled_event(e, view, closeout)]
     top = log.max_id()
     mark_ev = log.last("read")
     red = sorted((e for e in events if e.kind in RED_KINDS), key=lambda e: (e.kind != "tamper", e.id))
@@ -406,7 +428,13 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
 
     out = [heading or f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
-    out.append(f"Generated {clock(now())} · {len(events)} event(s) {since}, through #{top}.")
+    kept = {e.id for e in events}
+    of_reviewed = sum(1 for e in since_mark if e.item and e.id not in kept)
+    hidden = ([f"{of_reviewed} of reviewed items"] if of_reviewed else []) + (
+        [f"{n} requests and control commits up to closeout #{closeout}"]
+        if (n := len(since_mark) - len(events) - of_reviewed) else [])
+    out.append(f"Generated {clock(now())} · {len(since_mark)} event(s) {since}, through #{top}"
+               + (f" · hidden as settled: {', '.join(hidden)}" if hidden else "") + ".")
     if heading is None:
         out.append(f"Mark read: write a file in `signals/` containing `read: {top}`.")
     if cp := view.checkpoint:

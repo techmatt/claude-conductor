@@ -22,7 +22,7 @@ When Matt says "restart all" (or "restart everything", "restart conductor and th
 
 When Matt says "run next prompt" (or "run the next prompt" and the like):
 
-- **Next** is the lowest-numbered prompt in `prompts/` after the newest one that has a report in `reports/` (`NN_name.md` ↔ `NN_name_report.md`), in natural order: 12 < 12a < 13.
+- **Next** is the lowest-numbered `prompts/NN_name.md` after the newest one with a `done` line in `prompts/ledger.md` (before the ledger: a report in `reports/`), in natural order: 12 < 12a < 13. Files a prompt reads live in `prompts/support/`.
 - Name it first ("Running 19_run_next_and_maintenance"), so a wrong pick is obvious, then run exactly that one as if pasted, ending with `Report written to <path>` as usual. Never chain on to the next one.
 - With several unrun, run only the lowest and say how many remain.
 - An **older** prompt with no report (skipped or superseded) is never run by this phrase; mention it in one line in case it was missed.

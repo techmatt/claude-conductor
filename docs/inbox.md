@@ -43,7 +43,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    names the signal file it answers and the checkpoint (number, label, time), so a
    planner that staged it too early sees it is the previous one and stages again. The
    body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
-   reports, picks, every event since the previous read mark, *Now*), then:
+   reports, picks, every unsettled event since the previous read mark, *Now*), then:
    - **Conductor reports**: every `reports/NN_name_report.md` in conductor's own
      checkout (found from the installed package, `src/conductor/` → the repo root) whose
      prompt is past the `Last report reviewed by the planner: NN_name` line in its
@@ -114,7 +114,14 @@ without the item:
 - code/014_faces waiting for Matt — signal `pick: code/picks/faces.json`
 ```
 
-Then every event after the read mark, grouped **Red** (tamper first,
+Then every event after the read mark that is not *settled*: an event of an item whose
+report is reviewed (a red kind aside), or a request or control commit at or before the
+newest `closeout:` request among them (a session that closed out before closeouts moved
+the mark). The header counts them: `· hidden as settled: N of reviewed items, M requests
+and control commits up to closeout #<id>`. A request whose message starts `closeout:`
+also logs a `read` event through the newest event (detail `closeout`: the request
+folder's name), so the next inbox and digest start after the ended session. The rest are
+grouped **Red** (tamper first,
 then the rest in event order: `red`, `conflict`, `paths_violation`, `kill`, `request_failed`, `invalid`, `run_failed`,
 `pick_failed`, `amend_refused`, `memory_critical`, `daemon_died`),
 **Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**

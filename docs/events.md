@@ -35,7 +35,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `drift` | control folder changed with no executor running | changes |
 | `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing) / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
-| `read` / `clear` | signals | through; session (a `session:` signal's checkpoint id) / repo |
+| `read` / `clear` | signals, or a `closeout:` request | through; session (a `session:` signal's checkpoint id); closeout (the request's name) / repo |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by; hashes (`report`, `audit`: sha256 or null) |
 | `report_changed` | a reviewed report or its `.audit.md` no longer matches the hashes of its `reviewed` (or last `report_changed`): unreviewed again (`inbox.md`, *Reviewed*) | files (`report`, `audit`: what differs from the review), reviewed (its id), hashes; opened, opened_by (the latest `session_opened` since it finished) |
 | `session_opened` | a finished item's session opened by hand (the app's Terminal, `conductor open`: a `session_opened:` signal) | session_id, by |

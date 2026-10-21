@@ -27,18 +27,7 @@ inbox.md                       generated digest since the read mark
 session.md                     the start digest the last `session:` wrote (see inbox.md)
 review.md                      the review bundle the last `review:` wrote (see inbox.md)
 events.db                      append-only event log (SQLite, WAL)
-.conductor/                    daemon lock and heartbeat (daemon.json), guard snapshot, cancelled/ (kept
-                               cancelled items), reorder.json and signal.json (crash journals),
-                               daemon.out.log (a daemon started by the app), progress/ and
-                               mail/ (progress lines, messages to executors: see `progress.md`),
-                               touch/ (paths each item's tools named: tamper attribution),
-                               open.log (`open:` launches), restart.ready (self-restart handshake),
-                               memory.jsonl (memory samples: see `memory.md`), leftovers.json
-                               (worktrees to retry: see `worktrees.md`), run-<name>.log and
-                               run-<name>.json (run targets: see `run-targets.md`),
-                               setup/<repo>__NNN_name.run.json or .stage.json and their
-                               .result.json (a setup runner's spec and result, removed
-                               once setup ends: see `executors.md`, *Setup*)
+.conductor/                    the daemon's own state: lock, heartbeat, journals (see runtime.md)
 ```
 
 A run record's `phase` is `setup`, `exec`, `merge` or `concluding`. Run and stage
@@ -200,4 +189,6 @@ checked sends it round once more (it is never applied half-written). Requests ke
 order where their targets overlap: a later one naming a target of an earlier, waiting
 one waits too. A bad request is logged `request_failed` (red)
 and renamed `requests/<stamp>.failed/`. A request that changes nothing is logged with
-`no_change` and removed.
+`no_change` and removed. Requests apply in folder-name order; the planner names them
+`YYYYMMDD-HHMM-<tag>`. One whose message starts `closeout:` also moves the read mark
+(`inbox.md`).

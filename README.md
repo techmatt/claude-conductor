@@ -57,6 +57,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | File | What it covers |
 |---|---|
 | `docs/control-folder.md` | The control folder's layout and `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
+| `docs/runtime.md` | The `.conductor/` folder: the daemon's lock, heartbeat, journals and scratch state |
 | `docs/items.md` | Queue items: front-matter, rewriting, scheduling, holds, readonly and `alongside` items, exclusive templates, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, setup, log compaction, the report header, the outcome |

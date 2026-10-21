@@ -572,6 +572,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             if sha:
                 self.log.append("commit", paths=req.targets, scope="control", sha=sha,
                                 subject=req.message.splitlines()[0])
+            if request.is_closeout(req.message):     # the session ended: what it saw is read
+                self.log.append("read", paths=[rel], through=self.log.max_id(), closeout=d.name)
             shutil.rmtree(d)
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
             if "conductor.toml" in req.targets:

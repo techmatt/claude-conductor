@@ -19,6 +19,11 @@ REQUEST_WAIT_SECONDS = 60.0  # how long after request.md appears its missing tar
 FAILED_SUFFIX = ".failed"
 
 
+def is_closeout(message: str) -> bool:
+    """A planner session's closeout (`message: "closeout: …"`): what it saw is read."""
+    return message.strip().lower().startswith("closeout:")
+
+
 class RequestError(ValueError):
     pass
 

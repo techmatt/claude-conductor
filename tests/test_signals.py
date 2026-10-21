@@ -614,6 +614,33 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     assert "code/004_last finished" not in text and '"again"' in text
 
 
+@pytest.mark.slow
+def test_digest_hides_reviewed_items_and_a_closed_session_and_closeout_moves_the_mark(env):
+    from conductor import inbox, state
+    env.queue("001_seen", "FAKE report done")
+    env.queue("002_new", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/002_new"))
+    send(env, "reviewed: 001", "rev")
+    # A session that closed out before closeouts moved the mark: its requests stay settled.
+    for kind, key, text in [("request", "message", "state: old news"), ("commit", "subject", "state: old news"),
+                            ("request", "message", "closeout: s1 ends"), ("commit", "subject", "closeout: s1 ends"),
+                            ("request", "message", "state: fresh")]:
+        env.d.log.append(kind, **({"scope": "control"} if kind == "commit" else {}), **{key: text})
+    text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
+    assert "code/002_new finished" in text and "code/001_seen" not in text
+    assert "state: fresh" in text and "old news" not in text and "closeout: s1" not in text
+    assert "hidden as settled: " in text and " of reviewed items, 4 requests and control commits up to closeout #" in text
+    req = env.control / "requests" / "20261021-1000"
+    req.mkdir(parents=True)
+    (req / "state.md").write_text("# state\n\nclosed\n", encoding="utf-8")
+    (req / "request.md").write_text('---\ntargets: [state.md]\nmessage: "closeout: s2 ends"\n---\n', encoding="utf-8")
+    env.tick_until(lambda: not req.exists())
+    read = env.events("read")[-1]
+    assert read.detail["closeout"] == "20261021-1000" and read.detail["through"] == read.id - 1
+    text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
+    assert "code/002_new finished" not in text and "state: fresh" not in text
+
+
 def test_events_since_checkpoint_on_the_cli(env, capsys):
     from conductor import cli
     send(env, "checkpoint: one", "cp")
