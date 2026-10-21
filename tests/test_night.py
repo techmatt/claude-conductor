@@ -1,12 +1,14 @@
 """The night shift: the stall check, the watch item, backlog draws and their rules."""
 
+import json
 import os
+import re
 import time
 from datetime import datetime
 
 import pytest
 
-from conductor import daemon_watch, nightshift
+from conductor import daemon_watch, nightshift, questions
 from conductor.util import read_text
 
 
@@ -83,6 +85,39 @@ def test_a_backlog_item_is_drawn_into_an_empty_queue(env):
     assert "drawn into the queue as code/001_feature" in receipt
     assert not list((env.control / "backlog" / "code").glob("*.md"))
     assert (env.control / "backlog" / ".gitignore").read_text() == "*\n"
+
+
+def assert_each_once(text: str) -> None:
+    """No section heading and no event line (`- <clock> #<id> …`) appears twice."""
+    heads = [ln for ln in text.splitlines() if ln.startswith("#")]
+    ids = re.findall(r"^- \d{1,2}:\d\d[ap]m #(\d+) ", text, flags=re.M)
+    assert len(heads) == len(set(heads)), heads
+    assert len(ids) == len(set(ids)), ids
+
+
+@pytest.mark.slow
+def test_inbox_and_digests_print_each_section_once(env):
+    """Word Warriors' inbox printed everything after *Night shift* twice once (38)."""
+    env.queue("001_first", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/001_first"))
+    backlog(env, "07_ask", "FAKE ask " + json.dumps({"question": "Which?", "block": True}) + "\nFAKE report done")
+    env.tick_until(lambda: questions.scan(env.control))
+    [q] = questions.scan(env.control)
+    q.answer_path.write_text("This one.\n", encoding="utf-8")
+    env.tick_until(lambda: env.finished("code/002_ask"))
+    env.d.write_inbox(force=True)
+    inbox = read_text(env.control / "inbox.md")
+    for title in ("## Night shift", "## Finished", "## Questions resolved", "## Now"):
+        assert title in inbox
+    assert_each_once(inbox)
+    env.signal("planner-1.signal", "by: planner\nreview: all")
+    env.tick_until(lambda: env.events("review"))
+    assert_each_once(read_text(env.control / "review.md"))
+    env.signal("planner-2.signal", "by: planner\nsession: start")
+    env.tick_until(lambda: env.events("checkpoint"))
+    session = read_text(env.control / "session.md")
+    assert "## Night shift" in session and "## Questions resolved" in session
+    assert_each_once(session)
 
 
 @pytest.mark.slow

@@ -94,9 +94,11 @@ def file_hash(path: Path) -> str | None:
 
 
 def write_text(path: Path, text: str) -> None:
-    """Atomic UTF-8 / LF write: temp file in the same folder, then replace."""
+    """Atomic UTF-8 / LF write: temp file in the same folder, then replace. The temp name
+    carries the pid, so two processes writing one file (an old daemon's last inbox and a
+    new one's first) never share, and splice, one temp file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
     retry_io(os.replace, tmp, path)

@@ -87,7 +87,9 @@ marks nothing reviewed. Layout:
 ## Inbox
 
 `inbox.md` is regenerated whenever the log or the read mark changes (and every 30s
-for the *Now* section). Its header names the current checkpoint (see *Checkpoints*).
+for the *Now* section), as a whole-file replace through `<file>.<pid>.tmp`, so a reader
+sees one render or the next, never a splice; each heading and event line appears once.
+Its header names the current checkpoint (see *Checkpoints*).
 First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`
