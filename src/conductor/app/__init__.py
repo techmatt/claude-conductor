@@ -18,11 +18,14 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError as exc:          # pragma: no cover - PySide6 is a dependency
         print(f"conductor app: PySide6 is not available ({exc})", file=sys.stderr)
         return 1
-    from . import single, theme
+    from .. import procs
+    from . import icon, single, theme
     from .window import MainWindow
 
+    procs.set_app_id()                        # the taskbar shows conductor's icon, not Python's
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("Conductor")
+    app.setWindowIcon(icon.app_icon())
     folders = [f.resolve() for f in folders]   # the running app has its own cwd
     if single.forward(folders):
         return 0                              # an app is already running: it has them now

@@ -42,6 +42,20 @@ def allow_foreground() -> None:
         ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY)
 
 
+APP_ID = "conductor.app"
+
+
+def set_app_id(app_id: str = APP_ID) -> None:
+    """Windows: the app's own AppUserModelID, so the taskbar groups its window under its
+    own icon, not Python's. Set before any window shows; a no-op elsewhere."""
+    if WINDOWS:
+        import ctypes
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        except (AttributeError, OSError):
+            pass
+
+
 def free_port(avoid: set[int] = frozenset()) -> int:
     """A local TCP port nothing listens on now, from the OS's ephemeral range, never one
     in `avoid` (run targets' ports, other items')."""

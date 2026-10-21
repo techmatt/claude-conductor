@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon
 from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu,
                                QMessageBox, QPushButton, QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
 from .. import config as config_mod
 from ..inbox import checkpoint_name
 from ..util import clock
-from . import actions, theme
+from . import actions, icon, status, theme
 from .events_panel import EventsPanel
 from .model import PRIORITY, Project, Snapshot, overall
 from .proposed_panel import ProposedPanel
@@ -20,23 +20,22 @@ from .questions_panel import QuestionsPanel
 from .repos_panel import ReposPanel
 from .widgets import confirm
 
-# Icon and status-dot colours (graphics, not text: they need 3:1, which each meets).
+# Status-dot colours (graphics, not text: they need 3:1, which each meets).
 COLORS = {"red": theme.RED, "asking": theme.ICON_ASKING, "running": theme.ACCENT, "idle": theme.ICON_IDLE}
 SETTINGS_KEY = "controls"
+HUBS = {"need": "red", "running": "gold", "idle": "slate"}     # a project tab's icon, by `status` kind
+TURN_MS = 1000                  # the running title's glyph and the tray's pulse
 
 
-def state_icon(state: str, size: int = 64) -> QIcon:
-    """A filled disc in the state's colour, drawn rather than shipped."""
-    pm = QPixmap(size, size)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor("white"), size / 16))
-    p.setBrush(QColor(COLORS.get(state, COLORS["idle"])))
-    m = size / 10
-    p.drawEllipse(int(m), int(m), int(size - 2 * m), int(size - 2 * m))
-    p.end()
-    return QIcon(pm)
+def tray_hub(st: status.Status, tick: int) -> str:
+    """The tray's hub: red when something needs Matt, pulsing gold while items run."""
+    return {"need": "red", "running": "dim" if tick % 2 else "gold"}.get(st.kind, "gold")
+
+
+def state_icon(kind: str) -> QIcon:
+    """The app's icon with its hub coloured by a `status` kind: red when something needs
+    Matt, gold while items run, slate when idle."""
+    return icon.icon(HUBS.get(kind, "slate"))
 
 
 def dot(state: str) -> str:
@@ -254,9 +253,15 @@ class MainWindow(QMainWindow):
     def __init__(self, folders: list[Path] = (), settings: QSettings | None = None,
                  tray: bool = True, interval_ms: int = 1500):
         super().__init__()
-        self.setWindowTitle("Conductor")
+        self.setWindowTitle(status.APP)
         self.resize(1250, 780)
-        self.setWindowIcon(state_icon("idle"))
+        self.setWindowIcon(icon.app_icon())
+        self.status = status.Status("idle", [])
+        self._good: dict[Path, Snapshot] = {}      # each project's last snapshot read whole: the title's
+        self._tick = 0
+        # Only while items run: turns the title's glyph and pulses the tray's hub.
+        self.turner = QTimer(self)
+        self.turner.timeout.connect(self._turn)
         self.settings = settings or QSettings("conductor", "conductor-app")
         self.views: dict[Path, ProjectView] = {}
         self._quitting = False
@@ -379,20 +384,40 @@ class MainWindow(QMainWindow):
                 continue
             states.append(snap.state)
             lines.append(f"{snap.project}: {snap.state} — {snap.why}")
+            if not snap.error or folder not in self._good:
+                self._good[folder] = snap     # a read that failed part-way keeps the title where it was
             idx = self.tabs.indexOf(view)
-            self.tabs.setTabIcon(idx, state_icon(snap.state, 16))
+            self.tabs.setTabIcon(idx, state_icon(status.summarize([self._good[folder]]).kind))
+        self._good = {f: s for f, s in self._good.items() if f in self.views}
         self.state = overall(states)
-        self.setWindowIcon(state_icon(self.state))
+        self.status = status.summarize(list(self._good.values()))
+        if self.status.kind == "running":
+            if not self.turner.isActive():
+                self.turner.start(TURN_MS)
+        else:
+            self.turner.stop()
+        self._show_status()
         if self.tray:
-            self.tray.setIcon(state_icon(self.state))
-            self.tray.setToolTip(("Conductor — " + self.state + "\n" + "\n".join(lines))[:250])
+            head = status.APP + "".join(f" · {p}" for p in self.status.parts)
+            self.tray.setToolTip((head + "\n" + "\n".join(lines))[:250])
+
+    def _turn(self) -> None:
+        self._tick += 1
+        self._show_status()
+
+    def _show_status(self) -> None:
+        """The title and the tray's icon: the gold hub pulses while items run and turns
+        red when something needs Matt. Needs Matt holds still."""
+        self.setWindowTitle(self.status.title(self._tick))
+        if self.tray:
+            self.tray.setIcon(icon.icon(tray_hub(self.status, self._tick)))
 
     # ------------------------------------------------------------ tray
     def has_tray(self) -> bool:
         return self.tray is not None
 
     def _make_tray(self) -> QSystemTrayIcon:
-        tray = QSystemTrayIcon(state_icon("idle"), self)
+        tray = QSystemTrayIcon(icon.icon(), self)
         menu = QMenu()
         show = menu.addAction("Open Conductor")
         show.triggered.connect(self.show_window)
