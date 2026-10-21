@@ -3,7 +3,7 @@ item's detail beside it."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (QHeaderView, QInputDialog, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout)
@@ -27,23 +27,35 @@ def finished_note(f: Finished, when) -> str:
 
 class ReposPanel(Panel):
     COLS = ["Repo / item", "State", "Elapsed", "Note", ""]
-    BUTTONS_WIDTH = 310     # the button column's least width; each rebuild widens it to fit
+    FITTED = (0, 1, 2)      # sized to their contents until Matt drags one
+    NOTE_MIN = 140          # Note's least width: readable, the tree scrolls instead
+    SPLIT_KEY = "repos/split"
+    WIDTHS_KEY = "repos/widths"
+    # A finished row's buttons by kind, each in its own slot so they line up across rows.
+    DONE_SLOTS = ("Mark reviewed", "Pick…", "Terminal")
 
-    def __init__(self, project: Project, notify):
+    def __init__(self, project: Project, notify, settings: QSettings | None = None):
         super().__init__(project, notify)
+        self.settings = settings
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(self.COLS)
         self.tree.setRootIsDecorated(True)
         self.tree.setUniformRowHeights(True)
+        self.tree.setIndentation(14)                # two levels deep: every pixel goes to Note
         self.tree.itemDoubleClicked.connect(self._double)
         h = self.tree.header()
-        # The Note column takes the spare width; the button column stays button-sized.
+        # Note takes the spare width and grows with the window; the button column is only
+        # as wide as its widest row. A note that still does not fit elides (tooltip whole).
         h.setStretchLastSection(False)
-        for col in (0, 1, 2):
-            h.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        for col in self.FITTED:
+            h.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        h.resizeSection(4, self.BUTTONS_WIDTH)   # room for Mark reviewed, Pick… and Terminal
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self._fitting = False
+        self._widths = self._load_widths()              # column → width Matt dragged it to
+        h.sectionResized.connect(self._resized)
+        h.sectionHandleDoubleClicked.connect(self._unpin)
         self.tree.setItemDelegate(KeepColourDelegate(self.tree))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
@@ -63,7 +75,11 @@ class ReposPanel(Panel):
         split.addWidget(self.detail)
         split.setStretchFactor(0, 3)
         split.setStretchFactor(1, 2)
-        split.setSizes([720, 520])
+        split.setSizes([800, 440])
+        if settings is not None and (state := settings.value(self.SPLIT_KEY)) is not None:
+            split.restoreState(state)               # where Matt left the splitter
+        split.splitterMoved.connect(lambda *_: self._split_moved())
+        self.split = split
         lay.addWidget(split, 1)
         self.selected: str | None = None                # the item Matt picked in the tree
         self._actions: dict[str, tuple[bool, bool]] = {}    # item → (Tell allowed, Amend allowed)
@@ -133,11 +149,14 @@ class ReposPanel(Panel):
                     elapsed = duration(a.elapsed(at)) if staging else ""
                     note = "" if staging else "plan ready; resumes when it can run"
                 if i == 0 and held:
-                    # the hold row above says why
-                    state, look = (f"{state} · blocked by hold" if it.id in stages else "blocked by hold"), "blocked"
+                    # the hold row above says why; a staged item still looks staged
+                    state, look = ((f"{state} · blocked by hold", "stage") if it.id in stages
+                                   else ("blocked by hold", "blocked"))
                 elif i == 0:
                     state += " · next"
-                    if rs.action in ("wait", "stage", "run", "resume"):
+                    if rs.action == "stage" and rs.stage_dropped and it.id not in stages:
+                        note = rs.stage_dropped     # the daemon will not stage it again
+                    elif rs.action in ("wait", "stage", "run", "resume"):
                         note = rs.action + (f": {rs.reason}" if rs.reason else "")
                 if it.resume_of:
                     note = " · ".join(x for x in (resume_label(it.meta()), note) if x)
@@ -222,6 +241,66 @@ class ReposPanel(Panel):
                 for col, t in enumerate(texts):
                     if w.text(col) != t:
                         w.setText(col, t)
+                        if col == 3 and key[0] != "group":
+                            w.setToolTip(3, t)
+        self._fit()
+
+    def _fit(self) -> None:
+        """Repo / item, State and Elapsed fit their contents, unless Matt dragged one. Note
+        stretches into the rest, but never below NOTE_MIN: short of that, the tree scrolls."""
+        h = self.tree.header()
+        self._fitting = True
+        try:
+            for col in self.FITTED:
+                if self.tree.isColumnHidden(col):
+                    continue
+                want = self._widths.get(col) or max(self.tree.sizeHintForColumn(col), h.sectionSizeHint(col))
+                if h.sectionSize(col) != want:
+                    h.resizeSection(col, want)
+            others = sum(h.sectionSize(c) for c in range(len(self.COLS)) if c != 3 and not self.tree.isColumnHidden(c))
+            roomy = self.tree.viewport().width() - others >= self.NOTE_MIN
+            mode = QHeaderView.ResizeMode.Stretch if roomy else QHeaderView.ResizeMode.Fixed
+            if h.sectionResizeMode(3) != mode:
+                h.setSectionResizeMode(3, mode)
+            if not roomy and h.sectionSize(3) != self.NOTE_MIN:
+                h.resizeSection(3, self.NOTE_MIN)
+        finally:
+            self._fitting = False
+
+    def _split_moved(self) -> None:
+        """Note follows the splitter, and its place is kept across restarts."""
+        if self.settings is not None:
+            self.settings.setValue(self.SPLIT_KEY, self.split.saveState())
+        self._fit()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit()
+
+    def _resized(self, col: int, _old: int, new: int) -> None:
+        """A drag of a fitted column's edge pins its width, across refreshes and restarts."""
+        if self._fitting or col not in self.FITTED or new <= 0:
+            return
+        self._widths[col] = new
+        self._save_widths()
+
+    def _unpin(self, col: int) -> None:
+        """A double-click on a column's edge hands it back to fitting its contents."""
+        if self._widths.pop(col, None) is not None:
+            self._save_widths()
+        self._fit()
+
+    def _load_widths(self) -> dict[int, int]:
+        raw = self.settings.value(self.WIDTHS_KEY, []) if self.settings else []
+        try:
+            values = [int(v) for v in ([raw] if isinstance(raw, str) else raw or [])]
+        except (TypeError, ValueError):
+            return {}
+        return {col: v for col, v in zip(self.FITTED, values) if v > 0}
+
+    def _save_widths(self) -> None:
+        if self.settings is not None:
+            self.settings.setValue(self.WIDTHS_KEY, [self._widths.get(col, 0) for col in self.FITTED])
 
     def _rebuild(self, plan) -> None:
         self._rebuilding = True
@@ -252,6 +331,11 @@ class ReposPanel(Panel):
             # reviewed one reads as history (muted).
             looks[f"done:{status}:unreviewed"] = (fg, None, None, True)
             looks[f"done:{status}:reviewed"] = (None, theme.MUTED, None, False)
+        # Only the slots some finished row uses: a tree with no picker keeps no Pick… room.
+        done_looks = [look for _, _, _, rows in plan for key, _, _, look, _ in rows if key[0] in ("done", "old")]
+        done_slots = [s for s in self.DONE_SLOTS if s == "Terminal"
+                      or (s == "Pick…" and any("|pick:" in look for look in done_looks))
+                      or (s == "Mark reviewed" and any(":unreviewed" in look for look in done_looks))]
         for repo, note, path, rows in plan:
             top = QTreeWidgetItem([repo, "", "", note])
             for c in range(len(self.COLS)):
@@ -317,7 +401,7 @@ class ReposPanel(Panel):
                                          None if pick_state in ("saved", "settled") else "default"))
                     if look.endswith(":unreviewed"):
                         specs.insert(0, ("Mark reviewed", None, None if pick_state == "saved" else "default"))
-                    holder = compact_buttons(*specs)
+                    holder = compact_buttons(*specs, slots=done_slots)
                     if b := holder.buttons.get("Mark reviewed"):
                         b.clicked.connect(lambda _=False, i=key[1], b=b: self._reviewed(i, b))
                         b.setToolTip("Mark its report read (a `reviewed:` signal the daemon carries out)")
@@ -327,10 +411,19 @@ class ReposPanel(Panel):
                     term.setToolTip("Open this item's session in a terminal (claude --resume)")
                     term.setEnabled(bool(self._sessions.get(key[1])))
                     self.tree.setItemWidget(w, 4, holder)
-        # The button column fits its widest row, so no label is cut ("Open in terminal" was).
-        widest = max((h.sizeHint().width() for w in self._rows.values()
-                      if (h := self.tree.itemWidget(w, 4)) is not None), default=0)
-        self.tree.header().resizeSection(4, max(self.BUTTONS_WIDTH, widest + 8))
+        # Line the buttons up: within a group of rows each position is as wide as its widest
+        # button (Cancel / Tell…, then Amend…; each finished slot), and the column fits
+        # the widest row, so no label is cut and no width is spare.
+        holders = [(key[0], h) for key, w in self._rows.items() if (h := self.tree.itemWidget(w, 4)) is not None]
+        for kinds in (("queued", "run"), ("done", "old")):
+            rows = [h.row for kind, h in holders if kind in kinds]
+            for i in range(max(map(len, rows), default=0)):
+                at = [r[i] for r in rows if i < len(r)]
+                width = max(b.sizeHint().width() for b in at)
+                for b in at:
+                    b.setMinimumWidth(width)
+        widest = max((h.sizeHint().width() for _, h in holders), default=0)
+        self.tree.header().resizeSection(4, widest + 4 if widest else 0)
         self.tree.blockSignals(True)            # not a click: the remembered state stays
         for key, w in self._rows.items():
             if key[0] in ("repo", "group"):

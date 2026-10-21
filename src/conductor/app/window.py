@@ -46,7 +46,7 @@ def dot(state: str) -> str:
 class ProjectView(QWidget):
     """One control folder: a header (state, daemon, start/stop) and the four panels."""
 
-    def __init__(self, project: Project, notify):
+    def __init__(self, project: Project, notify, settings: QSettings | None = None):
         super().__init__()
         self.project = project
         self.notify = notify
@@ -86,7 +86,7 @@ class ProjectView(QWidget):
         self.memory_label.hide()
         lay.addWidget(self.memory_label)
         self.tabs = QTabWidget()
-        self.repos_panel = ReposPanel(project, notify)
+        self.repos_panel = ReposPanel(project, notify, settings)
         self.questions_panel = QuestionsPanel(project, notify)
         self.events_panel = EventsPanel(project, notify)
         self.proposed_panel = ProposedPanel(project, notify)
@@ -325,7 +325,7 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.warning(self, "Add project", msg)
             return None
-        view = ProjectView(project, self.notify)
+        view = ProjectView(project, self.notify, self.settings)
         self.views[folder] = view
         self.tabs.addTab(view, project.name)
         self.tabs.setTabToolTip(self.tabs.count() - 1, str(folder))

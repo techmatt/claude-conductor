@@ -109,7 +109,7 @@ QPushButton[role="approve"] {{ background: {GREEN}; color: #ffffff; border-color
 QPushButton[role="approve"]:hover {{ background: {GREEN_DARK}; }}
 QPushButton[role="primary"]:disabled, QPushButton[role="approve"]:disabled {{
     background: {DISABLED_BG}; color: {DISABLED_TEXT}; border: 1px dashed {INPUT_BORDER}; font-weight: normal; }}
-QPushButton[role="compact"] {{ padding: 1px 10px; }}
+QPushButton[role="compact"] {{ padding: 1px 7px; }}
 QPushButton[tone="danger"] {{ color: {RED}; border: 1px solid {RED}; font-weight: bold; }}
 QPushButton[tone="danger"]:hover {{ background: {RED_BG}; }}
 QPushButton[tone="default"] {{ border: 2px solid {AMBER}; font-weight: bold; }}

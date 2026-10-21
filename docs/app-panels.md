@@ -21,10 +21,11 @@ an item's detail in `trail.py`.
   with `resume of <orig>` in its note (`resume.md`), an `alongside` one
   `running · alongside`), its elapsed time and, while it runs, its port in the note (an
   `alongside` one adds `beside <names>` and `alongside: <line>`), then the queue in order, the next one marked `· next` with its
-  decision (`wait`, `stage`, …) in the note, and any invalid item. A staged item is
+  decision (`wait`, `stage`, …) in the note (after a discarded or failed stage, that
+  warning instead: it launches fresh), and any invalid item. A staged item is
   still queued, so it is one row whose state carries both: `staging` (with elapsed) or
-  `staged` (note: plan ready), then `· next` or `· blocked by hold`; other queued items
-  read `queued`. Each queued item has **Cancel** (asks first;
+  `staged` (note: plan ready), then `· next` or `· blocked by hold`, teal until it
+  launches (running is blue); other queued items read `queued`. Each queued item has **Cancel** (asks first;
   `cancel: <repo>/<NNN_name>`).
   *Finished* holds the repo's current finished items (those not settled by a
   checkpoint), newest first: the
@@ -48,6 +49,13 @@ an item's detail in `trail.py`.
   *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the
   latest checkpoint sit in *Earlier checkpoints* (the 10 newest; the count is all of
   them).
+  Columns: Repo / item, State and Elapsed fit their contents, the buttons sit far right in
+  a column as wide as the widest row's set, and Note takes the rest (never under 140px:
+  short of that the tree scrolls), eliding with the note whole in its tooltip. Buttons
+  line up by kind: finished rows keep a slot each for Mark reviewed, Pick… and Terminal
+  (only the slots some row uses), in-flight rows share widths so Amend… aligns. A width
+  dragged by hand stays across refreshes and restarts (app settings, `repos/widths`, as
+  does the splitter, `repos/split`); a double-click on the column's edge refits it.
   The tab has no help line: an item's name tooltip says double-click opens it in Events,
   and **Clear hold**, **Cancel**, **Mark reviewed** and **Pick…** each have a tooltip
   naming what it does and the signal it sends.

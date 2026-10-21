@@ -148,6 +148,7 @@ class RepoState:
     queued: list[items.Item] = field(default_factory=list)
     action: str = "idle"        # state.decide's action for the queue head
     reason: str = ""
+    stage_dropped: str = ""     # the head's stage was discarded or failed: it launches fresh
     red: Event | None = None    # the red event holding the queue until `clear`
     finished: list[Finished] = field(default_factory=list)     # newest first
     finished_total: int = 0
@@ -490,6 +491,13 @@ class Project:
                                               rec.get("started"), rec.get("branch") or ""))
             if d := decisions.get(repo):
                 rs.action, rs.reason = d.action, d.reason
+            if rs.action == "stage" and rs.queued:
+                # decide() says stage, but the daemon will not restage an item whose stage it dropped.
+                head = rs.queued[0].id
+                w, s = self.log.last("warning", item=head), self.log.last("stage", item=head)
+                note = str(w.detail.get("note", "")) if w and (s is None or w.id > s.id) else ""
+                if note.startswith(("stage discarded", "could not stage")):
+                    rs.stage_dropped = note
             rs.finished, rs.finished_total = finished_items(view, repo, keep=waiting)
             rs.earlier, rs.earlier_total = earlier_items(view, repo, skip=waiting)
             rs.audit_notes = len(view.unused_notes(cfg, repo))

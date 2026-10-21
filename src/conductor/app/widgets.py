@@ -76,21 +76,33 @@ def compact_button(text: str, slot, tone: str | None = None) -> QWidget:
     return compact_buttons((text, slot, tone))
 
 
-def compact_buttons(*specs: tuple) -> QWidget:
+def compact_buttons(*specs: tuple, slots: list[str] | None = None) -> QWidget:
     """Small buttons side by side for one tree cell: each spec is (text, slot, tone).
-    `holder.buttons` maps text → button; `holder.button` is the first."""
+    `holder.buttons` maps text → button; `holder.button` is the first. With `slots`, the
+    buttons sit in that order and a slot this row lacks keeps its room (an invisible
+    stand-in), so each kind of button lines up across rows. `holder.row` is every
+    button in layout order, stand-ins included."""
     holder = QWidget()
     lay = QHBoxLayout(holder)
     lay.setContentsMargins(4, 1, 4, 1)
-    holder.buttons = {}
-    for text, slot, tone in specs:
+    holder.buttons, holder.row = {}, []
+    given = {text: (slot, tone) for text, slot, tone in specs}
+    for text in slots or list(given):
         b = QPushButton(text)
         b.setProperty("role", "compact")
+        lay.addWidget(b)
+        holder.row.append(b)
+        if text not in given:
+            policy = b.sizePolicy()
+            policy.setRetainSizeWhenHidden(True)
+            b.setSizePolicy(policy)
+            b.hide()
+            continue
+        slot, tone = given[text]
         if tone:
             b.setProperty("tone", tone)
         if slot is not None:
             b.clicked.connect(slot)
-        lay.addWidget(b)
         holder.buttons[text] = b
     lay.addStretch(1)
     holder.button = next(iter(holder.buttons.values()))
