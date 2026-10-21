@@ -31,12 +31,17 @@ until the file is fixed — an item not yet started may be rewritten freely.
 **Rewriting a queued item.** Conductor parses `queue/` afresh every tick, so a rewrite
 of an item that has not launched takes effect: the launch reads the file as it is then.
 Each change to a queued file's bytes logs an `edited` event (an Activity event, so the
-planner and the Events tab see that the rewrite landed). A staged item's stage belongs
-to the text it read, so a rewrite discards it and the item launches fresh (see
-`worktrees.md`, *Staging*). Once the item has moved to `running/`, edits are never read. Changes made
-while the daemon is down log no `edited` (the first scan sees only the new text), but a
-stage is still discarded by its hash. To add to a plan that still stands, keeping a
-stage, or to change a running item, amend it instead (`progress.md`, *Amendments*).
+planner and the Events tab see that the rewrite landed). A stage belongs to the text it
+read, so a rewrite of a staging or staged item discards the stage (a staging executor is
+killed) and stages it again from the new text when it still waits (`warning` *stage
+discarded … it starts again from the new text*; `worktrees.md`, *Staging*). A rewrite
+that lands mid-launch, between the tick's scan and the move into `running/`, undoes that
+launch (its worktree or stage discarded, `edited` with `launching: true`) and the next
+tick launches the new text. Once the item has moved to `running/`, a write to its queue
+file can't reach it: it is set aside as `NNN_name.md.bad` with an `invalid` event, never
+left to hold the queue (the same for a queue file named like an item in `done/`). A stage
+found changed after a restart logs `edited` too. To add to a plan that still stands,
+keeping a stage, or to change a running item, amend it instead (`progress.md`, *Amendments*).
 
 An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numbers
 numerically, so it still resolves.

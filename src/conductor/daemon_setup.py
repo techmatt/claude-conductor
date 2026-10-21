@@ -142,8 +142,11 @@ class SetupMixin:
         self._end_setup(run, error)
         if error:
             self._discard_stage(run, f"could not stage: {error}")
-        elif not run.md_path.is_file() or file_hash(run.md_path) != rec.get("item_hash"):
-            self._discard_stage(run, "the item file changed or left the queue during setup")
+        elif not run.md_path.is_file():
+            self._discard_stage(run, "the item left the queue during setup")
+        elif file_hash(run.md_path) != rec.get("item_hash"):
+            self._discard_stage(run, "the item file changed during setup", then="it starts again from the new text")
+            self.no_stage.discard(rec["item"])
         else:
             self._start_stage(run, items.parse(run.md_path, rec["repo"]))
 

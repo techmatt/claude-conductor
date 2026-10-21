@@ -106,8 +106,10 @@ so setup output is allowed in a stage). A stage is discarded — `warning` event
 worktree removed, the item launches fresh later — if its setup failed (`stage
 discarded: could not stage: <error>; the item launches fresh`), it changed its
 worktree, left no result or errored, ran past `stage_minutes`, tampered with the
-control folder, or the item file changed or left the queue during setup or after
-staging. The head waits for a stage still running when it could
+control folder, or the item left the queue. If the item file changed (during setup,
+while staging, or once staged), the stage is discarded the same way but the item may
+stage again, from its new text (`… it starts again from the new text`; `items.md`,
+*Rewriting a queued item*). The head waits for a stage still running when it could
 otherwise start.
 
 **Resume and working directory.** Claude Code stores sessions per working directory

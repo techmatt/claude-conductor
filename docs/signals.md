@@ -53,7 +53,10 @@ value is ignored.
   item, when a renumbered queue item would come before an item of its own queue it
   depends on (it would hold forever), or while an earlier reorder is unfinished. A
   renumbered staged item loses its stage first. A renamed queue item is a new id, so
-  it is enqueued again. Renames go through temp names (`NNN_name.reorder~<new name>`,
+  it is enqueued again; amendments already taken (`amended`) move with it, and amend
+  files still waiting beside it (`old.amend.x.md`) are renamed with it (`new.amend.x.md`).
+  An amend file written later under an old name waits with a warning for an item that
+  never comes. Renames go through temp names (`NNN_name.reorder~<new name>`,
   not `*.md`), journalled in `.conductor/reorder.json`. A rename that fails (a file
   held open) leaves the journal: a `warning` is logged, every tick rolls it forward
   until it completes (`reorder` logged with `note`), and that queue launches nothing

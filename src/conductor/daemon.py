@@ -36,7 +36,7 @@ from .daemon_messages import MessagesMixin
 from .daemon_reap import ReapMixin
 from .daemon_restart import RestartMixin
 from .daemon_setup import SetupMixin
-from .daemon_signals import SignalsMixin
+from .daemon_signals import SIGNAL_SETTLE_SECONDS, SignalsMixin
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp, write_text
 
@@ -607,7 +607,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 self.invalid_seen[key] = "stray"
                 self.log.append("invalid", paths=[key], path=key,
                                 error="queue folder is not a repo in conductor.toml")
+        self._refuse_late_writes(view)
         queued: dict[str, items.Item] = {}
+        edited: set[str] = set()
         for repo, queue in view.queued.items():
             for item in queue:
                 queued[item.id] = item
@@ -620,6 +622,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 # stage, which a change discards below) reads the file as it is then.
                 digest = file_hash(item.path)
                 if self.queued_hashes.get(item.id, digest) != digest:
+                    edited.add(item.id)
                     self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
                                     staged=item.id in view.staged)
                 self.queued_hashes[item.id] = digest
@@ -630,16 +633,25 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                         self.log.append("invalid", item=item.id, paths=[self.cfg.rel(item.path)],
                                         error="; ".join(item.errors))
         self.queued_hashes = {i: h for i, h in self.queued_hashes.items() if i in queued}
-        # A stage belongs to the item file it read; a changed or removed item drops it.
+        # A stage belongs to the item file it read; a removed item drops it, and a rewritten
+        # one (staging or staged) is staged again from its new text.
         for item_id, srec in list(view.staged.items()):
             item = queued.get(item_id)
             if item_id in view.running:
                 # A resume launch stopped between moving the item and dropping the record.
                 self._stage_run(srec).rec_path.unlink(missing_ok=True)
                 view.staged.pop(item_id)
-            elif item is None or file_hash(item.path) != srec.get("item_hash"):
-                run = self.stages.get(item_id) or self._stage_run(srec)
-                self._discard_stage(run, "the item file changed or left the queue after staging")
+            elif item is None:
+                self._discard_stage(self.stages.get(item_id) or self._stage_run(srec),
+                                    "the item left the queue after staging")
+                view.staged.pop(item_id)
+            elif file_hash(item.path) != srec.get("item_hash"):
+                if item_id not in edited:         # rewritten while the daemon was down
+                    self.log.append("edited", item=item_id, paths=[self.cfg.rel(item.path)], staged=True)
+                self._discard_stage(self.stages.get(item_id) or self._stage_run(srec),
+                                    f"the item file changed while {srec.get('phase', 'staged')}",
+                                    then="it starts again from the new text")
+                self.no_stage.discard(item_id)
                 view.staged.pop(item_id)
         # After the enqueues (an amend file written with its item finds it queued) and the
         # stage checks (an amendment never discards a stage; an item change still does).
@@ -666,6 +678,27 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         for item in state.early_starts(self.cfg, view, decisions) if self.mem_level == "ok" else []:
             if item.repo != reordering and item.id not in amending:
                 self.launch(item)
+
+    def _refuse_late_writes(self, view: state.View) -> None:
+        """A queue file named for an item that already launched (a rewrite that lost the race
+        with its launch, or a reused name) can never reach it. It is set aside as `.bad`
+        with an `invalid` event, never left to hold its repo's queue."""
+        for repo, queue in view.queued.items():
+            late = [i for i in queue if i.id in view.running or i.id in view.done]
+            for item in late:
+                queue.remove(item)
+                try:
+                    if time.time() - item.path.stat().st_mtime < SIGNAL_SETTLE_SECONDS:
+                        continue                    # still being written: set aside once settled
+                    bad = item.path.with_name(item.path.name + ".bad")
+                    retry_io(os.replace, item.path, bad)
+                except OSError:
+                    continue
+                where = "running" if item.id in view.running else "finished"
+                self.log.append("invalid", item=item.id, paths=[self.cfg.rel(bad)], path=self.cfg.rel(bad),
+                                error=f"{item.id} already launched ({where}), so this write to its queue file "
+                                      f"can't reach it; set aside as {bad.name}. A running item takes tell or "
+                                      "amend; a change to finished work is a new item")
 
     def _stage_run(self, srec: dict) -> Run:
         return Run(srec, self.cfg.path("running", srec["repo"], f"{srec['name']}.stage.json"),
@@ -752,6 +785,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             except OSError as exc:
                 error = f"port: {exc}"
         self._save(run)
+        if (seen := self.queued_hashes.get(item.id)) and (now_hash := file_hash(item.path)) != seen:
+            self._launch_raced(run, item, stage, now_hash)
+            return
         retry_io(os.replace, item.path, md_path)
         if stage:
             retry_io(Path(self._stage_run(stage).rec_path).unlink, True)
@@ -773,6 +809,19 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             self.finish(run, launch_error=error)
             return
         self._start_exec(run, item)
+
+    def _launch_raced(self, run: Run, item: items.Item, stage: dict | None, digest: str | None) -> None:
+        """A rewrite landed between this tick's scan and the move into `running/`: undo the
+        launch (nothing has started) so the next tick launches the new text, its stage gone."""
+        rec = run.rec
+        if stage:
+            self._discard_stage(self._stage_run(stage), "the item file changed while it was launching")
+        elif rec.get("worktree"):
+            self._worktree_op(rec, "discarded", "the item file changed while launching")
+        retry_io(run.rec_path.unlink, True)
+        self.queued_hashes[item.id] = digest
+        self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)], staged=bool(stage),
+                        launching=True)
 
     def _free_port(self) -> int:
         """The port an executor's servers use (`CONDUCTOR_PORT`): free now, and never a
@@ -856,7 +905,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         except git.GitError:
             return True
 
-    def _discard_stage(self, run: Run, reason: str) -> None:
+    def _discard_stage(self, run: Run, reason: str, then: str = "the item launches fresh") -> None:
         rec = run.rec
         if run.setting_up:
             self._end_setup(run, reason)         # kills the runner
@@ -873,7 +922,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             # record must go regardless, or the head waits on a stage nobody tracks.
             self._worktree_op(rec, "discarded", "stage discarded")
         retry_io(run.rec_path.unlink, True)
-        self.log.append("warning", item=rec["item"], note=f"stage discarded: {reason}; the item launches fresh")
+        self.log.append("warning", item=rec["item"], note=f"stage discarded: {reason}; {then}")
 
     def _free_notes(self, repo: str) -> list[str]:
         """The ids of `repo`'s audit notes no cleanup has used or claimed, oldest first."""

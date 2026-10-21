@@ -1,5 +1,8 @@
 """Signal verbs: approve, cancel, reorder, reviewed, stop: daemon, and `by:` attribution."""
 
+import os
+import time
+
 import pytest
 
 from conductor import config, daemon, daemon_signals, items, procs
@@ -145,6 +148,29 @@ def test_reorder_queue(env):
     env.tick_until(lambda: env.finished("code/004_a"))
     starts = [e.item for e in env.events("start")][1:]
     assert starts == ["code/002_c", "code/003_b", "code/004_a"]
+
+
+def test_reorder_carries_pending_amendments(env):
+    held(env)
+    env.queue("002_a", "FAKE report done")
+    env.queue("003_b", "FAKE report done")
+    env.queue("004_c", "FAKE report done")
+    env.d.tick()
+    qdir = env.control / "queue" / "code"
+    future = time.time() + 60               # unsettled: still waiting when the reorder runs
+    for name in ("002_a.amend.md", "002_a.amend.x.md", "003_b.amend.md", "004_c.amend.md"):
+        (qdir / name).write_text(f"---\nby: planner\n---\n\nfor {name.split('.')[0]}\n", encoding="utf-8")
+        os.utime(qdir / name, (future, future))
+    send(env, "reorder: code 004 002 003")          # a rotation: all three renamed
+    assert queue_names(env) == ["002_c", "002_c.amend", "003_a", "003_a.amend", "003_a.amend.x",
+                                "004_b", "004_b.amend"]
+    for p in qdir.glob("*.amend*.md"):
+        os.utime(p, (time.time() - 5, time.time() - 5))
+    env.tick_until(lambda: len(env.events("amended")) == 4)
+    got = sorted((e.item, e.detail["text"]) for e in env.events("amended"))
+    assert got == [("code/002_c", "for 004_c"), ("code/003_a", "for 002_a"), ("code/003_a", "for 002_a"),
+                   ("code/004_b", "for 003_b")]
+    assert not any("left in place" in e.detail.get("note", "") for e in env.events("warning"))
 
 
 def test_reorder_keeps_padding_and_moves_back(env):

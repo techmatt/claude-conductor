@@ -1,3 +1,7 @@
+import json
+import os
+import time
+
 import pytest
 
 from pathlib import Path
@@ -484,6 +488,7 @@ def test_head_is_staged_then_resumed(env):
     assert env.finished("code/002_next").detail["status"] == "done"
 
 
+@pytest.mark.slow
 def test_rewrite_of_a_queued_item_takes_effect(env):
     env.queue("001_long", env.hold())
     env.queue("002_next", "FAKE commit b.txt b", stage="false")
@@ -499,18 +504,80 @@ def test_rewrite_of_a_queued_item_takes_effect(env):
 
 
 @pytest.mark.slow
-def test_rewrite_after_staging_discards_the_stage(env):
+def test_rewrite_of_a_staged_item_restages_it(env):
     env.queue("001_long", env.hold())
     env.queue("002_next", "FAKE commit b.txt b")
     env.tick_until(lambda: env.events("staged"))
     env.queue("002_next", "FAKE commit c.txt c")
-    env.tick_until(lambda: env.events("edited"))
-    assert env.events("edited")[0].detail["staged"] is True
+    env.tick_until(lambda: len(env.events("staged")) == 2)
+    [edited] = env.events("edited")
+    assert edited.detail["staged"] is True
+    assert any("item file changed while staged" in e.detail["note"] for e in env.events("warning"))
+    first, second = env.events("stage")
+    assert first.detail["session_id"] != second.detail["session_id"] and second.id > edited.id
     env.release()
     env.tick_until(lambda: env.finished("code/002_next"))
-    assert any("item file changed" in e.detail["note"] for e in env.events("warning"))
-    assert not env.d.log.last("start", item="code/002_next").detail.get("resumed")
+    start = env.d.log.last("start", item="code/002_next")
+    assert start.detail["resumed"] and start.detail["session_id"] == second.detail["session_id"]
     assert (env.repo / "c.txt").is_file() and not (env.repo / "b.txt").exists()
+
+
+@pytest.mark.slow
+def test_rewrite_while_staging_kills_and_restages(env):
+    from conductor import procs
+    env.queue("001_long", env.hold())
+    env.queue("002_next", "FAKE stage-sleep 30\nFAKE commit b.txt b")
+    env.tick_until(lambda: env.events("stage"))
+    pid = env.events("stage")[0].detail["pid"]
+    env.queue("002_next", "FAKE commit c.txt c")
+    env.tick_until(lambda: len(env.events("staged")) == 1)
+    assert not procs.alive(pid, None)
+    assert env.events("edited")[0].detail["staged"] is True
+    assert any("item file changed while staging" in e.detail["note"] for e in env.events("warning"))
+    assert len(env.events("stage")) == 2
+    env.release()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    assert env.d.log.last("start", item="code/002_next").detail["resumed"]
+    assert (env.repo / "c.txt").is_file() and not (env.repo / "b.txt").exists()
+
+
+@pytest.mark.slow
+def test_rewrite_during_launch_relaunches_the_new_text(env):
+    env.queue("001_next", "FAKE commit b.txt b", stage="false")
+    real = env.d._free_port
+
+    def racing():
+        # The planner's write lands after this tick's scan, before the move into running/.
+        env.d._free_port = real
+        env.queue("001_next", "FAKE commit c.txt c", stage="false", max_hours="3")
+        return real()
+    env.d._free_port = racing
+    env.tick_until(lambda: env.finished("code/001_next"))
+    [edited] = env.events("edited")
+    assert edited.detail["launching"] is True and edited.detail["staged"] is False
+    assert [e.detail["action"] for e in env.events("worktree")][:2] == ["created", "discarded"]
+    [start] = env.events("start")
+    assert start.id > edited.id
+    assert len(env.events("enqueue")) == 1
+    run = json.loads((env.control / "done" / "code" / "001_next.run.json").read_text(encoding="utf-8"))
+    assert run["max_hours"] == 3                                    # the new front-matter, too
+    assert (env.repo / "c.txt").is_file() and not (env.repo / "b.txt").exists()
+
+
+@pytest.mark.slow
+def test_write_after_launch_is_set_aside_not_held(env):
+    env.queue("001_long", env.hold())
+    env.queue("002_next", "FAKE report done", stage="false")
+    env.tick_until(lambda: env.d.log.last("start", item="code/001_long"))
+    late = env.queue("001_long", "FAKE commit late.txt x")
+    os.utime(late, (time.time() - 5, time.time() - 5))
+    env.tick_until(lambda: env.events("invalid"))
+    [bad] = env.events("invalid")
+    assert bad.item == "code/001_long" and "already launched (running)" in bad.detail["error"]
+    assert not late.exists() and late.with_name("001_long.md.bad").is_file()
+    env.release()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    assert not env.events("hold") and not (env.repo / "late.txt").exists()
 
 
 @pytest.mark.slow

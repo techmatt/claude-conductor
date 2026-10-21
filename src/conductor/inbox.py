@@ -407,7 +407,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
     if unreviewed := view.unreviewed():
         # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
         out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed)]
-        out.append("  Mark one reviewed once acted on: signal `reviewed: <repo>/<NNN_name>`.")
+        out.append("  Each stays unreviewed until Matt says process X (or process next / process all).")
     if pick_rows := pick_lines(cfg, log, view):
         # Standing too: a picker waits for Matt whatever the read mark says.
         out += ["", "## Picks", *pick_rows]

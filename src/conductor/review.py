@@ -53,7 +53,7 @@ def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: 
     what = item_id or "all"
     out = [f"# Review — {cfg.project}", "",
            f"Written for `{rel}` at {clock(now())}: `review: {what}`. Nothing is marked reviewed: "
-           "signal `reviewed: <repo>/<NNN_name>` once each is acted on.",
+           "`reviewed:` comes only from processing a report read in full, as process X / process all does.",
            "", "## Unreviewed reports" if not item_id else "## Report",
            *(inbox.unreviewed_lines(view, finishes) or ["- none"])]
     bundle = Bundle("", items=[ev.item for ev in finishes])

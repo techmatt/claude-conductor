@@ -493,19 +493,26 @@ class SignalsMixin:
         `new.md`; then log it and drop the journal. Repeatable after a crash at any point."""
         folder = self._reorder_folder(j["where"])
         moved, stuck = False, []
+        temp = items.REORDER_TEMP
+        # The item and every amend file still waiting beside it (`o.amend.x.md` → `n.amend.x.md`)
+        # move together: `<old stem><temp><new stem>`, then `<new stem>.md`.
         for o, n in j["pairs"]:
-            src, tmp = folder / f"{o}.md", folder / f"{o}{items.REORDER_TEMP}{n}"
-            if src.exists() and not tmp.exists():
-                retry_io(os.rename, src, tmp)
-                moved = True
-        for o, n in j["pairs"]:
-            tmp, dst = folder / f"{o}{items.REORDER_TEMP}{n}", folder / f"{n}.md"
-            if tmp.exists():
-                if dst.exists():
-                    stuck.append(tmp.name)
+            for src in [folder / f"{o}.md", *sorted(folder.glob(f"{o}.amend*.md"))]:
+                if src.stem != o and (items.amend_of(src) or ("",))[0] != o:
                     continue
-                retry_io(os.rename, tmp, dst)
-                moved = True
+                tmp = folder / f"{src.stem}{temp}{n}{src.stem[len(o):]}"
+                if src.exists() and not tmp.exists():
+                    retry_io(os.rename, src, tmp)
+                    moved = True
+        for o, n in j["pairs"]:
+            for tmp in [folder / f"{o}{temp}{n}", *sorted(folder.glob(f"{o}.amend*{temp}*"))]:
+                dst = folder / f"{tmp.name.partition(temp)[2]}.md"
+                if tmp.exists():
+                    if dst.exists():
+                        stuck.append(tmp.name)
+                        continue
+                    retry_io(os.rename, tmp, dst)
+                    moved = True
         if j["where"] != "proposed":
             for o, n in j["pairs"]:
                 self._forget(f"{j['where']}/{o}")

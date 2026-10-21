@@ -12,8 +12,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields |
-| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded) |
-| `invalid` | bad item, signal, stray queue folder, bad config | error, path; `applied` (lines already applied) for a part-applied signal |
+| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone) |
+| `invalid` | bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
 | `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `items.md`, *Alongside items*); error (launch failed, setup included) |
