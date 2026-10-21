@@ -343,14 +343,6 @@ def test_console_python_under_pythonw(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------- Qt smoke test
-@pytest.fixture
-def qapp():
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    qtw = pytest.importorskip("PySide6.QtWidgets")
-    app = qtw.QApplication.instance() or qtw.QApplication([sys.argv[0]])
-    yield app
-
-
 def _settings(tmp_path):
     from PySide6.QtCore import QSettings
     return QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)

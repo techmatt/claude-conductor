@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -151,6 +152,14 @@ def claude_config(tmp_path, monkeypatch):
     path = tmp_path / "claude-config"
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(path))
     return path
+
+
+@pytest.fixture
+def qapp():
+    """The offscreen Qt application the app tests share."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    qtw = pytest.importorskip("PySide6.QtWidgets")
+    yield qtw.QApplication.instance() or qtw.QApplication([sys.argv[0]])
 
 
 @pytest.fixture(scope="session")

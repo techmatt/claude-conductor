@@ -28,7 +28,6 @@ def watch_prompt(env, ev) -> str:
 
 
 @pytest.mark.slow
-@pytest.mark.slow
 def test_a_stall_is_flagged_and_a_watch_tells_the_item(env, monkeypatch):
     monkeypatch.setattr(daemon_watch, "WATCH_BODY", "{reason}\nFAKE note ## Actions\\n- tell: code/001_long "
                         "post where you are\\n- cancel: code/001_long\n")

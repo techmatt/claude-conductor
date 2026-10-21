@@ -33,7 +33,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-10-20, after prompt 31
+Last cleanup: 2026-10-21, after prompt 37
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`) and Word Warriors (`C:\Code\wordwarriors-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
@@ -71,7 +71,6 @@ A next prompt should know:
 - From the first self-audit (sandbox 069): every executor spends a turn on ToolSearch loading the deferred `progress` tool; a repo asking for one-line commits conflicts with Claude Code's `Co-Authored-By` trailer.
 - At budget: `planner.md`, `CLAUDE.md`, this file, `executors.md`, `progress.md`, `app-panels.md`, `items.md`; the next addition to any needs a cut or a cleanup's budget revision.
 - Night shift (36): proven with the fake executor only. First real nights: are a watch's judgements and tells useful, does an item's whole `max_hours` fitting the budget leave enough drawn? Full-length counts only a declared `max_hours` ≥ 2 (projects default to 2); back-to-back is per-repo.
-- `.claude/worktrees/wf_*` holds nine stale workflow worktrees, each with an old `CLAUDE.md` (found by 34); a cleanup removes them.
 - Repos tab (33), 1250px window: Note ~140px; three buttons push Terminal off the edge.
 - Window focus needs a human look: an `open:` window, a forwarded app launch or a picker from an app-started daemon may come up behind others.
 - `picks/`, `session.md` and (28) `review.md` joined the runtime paths after the sandbox, Corelight and Word Warriors were made, so each logs a startup `warning` until a request adds them to its `.gitignore`: each project's planner's job. `receipts/` (35) and `backlog/` (36) need none: they ignore themselves.

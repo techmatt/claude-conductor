@@ -1,11 +1,7 @@
 """The app's icon and its live window title (`app/icon.py`, `app/status.py`)."""
 
-import os
 import struct
-import sys
 from types import SimpleNamespace
-
-import pytest
 
 from conductor.app import status
 
@@ -34,13 +30,6 @@ def test_title_ranks_needs_over_running_over_idle():
     # A daemon down with work queued (or running) needs Matt; with nothing to do it is idle.
     assert status.summarize([snap(queued=1, alive=False)]).title() == "● Conductor · daemon down"
     assert status.summarize([snap(alive=False)]).title() == "Conductor"
-
-
-@pytest.fixture
-def qapp():
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    qtw = pytest.importorskip("PySide6.QtWidgets")
-    yield qtw.QApplication.instance() or qtw.QApplication([sys.argv[0]])
 
 
 def test_the_icon_is_the_master_and_its_ico_has_every_size(qapp):

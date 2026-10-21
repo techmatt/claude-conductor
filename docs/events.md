@@ -11,7 +11,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `daemon_died` | at start: the previous daemon left `daemon.json` and is gone, so it never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
-| `enqueue` | an item is first seen in `queue/` | its front-matter fields; `shares_number` (the other items with its number), if any |
+| `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone) |
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
@@ -53,7 +53,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `pick_failed` | opening the browser raised, `conductor pick` refused the manifest, or its own server could not start (red; holds no queue) | manifest, name, url, error; by |
 | `opened` | an `open:` signal (or `conductor open-path`) launched its action | verb, path or url; by |
 | `open_refused` | an `open:` target failed its check (not red; the signal file goes on) | verb, target (as given), reason; by |
-| `notify` | a `notify:` signal raised a toast | text, by |
+| `notify` | a `notify:` signal or a watch's action raised a toast | text, by; item (a watch's) |
 | `approve` | a `proposed/` item moved into its queue | item, from |
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
@@ -68,4 +68,4 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `watch` | conductor queued a watch item | reason, flags (their keys), file, by |
 | `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
 | `backlog_sleep` | at night, draws stop: the budget is spent, or nothing is eligible (once a night per reason) | key, reason, until, spent_hours, budget_hours |
-| `config_reload`, `warning` | config applied; runtime path not ignored; a toast or an `open:` launch failed; a self-restart blocked, not importing or not spawned; a stage discarded; a shared path that is a file, or not ignored; a worktree not removed (recorded for retry) or still not removed on a retry; a report still unreviewed at a checkpoint, or reviewed twice; a tick or a memory sample failed; a log not compacted; a message or amendment never delivered; a `tell:` for no live item (left in place); a signal or reorder cut short by a crash, or its journal unreadable; the daemon runs under a Claude Code session | note; checkpoint, finish (unreviewed at a checkpoint); applied (a part-applied signal); amend, tell (never delivered); verb, target (an `open:` launch) |
+| `config_reload`, `warning` | config applied; runtime path not ignored; a toast or an `open:` launch failed; a self-restart blocked, not importing or not spawned; a stage discarded; a shared path that is a file, or not ignored; a worktree not removed (recorded for retry) or still not removed on a retry; a report still unreviewed at a checkpoint, or reviewed twice; a tick or a memory sample failed; a log not compacted; a message or amendment never delivered; a `tell:` for no live item (left in place); a signal or reorder cut short by a crash, or its journal unreadable; the daemon runs under a Claude Code session; the night shift failed; a watch's `## Actions` line not carried out | note; checkpoint, finish (unreviewed at a checkpoint); applied (a part-applied signal); amend, tell (never delivered); verb, target (an `open:` launch); action (a watch's) |

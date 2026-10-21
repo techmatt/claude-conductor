@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import contextmanager
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from . import daemon_signals, inbox, items
 from .events import Event
@@ -129,21 +129,8 @@ class ReceiptsMixin:
     def process_proposed(self) -> None:
         """A receipt for each new or rewritten `proposed/` file: waiting for Matt's approval,
         or refused for what `approve:` would refuse it for. No event: a proposal changes nothing."""
-        seen: dict[str, int] = {}
-        for p in items.item_files(self.cfg.path("proposed")):
-            rel = self.cfg.rel(p)
-            try:
-                mtime = p.stat().st_mtime_ns
-            except OSError:
-                continue
-            if self.proposed_seen.get(rel) == mtime:
-                seen[rel] = mtime
-                continue
-            if time.time() - mtime / 1e9 < daemon_signals.SIGNAL_SETTLE_SECONDS:
-                continue                    # still being written: a later tick
-            seen[rel] = mtime
-            if rel not in self.proposed_seen and self._receipt_meta(rel).get("written_ms") == mtime // 1_000_000:
-                continue                    # its receipt was written before a restart
+        fresh, self.proposed_seen = self._new_versions(items.item_files(self.cfg.path("proposed")), self.proposed_seen)
+        for p, rel in fresh:
             repo = items.front_repo(p)
             if repo not in self.cfg.repos:
                 self._write_receipt(rel, [], reason=f"`repo: {repo}` is not a configured repo")
@@ -151,7 +138,28 @@ class ReceiptsMixin:
                 self._write_receipt(rel, [], reason="; ".join(errors))
             else:
                 self._write_receipt(rel, [], result=f"proposed for {repo}: waits for Matt (`approve: {p.stem}`)")
-        self.proposed_seen = seen
+
+    def _new_versions(self, paths: list[Path], seen: dict[str, int]) -> tuple[list[tuple[Path, str]], dict[str, int]]:
+        """The settled files among `paths` that are new or rewritten since `seen` (rel → the
+        mtime its receipt covers), as (path, rel), and the new `seen`. A file still being
+        written waits for a later tick; one whose receipt predates a restart is not new."""
+        fresh, now_seen = [], {}
+        for p in paths:
+            rel = self.cfg.rel(p)
+            try:
+                mtime = p.stat().st_mtime_ns
+            except OSError:
+                continue
+            if seen.get(rel) == mtime:
+                now_seen[rel] = mtime
+                continue
+            if time.time() - mtime / 1e9 < daemon_signals.SIGNAL_SETTLE_SECONDS:
+                continue
+            now_seen[rel] = mtime
+            if rel not in seen and self._receipt_meta(rel).get("written_ms") == mtime // 1_000_000:
+                continue
+            fresh.append((p, rel))
+        return fresh, now_seen
 
     def _pending_receipt(self, rel: str, waits: str) -> None:
         """`outcome: pending` for a request still waiting (so the planner can tell waiting from

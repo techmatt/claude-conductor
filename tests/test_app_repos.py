@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from conductor.app import model, theme
 from conductor.app.model import Project
 from conductor.items import Item
-from test_app import _settings, bare_control, qapp  # noqa: F401  (qapp is a fixture)
+from test_app import _settings, bare_control
 
 LONG = "Done: proved the rune altar renders in the room at both sizes, with the egg prop beside it"
 

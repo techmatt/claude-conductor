@@ -212,6 +212,9 @@ def test_a_stop_signal_written_during_the_restart_is_this_daemons(started):
     spawned = []
     stand_in(d, ["v2"], spawned)
     env.signal("stop.signal", "stop: daemon")     # after the tick's signals, before the spawn
+    # Settled: on Windows a fresh file's mtime can read a hair past time.time(), unsettled even at 0s.
+    old = time.time() - 5
+    os.utime(env.control / "signals" / "stop.signal", (old, old))
     assert not d.restart_due() and not spawned and d.stop_requested is not None
     assert not d.restart_due() and not spawned and not env.events("daemon_restart")
 

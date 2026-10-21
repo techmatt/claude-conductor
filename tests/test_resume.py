@@ -145,6 +145,7 @@ def test_a_red_hold_still_lets_its_item_be_asked(env):
     assert "nothing has landed on it since your run." in prompt(env, "003_ask")
 
 
+@pytest.mark.slow
 def test_a_resume_items_invalid_reason_is_logged_again_when_it_changes(env):
     env.queue("001_orig", env.hold())
     env.queue("002_ask", "1. Why?", resume="code/001_orig")

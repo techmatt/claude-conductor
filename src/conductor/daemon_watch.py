@@ -20,7 +20,7 @@ import re
 import time
 from pathlib import Path
 
-from . import daemon_signals, items, nightshift, questions, state
+from . import items, nightshift, questions, state
 from .util import clock, duration, now, parse_stamp, read_text, retry_io, write_text
 
 WATCH_BODY = "{reason}\n"           # the watch item's body: why conductor launched it
@@ -76,29 +76,16 @@ class WatchMixin:
     def process_backlog(self) -> None:
         """A receipt for each new or rewritten backlog file: waiting to be drawn, or refused
         for what would make it invalid in the queue. No event: a backlog write changes nothing."""
-        seen: dict[str, int] = {}
-        for repo in self.cfg.repos:
-            for p in items.item_files(self.cfg.path("backlog", repo)):
-                rel = self.cfg.rel(p)
-                try:
-                    mtime = p.stat().st_mtime_ns
-                except OSError:
-                    continue
-                if self.backlog_seen.get(rel) == mtime:
-                    seen[rel] = mtime
-                    continue
-                if time.time() - mtime / 1e9 < daemon_signals.SIGNAL_SETTLE_SECONDS:
-                    continue                # still being written: a later tick
-                seen[rel] = mtime
-                if rel not in self.backlog_seen and self._receipt_meta(rel).get("written_ms") == mtime // 1_000_000:
-                    continue                # its receipt was written before a restart
-                item = nightshift.parse(p, repo)
-                if item.errors:
-                    self._write_receipt(rel, [], reason="; ".join(item.errors))
-                else:
-                    full = " (full-length: drawn only after Matt acts)" if nightshift.full_length(item.meta()) else ""
-                    self._write_receipt(rel, [], result=f"in the backlog for {repo}: drawn when its queue is empty{full}")
-        self.backlog_seen = seen
+        files = [p for repo in self.cfg.repos for p in items.item_files(self.cfg.path("backlog", repo))]
+        fresh, self.backlog_seen = self._new_versions(files, self.backlog_seen)
+        for p, rel in fresh:
+            repo = p.parent.name
+            item = nightshift.parse(p, repo)
+            if item.errors:
+                self._write_receipt(rel, [], reason="; ".join(item.errors))
+            else:
+                full = " (full-length: drawn only after Matt acts)" if nightshift.full_length(item.meta()) else ""
+                self._write_receipt(rel, [], result=f"in the backlog for {repo}: drawn when its queue is empty{full}")
 
     def _eligible(self, view: state.View, repo: str) -> tuple[items.Item | None, str]:
         """The backlog item a draw would take now, or None and why none."""
