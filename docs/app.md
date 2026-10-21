@@ -33,14 +33,16 @@ On Windows its reads can briefly block the daemon's renames; the daemon retries 
 (`util.retry_io`, up to 3s). It never moves a queue file. Its only writes are signal files, answer
 files, its own settings, starting the daemon, and opening a console on a finished session.
 
-**Header.** The project's state, its daemon (`.conductor/daemon.json`, pid + creation
-time: **running**, amber **not answering** when its heartbeat is stale, red **died**
-when its lock outlived it, or **not running**; see `memory.md`), and a count of the app's
+**Header.** One short line: the state (`1 running · 1 staged`, `held after red: …`,
+`2 open question(s)`, `idle`; the project is the tab's name), its daemon
+(`.conductor/daemon.json`, pid + creation time: **up** since a time, amber **not
+answering** when its heartbeat is stale, red **died** when its lock outlived it, or
+**down**; the pid and heartbeat in its tooltip; see `memory.md`), and a count of the app's
 signals still waiting in `signals/` (or rejected as `.bad`). A second line, the memory
 line (`memory.line`, as in the inbox's *Now*), shows only when it needs Matt: amber under
 pressure, red when critical (with the biggest item). At `ok` it is hidden and takes no
 space; `conductor status` and the inbox's *Now* still show it always.
-*Start daemon* spawns `<python> -m conductor run <folder>` (the
+One daemon button toggles with its state: *Start daemon* spawns `<python> -m conductor run <folder>` (the
 console `python.exe` even when the app runs under `pythonw.exe`; git calls pass
 `CREATE_NO_WINDOW` too, so nothing flashes a console window)
 detached through a launcher that exits (no live parent, no window, its own process group, out of the caller's job object when
@@ -51,8 +53,15 @@ or `● down` (green, amber, grey; probed each refresh); a click writes `run: <n
 which opens the URL (starting the target first when it is down). While a target is
 up or starting, a **Stop <name>** button beside its Run button writes `run: <name>
 stop` (no confirmation: a click is cheap to undo with Run).
-**New checkpoint…** asks for a label (default `session start`) and writes
-`checkpoint: <label>`; its tooltip names the current checkpoint.
+**Autopilot: Off / Night only / Always** is a menu writing `autopilot: <mode>`
+(`night-shift.md`, *Autopilot*); beside it, muted, what autopilot starts next
+(`nightshift.plan`). **New checkpoint…** asks for a label (default `session start`) and writes
+`checkpoint: <label>`; its tooltip names the current checkpoint. Labels that don't fit a
+narrow window are clipped, their tooltips whole.
+
+**Message boxes** (Tell…, Amend…, a question's answer): word-wrapped, never scrolling
+sideways, several lines tall; **Enter** sends (as OK), **Shift+Enter** is a new line, and a
+hint under the box says so (`widgets.SendBox`, `MessageDialog`).
 
 **Panels**: Repos (with each item's Conversation), Questions, Events and Proposed, in
 `docs/app-panels.md`.

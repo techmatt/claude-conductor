@@ -67,6 +67,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `watch_flag` | the night shift's check flagged something (`night-shift.md`) | flag (`quiet`, `eta`, `question`, `backlog`, `memory`, `run_failed`), key, text; watch (`skipped: <why>` for a stall no watch looked at) |
 | `watch` | conductor queued a watch item | reason, flags (their keys), file, by |
 | `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
+| `autopilot` | an `autopilot:` signal set the mode (`night-shift.md`); the last one holds | mode (`off`, `night`, `always`), was, by |
 | `backlog_sleep` | at night, draws stop: the budget is spent, or nothing is eligible (once a night per reason) | key, reason, until, spent_hours, budget_hours |
 | `push` | main was pushed to the remote (`push.md`); repo: none for the control folder | target (repo or `.control`), remote, branch, sha, why (`merge`, `start`, `signal`, `closeout`), up_to_date, recovered (the first success after a failure) |
 | `push_failed` | a push failed, once per failure (an automatic retry of the same one logs nothing) | target, remote, branch, why, error, signature, output (git's last lines), rejected (the remote moved on: never forced) |

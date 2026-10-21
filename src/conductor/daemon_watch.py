@@ -11,6 +11,9 @@ queue leaves backlog waiting, memory pressure and a failed run target. A stall f
 hour of running work since the last watch, launches a **watch item**: a short readonly run of
 the `watch` template, unless a planner session is active. When it finishes, its report's
 `## Actions` lines (tell, notify, draw: nothing else) are carried out, attributed `by: watch`.
+
+**Autopilot** (`off`, `night`, `always`; the `autopilot:` signal) gates what starts work on
+its own: draws and a watch's tells and draws. The checks and the watch itself still run.
 """
 
 from __future__ import annotations
@@ -103,34 +106,12 @@ class WatchMixin:
         queue = [i for i in nightshift.backlog(self.cfg)[repo] if self.cfg.rel(i.path) in self.backlog_seen]
         if not queue:
             return None, "the backlog is empty"
-        window, budget = nightshift.night(self.cfg), self.cfg.backlog_night_hours
-        spent = nightshift.spent_hours(self.log, window) if window else 0.0
-        if window and spent >= budget:
-            self._sleep(window, "budget", f"tonight's backlog budget is spent ({spent:.1f}h of {budget:g}h)")
-            return None, "tonight's budget is spent"
-        why, over = [], False
-        known = view.known()
-        for item in queue:
-            if item.errors:
-                why.append(f"{item.name} is invalid")
-                continue
-            if waits := [r for r in item.depends_on if view.status_of(items.resolve_ref(r, repo, known) or "") != "done"]:
-                why.append(f"{item.name} waits on {', '.join(waits)}")
-                continue
-            if nightshift.full_length(item.meta()) and (last := nightshift.last_full(self.log, repo)) \
-                    and not nightshift.matt_since(self.cfg, self.log, last):
-                why.append(f"{item.name} is full-length and nothing came from Matt since "
-                           f"{last.item} (full-length) started")
-                continue
-            if window and spent + (hours := item.max_hours or self.cfg.max_hours) > budget:
-                over = True             # the budget is a cap: an item's whole max_hours must fit in it
-                why.append(f"{item.name} may run {hours:g}h, past tonight's budget ({spent:.1f}h of {budget:g}h used)")
-                continue
-            return item, ""
-        if over:
-            self._sleep(window, "budget", f"nothing left in the backlog fits tonight's budget ({spent:.1f}h of "
-                                          f"{budget:g}h used)")
-        return None, "; ".join(why)
+        if hold := nightshift.autopilot_holds(self.cfg, self.log):
+            return None, hold
+        item, why, done = nightshift.pick(self.cfg, self.log, view, repo, queue)
+        if done:
+            self._sleep(nightshift.night(self.cfg), "budget", done)
+        return item, "" if item else "; ".join(w for _, w in why)
 
     def _draw(self, view: state.View, repo: str, by: str | None = None) -> str | None:
         """Draw `repo`'s next eligible backlog item into its queue; None, or why not."""
@@ -290,6 +271,8 @@ class WatchMixin:
                     raise ValueError(f"more than {MAX_ACTIONS} actions")
                 if verb not in ACTIONS or not value:
                     raise ValueError("a watch may only tell, notify or draw; it recommends the rest in its report")
+                if verb != "notify" and (hold := nightshift.autopilot_holds(self.cfg, self.log)):
+                    raise ValueError(f"{hold}: recommended only")
                 with self._attributed("watch"):
                     if verb == "tell":
                         self._tell(value, rel)

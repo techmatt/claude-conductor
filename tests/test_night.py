@@ -178,6 +178,40 @@ def test_the_night_budget_stops_draws(env):
     assert "backlog budget used; sleeping since" in read_text(env.control / "inbox.md")
 
 
+@pytest.mark.slow
+def test_autopilot_holds_draws_and_watch_tells(env, monkeypatch):
+    from conductor.app import model
+    night_cfg(env, watch_check_minutes=10)
+    monkeypatch.setattr(nightshift, "night", lambda cfg, at=None: None)        # always day
+    env.signal("app-1.signal", "by: app\nautopilot: night")
+    env.tick_until(lambda: env.events("autopilot"))
+    assert env.events("autopilot")[0].detail == {"mode": "night", "was": "always", "by": "app"}
+    backlog(env, "07_feature", "FAKE report done")
+    env.tick_until(lambda: (env.control / "receipts" / "backlog" / "code" / "07_feature.md").is_file())
+    for _ in range(3):
+        env.d.tick()
+    assert not env.events("backlog_draw") and nightshift.autopilot(env.d.log) == "night"
+    snap = model.Project(env.control).snapshot()
+    assert snap.autopilot == ("night", "next: 07_feature from 6pm")
+    assert "autopilot: **night** (autopilot is night only (from 6pm)" in read_text(env.control / "inbox.md")
+    # Off: the watch still runs, but its tell is only recommended.
+    monkeypatch.setattr(daemon_watch, "WATCH_BODY", "{reason}\nFAKE note ## Actions\\n- tell: code/001_long hi\n")
+    env.signal("cli-1.signal", "by: cli\nautopilot: off")
+    env.queue("001_long", env.hold())
+    env.signal("cli-2.signal", "by: cli\nwatch: now")
+    env.tick_until(lambda: env.finished("code/002_watch"))
+    assert not env.events("tell")
+    assert any("autopilot is off: recommended only" in w.detail["note"] for w in env.events("warning"))
+    env.release()
+    env.tick_until(lambda: env.finished("code/001_long"))
+    assert not env.events("backlog_draw")
+    env.signal("cli-3.signal", "by: cli\nautopilot: on")        # on is always
+    env.tick_until(lambda: env.events("backlog_draw"))
+    assert [e.detail["mode"] for e in env.events("autopilot")] == ["night", "off", "always"]
+    env.signal("cli-4.signal", "by: cli\nautopilot: sometimes")
+    env.tick_until(lambda: list((env.control / "signals").glob("cli-4.signal.bad")))
+
+
 def test_eta_night_and_full_length_rules():
     posted = datetime(2026, 10, 21, 23, 30).astimezone()
     assert nightshift.parse_eta("~12:10am", posted).day == 22                  # past midnight

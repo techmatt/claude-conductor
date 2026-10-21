@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import config as config_mod
-from .. import git, items, memory, picks, questions, state, talk, targets
+from .. import git, items, memory, nightshift, picks, questions, state, talk, targets
 from ..events import RED_KINDS, Event, EventLog
 from ..executor import RunPaths
 from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
@@ -187,6 +187,7 @@ class Snapshot:
     checkpoint: Event | None = None                            # the latest `checkpoint` event
     picks: dict[str, picks.PickInfo] = field(default_factory=dict)  # finished item → its picker (`picks.pending`)
     memory: tuple[str, str] = ("", "ok")                       # `memory.line`: text, level
+    autopilot: tuple[str, str] = ("always", "")                # mode, what it starts next (`nightshift.plan`)
 
     @property
     def to_pick(self) -> int:
@@ -511,8 +512,12 @@ class Project:
             mem = memory.line(cfg)
         except OSError as exc:
             mem = (f"memory: could not read ({exc})", "ok")
+        try:
+            pilot = (nightshift.autopilot(self.log), nightshift.plan(cfg, self.log, view))
+        except (OSError, ValueError) as exc:
+            pilot = (nightshift.autopilot(self.log), f"could not read the backlog: {exc}")
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
-                        view.checkpoint, pending, mem)
+                        view.checkpoint, pending, mem, pilot)
 
     def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
         """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only
@@ -554,15 +559,17 @@ class Project:
     def _state(daemon: DaemonInfo, repos: list[RepoState], open_qs: list) -> tuple[str, str]:
         reds = [r.name for r in repos if r.red]
         busy = any(r.running or r.staged for r in repos)
+        counts = [(sum(len(r.running) for r in repos), "running"), (sum(len(r.staged) for r in repos), "staged"),
+                  (sum(1 for r in repos for q in r.queued if q.id not in {s.item for s in r.staged}), "queued")]
         if reds:
             return "red", f"held after red: {', '.join(reds)}"
-        if not daemon.alive and (busy or any(r.queued for r in repos)):
-            return "red", "daemon down with work queued or running"
+        if not daemon.alive and (busy or counts[2][0]):
+            # The header's daemon label says it is down: this says what waits on it.
+            return "red", " · ".join(f"{n} {k}" for n, k in counts if n) + " with the daemon down"
         if open_qs:
             return "asking", f"{len(open_qs)} open question(s)"
         if busy:
-            n = sum(len(r.running) + len(r.staged) for r in repos)
-            return "running", f"{n} item(s) running or staged"
+            return "running", " · ".join(f"{n} {k}" for n, k in counts[:2] if n)
         return "idle", "idle" + ("" if daemon.alive else " (daemon not running)")
 
     # ------------------------------------------------------------ trail

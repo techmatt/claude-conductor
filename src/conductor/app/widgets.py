@@ -7,7 +7,8 @@ from typing import Callable
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QPalette
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QPushButton, QStyle, QStyledItemDelegate, QWidget
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit,
+                               QPushButton, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget)
 
 from ..events import Event
 from ..inbox import describe
@@ -148,6 +149,56 @@ def confirm(parent: QWidget, title: str, text: str) -> bool:
     return QMessageBox.question(parent, title, text,
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
+
+
+SEND_HINT = "Enter sends · Shift+Enter for a new line"
+
+
+class SendBox(QPlainTextEdit):
+    """A free-text box: word-wrapped, never scrolling sideways; Enter emits `submitted`,
+    Shift+Enter inserts a newline."""
+    submitted = Signal()
+
+    def __init__(self, lines: int = 6):
+        super().__init__()
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setMinimumHeight(self.fontMetrics().lineSpacing() * lines + 12)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) \
+                and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.submitted.emit()
+            return
+        super().keyPressEvent(event)
+
+
+class MessageDialog(QDialog):
+    """Tell…, Amend… and the like: a prompt, a `SendBox`, the hint, OK and Cancel."""
+
+    def __init__(self, parent: QWidget | None, title: str, label: str):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumWidth(520)
+        lay = QVBoxLayout(self)
+        text = QLabel(label)
+        text.setWordWrap(True)
+        lay.addWidget(text)
+        self.box = SendBox()
+        self.box.submitted.connect(self.accept)
+        lay.addWidget(self.box, 1)
+        lay.addWidget(muted(QLabel(SEND_HINT)))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        lay.addWidget(buttons)
+
+
+def ask_text(parent: QWidget | None, title: str, label: str) -> tuple[str, bool]:
+    """`QInputDialog.getMultiLineText`'s shape, with a `MessageDialog`."""
+    d = MessageDialog(parent, title, label)
+    ok = bool(d.exec())                 # Accepted is 1, Rejected 0
+    return d.box.toPlainText(), ok
 
 
 def open_session(parent: QWidget, project: Project, item_id: str, session_id: str | None) -> None:

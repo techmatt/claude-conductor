@@ -112,6 +112,88 @@ def night(cfg: Config, at: datetime | None = None) -> tuple[datetime, datetime] 
     return None
 
 
+def hour(h: float) -> str:
+    """A night hour as Matt reads it: 18 → `6pm`."""
+    return f"{int(h) % 12 or 12}{'am' if int(h) % 24 < 12 else 'pm'}"
+
+
+# ---------------------------------------------------------------- autopilot
+AUTOPILOT = ("off", "night", "always")      # `always` is the default: the night shift before 40
+
+
+def autopilot(log: EventLog) -> str:
+    """The project's autopilot mode: the last `autopilot` event's, else `always`."""
+    ev = log.last("autopilot")
+    return ev.detail.get("mode", "always") if ev else "always"
+
+
+def autopilot_holds(cfg: Config, log: EventLog, at: datetime | None = None) -> str | None:
+    """Why autopilot may not start work now (a draw, a watch's tell or draw), or None."""
+    mode = autopilot(log)
+    if mode == "off":
+        return "autopilot is off"
+    if mode == "night" and not night(cfg, at):
+        return f"autopilot is night only (from {hour(cfg.night_start_hour)})"
+    return None
+
+
+def pick(cfg: Config, log: EventLog, view: View, repo: str, queue: list[Item]) \
+        -> tuple[Item | None, list[tuple[str, str]], str | None]:
+    """The first of `queue` (a repo's backlog) a draw may take now, else None; why each one
+    before it can't go, as (short, long); and why the night's budget is done, if it is."""
+    window, budget = night(cfg), cfg.backlog_night_hours
+    spent = spent_hours(log, window) if window else 0.0
+    if window and spent >= budget:
+        why = f"tonight's backlog budget is spent ({spent:.1f}h of {budget:g}h)"
+        return None, [("budget", "tonight's budget is spent")], why
+    why, over = [], False
+    known = view.known()
+    for item in queue:
+        if item.errors:
+            why.append(("invalid", f"{item.name} is invalid"))
+            continue
+        if waits := [r for r in item.depends_on if view.status_of(items.resolve_ref(r, repo, known) or "") != "done"]:
+            why.append((f"waits on {', '.join(waits)}", f"{item.name} waits on {', '.join(waits)}"))
+            continue
+        if full_length(item.meta()) and (last := last_full(log, repo)) and not matt_since(cfg, log, last):
+            why.append(("back-to-back", f"{item.name} is full-length and nothing came from Matt since "
+                                        f"{last.item} (full-length) started"))
+            continue
+        if window and spent + (hours := item.max_hours or cfg.max_hours) > budget:
+            over = True             # the budget is a cap: an item's whole max_hours must fit in it
+            why.append(("budget", f"{item.name} may run {hours:g}h, past tonight's budget "
+                                  f"({spent:.1f}h of {budget:g}h used)"))
+            continue
+        return item, why, None
+    return None, why, (f"nothing left in the backlog fits tonight's budget ({spent:.1f}h of {budget:g}h used)"
+                       if over else None)
+
+
+def plan(cfg: Config, log: EventLog, view: View) -> str:
+    """What autopilot will start next, in a few words for the app's header ('' with no
+    backlog): `next: bug_sweep when the queue empties`, `held: back-to-back`."""
+    queues = {r: q for r, q in backlog(cfg).items() if q}
+    if not queues:
+        return ""
+    mode = autopilot(log)
+    if mode == "off":
+        return f"{sum(map(len, queues.values()))} in the backlog, not drawn"
+    out = []
+    for repo, queue in queues.items():
+        item, why, _ = pick(cfg, log, view, repo, queue)
+        if item is None:
+            text = f"held: {why[0][0] if why else 'nothing eligible'}"
+        elif ev := view.red_hold.get(repo) or view.planner_hold.get(repo):
+            text = f"held: {repo} queue held ({ev.item})"
+        else:
+            busy = view.queued.get(repo) or any(r["repo"] == repo and not is_watch(r) for r in view.running.values())
+            when = (f" from {hour(cfg.night_start_hour)}" if mode == "night" and not night(cfg)
+                    else " when the queue empties" if busy else "")
+            text = f"next: {item.name}{when}"
+        out.append(f"{repo}: {text}" if len(queues) > 1 else text)
+    return " · ".join(out)
+
+
 def drawn(log: EventLog) -> list[Event]:
     return log.query(kinds=["backlog_draw"])
 
@@ -184,12 +266,16 @@ def lines(cfg: Config, log: EventLog, view: View, since: int) -> list[str]:
         out.append(f"- tonight ({clock(window[0])}–{clock(window[1])}): {used:.1f}h of "
                    f"{cfg.backlog_night_hours:g}h backlog budget used"
                    + (f"; {how} since {clock(sleep.ts)}: {sleep.detail.get('reason')}" if asleep else ""))
-    for ev in log.query(since_id=since, kinds=["backlog_draw", "backlog_sleep", "watch_flag", "watch", "finish"]):
+    for ev in log.query(since_id=since, kinds=["backlog_draw", "backlog_sleep", "watch_flag", "watch", "autopilot",
+                                               "finish"]):
         if ev.kind != "finish":
             out.append(f"- {clock(ev.ts)} #{ev.id} {_describe(ev)}")
         elif is_watch(ev.detail):
             out.append(f"- {clock(ev.ts)} #{ev.id} watch report {ev.item} **{ev.detail.get('status')}**"
                        + (f" — {ev.paths[0]}" if ev.paths else ""))
+    if (mode := autopilot(log)) != "always" or out:
+        held = autopilot_holds(cfg, log)
+        out.insert(0, f"- autopilot: **{mode}**" + (f" ({held}: no draws, no watch tells)" if held else ""))
     return out
 
 

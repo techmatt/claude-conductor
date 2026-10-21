@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
-                               QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea, QSplitter,
+                               QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from . import actions, theme
 from .model import Project, Snapshot
-from .widgets import Panel, countdown, muted, when
+from .widgets import SEND_HINT, Panel, SendBox, countdown, muted, when
 
 
 class QuestionCard(QGroupBox):
@@ -55,10 +55,13 @@ class QuestionCard(QGroupBox):
             row.addStretch(1)
             lay.addLayout(row)
         row = QHBoxLayout()
-        self.box = QPlainTextEdit()
+        self.box = SendBox(lines=3)
         self.box.setPlaceholderText("Your answer (written to questions/<id>.answer.md)")
-        self.box.setFixedHeight(64)
-        row.addWidget(self.box, 1)
+        self.box.submitted.connect(self._answer)
+        col = QVBoxLayout()
+        col.addWidget(self.box)
+        col.addWidget(muted(QLabel(SEND_HINT)))
+        row.addLayout(col, 1)
         self.send = QPushButton("Answer")
         self.send.setProperty("role", "primary")
         self.send.setMinimumHeight(34)
@@ -86,6 +89,8 @@ class QuestionCard(QGroupBox):
             theme.repolish(self)
 
     def _answer(self) -> None:
+        if not self.send.isEnabled():           # Enter in the box after it was answered
+            return
         text = self.box.toPlainText().strip()
         try:
             q = actions.answer(self.panel.control, self.q.id, text)

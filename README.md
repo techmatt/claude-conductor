@@ -7,7 +7,8 @@ queues as headless `claude -p` sessions (each in its own git worktree, merged in
 `alongside`), and records everything in an append-only event log from which the inbox and
 every other view is derived.
 
-`planner.md` is how a planner session uses it, every session; `claude-ai-new-project.md`
+`planner.md` is how a planner session uses it, every session (its rarer vocab rows in
+`planner-vocab.md`); `claude-ai-new-project.md`
 is how a project is started, parked and resumed. This file and `docs/` are how conductor
 works: the canon for commands, file formats, fields and event kinds. Each topic file is
 small enough to read whole, and stays so: `CLEANUP.md` is the standing maintenance pass,
@@ -63,7 +64,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/push.md` | Pushing main to a remote after each merge, on `push:` and at closeout; failures and rejections |
 | `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, setup, log compaction, the report header, the outcome |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk audit, claude.md cleanup, bug hunt, self audit, watch) |
-| `docs/night-shift.md` | The stall check, the watch item, the backlog and its draws, the nightly budget |
+| `docs/night-shift.md` | The stall check, the watch item, autopilot, the backlog and its draws, the nightly budget |
 | `docs/resume.md` | Resume items: asking a finished item's own session (forked), and its self-audit |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress` and outlines, messages (`tell:`), short calls, amendments, opening a finished session |

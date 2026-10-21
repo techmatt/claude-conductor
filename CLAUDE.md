@@ -12,11 +12,11 @@ Conductor is a daemon that runs queued Claude Code prompts for a project: per-re
 
 ## "Launch the conductor"
 
-When Matt says "launch the conductor" (or "launch conductor", "start the conductor app", "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\wordwarriors-control`). The app also reopens every remembered project, so naming the newest one is enough. It doesn't start the daemon (*Start daemon* or `uv run conductor run <control>` does), and launching it is not a test, so the sandbox-only rule below does not apply.
+When Matt says "launch the conductor" (or "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\wordwarriors-control`). The app also reopens every remembered project, so naming the newest one is enough. It doesn't start the daemon (*Start daemon* or `uv run conductor run <control>` does), and launching it is not a test, so the sandbox-only rule below does not apply.
 
 ## "Restart all"
 
-When Matt says "restart all" (or "restart everything", "restart conductor and the app" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). Running executors are adopted by the new daemon, not killed. The warning comes first: Matt times a restart.
+When Matt says "restart all" (or "restart everything" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). Running executors are adopted by the new daemon, not killed. The warning comes first: Matt times a restart.
 
 ## "Run next prompt"
 
@@ -26,13 +26,14 @@ When Matt says "run next prompt" (or "run the next prompt" and the like):
 - Name it first ("Running 19_run_next_and_maintenance"), so a wrong pick is obvious, then run exactly that one as if pasted, ending with `Report written to <path>` as usual. Never chain on to the next one.
 - With several unrun, run only the lowest and say how many remain.
 - An **older** prompt with no report (skipped or superseded) is never run by this phrase; mention it in one line in case it was missed.
-- **None:** say so in one line ("No unrun prompt; the latest is 18_readonly_concurrency_and_report_marker, and its report is in") and do nothing else: no invented work, no reruns.
+- **None:** say so in one line ("No unrun prompt; the latest is 18_x, and its report is in") and do nothing else: no invented work, no reruns.
+- **What's left is checked at the end:** "that was the last unrun prompt" comes from a fresh look at `prompts/` against the ledger after the run, never from the start.
 
 There is no "run all prompts" phrase.
 
 ## "Cleanup conductor"
 
-When Matt says "cleanup conductor" (or "clean up conductor", "conductor cleanup", "run a cleanup on conductor" and the like), follow `CLEANUP.md` as written: a maintenance pass with its report in `reports/` (named in `CLEANUP.md`). It is not a numbered prompt, so "run next prompt" never picks it, and it never runs unasked. `uv run python tools/sizes.py` shows any file over its size budget at a glance, in any session.
+When Matt says "cleanup conductor" (or "conductor cleanup" and the like), follow `CLEANUP.md` as written: a maintenance pass with its report in `reports/` (named in `CLEANUP.md`). It is not a numbered prompt, so "run next prompt" never picks it, and it never runs unasked. `uv run python tools/sizes.py` shows any file over its size budget at a glance, in any session.
 
 ## Standing prompt contract
 

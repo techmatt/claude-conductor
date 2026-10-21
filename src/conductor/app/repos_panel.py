@@ -5,8 +5,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import (QHeaderView, QInputDialog, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
-                               QVBoxLayout)
+from PySide6.QtWidgets import QHeaderView, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout
 
 from .. import audits
 from ..events import Event
@@ -15,8 +14,8 @@ from ..util import clock, duration, now
 from . import actions, theme
 from .model import Finished, Project, Snapshot
 from .trail import TrailView
-from .widgets import (AMBER, KeepColourDelegate, Panel, compact_button, compact_buttons, confirm, open_session,
-                      pick_note, when)
+from .widgets import (AMBER, KeepColourDelegate, Panel, ask_text, compact_button, compact_buttons, confirm,
+                      open_session, pick_note, when)
 
 
 def finished_note(f: Finished, when) -> str:
@@ -471,7 +470,7 @@ class ReposPanel(Panel):
         self.signal_sent(f"clear {repo}", actions.clear(self.control, repo))
 
     def _tell(self, item_id: str) -> None:
-        text, ok = QInputDialog.getMultiLineText(
+        text, ok = ask_text(
             self, f"Message to {item_id}",
             f"Message for the running executor of {item_id}.\nIt arrives after its next tool call; "
             "it answers through a progress line.")
@@ -479,7 +478,7 @@ class ReposPanel(Panel):
             self.signal_sent(f"message to {item_id}", actions.tell(self.control, item_id, text))
 
     def _amend(self, item_id: str) -> None:
-        text, ok = QInputDialog.getMultiLineText(
+        text, ok = ask_text(
             self, f"Amend {item_id}",
             f"An addition to {item_id}'s prompt; where they conflict, it wins.\nQueued: appended at "
             "launch. Staged: added to the resume message, the stage kept. Running: arrives after its "

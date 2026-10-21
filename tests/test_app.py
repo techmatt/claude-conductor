@@ -564,7 +564,7 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     from conductor import procs
     from conductor.app.window import MainWindow
     from PySide6.QtCore import QUrl
-    from PySide6.QtWidgets import QInputDialog
+    from conductor.app.widgets import MessageDialog
     env.queue("001_x", 'FAKE progress {"note": "reading", "eta": "5m"}\nFAKE until-message 30')
     env.tick_until(lambda: env.events("progress"))
     win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
@@ -580,7 +580,7 @@ def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, mon
     assert [t.title for t in chat.turns] == ["Started", "Progress"]
     tell = repos.tree.itemWidget(row, 4).button
     assert tell.text() == "Tell…"
-    monkeypatch.setattr(QInputDialog, "getMultiLineText", lambda *a, **k: ("finish now\nplease", True))
+    monkeypatch.setattr(MessageDialog, "exec", lambda d: (d.box.setPlainText("finish now\nplease"), 1)[1])
     chat.tell_btn.click()                                   # the same signal as the row's Tell…
     env.tick_until(lambda: env.finished("code/001_x"))
     assert env.events("tell")[0].detail["text"] == "finish now / please"

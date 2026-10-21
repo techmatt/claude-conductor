@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QIcon
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon
 from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu,
-                               QMessageBox, QPushButton, QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget)
+                               QMessageBox, QPushButton, QSizePolicy, QSystemTrayIcon, QTabWidget, QToolBar,
+                               QVBoxLayout, QWidget)
 
 from .. import config as config_mod
 from ..inbox import checkpoint_name
@@ -18,11 +19,17 @@ from .model import PRIORITY, Project, Snapshot, overall
 from .proposed_panel import ProposedPanel
 from .questions_panel import QuestionsPanel
 from .repos_panel import ReposPanel
-from .widgets import confirm
+from .widgets import confirm, muted
 
 # Status-dot colours (graphics, not text: they need 3:1, which each meets).
 COLORS = {"red": theme.RED, "asking": theme.ICON_ASKING, "running": theme.ACCENT, "idle": theme.ICON_IDLE}
 SETTINGS_KEY = "controls"
+AUTOPILOT = {                   # mode → menu label, what it means
+    "off": ("Off", "Nothing starts by itself: no backlog draws, no watch tells or draws (the watch still "
+                   "runs and recommends)"),
+    "night": ("Night only", "Backlog draws and watch actions only at night ([defaults] night hours)"),
+    "always": ("Always", "Backlog draws and watch actions day and night"),
+}
 HUBS = {"need": "red", "running": "gold", "idle": "slate"}     # a project tab's icon, by `status` kind
 TURN_MS = 1000                  # the running title's glyph and the tray's pulse
 
@@ -59,26 +66,44 @@ class ProjectView(QWidget):
         self.daemon_label.setStyleSheet(f"font-size: {theme.BASE_POINT_SIZE + 1}pt")
         self.pending_label = QLabel()
         self.pending_label.setStyleSheet(f"color: {theme.AMBER}; font-weight: bold")
-        self.start_btn = QPushButton("Start daemon")
-        self.start_btn.clicked.connect(self.start_daemon)
-        self.stop_btn = QPushButton("Stop daemon…")
-        self.stop_btn.clicked.connect(self.stop_daemon)
+        # One daemon button: Start daemon while it is down, Stop daemon… while it runs.
+        self.daemon_btn = QPushButton("Start daemon")
+        self.daemon_btn.clicked.connect(self.toggle_daemon)
         self.checkpoint_btn = QPushButton("New checkpoint…")
         self.checkpoint_btn.setToolTip("A session boundary: finished, reviewed items from before it drop out of "
                                        "Repos, Events and the inbox (a `checkpoint:` signal)")
         self.checkpoint_btn.clicked.connect(self.new_checkpoint)
-        for w in (self.state_label, self.daemon_label, self.pending_label):
+        # Autopilot: whether the night shift may start work on its own (an `autopilot:` signal),
+        # and beside it what it will start next.
+        self.autopilot_btn = QPushButton()
+        menu = QMenu(self.autopilot_btn)
+        group = QActionGroup(menu)
+        self.autopilot_actions: dict[str, QAction] = {}
+        for mode, (label, tip) in AUTOPILOT.items():
+            a = menu.addAction(label)
+            a.setCheckable(True)
+            a.setToolTip(tip)
+            group.addAction(a)
+            a.triggered.connect(lambda _=False, m=mode: self.set_autopilot(m))
+            self.autopilot_actions[mode] = a
+        menu.setToolTipsVisible(True)
+        self.autopilot_btn.setMenu(menu)
+        self.autopilot_label = muted(QLabel())
+        for w in (self.pending_label, self.autopilot_label):       # clipped when narrow; the tooltip has it all
+            w.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        for w in (self.state_label, self.daemon_label):
             head.addWidget(w)
-        head.addStretch(1)
+        head.addWidget(self.pending_label, 1)
         # One Run button per `[run.<name>]` target, rebuilt when the targets change, each
         # with a Stop button beside it, shown while the target is up or starting.
         self.run_bar = QHBoxLayout()
         head.addLayout(self.run_bar)
         self.run_buttons: dict[str, QPushButton] = {}
         self.stop_buttons: dict[str, QPushButton] = {}
+        head.addWidget(self.autopilot_btn)
+        head.addWidget(self.autopilot_label, 1)
         head.addWidget(self.checkpoint_btn)
-        head.addWidget(self.start_btn)
-        head.addWidget(self.stop_btn)
+        head.addWidget(self.daemon_btn)
         lay.addLayout(head)
         # The header's second line: the box's memory (`memory.line`), only when it needs
         # Matt: amber under pressure, red when critical. Hidden (and its space collapsed) at ok.
@@ -142,30 +167,39 @@ class ProjectView(QWidget):
         if held:
             what = " · ".join(f"{rs.name} <b style='color:{theme.RED}'>HELD</b> (red {(rs.red.item or '?').rsplit('/', 1)[-1]})"
                               for rs in held)
-        elif snap.why.startswith(snap.state):
-            what = snap.why
         else:
-            what = f"{snap.state}: {snap.why}"
-        self.state_label.setText(f"{dot(snap.state)} <b>{snap.project}</b> · {what}")
+            what = snap.why.replace("daemon down", f"daemon <b style='color:{theme.RED}'>down</b>")
+        self.state_label.setText(f"{dot(snap.state)} {what}")
+        self.state_label.setToolTip(f"{snap.project}: {snap.state}")
         d = snap.daemon
-        since = f", since {clock(d.started)}" if d.started else ""
         beat = clock(d.beat) if d.beat else "never"
         if d.alive and d.stale:
-            self.daemon_label.setText(f"· daemon <b style='color:{theme.AMBER}'>not answering</b> "
-                                      f"(pid {d.pid}, last heartbeat {beat})")
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.AMBER}'>not answering</b> since {beat}")
         elif d.alive:
-            self.daemon_label.setText(f"· daemon <b style='color:{theme.GREEN}'>running</b> (pid {d.pid}{since})")
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.GREEN}'>up</b>"
+                                      + (f" since {clock(d.started)}" if d.started else ""))
         elif d.died:
-            self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>died</b> (pid {d.pid}, "
-                                      f"last heartbeat {beat}; it never stopped cleanly)")
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>died</b> (last heartbeat {beat})")
         else:
-            self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>not running</b>")
+            self.daemon_label.setText(f"· daemon <b style='color:{theme.RED}'>down</b>")
+        self.daemon_label.setVisible(not snap.why.endswith("with the daemon down"))   # said once is enough
+        self.daemon_label.setToolTip(f"pid {d.pid}, last heartbeat {beat}" + (
+            "; it never stopped cleanly" if d.died else "") if d.pid else "no daemon has run here yet")
         text, level = snap.memory
         colour = {"pressure": theme.AMBER, "critical": theme.RED}.get(level)
         self.memory_label.setText(f"<b style='color:{colour}'>{text}</b>" if colour else "")
         self.memory_label.setVisible(bool(colour))
-        self.start_btn.setEnabled(not d.alive)
-        self.stop_btn.setEnabled(d.alive)
+        self.daemon_btn.setText("Stop daemon…" if d.alive else "Start daemon")
+        self.daemon_btn.setToolTip("Stop the daemon; running executors keep running" if d.alive else
+                                   "Start the daemon (`conductor run`), output in .conductor/daemon.out.log")
+        self.daemon_btn.setEnabled(True)
+        mode, plan = snap.autopilot
+        self.autopilot_btn.setText(f"Autopilot: {AUTOPILOT.get(mode, (mode,))[0]}")
+        self.autopilot_btn.setToolTip(AUTOPILOT.get(mode, ("", "unknown mode"))[1])
+        for m, a in self.autopilot_actions.items():
+            a.setChecked(m == mode)
+        self.autopilot_label.setText(plan)
+        self.autopilot_label.setToolTip(plan)
         self._update_run_buttons(snap)
         cp = snap.checkpoint
         self.checkpoint_btn.setToolTip(
@@ -183,6 +217,7 @@ class ProjectView(QWidget):
         if snap.error:
             bits.append(snap.error)
         self.pending_label.setText(" · ".join(bits))
+        self.pending_label.setToolTip(" · ".join(bits))
         return snap
 
     def _update_run_buttons(self, snap: Snapshot) -> None:
@@ -234,11 +269,18 @@ class ProjectView(QWidget):
         path = actions.checkpoint(self.project.control, label)
         self.notify(f"new checkpoint: wrote signals/{path.name}; the daemon logs it")
 
+    def set_autopilot(self, mode: str) -> None:
+        path = actions.autopilot(self.project.control, mode)
+        self.notify(f"autopilot {mode}: wrote signals/{path.name}; the daemon applies it and logs `autopilot`")
+
+    def toggle_daemon(self) -> None:
+        (self.stop_daemon if self.snap and self.snap.daemon.alive else self.start_daemon)()
+
     def start_daemon(self) -> None:
         p = actions.start_daemon(self.project.control)
         self.notify(f"started the daemon for {self.project.name} (pid {p.pid}); "
                     "output in .conductor/daemon.out.log")
-        self.start_btn.setEnabled(False)
+        self.daemon_btn.setEnabled(False)
 
     def stop_daemon(self) -> None:
         if confirm(self, "Stop daemon",

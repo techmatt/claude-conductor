@@ -10,7 +10,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import desktop, items, procs, state, talk
+from . import desktop, items, nightshift, procs, state, talk
 from . import review as review_mod
 from . import session as session_mod
 from .events import Event
@@ -191,6 +191,10 @@ class SignalsMixin:
             elif key == "watch":
                 if value.lower() != "now":
                     raise ValueError(f"line {n}: watch: only `watch: now` is known, got {value!r}")
+            elif key == "autopilot":
+                value = {"on": "always"}.get(value.lower(), value.lower())
+                if value not in nightshift.AUTOPILOT:
+                    raise ValueError(f"line {n}: autopilot: expects `off`, `night` or `always`, got {value!r}")
             else:
                 raise ValueError(f"line {n}: unknown signal key {key!r}")
             out.append((key, value))
@@ -247,6 +251,9 @@ class SignalsMixin:
             # Asked for: the planner rule and memory don't hold it back (daemon_watch).
             if why := self._launch_watch(f"asked for by {self._by or 'unknown'} (`watch: now`)", [], force=True):
                 raise ValueError(f"watch: {why}")
+        elif key == "autopilot":
+            self.log.append("autopilot", paths=[rel], mode=value, was=nightshift.autopilot(self.log),
+                            by=self._by or "unknown")
 
     def _one(self, found: list[Path], verb: str, ref: str, where: str) -> Path:
         if not found:

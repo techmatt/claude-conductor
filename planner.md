@@ -85,7 +85,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Questions** land in `questions\`, raised as *Open questions first* says. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on the inbox's *Now*.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper or a blocking question. Longer, or not started: **amend**.
-- **Night shift** (`docs/night-shift.md`): a readonly **watch** item (never in a planner session) judges stalls and drift, may tell, toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). All on the inbox's *Night shift*.
+- **Night shift** (`docs/night-shift.md`): a readonly **watch** item (never in a planner session) judges stalls and drift, may tell, toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates the draws and the watch's tells and draws. All on the inbox's *Night shift*.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it (**memory?**); raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) carries its log's end: say what broke.
 - **Picks.** A prompt producing candidates asks for a picker manifest, under a new name (`docs/picks.md`).
@@ -118,7 +118,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rarer phrases** (templates and audits, ask / post-audit, picks, reorder, push, events and postmortem, ultracode / alongside, park / resume, pipeline review, context estimate) are in `planner-vocab.md` beside this file: read it when Matt uses one.
 
 | Phrase | What the planner does |
 |---|---|
@@ -137,31 +137,15 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **ETA on X?** | X's latest outline, else progress line, with when posted; neither: says so, never a guess. |
 | **outline X** / **tell X: …** | Signal `outline: <repo>/<NNN_name>` or `tell: <repo>/<NNN_name> <Matt's words>` (one line); reports the `reply to #N` on the next check. Refused if X isn't running. |
 | **amend X: …** | Writes `queue\<repo>\NNN_name.amend.<stamp>.md`: `by: planner` front-matter, then Matt's words. |
-| **show events** [since X / for Y] | Stages `events.db` and queries it. "since checkpoint N": event id ≥ N; plain "since checkpoint": the latest. Kinds: `docs/events.md`. |
-| **postmortem Y** | Y's events, prompt and report: where it went wrong. |
 | **propose** / **enqueue** | Writes a prompt to `proposed\`, or to `queue\<repo>\` once Matt approved it. |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` / `cancel: <item>` (proposed or queued, never running). |
-| **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap): numbers swap, each renamed item is a new id. Fix old names in `state.md`. |
 | **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
-| **push R** | Signal `push: <repo>` (retry). |
 | **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: any "run …" means it; several and no match: asks; none: proposes one by request. |
-| **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
-| **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |
 | **stop conductor** | Signal `stop: daemon`; executors are adopted on restart. |
-| **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
-| **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency*'s rule allows; else says why not. |
-| **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item or a queued X (not once running) / lists unused notes per repo, reading one if asked. |
-| **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none (it would hold its queue), says so. |
-| **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`. |
-| **test cleanup R** / **claude.md cleanup R** / **disk space audit R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_audit` (body: Matt's extras). |
 | **backlog X** | Only on Matt's word: his prompt as `backlog\<repo>\<name>.md` (queue front-matter, no number); drawn when that queue empties. |
 | **show backlog** | The inbox's *Night shift*. |
 | **watch now** | Signal `watch: now` (refused while one is live). |
-| **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report (X must have finished). |
-| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
-| **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
-| **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
+| **autopilot off / night / on** | Signal `autopilot: off\|night\|always`: whether the night shift may start work itself (draws, a watch's tells and draws); the app's header shows it and what is next. |
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
-| **pipeline review** | Over this session: unbuilt fixes saving calls, tokens, churn or a step of Matt's, with evidence; asks which to take. Approved conductor fixes → a conductor prompt; the rest → `state.md` (conductor: `planner-notes.md`). |
-| **context estimate** / **read the workflow** / **remind me the vocab** | Estimates tokens / re-reads this file / prints this table. |
+| **read the workflow** / **remind me the vocab** | Re-reads this file / prints this table and `planner-vocab.md`'s. |

@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, checkpoint, session, run, pick, open, notify, stop, watch, push.
+outline, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -28,6 +28,7 @@ notify: ready when you are   # a desktop toast
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 watch: now                   # queue a watch item now (night-shift.md); refused while one is queued or running
 push: sandbox                # push sandbox's main to its remote now (push.md); its push or push_failed follows
+autopilot: night             # off | night | always (`on` = always): may the night shift start work itself (night-shift.md)
 ```
 
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
@@ -130,6 +131,8 @@ value is ignored.
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
   (`reason: signal`), releases its lock and exits. Executors and stages keep running;
   the next start adopts them.
+- **autopilot** — `autopilot: off|night|always` (`on` is `always`): logs `autopilot`
+  (mode, was), which every later decision reads (`night-shift.md`, *Autopilot*).
 
 Conductor processes a file about a second after it stops changing and deletes it. The
 whole file is syntax-checked first: an unknown key or malformed line rejects it with

@@ -10,7 +10,7 @@ from .resume import label as resume_label
 from .state import View, decide
 from .util import clock, now, parse_stamp
 
-NIGHT_KINDS = ("backlog_draw", "backlog_sleep", "watch_flag", "watch")      # the *Night shift* section's (`nightshift.lines`)
+NIGHT_KINDS = ("backlog_draw", "backlog_sleep", "watch_flag", "watch", "autopilot")      # the *Night shift* section's (`nightshift.lines`)
 
 def progress_line(ev: Event) -> str:
     """A `progress` event as one line: `note (ETA 5:40pm, 3 done, 4 to go)`."""
@@ -324,6 +324,8 @@ def describe(ev: Event) -> str:
         case "closeout_push":
             text = (f"closeout push: {', '.join(d.get('pushed', [])) or 'nothing'} pushed"
                     + (f"; FAILED: {', '.join(d['failed'])}" if d.get("failed") else ""))
+        case "autopilot":
+            text = f"autopilot **{d.get('mode')}** (was {d.get('was')})"
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
         case _:

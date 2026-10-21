@@ -1,6 +1,6 @@
 # claude-ai-new-project — starting, parking and resuming a project
 
-**Read `planner.md` first.** It is the method for every session and the vocab. This file adds what only a new, parked or resumed project needs, plus detail on memory, run targets and picks beyond what `planner.md` needs to act. How conductor itself works is in its `README.md` and `docs/`.
+**Read `planner.md` first.** It is the method for every session and the vocab (rarer phrases: `planner-vocab.md`). This file adds what only a new, parked or resumed project needs, plus detail on memory, run targets and picks beyond what `planner.md` needs to act. How conductor itself works is in its `README.md` and `docs/`.
 
 ## Layout (per project)
 
@@ -40,7 +40,7 @@ Matt can watch and act without the planner in the desktop app (`uv run conductor
 
 Parking puts a project away whole (to free the box, or to move its folders), with nothing left running or half-done.
 
-1. Nothing is in flight. No item is running, staged or merging, and no question is open. Cancel or let finish what's queued; anything still queued stays queued and runs on resume. The backlog (`backlog\<repo>\`) draws into any empty queue while the daemon runs, so it is drawn from up to the stop, and the rest waits for resume.
+1. Nothing is in flight. No item is running, staged or merging, and no question is open. Cancel or let finish what's queued; anything still queued stays queued and runs on resume. The backlog (`backlog\<repo>\`) draws into any empty queue while the daemon runs, so it is drawn from up to the stop, and the rest waits for resume (or set **autopilot off** first to stop draws sooner).
 2. **Closeout** as a request, **while the daemon still runs**: requests apply only through the daemon. It also pushes the control folder and every `push = true` repo; wait for `closeout_push` in the inbox before step 4.
 3. `run: <target> stop` for every run target that is up.
 4. `stop: daemon` (**stop conductor**).

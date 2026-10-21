@@ -61,6 +61,20 @@ drifting. Its report (short: **Items**, **Recommend**, **Actions**) never waits 
 Anything else there (cancel, kill, amend, answer) is never carried out: a `warning` says
 so. It recommends those in its report, for Matt or the planner.
 
+## Autopilot
+
+One switch per project for whether the night shift may start work on its own: **off**,
+**night** (only inside the night window, `night_start_hour` to `night_end_hour`) or
+**always** (the default, and the behaviour before it existed). The mode is the last
+`autopilot` event's (set by the `autopilot:` signal from the app's header or the planner),
+so it survives restarts and needs no tracked file. Outside what it allows there are no
+backlog draws and no watch `tell:` or `draw:` actions (refused with a `warning`: "recommended
+only"); a watch's `notify:`, the checks and the watch itself still run, so Matt sees what it
+would have done. A repo's `backlog` flag then says `autopilot is off` (or night only).
+`nightshift.plan` says in a few words what it will start next (`next: bug_sweep when the
+queue empties`, `next: bug_sweep from 6pm`, `held: back-to-back`, `held: budget`): the app's
+header shows it beside the mode, and the inbox's *Night shift* opens with the mode.
+
 ## The backlog
 
 `backlog/<repo>/<name>.md`: items Matt approved ahead of time, written only by the planner
@@ -100,7 +114,7 @@ retried only when the log, the backlog or day/night changed since the last try.
 
 ## Where it shows
 
-The inbox and the session digest have a **Night shift** section: each repo's backlog
+The inbox and the session digest have a **Night shift** section: the autopilot mode, each repo's backlog
 (invalid and full-length marked), tonight's budget used and whether it sleeps, and since the
 read mark the draws, flags, watch launches and watch reports.
 

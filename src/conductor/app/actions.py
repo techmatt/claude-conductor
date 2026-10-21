@@ -145,6 +145,11 @@ def stop_daemon(control: Path) -> Path:
     return write_signal(control, "stop: daemon")
 
 
+def autopilot(control: Path, mode: str) -> Path:
+    """`off`, `night` or `always`: whether the night shift may start work on its own."""
+    return write_signal(control, f"autopilot: {mode}")
+
+
 def start_daemon(control: Path):
     """Spawn the daemon detached; its output goes to `.conductor/daemon.out.log`."""
     control = Path(control).resolve()
