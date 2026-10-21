@@ -327,6 +327,8 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
         return hold(f"unknown lock(s) {unknown}; declare them in conductor.toml")
     for ref in head.depends_on:
         dep = items.resolve_ref(ref, repo, known)
+        if dep is None and len(both := items.ref_matches(ref, repo, known)) > 1:
+            return hold(f"dependency {ref} is ambiguous ({', '.join(both)} share its number): name it in full")
         if dep is None:
             return hold(f"unknown dependency {ref}")
         status = view.status_of(dep)

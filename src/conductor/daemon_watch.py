@@ -2,8 +2,8 @@
 the stall check every `watch_check_minutes`, and the watch item it launches.
 
 A **draw** moves a repo's next eligible `backlog/<repo>/` item into its empty queue under the
-next item number. A full-length item is drawn only if Matt or the planner acted since the
-repo's last full-length item started, and at night only while the backlog budget lasts.
+next item number. A full-length item is drawn only if Matt acted (`nightshift.matt_since`)
+since the repo's last full-length item started, and at night only while the backlog budget lasts.
 
 The **check** costs no tokens: it flags (one `watch_flag` event per flag, de-duplicated by
 its key) a running item silent or past its ETA, a question left open, a repo whose empty
@@ -96,7 +96,7 @@ class WatchMixin:
                 if item.errors:
                     self._write_receipt(rel, [], reason="; ".join(item.errors))
                 else:
-                    full = " (full-length: drawn only after Matt or the planner acts)" if nightshift.full_length(item.meta()) else ""
+                    full = " (full-length: drawn only after Matt acts)" if nightshift.full_length(item.meta()) else ""
                     self._write_receipt(rel, [], result=f"in the backlog for {repo}: drawn when its queue is empty{full}")
         self.backlog_seen = seen
 
@@ -131,8 +131,8 @@ class WatchMixin:
                 why.append(f"{item.name} waits on {', '.join(waits)}")
                 continue
             if nightshift.full_length(item.meta()) and (last := nightshift.last_full(self.log, repo)) \
-                    and not nightshift.human_since(self.log, last.id):
-                why.append(f"{item.name} is full-length and nothing came from Matt or the planner since "
+                    and not nightshift.matt_since(self.cfg, self.log, last):
+                why.append(f"{item.name} is full-length and nothing came from Matt since "
                            f"{last.item} (full-length) started")
                 continue
             if window and spent + (hours := item.max_hours or self.cfg.max_hours) > budget:

@@ -44,7 +44,8 @@ def backlog(cfg: Config) -> dict[str, list[Item]]:
 def queue_name(cfg: Config, view: View, repo: str, stem: str) -> str:
     """`stem` (`bug_sweep` or `07_bug_sweep`) as the repo's next item: `NNN_bug_sweep`, NNN one
     past every number queued, running, done or proposed there, padded like the widest of them
-    (3 at least). A number the planner picks but has not written yet can still clash."""
+    (3 at least). A number the planner picked but had not written yet can still be shared: then
+    neither item answers to the bare number (`items.resolve_ref`), and the planner's receipt says so."""
     rest = re.sub(r"^\d+_", "", stem)
     names = [i.split("/", 1)[1] for i in view.known() if i.startswith(repo + "/")]
     names += [p.stem for p in items.item_files(cfg.path("proposed")) if items.front_repo(p) == repo]
@@ -68,12 +69,31 @@ def last_full(log: EventLog, repo: str) -> Event | None:
                  if not e.detail.get("error") and full_length(meta.get(e.item, e.detail))), None)
 
 
-def human_since(log: EventLog, event_id: int) -> Event | None:
-    """Matt or the planner acted after `event_id`: a signal file (the app's and the planner's
-    alike), a request or an approval. The first such event, or None."""
-    row = log.conn.execute("SELECT * FROM events WHERE id > ? AND (kind IN ('request', 'approve') "
-                           "OR paths LIKE '[\"signals/%') ORDER BY id LIMIT 1", (event_id,)).fetchone()
-    return Event.from_row(row) if row else None
+MATT_BY = ("app", "cli")    # a signal file `by:` these is Matt's own hand
+
+
+def matt_since(cfg: Config, log: EventLog, start: Event) -> str | None:
+    """What Matt did after `start`, or None: a signal file `by: app` or `cli`, or a planner
+    write that carries his approval (an approval, a queue write but a draw or a watch, an
+    answer, a backlog file written since). A request or any other planner signal
+    (`review:`, `reviewed:`, `tell:` …) is bookkeeping and doesn't count."""
+    rows = log.conn.execute(
+        "SELECT * FROM events WHERE id > ? AND (kind IN ('approve', 'answer', 'enqueue', 'edited') OR "
+        "(paths LIKE '[\"signals/%' AND json_extract(detail, '$.by') IN (?, ?))) ORDER BY id",
+        (start.id, *MATT_BY)).fetchall()
+    conductors = {e.item for e in drawn(log)}
+    for ev in map(Event.from_row, rows):
+        if ev.kind in ("enqueue", "edited") and (ev.item in conductors or is_watch(ev.detail)):
+            continue                    # conductor's own queue writes
+        return f"{ev.kind} #{ev.id}"
+    since = parse_stamp(start.ts).timestamp()
+    for item in (i for queue in backlog(cfg).values() for i in queue):
+        try:
+            if item.path.stat().st_mtime > since:
+                return f"backlog {cfg.rel(item.path)}"
+        except OSError:
+            continue
+    return None
 
 
 # ---------------------------------------------------------------- the night

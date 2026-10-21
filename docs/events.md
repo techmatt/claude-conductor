@@ -11,7 +11,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `daemon_died` | at start: the previous daemon left `daemon.json` and is gone, so it never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
-| `enqueue` | an item is first seen in `queue/` | its front-matter fields |
+| `enqueue` | an item is first seen in `queue/` | its front-matter fields; `shares_number` (the other items with its number), if any |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone) |
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |

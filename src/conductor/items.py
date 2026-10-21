@@ -228,14 +228,26 @@ def renumber(names: list[str]) -> list[str]:
 def resolve_ref(ref: str, repo: str, known: list[str]) -> str | None:
     """`001_x`, `001`, `repo/001_x` or `repo/001` → a known item id, or None.
 
-    A bare number matches numerically: YAML reads an unquoted `001` as the integer 1.
+    A bare number matches numerically: YAML reads an unquoted `001` as the integer 1. A number
+    two items share (a conductor-numbered watch or draw took one the planner also wrote) names
+    neither: None, never a guess (`ref_matches` lists them).
     """
+    found = ref_matches(ref, repo, known)
+    return found[0] if len(found) == 1 else None
+
+
+def ref_matches(ref: str, repo: str, known: list[str]) -> list[str]:
+    """Every known item `ref` names: the one with its full name, else all with its number."""
     ref_repo, _, rest = ref.rpartition("/")
     ref_repo = ref_repo or repo
+    out = []
     for item_id in known:
         r, _, name = item_id.partition("/")
         num = name.split("_", 1)[0]
-        if r == ref_repo and (name == rest or num == rest
-                              or (rest.isdigit() and num.isdigit() and int(num) == int(rest))):
-            return item_id
-    return None
+        if r != ref_repo:
+            continue
+        if name == rest:
+            return [item_id]
+        if num == rest or (rest.isdigit() and num.isdigit() and int(num) == int(rest)):
+            out.append(item_id)
+    return out

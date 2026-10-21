@@ -559,8 +559,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         for d in request.pending(self.cfg):
             rel = f"requests/{d.name}"
             with self._receipt(rel):     # one receipt: the request, its commit, or why it failed
-                if waiting and request.listed_targets(d) & waiting:
+                if waiting and (ahead := request.listed_targets(d) & waiting):
                     waiting |= request.listed_targets(d)
+                    self._pending_receipt(rel, f"an earlier request still waiting on {sorted(ahead)}")
                     continue
                 try:
                     req = request.ready(d)
@@ -570,6 +571,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     continue
                 if req is None:      # still being written: unsettled, or targets not all here yet
                     waiting |= request.listed_targets(d)
+                    self._pending_receipt(rel, request.waiting_for(d))
                     continue
                 self._guard_check(f"before request {d.name}")
                 try:
@@ -622,6 +624,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     self.enqueued.add(item.id)
                     meta = item.meta()
                     meta["paths_declared"] = meta.pop("paths")      # `paths` is the event's own column
+                    if shared := [i for i in items.ref_matches(str(item.num), repo, view.known())
+                                  if i != item.id and item.num]:
+                        meta["shares_number"] = shared              # its receipt says: name it in full
                     self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)], **meta)
                 # A queued item may be rewritten until it launches: the launch (and a
                 # stage, which a change discards below) reads the file as it is then.

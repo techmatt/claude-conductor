@@ -46,6 +46,7 @@ class ReceiptsMixin:
         self._capturing: list[Event] | None = None  # events of the signal file or request being handled
         self._pruned_at = 0.0
         self.proposed_seen: dict[str, int] = {}     # proposed file → the mtime its receipt covers
+        self._pending: dict[str, str] = {}          # waiting request → what its pending receipt says
 
     def _prepare_receipts(self) -> None:
         root = self.cfg.path(ROOT)
@@ -83,7 +84,10 @@ class ReceiptsMixin:
         rel, d = (ev.paths[0] if ev.paths else ""), ev.detail
         match ev.kind:
             case "enqueue":
-                self._write_receipt(rel, [ev], result="queued")
+                shared = d.get("shares_number")
+                self._write_receipt(rel, [ev], result=f"queued as {ev.item}" + (
+                    f"; its number is also {', '.join(shared)}'s: name it in full, never by number"
+                    if shared else ""))
             case "edited":
                 how = "the launch it raced was undone; " if d.get("launching") else ""
                 how += "its stage is redone" if d.get("staged") else "it runs the new text"
@@ -149,6 +153,13 @@ class ReceiptsMixin:
                 self._write_receipt(rel, [], result=f"proposed for {repo}: waits for Matt (`approve: {p.stem}`)")
         self.proposed_seen = seen
 
+    def _pending_receipt(self, rel: str, waits: str) -> None:
+        """`outcome: pending` for a request still waiting (so the planner can tell waiting from
+        lost), written once per thing waited for; the final receipt replaces it."""
+        if self._pending.get(rel) != waits:
+            self._pending[rel] = waits
+            self._write_receipt(rel, [], pending=f"waiting for {waits}")
+
     def _receipt_meta(self, rel: str) -> dict:
         try:
             return split_front_matter(read_text(self.cfg.path(*rel_for(rel).split("/"))))[0] or {}
@@ -163,14 +174,18 @@ class ReceiptsMixin:
         return f"---\n{head}\n---\n" + "".join(f"{ln}\n" for ln in lines)
 
     def _write_receipt(self, rel: str, evs: list[Event], result: str | None = None,
-                       reason: str | None = None, applied: list | None = None) -> None:
-        """`outcome: accepted` with what happened (`result`), or `refused` with `reason`
-        (and, for a signal cut short, the lines `applied` before it); then one line per event."""
+                       reason: str | None = None, applied: list | None = None, pending: str | None = None) -> None:
+        """`outcome: accepted` with what happened (`result`), `refused` with `reason` (and,
+        for a signal cut short, the lines `applied` before it), or `pending` with what it
+        waits for (`result`); then one line per event."""
+        if not pending:
+            self._pending.pop(rel, None)
         try:
             mtime = self.cfg.path(*rel.split("/")).stat().st_mtime_ns // 1_000_000
         except OSError:
             mtime = None                    # a signal or request is gone by now; its name is unique anyway
-        meta = {"write": rel, "outcome": "refused" if reason else "accepted", "result": result,
+        outcome = "refused" if reason else "pending" if pending else "accepted"
+        meta = {"write": rel, "outcome": outcome, "result": pending or result,
                 "reason": reason, "applied": applied, "at": clock(now()), "written_ms": mtime,
                 "events": [e.id for e in evs]}
         lines = [self._line(e) for e in evs[:LINES]]

@@ -1,5 +1,7 @@
 """The night shift: the stall check, the watch item, backlog draws and their rules."""
 
+import os
+import time
 from datetime import datetime
 
 import pytest
@@ -91,14 +93,42 @@ def test_two_full_length_items_never_run_back_to_back(env):
     env.tick_until(lambda: env.finished("code/001_big"))
     backlog(env, "a_big2", "FAKE report done", max_hours=3)
     backlog(env, "b_small", "FAKE report done")
+    old = time.time() - 3600                # written before 001_big started: a backlog write since counts as Matt
+    for p in (env.control / "backlog" / "code").glob("*.md"):
+        os.utime(p, (old, old))
+    env.signal("planner-1.signal", "by: planner\nreviewed: code/001_big")     # bookkeeping: not Matt
     env.tick_until(lambda: env.finished("code/002_b_small"))      # the short one goes past it
     for _ in range(5):
         env.d.tick()
     assert [e.item for e in env.events("backlog_draw")] == ["code/002_b_small"]
     flags = [e.detail["text"] for e in env.events("watch_flag") if e.detail["flag"] == "backlog"]
-    assert any("a_big2 is full-length and nothing came from Matt or the planner since code/001_big" in t for t in flags)
+    assert any("a_big2 is full-length and nothing came from Matt since code/001_big" in t for t in flags)
     env.signal("app-1.signal", "by: app\ncheckpoint: back")         # Matt in between
     env.tick_until(lambda: env.finished("code/003_a_big2"))
+
+
+def test_only_matt_counts_between_full_length_items(env):
+    log, cfg = env.d.log, env.d.cfg
+    start = log.append("start", item="code/079_bug_hunt")
+    # Bookkeeping (Word Warriors 080): a planner request, a planner `reviewed:`; conductor's own queue writes.
+    log.append("request", paths=["state.md"], request="20261021-1227-state")
+    log.append("reviewed", item="code/078_x", paths=["signals/planner-1.signal"], by="planner")
+    log.append("backlog_draw", item="code/080_hunt", paths=["queue/code/080_hunt.md"])
+    log.append("enqueue", item="code/080_hunt", paths=["queue/code/080_hunt.md"])
+    log.append("enqueue", item="code/081_watch", paths=["queue/code/081_watch.md"], template="watch")
+    assert nightshift.matt_since(cfg, log, start) is None
+    for write in [lambda: log.append("checkpoint", paths=["signals/app-1.signal"], by="app"),
+                  lambda: log.append("approve", item="code/082_y", paths=["signals/planner-2.signal"], by="planner"),
+                  lambda: log.append("answer", item="code/079_bug_hunt", paths=["questions/q.answer.md"]),
+                  lambda: log.append("enqueue", item="code/083_z", paths=["queue/code/083_z.md"])]:
+        assert nightshift.matt_since(cfg, log, start) is None
+        ev = write()
+        assert nightshift.matt_since(cfg, log, start) == f"{ev.kind} #{ev.id}"
+        start = ev
+    backlog(env, "later", "FAKE report done")
+    later = time.time() + 5
+    os.utime(env.control / "backlog" / "code" / "later.md", (later, later))
+    assert nightshift.matt_since(cfg, log, start) == "backlog backlog/code/later.md"
 
 
 def test_the_night_budget_stops_draws(env):

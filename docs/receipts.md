@@ -37,7 +37,9 @@ events: [812, 813]
 
 - `outcome`: `accepted`, with `result` (what happened), or `refused`, with `reason`.
   A signal refused part-way also has `applied`: the lines that applied before the one
-  that failed (they stay applied).
+  that failed (they stay applied). A request still waiting is `pending`, its `result`
+  what it waits for (its targets, its files to settle, an earlier request on the same
+  targets), rewritten when that changes and replaced by the final receipt.
 - `events`: the ids of every event its handling logged, one line each below: a
   signal's, side effects included; a request's `request`, `commit` (and a `closeout:`
   request's `read`). Past eight (`LINES`; a `session:` warns once per unreviewed
@@ -49,8 +51,8 @@ events: [812, 813]
 | write | written when | result | refused when |
 |---|---|---|---|
 | signal | its lines applied or it was rejected | `applied` | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line |
-| request | applied or failed; nothing while it waits for targets | `committed <sha>`, `applied; nothing changed` | `request_failed` (it is `.failed`) |
-| queue item | `enqueue`, `edited` | `queued`; `rewritten: it runs the new text` / `its stage is redone` | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
+| request | applied or failed; `pending` at once while it waits | `committed <sha>`, `applied; nothing changed` | `request_failed` (it is `.failed`) |
+| queue item | `enqueue`, `edited` | `queued as <id>` (plus, if a watch or draw took its number meanwhile, `its number is also <id>'s: name it in full`); `rewritten: it runs the new text` / `its stage is redone` | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` | `late` (the question had resolved) |
 | proposed item | settled, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |

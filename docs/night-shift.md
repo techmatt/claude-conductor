@@ -78,9 +78,13 @@ Eligible: valid, every `depends_on` done, and:
 
 - **Never two full-length items back to back without Matt in between.** Full-length: any
   template run but a watch, or a declared `max_hours` of 2 or more (only a declared one: the
-  usual default `max_hours` is 2). A full-length item is drawn only if, since the repo's last
-  full-length item started (queued by hand or drawn), Matt or the planner wrote a signal (the
-  app's count), a request, or an approval. A short item behind it is drawn meanwhile.
+  usual default `max_hours` is 2). A full-length item is drawn only if Matt acted since the
+  repo's last full-length item started (queued by hand or drawn): a signal file `by: app`
+  or `by: cli` (any line), or a planner write that carries his approval: `approve:`, a queue
+  write (`enqueue` or `edited`; never a draw's or a watch's), an answer, or a backlog file
+  written since. A request (`state.md` above all) and any other planner signal (`review:`,
+  `reviewed:`, `tell:`, `checkpoint:` …) are bookkeeping and don't count
+  (`nightshift.matt_since`). A short item behind it is drawn meanwhile.
 - **The nightly budget.** At night (`night_start_hour` 18 to `night_end_hour` 8, local
   wall-clock time), backlog items' executor-hours inside the night (each drawn item's start
   to its finish, or now) are capped at `backlog_night_hours` (6): an item is drawn only if

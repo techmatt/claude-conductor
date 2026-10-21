@@ -67,12 +67,53 @@ def test_request_receipts_applied_unchanged_and_failed(env):
     assert meta["outcome"] == "refused" and "not listed as targets: ['stray.md']" in meta["reason"]
 
 
+def test_a_waiting_request_has_a_pending_receipt(env):
+    d = env.control / "requests" / "20261021-1100-two"
+    d.mkdir(parents=True)
+    (d / "request.md").write_text("---\ntargets: [state.md, notes.md]\nmessage: two\n---\n", encoding="utf-8")
+    (d / "state.md").write_text("# state v3\n", encoding="utf-8")
+    later = env.control / "requests" / "20261021-1101-after"
+    later.mkdir(parents=True)
+    (later / "request.md").write_text("---\ntargets: [state.md]\nmessage: after\n---\n", encoding="utf-8")
+    (later / "state.md").write_text("# state v4\n", encoding="utf-8")
+    old = time.time() - 5                               # settled: only a target is missing
+    for p in [*d.iterdir(), *later.iterdir(), d, later]:
+        os.utime(p, (old, old))
+    env.d.tick()
+    meta, _ = receipt(env, "requests/20261021-1100-two")
+    assert meta["outcome"] == "pending" and "waiting for its targets ['notes.md']" in meta["result"]
+    meta, _ = receipt(env, "requests/20261021-1101-after")
+    assert meta["outcome"] == "pending" and "an earlier request still waiting on ['state.md']" in meta["result"]
+    (d / "notes.md").write_text("notes\n", encoding="utf-8")
+    os.utime(d / "notes.md", (old, old))
+    env.d.tick()
+    meta, _ = receipt(env, "requests/20261021-1100-two")
+    assert meta["outcome"] == "accepted" and meta["result"].startswith("committed ")
+    assert receipt(env, "requests/20261021-1101-after")[0]["outcome"] == "accepted"
+
+
+def test_a_shared_number_is_named_in_the_receipt_and_never_guessed(env):
+    env.queue("080_watch", "FAKE report done", depends_on="001_gone")      # conductor's, say: holds
+    env.d.tick()
+    env.queue("080_feature", "do it")
+    env.queue("081_next", "do it", depends_on="080")
+    env.d.tick()
+    meta, _ = receipt(env, "queue/code/080_feature.md")
+    assert meta["result"] == ("queued as code/080_feature; its number is also code/080_watch's: name it "
+                              "in full, never by number")
+    from conductor import items, state
+    known = state.scan(env.d.cfg, env.d.log).known()
+    assert items.resolve_ref("080", "code", known) is None
+    assert items.resolve_ref("080_feature", "code", known) == "code/080_feature"
+    assert sorted(items.ref_matches("080", "code", known)) == ["code/080_feature", "code/080_watch"]
+
+
 def test_queue_item_rewrite_and_amendment_receipts(env):
     item = env.queue("002_waits", "do it", depends_on="001_first")      # holds: its dependency never runs
     bad = env.queue("003_bad", "do it", nope="x")
     env.d.tick()
     meta, _ = receipt(env, "queue/code/002_waits.md")
-    assert meta["outcome"] == "accepted" and meta["result"] == "queued"
+    assert meta["outcome"] == "accepted" and meta["result"] == "queued as code/002_waits"
     assert meta["written_ms"] == item.stat().st_mtime_ns // 1_000_000
     meta, _ = receipt(env, "queue/code/003_bad.md")
     assert meta["outcome"] == "refused" and "unknown front-matter fields: ['nope']" in meta["reason"]

@@ -122,6 +122,18 @@ def ready(d: Path) -> Request | None:
     return req if settled(d) else None
 
 
+def waiting_for(d: Path) -> str:
+    """What a request `ready` returned None for is waiting for, in words (its pending receipt)."""
+    try:
+        parse(d)
+    except MissingTargets as exc:
+        return (f"its targets {exc.missing} (until {REQUEST_WAIT_SECONDS:g}s after request.md was "
+                "written; then it fails)")
+    except (RequestError, OSError):
+        pass
+    return "its files to settle (still being written)"
+
+
 def _normalize(data: bytes) -> bytes:
     """UTF-8 text is written with LF endings; anything else is copied byte for byte."""
     try:
