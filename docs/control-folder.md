@@ -22,6 +22,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.l
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner/app → conductor: the verbs in signals.md
 receipts/                      conductor → planner: what became of each write (see receipts.md)
+backlog/<repo>/<name>.md       pre-approved items, drawn into an empty queue (see night-shift.md); ignores itself
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 picks/                         Matt's saved picker choices: <name>.choices.json (see picks.md)
 inbox.md                       generated digest since the read mark

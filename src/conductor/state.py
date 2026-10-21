@@ -83,9 +83,16 @@ class View:
 
     def reviewed(self, item_id: str) -> bool:
         """Its report has a `reviewed` event, and no `report_changed` since (a reviewed report
-        or its audit notes edited afterwards is unreviewed again until the next `reviewed`)."""
+        or its audit notes edited afterwards is unreviewed again until the next `reviewed`).
+        A watch's report never waits for review: the inbox's *Night shift* lists it."""
+        if self.is_watch(item_id):
+            return True
         rev, chg = self.reviews.get(item_id), self.changed.get(item_id)
         return rev is not None and (chg is None or chg.id < rev.id)
+
+    def is_watch(self, item_id: str) -> bool:
+        """A finished watch item (`template: watch`, docs/night-shift.md)."""
+        return (fin := self.finishes.get(item_id)) is not None and fin.detail.get("template") == "watch"
 
     def changed_since_review(self, item_id: str) -> Event | None:
         """The `report_changed` that made a reviewed report unreviewed again, or None."""
@@ -100,6 +107,8 @@ class View:
         """Hidden from the current view: finished before the latest checkpoint and reviewed
         before it too, and not the red holding its queue. Everything else carries forward."""
         cp, fin, rev = self.checkpoint, self.finishes.get(item_id), self.reviews.get(item_id)
+        if self.is_watch(item_id):              # reviewed without a `reviewed` event
+            return cp is not None and fin.id < cp.id
         if cp is None or fin is None or rev is None or fin.id > cp.id or rev.id > cp.id or not self.reviewed(item_id):
             return False
         return not any(ev.item == item_id for ev in self.red_hold.values())
@@ -166,6 +175,8 @@ def can_share(cfg: Config, head: Item, rec: dict) -> bool:
     that they are unrelated. Their named locks are `decide`'s. Otherwise (legacy `paths`)
     both declared `paths`, the globs are disjoint (prose aside) and they share no named lock."""
     opts = cfg.opts(head.repo)
+    if head.template == "watch" or rec.get("template") == "watch":
+        return True                 # a watch only reads, for minutes, and must see a stall as it is
     if not (opts.worktrees and rec.get("worktree")):
         return False
     if head.template in audits.EXCLUSIVE or rec.get("template") in audits.EXCLUSIVE:
@@ -237,15 +248,16 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
     known = view.known()
     out: list[Item] = []
     for repo in cfg.repos:
-        if not cfg.opts(repo).worktrees:
-            continue
+        trees = cfg.opts(repo).worktrees
         queue = view.queued.get(repo, [])
         running_here = [r for r in view.running.values() if r["repo"] == repo]
         for i, item in enumerate(queue[1:], 1):
-            if any(q.template in audits.EXCLUSIVE for q in queue[:i]):
-                break
+            # A watch starts beside anything, past any barrier, in any repo: it always has a worktree.
+            watch = item.template == "watch"
+            if not watch and (not trees or any(q.template in audits.EXCLUSIVE for q in queue[:i])):
+                continue
             if (not (item.readonly or item.alongside) or item.id in view.staged
-                    or item.template in audits.NO_STAGE + audits.EXCLUSIVE
+                    or (item.template in audits.NO_STAGE + audits.EXCLUSIVE and not watch)
                     or set(item.locks) & held or _hold(cfg, view, repo, item, known)
                     or not all(can_share(cfg, item, rec) for rec in running_here)):
                 continue
@@ -305,9 +317,10 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
         return hold("invalid item: " + "; ".join(head.errors))
     if head.id in view.done or head.id in view.running:
         return hold(f"{head.id} already ran; a re-run needs a new item number")
-    if (ev := view.red_hold.get(repo)) and not head.resume_of:   # asking why it went red is the point
+    looks = head.resume_of or head.template == "watch"   # asking why it went red is the point; a watch only reads
+    if (ev := view.red_hold.get(repo)) and not looks:
         return hold(f"queue held after red {ev.item} (event #{ev.id}); write `clear: {repo}` to signals/")
-    if ev := view.planner_hold.get(repo):
+    if (ev := view.planner_hold.get(repo)) and head.template != "watch":
         return hold(f"needs_planner: report for {ev.item} unread (finish #{ev.id}); move the read mark past it")
     unknown = [lock for lock in head.locks if lock not in cfg.locks]
     if unknown:

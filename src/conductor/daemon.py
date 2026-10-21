@@ -6,11 +6,12 @@ so several repos (and disjoint items within one) run at once. The one exception 
 picker server (`picker`), whose handler threads touch only files and a queue that the
 loop drains into the event log.
 
-`Daemon` is this module plus seven mixins, one per concern: `daemon_signals` (signal
+`Daemon` is this module plus nine mixins, one per concern: `daemon_signals` (signal
 files and their verbs), `daemon_messages` (questions, progress, deliveries, amendments),
 `daemon_receipts` (a receipt per planner write), `daemon_reap` (leftover processes and
 worktrees), `daemon_merge` (merges and concluding an item), `daemon_setup` (a repo's
-setup commands, off the loop) and `daemon_restart` (restarting itself when its code changes).
+setup commands, off the loop), `daemon_restart` (restarting itself when its code changes),
+`daemon_templates` (what a template item is handed) and `daemon_watch` (the night shift).
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ from .daemon_reap import ReapMixin
 from .daemon_restart import RestartMixin
 from .daemon_setup import SetupMixin
 from .daemon_signals import SIGNAL_SETTLE_SECONDS, SignalsMixin
+from .daemon_templates import TemplatesMixin
+from .daemon_watch import WatchMixin
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp, write_text
 
@@ -109,7 +112,8 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
     return f"{repo}/{picks.normal(value)}" if value and value.lower() != "none" else None
 
 
-class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin):
+class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
+             TemplatesMixin, WatchMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -152,6 +156,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._mem_clear_since: float | None = None  # below the level since (monotonic), not yet calm
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about
         self._init_restart()
+        self._init_watch()
 
     def _live_enqueued(self) -> set[str]:
         """Ids whose `enqueue` still stands: a cancel or a reorder retires an id, so the
@@ -238,6 +243,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         for repo in self.cfg.repos:
             self.cfg.path("queue", repo).mkdir(exist_ok=True)
         self._prepare_receipts()
+        self._prepare_backlog()
         self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control))
         self._read_code()
         if self._died:
@@ -340,6 +346,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.check_runs()
         self.process_merges()
         self.sample_memory()
+        self.night_shift()
         self.schedule()
         self.write_inbox()
 
@@ -772,7 +779,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             landed = git.commits_between(repo_path, stage["base"], rec["base"]) if not error else []
             rec["resume"] = {"old": stage["base"], "new": rec["base"] or stage["base"], "landed": len(landed)}
             self._worktree_event(rec, "moved", f"{stage['base'][:10]} → {(rec['base'] or '?')[:10]}")
-        elif cfg.opts(item.repo).worktrees or item.resume_of:      # a resume item: always a fresh worktree
+        elif cfg.opts(item.repo).worktrees or item.resume_of or item.template == "watch":   # these: always one
             error = self._make_worktree(item, rec, paths.setup)
         if item.template == "cleanup" and not rec["notes"] and not error:
             error = f"cleanup: no unused audit notes for {item.repo}"
@@ -797,8 +804,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             if stale.exists():
                 stale.unlink()
         self.runs[item.id] = run
-        if not error and rec["worktree"] and cfg.opts(item.repo).setup:
-            # Setup runs off the loop; `check_runs` starts the executor once it is done.
+        if not error and rec["worktree"] and cfg.opts(item.repo).setup and item.template != "watch":
+            # Setup runs off the loop; `check_runs` starts the executor once it is done. A watch
+            # only reads: it skips setup (an `npm ci` would cost it minutes).
             rec["phase"] = "setup"
             error = self._start_setup(run, "run", paths.setup)
             if not error:
@@ -925,39 +933,6 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         retry_io(run.rec_path.unlink, True)
         self.log.append("warning", item=rec["item"], note=f"stage discarded: {reason}; {then}")
 
-    def _free_notes(self, repo: str) -> list[str]:
-        """The ids of `repo`'s audit notes no cleanup has used or claimed, oldest first."""
-        return [n.item for n in state.scan(self.cfg, self.log).unused_notes(self.cfg, repo)]
-
-    def _notes_text(self, rec: dict) -> str:
-        if not rec.get("notes"):
-            return ""
-        finishes = {i: ev for i in rec["notes"] if (ev := self.log.last("finish", item=i))}
-        return audits.render_notes(self.cfg, rec["notes"], finishes)
-
-    def _disk_usage(self, rec: dict) -> str:
-        """A disk audit's view of what only conductor sees: the control folder's sizes
-        and what each of the repo's worktrees is. Leftover removals are retried first."""
-        if rec.get("template") != "disk_audit":
-            return ""
-        repo = rec["repo"]
-        self._retry_leftovers("disk audit", repo=repo)
-        live = {str(Path(r.rec["worktree"])): r.item_id for r in [*self.runs.values(), *self.stages.values()]
-                if r.rec.get("worktree") and r.rec.get("repo") == repo}
-        if rec.get("worktree"):
-            live[str(Path(rec["worktree"]))] = "this item's own working directory"
-        last: dict[str, str] = {}
-        for ev in self.log.query(kinds=["worktree"]):
-            if ev.repo == repo and ev.item:
-                last[ev.item.split("/", 1)[1]] = ev.detail.get("action")
-        kept = {name for name, action in last.items() if action == "kept"}
-        shared = self.cfg.opts(repo).shared
-        checkout = (f"Main checkout: `{self.cfg.repos[repo]}`. Its `shared` folders (linked into every "
-                    "worktree; a Drive-homed one is a junction in the main checkout): "
-                    + (", ".join(f"`{s}`" for s in shared) if shared else "none") + ".")
-        return "\n\n".join([checkout, audits.control_usage(self.cfg, repo),
-                            audits.worktree_listing(self.cfg, repo, live, self._leftovers(), kept)])
-
     def resume(self, item: items.Item, srec: dict) -> None:
         if self._stage_dirty(srec):
             self._discard_stage(self._stage_run(srec), "the staged worktree has changes")
@@ -974,7 +949,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 self._poll_run_setup(run)
             elif run.exited():
                 self.finish(run)
-            elif now() > parse_stamp(run.rec["deadline"]) and run.item_id not in self.blocked:
+            elif now() > parse_stamp(run.rec["deadline"]) and (run.item_id not in self.blocked
+                                                               or run.rec.get("template") == "watch"):
                 pid = run.pid()
                 procs.kill_tree(pid)
                 self.log.append("kill", item=run.item_id, pid=pid,

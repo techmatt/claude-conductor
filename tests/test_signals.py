@@ -604,7 +604,7 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     assert "12a_y: status: partial" in reports and "13_z: no status line" in reports
     assert "12_x:" not in reports and "3_old" not in reports
     facts = text.split("## Maintenance facts", 1)[1]
-    assert "- test perf audit: 002_perf, " in facts and "· 2 non-template item(s) finished since" in facts
+    assert "- test cleanup: 002_perf, " in facts     # queued as `test_perf`, an alias and "· 2 non-template item(s) finished since" in facts
     assert "- bug hunt: never · 3 non-template item(s) finished" in facts
     assert "- `CLAUDE.md`: 0.0 KB, 2 lines" in facts and "- unused audit notes: 0" in facts
     assert "repeated in the last 4 report(s): tests (001, 003)" in facts

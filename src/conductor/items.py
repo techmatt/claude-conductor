@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import globs
-from .audits import TEMPLATES
+from .audits import TEMPLATES, canonical
 from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
@@ -120,10 +120,10 @@ def parse(path: Path, repo: str) -> Item:
         else:
             item.stage = meta["stage"]
     if meta.get("template") is not None:
-        if meta["template"] not in TEMPLATES:
+        if canonical(meta["template"]) not in TEMPLATES:
             item.errors.append(f"`template` must be one of {', '.join(TEMPLATES)}")
         else:
-            item.template = meta["template"]
+            item.template = canonical(meta["template"])       # an old name runs the renamed text
     if meta.get("alongside") is not None:
         value = meta["alongside"]
         if not isinstance(value, str) or not value.strip() or "\n" in value.strip():

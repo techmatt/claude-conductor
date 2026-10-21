@@ -81,11 +81,13 @@ def test_a_red_cleanup_uses_no_notes(env):
     assert used.item == "code/003_clean" and used.detail["notes"] == ["code/001_a"]
 
 
-def test_general_audit_writes_and_uses_its_own_notes(env):
+def test_general_cleanup_writes_and_uses_its_own_notes(env):
+    # Queued under its old name, `general_audit`: an alias, so it runs the renamed text.
     env.queue("001_ga", "FAKE audit messy layout", template="general_audit")
     env.tick_until(lambda: env.finished("code/001_ga"))
     text = prompt(env, "001_ga")
-    assert "General audit of `code`" in text and "running notes file at exactly" in text
+    assert "General cleanup of `code`" in text and "running notes file at exactly" in text
+    assert env.finished("code/001_ga").detail["template"] == "general_cleanup"
     assert text.rstrip().endswith("The planner adds, for this item:\n\nFAKE audit messy layout")
     [used] = env.events("audit_used")
     assert used.detail["notes"] == ["code/001_ga"]
@@ -166,11 +168,11 @@ def test_daemon_start_compacts_finished_items_logs(env):
     assert (env.control / "reports" / "code__002_queued.log").stat().st_size > 2 << 20
 
 
-def test_test_perf_template_and_bad_template(env, tmp_path):
-    env.queue("001_tp", "", template="test_perf")
+def test_test_cleanup_template_and_bad_template(env, tmp_path):
+    env.queue("001_tp", "", template="test_cleanup")
     env.tick_until(lambda: env.finished("code/001_tp"))
     text = prompt(env, "001_tp")
-    assert "Test performance in `code`" in text and "running notes file" not in text
+    assert "Test cleanup in `code`" in text and "running notes file" not in text
     assert not env.events("audit_used")
     bad = tmp_path / "002_x.md"
     bad.write_text("---\nrepo: code\ntemplate: nope\n---\n", encoding="utf-8")

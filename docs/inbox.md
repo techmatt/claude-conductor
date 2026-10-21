@@ -50,7 +50,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      git-ignored `planner-notes.md` (the planner's file), in natural order (12 < 12a < 13), each with its `status:` line (one
      of its first five non-blank lines) or *no status line*, and its path;
    - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
-     general audit, cleanup, test perf audit, claude.md cleanup, disk space audit) the
+     general cleanup, cleanup, test cleanup, claude.md cleanup, disk space audit; an item run under an old name, `general_audit` or `test_perf`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's
      `CLAUDE.md` size (KB and lines, from the main checkout); its unused audit notes;
@@ -113,6 +113,10 @@ without the item:
 - code/013_more opened 4:40pm, not saved — `code/picks/more.json`
 - code/014_faces waiting for Matt — signal `pick: code/picks/faces.json`
 ```
+
+Then **Night shift** (`night-shift.md`): each repo's backlog, tonight's budget and whether
+it sleeps, and since the mark the draws, flags, watch launches and watch reports (which
+never wait in *Unreviewed reports*); their events leave *Other*.
 
 Then every event after the read mark that is not *settled*: an event of an item whose
 report is reviewed (a red kind aside), or a request or control commit at or before the

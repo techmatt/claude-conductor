@@ -52,7 +52,9 @@ def build_template(root: Path) -> Path:
         'ask_default_minutes = 0.03\n'
         # The box's real memory never gates a test; memory tests set a probe or thresholds.
         'memory_pressure_percent = 0\nmemory_pressure_free_gb = 0\n'
-        'memory_critical_percent = 0\nmemory_critical_free_gb = 0\n\n'
+        'memory_critical_percent = 0\nmemory_critical_free_gb = 0\n'
+        # The night shift's check is off, so no test depends on the time of day; its own tests turn it on.
+        'watch_check_minutes = 0\n\n'
         f'[repos]\ncode = "../code"\n\n[executor]\ncommand = {[sys.executable, str(FAKE)]!r}\n'
     ).replace("'", '"').replace("\\", "/")
     init_repo(root / "control", {"conductor.toml": toml, "state.md": "# state\n",

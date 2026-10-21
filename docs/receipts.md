@@ -16,6 +16,7 @@ The write's path under `receipts/`, with `.signal` or `.md` changed to `.md`:
 | `queue/<repo>/012_x.amend.<tag>.md` | `receipts/queue/<repo>/012_x.amend.<tag>.md` |
 | `questions/<id>.answer.md` | `receipts/questions/<id>.answer.md` |
 | `proposed/012_x.md` | `receipts/proposed/012_x.md` |
+| `backlog/<repo>/bug_sweep.md` | `receipts/backlog/<repo>/bug_sweep.md` (`night-shift.md`; a draw rewrites it) |
 
 Every signal file and request gets one, whoever wrote it (the app's too).
 

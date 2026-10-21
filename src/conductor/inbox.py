@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import audits, memory, picks, questions, talk
+from . import audits, memory, nightshift, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
 from .request import is_closeout
@@ -10,6 +10,7 @@ from .resume import label as resume_label
 from .state import View, decide
 from .util import clock, now, parse_stamp
 
+NIGHT_KINDS = ("backlog_draw", "backlog_sleep", "watch_flag", "watch")      # the *Night shift* section's (`nightshift.lines`)
 
 def progress_line(ev: Event) -> str:
     """A `progress` event as one line: `note (ETA 5:40pm, 3 done, 4 to go)`."""
@@ -305,6 +306,14 @@ def describe(ev: Event) -> str:
             text = f"{who} used {len(d.get('notes', []))} audit note(s): {', '.join(d.get('notes', []))}"
         case "queue_empty":
             text = f"queue `{ev.repo}` is empty (last: {d.get('last')})"
+        case "backlog_draw":
+            text = f"{who} drawn from the backlog ({d.get('from')})" + (" · full-length" if d.get("full_length") else "")
+        case "backlog_sleep":
+            text = f"backlog sleeps until {d.get('until')}: {d.get('reason')}"
+        case "watch_flag":
+            text = f"watch flag ({d.get('flag')}): {d.get('text')}" + (f" — watch {d['watch']}" if d.get("watch") else "")
+        case "watch":
+            text = f"watch {who} launched: {d.get('reason')}"
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
         case _:
@@ -391,7 +400,7 @@ def settled_event(ev: Event, view: View, closeout: int) -> bool:
     out (up to its `closeout:`), which a mark older than the closeout still covers."""
     if ev.kind in RED_KINDS:
         return False
-    if ev.item and view.reviewed(ev.item):
+    if ev.item and view.reviewed(ev.item) and not view.is_watch(ev.item):   # a watch's warnings stay
         return True
     return ev.id <= closeout and (ev.kind == "request" or (ev.kind == "commit" and ev.detail.get("scope") == "control"))
 
@@ -416,7 +425,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
             for name in set(e.detail.get("before", [])) - set(e.detail.get("after", [])):
                 moved[f"{e.repo}/{name}"] = e.id
     holds = [e for e in events if e.kind == "hold" and moved.get(e.item, 0) < e.id]
-    finished = [e for e in events if e.kind == "finish"]
+    finished = [e for e in events if e.kind == "finish" and not view.is_watch(e.item)]     # Night shift lists those
     changes = [e for e in events if e.kind in ("request", "commit")]
     open_qs = [q for q in questions.scan(cfg.control) if q.is_open]
     open_ids = {q.id for q in open_qs}
@@ -424,7 +433,8 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
              and not (e.kind == "ask" and e.detail.get("question") in open_ids)]
     changes += [e for e in events if e.kind == "merge"]
     other = [e for e in events if e not in red + holds + finished + changes + asked
-             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress", "setup")]
+             and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress", "setup",
+                                "finish", *NIGHT_KINDS)]
 
     out = [heading or f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
@@ -460,6 +470,8 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
     if pick_rows := pick_lines(cfg, log, view):
         # Standing too: a picker waits for Matt whatever the read mark says.
         out += ["", "## Picks", *pick_rows]
+    if night_rows := nightshift.lines(cfg, log, view, mark):
+        out += ["", "## Night shift", *night_rows]
     sections = [("Red", red), ("Holds", holds), ("Finished", finished), ("Questions resolved", asked),
                 ("Requests and commits", changes), ("Other", other)]
     for title, evs in sections:

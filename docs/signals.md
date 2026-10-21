@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, checkpoint, session, run, pick, open, notify, stop.
+outline, checkpoint, session, run, pick, open, notify, stop, watch.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -26,6 +26,7 @@ pick: code/picks/art_alts_009.json   # serve that picker manifest and open it in
 open: reveal C:\Code\x\out.png   # a desktop action on a checked path (below)
 notify: ready when you are   # a desktop toast
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
+watch: now                   # queue a watch item now (night-shift.md); refused while one is queued or running
 ```
 
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.

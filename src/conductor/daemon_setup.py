@@ -202,7 +202,7 @@ class SetupMixin:
         resumed = resume_items.paragraph(cfg, self.log, rec, paths.original) if rec.get("resume_of") else ""
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, item.max_hours or cfg.max_hours,
                                                        parse_stamp(rec["deadline"]), rec, resume,
-                                                       notes=self._notes_text(rec), usage=self._disk_usage(rec),
+                                                       notes=self._notes_text(rec), usage=self._template_usage(rec),
                                                        amends=[m for m in amends if talk.is_amend(m)], beside=warn,
                                                        resumed=resumed))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))

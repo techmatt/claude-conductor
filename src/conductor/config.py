@@ -14,7 +14,7 @@ CONFIG_NAME = "conductor.toml"
 # committed. A request may not target anything under these.
 RUNTIME = (
     "queue", "proposed", "running", "done", "reports", "questions", "picks", "requests",
-    "signals", "receipts", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
+    "signals", "receipts", "backlog", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
 )
 
 REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background"}
@@ -60,6 +60,8 @@ RUN_KEYS = {"repo", "cwd", "command", "url", "ready", "ready_seconds"}
 MEMORY_KEYS = ("memory_sample_seconds", "memory_keep_hours", "memory_pressure_percent",
                "memory_pressure_free_gb", "memory_critical_percent", "memory_critical_free_gb",
                "memory_calm_seconds")
+NIGHT_KEYS = ("watch_check_minutes", "watch_quiet_minutes", "watch_every_minutes", "watch_planner_minutes",
+              "watch_max_hours", "backlog_night_hours", "night_start_hour", "night_end_hour")
 
 
 @dataclass
@@ -89,6 +91,15 @@ class Config:
     memory_critical_percent: float = 95.0
     memory_critical_free_gb: float = 1.5
     memory_calm_seconds: float = 300.0   # a level falls only after the box stays clear this long
+    # The night shift (`daemon_watch.py`, docs/night-shift.md).
+    watch_check_minutes: float = 10.0    # the daemon's stall check (no tokens; 0: off)
+    watch_quiet_minutes: float = 20.0    # a running item with no progress line this long is flagged
+    watch_every_minutes: float = 60.0    # a watch item about this often while any item runs (0: only on flags)
+    watch_planner_minutes: float = 30.0  # no watch item within this long of a planner signal or request
+    watch_max_hours: float = 0.5         # a watch item's max_hours
+    backlog_night_hours: float = 6.0     # executor-hours of backlog work drawn per night
+    night_start_hour: float = 18.0       # the night: from this local hour ...
+    night_end_hour: float = 8.0          # ... to this one (the next morning when it is smaller)
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
     targets: dict[str, RunTarget] = field(default_factory=dict)
@@ -275,7 +286,7 @@ def load(control: Path) -> Config:
         merge_minutes=float(defaults.get("merge_minutes", 10.0)),
         foreground_seconds=float(defaults.get("foreground_seconds", 60.0)),
         toasts=bool(defaults.get("toasts", True)),
-        **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS},
+        **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS + NIGHT_KEYS},
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],
         targets=_targets(control, repos, data.get("run")),

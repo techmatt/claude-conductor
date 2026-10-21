@@ -29,7 +29,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
 | `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow (as written, or null), pick (`<repo>/<path>`, or null), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; audit (it kept notes), template, resume_of (a resume item) |
-| `audit_used` | a cleanup (or general audit) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
+| `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
 | `drift` | control folder changed with no executor running | changes |
@@ -64,4 +64,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `late` | an answer file after a default or close | question, text, outcome; by |
 | `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
+| `watch_flag` | the night shift's check flagged something (`night-shift.md`) | flag (`quiet`, `eta`, `question`, `backlog`, `memory`, `run_failed`), key, text; watch (`skipped: <why>` for a stall no watch looked at) |
+| `watch` | conductor queued a watch item | reason, flags (their keys), file, by |
+| `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
+| `backlog_sleep` | at night, draws stop: the budget is spent, or nothing is eligible (once a night per reason) | key, reason, until, spent_hours, budget_hours |
 | `config_reload`, `warning` | config applied; runtime path not ignored; a toast or an `open:` launch failed; a self-restart blocked, not importing or not spawned; a stage discarded; a shared path that is a file, or not ignored; a worktree not removed (recorded for retry) or still not removed on a retry; a report still unreviewed at a checkpoint, or reviewed twice; a tick or a memory sample failed; a log not compacted; a message or amendment never delivered; a `tell:` for no live item (left in place); a signal or reorder cut short by a crash, or its journal unreadable; the daemon runs under a Claude Code session | note; checkpoint, finish (unreviewed at a checkpoint); applied (a part-applied signal); amend, tell (never delivered); verb, target (an `open:` launch) |

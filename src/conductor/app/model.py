@@ -234,6 +234,9 @@ def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
     evs = sorted((e for e in view.finishes.values()
                   if e.repo == repo and (e.item in keep or not view.settled(e.item))),
                  key=lambda e: e.id, reverse=True)
+    # Only the latest watch (docs/night-shift.md): one an hour would crowd out the work.
+    watches = [e for e in evs if e.detail.get("template") == "watch"]
+    evs = [e for e in evs if e.detail.get("template") != "watch" or e is watches[0]]
     shown = [e for n, e in enumerate(evs) if n < recent or not view.reviewed(e.item) or e.item in keep]
     return [_finished(view, e) for e in shown], len(evs)
 

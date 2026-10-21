@@ -19,7 +19,7 @@ paths: ['src/ui/**']     # legacy: globs the item may change (see `paths:`)
 stage: false             # override the repo's `stage` setting for this item
 ultracode: true          # launch with Claude Code's ultracode on (see executors.md, *Ultracode*)
 audit: true              # keep audit notes beside the report (see templates.md)
-template: cleanup        # cleanup | general_audit | test_perf | disk_audit | claude_md_cleanup | bug_hunt | self_audit: a conductor-owned prompt (templates.md)
+template: cleanup        # a conductor-owned prompt (templates.md): cleanup, general_cleanup, test_cleanup, …
 resume: sandbox/001_x    # ask a finished item's own session, forked; always readonly (resume.md)
 ---
 Prompt body.
@@ -119,8 +119,8 @@ also gains each item that starts later beside it, so the inbox's *Now* line read
 `conductor status` adds `, alongside` and `, beside <ids>`, and the app's *In flight* row
 reads `running · alongside` with `beside …` and the line in its note.
 
-**Exclusive templates** (`cleanup`, `general_audit`, `test_perf`, `disk_audit`,
-`claude_md_cleanup`; not `bug_hunt` or `self_audit`) run alone in their repo: one at the head waits for
+**Exclusive templates** (`cleanup`, `general_cleanup`, `test_cleanup`, `disk_audit`,
+`claude_md_cleanup`; not `bug_hunt`, `self_audit` or `watch`, which starts beside anything) run alone in their repo: one at the head waits for
 every running item, readonly and `alongside` ones included; nothing, readonly items
 included, starts beside one running; and nothing behind one in the queue starts early,
 so a stream of small items never starves it. Readonly yields here because a perf or

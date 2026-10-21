@@ -202,10 +202,10 @@ class MergeMixin:
             if notes.is_file():
                 report_paths.append(cfg.rel(notes))
         if rec.get("template") in audits.USES_NOTES and out["status"] != "red":
-            # What this cleanup (or general audit, its own notes) acted on: the next
+            # What this cleanup (or general cleanup, its own notes) acted on: the next
             # cleanup sees only newer notes. A red one uses none.
             used = list(rec.get("notes") or [])
-            if rec["template"] == "general_audit" and notes.is_file():
+            if audits.canonical(rec["template"]) == "general_cleanup" and notes.is_file():
                 used.append(item_id)
             if used:
                 self.log.append("audit_used", item=item_id, notes=used,
@@ -232,6 +232,8 @@ class MergeMixin:
             cost_usd=out["cost_usd"], turns=out["turns"],
             needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,
         )
+        if rec.get("template") == "watch" and out["status"] != "red":
+            self._watch_actions(rec)            # its tell, notify and draw lines (daemon_watch)
         rec["phase"] = "done"
         if run.rec_path.exists():
             self._save(run)

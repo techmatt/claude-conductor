@@ -188,6 +188,9 @@ class SignalsMixin:
             elif key == "stop":
                 if value.lower() != "daemon":
                     raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
+            elif key == "watch":
+                if value.lower() != "now":
+                    raise ValueError(f"line {n}: watch: only `watch: now` is known, got {value!r}")
             else:
                 raise ValueError(f"line {n}: unknown signal key {key!r}")
             out.append((key, value))
@@ -238,6 +241,10 @@ class SignalsMixin:
             self.log.append("notify", paths=[rel], text=value, by=self._by or "unknown")
         elif key == "stop":
             self.stop_requested = {"paths": [rel], **({"by": self._by} if self._by else {})}
+        elif key == "watch":
+            # Asked for: the planner rule and memory don't hold it back (daemon_watch).
+            if why := self._launch_watch(f"asked for by {self._by or 'unknown'} (`watch: now`)", [], force=True):
+                raise ValueError(f"watch: {why}")
 
     def _one(self, found: list[Path], verb: str, ref: str, where: str) -> Path:
         if not found:
@@ -324,9 +331,10 @@ class SignalsMixin:
         (`report_changed`); the event keeps the hashes the change is checked against."""
         item_id, view = self._finished_item("reviewed", ref)
         if view.reviewed(item_id):
-            prior = view.reviews[item_id]
+            prior = view.reviews.get(item_id)
+            when = f"#{prior.id}, {clock(prior.ts)}" if prior else "a watch's report needs no review"
             self.log.append("warning", item=item_id, paths=[rel],
-                            note=f"{item_id} was already reviewed (#{prior.id}, {clock(prior.ts)}); nothing changed")
+                            note=f"{item_id} was already reviewed ({when}); nothing changed")
             return
         fin = view.finishes[item_id]
         self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,

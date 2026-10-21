@@ -1,4 +1,4 @@
-General audit of `{{repo}}`. There are no notes to go on: audit the whole repo yourself,
+General cleanup of `{{repo}}`. There are no notes to go on: audit the whole repo yourself,
 then act on what you found.
 
 1. Audit. Read the repo end to end: layout, code, tests, CLAUDE.md, README and other
@@ -20,4 +20,4 @@ The report, after its header, has:
 
 The status is `done` when everything clear was carried out (deferred design calls do
 not make it partial), `partial` when clear work was left undone, and `red` only when
-something is broken. A red audit leaves its notes for the next cleanup.
+something is broken. A red general cleanup leaves its notes for the next cleanup.

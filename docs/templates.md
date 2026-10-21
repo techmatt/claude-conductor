@@ -1,14 +1,22 @@
 # Audits and templates
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
-live in `src/conductor/templates/` (`cleanup.md`, `general_audit.md`, `test_perf.md`,
-`disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`, `self_audit.md`; `audit.md` is the *Audit notes*
+live in `src/conductor/templates/` (`cleanup.md`, `general_cleanup.md`, `test_cleanup.md`,
+`disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`, `self_audit.md`, `watch.md`; `audit.md` is the *Audit notes*
 paragraph, not a template) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
 `.prompt.md`). The texts use `{{name}}` placeholders (`repo`, `project`, `notes`, `usage`,
-`original`). Every template but `bug_hunt` and `self_audit` is
+`original`).
+
+**Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
+`self_audit`); one that edits is a *cleanup*. So `general_audit` became `general_cleanup` and
+`test_perf` `test_cleanup` (prompt 36); the old names are aliases (`audits.ALIASES`): an item
+queued under one runs the new text and is recorded under the new name, and an event or run
+record carrying an old one still counts (maintenance facts, exclusivity, notes).
+
+Every template but `bug_hunt`, `self_audit` and `watch` is
 *exclusive* (`audits.EXCLUSIVE`): it runs alone in its repo, and a template item with
 `alongside` is invalid (`items.md`, *Exclusive templates*).
 
@@ -26,10 +34,10 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
   the item's own body, if any. The executor carries out what is clear and well
   defined and defers every design-level call (its report lists them under
   **Deferred**, with options and a recommendation). A cleanup never stages.
-- **`template: general_audit`**. The same, with no notes to go on: it behaves as
+- **`template: general_cleanup`** (was `general_audit`). The same, with no notes to go on: it behaves as
   `audit: true` (it writes its own notes file), audits the whole repo, then carries out
   the clear items and defers the design calls.
-- **`template: test_perf`**. Set up or tighten a fast/slow lane split and speed tests
+- **`template: test_cleanup`** (was `test_perf`). Set up or tighten a fast/slow lane split and speed tests
   up generally; a small loss of thoroughness or moving a slow test to the slow lane is
   allowed; the report gives before/after timings per lane (the one report where test
   detail belongs). It uses no notes.
@@ -92,16 +100,21 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
   report has **Summary** and **About conductor** (findings about the template,
   preamble, planner or tools, for the planner to carry to conductor's `planner-notes.md`). Not
   exclusive: it may run beside anything.
+- **`template: watch`** (conductor writes these; `night-shift.md`). A short readonly look
+  at the running items: a real stall or busy, on goal or drifting. Its `{{usage}}` is each
+  executing item's prompt (quoted), outline, progress and recent events, the open questions
+  and recent flags; its body says why it was launched. Its `## Actions` lines (tell, notify,
+  draw) are carried out when it finishes; it never cancels, kills, amends or answers.
 
 **Which notes are unused.** A note is a finished item whose `finish` event has
-`audit: true` (an `audit: true`, general audit or self-audit item) and whose `.audit.md` exists and is not blank, in any status (a red
+`audit: true` (an `audit: true`, general cleanup or self-audit item) and whose `.audit.md` exists and is not blank, in any status (a red
 item's notes are still notes). It is *used* once an `audit_used` event names it, and
 *claimed* while a running cleanup's `.run.json` lists it under `notes`. A cleanup takes
 every note neither used nor claimed at the moment it launches (they are in its `start`
 event as `notes`). When it concludes, unless it ended red, conductor logs
 `audit_used` (`notes`, and their files as `paths`) before its `finish`, so the next
 cleanup sees only newer notes. A red cleanup uses none: they stay for the next one. A
-general audit that does not end red uses its own notes the same way. A cleanup that
+general cleanup that does not end red uses its own notes the same way. A cleanup that
 could run but has no unused notes holds (`hold`: *cleanup: no unused audit notes*)
 until an audit item finishes or it is cancelled. While something else still blocks
 it, it only waits, since the item it waits on may add notes.

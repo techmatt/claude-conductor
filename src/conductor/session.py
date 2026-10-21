@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from . import inbox
+from .audits import canonical
 from .config import Config
 from .events import Event, EventLog
 from .state import View
@@ -20,8 +21,8 @@ NOTES = "planner-notes.md"
 MARKER = "Last report reviewed by the planner:"
 
 # What `state.md`'s *Maintenance* section tracks, in the planner's words.
-MAINTENANCE = (("bug_hunt", "bug hunt"), ("general_audit", "general audit"), ("cleanup", "cleanup"),
-               ("test_perf", "test perf audit"), ("claude_md_cleanup", "claude.md cleanup"),
+MAINTENANCE = (("bug_hunt", "bug hunt"), ("general_cleanup", "general cleanup"), ("cleanup", "cleanup"),
+               ("test_cleanup", "test cleanup"), ("claude_md_cleanup", "claude.md cleanup"),
                ("disk_audit", "disk space audit"))
 SLOW_WINDOW = 5     # a `slow:` component named in two or more of a repo's last five reports
 
@@ -104,11 +105,12 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
     fins = [ev for ev in fins if not ev.detail.get("resume_of")]     # questions about work, not work
     plain = [ev for ev in fins if not ev.detail.get("template")]
     live = {it.template: it.name for it in view.queued.get(repo, []) if it.template}
-    live |= {rec.get("template"): rec["name"] for rec in view.running.values()
+    live |= {canonical(rec.get("template")): rec["name"] for rec in view.running.values()
              if rec.get("repo") == repo and rec.get("template")}
     out = [f"### `{repo}`"]
     for tmpl, words in MAINTENANCE:
-        last = next((ev for ev in reversed(fins) if ev.detail.get("template") == tmpl), None)
+        # An item run under a template's old name (`general_audit`) counts as its new one.
+        last = next((ev for ev in reversed(fins) if canonical(ev.detail.get("template")) == tmpl), None)
         since = sum(1 for ev in plain if last is None or ev.id > last.id)
         text = (f"{last.item.split('/', 1)[1]}, {clock(last.ts)} ({last.detail.get('status')})"
                 if last else "never")

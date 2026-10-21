@@ -1,9 +1,9 @@
 """Audit notes and the standard prompt templates conductor owns.
 
-An item with `audit: true` (or `template: general_audit` or `self_audit`) keeps notes beside its
+An item with `audit: true` (or `template: general_cleanup` or `self_audit`) keeps notes beside its
 report, `reports/<repo>__NNN_name.audit.md`. A `template: cleanup` item is handed every
 note of its repo not yet used by an earlier cleanup; an `audit_used` event records the
-notes a cleanup (or a general audit, its own) used, so the next one sees only newer ones.
+notes a cleanup (or a general cleanup, its own) used, so the next one sees only newer ones.
 The template texts live in `templates/` beside this module, versioned with the repo.
 """
 
@@ -19,19 +19,35 @@ from .events import Event
 from .util import clock, read_text
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
-TEMPLATES = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_cleanup",
-             "bug_hunt", "self_audit")  # what `template:` may name
-NOTE_TEMPLATES = ("general_audit", "self_audit")           # keep audit notes without `audit: true`
-USES_NOTES = ("cleanup", "general_audit")                  # a finish not red logs `audit_used`
-NO_STAGE = ("cleanup", "disk_audit")       # what they are handed is fixed at launch, so they never stage
+TEMPLATES = ("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup",
+             "bug_hunt", "self_audit", "watch")  # what `template:` may name
+# Old names, still read: "audit" is kept for passes that only read and take notes, so the
+# two that edit code were renamed (prompt 36). Items and events written before keep theirs.
+ALIASES = {"general_audit": "general_cleanup", "test_perf": "test_cleanup"}
+
+
+def canonical(name: str | None) -> str | None:
+    """A template's current name: an alias (`general_audit`) → `general_cleanup`."""
+    return ALIASES.get(name, name) if isinstance(name, str) else name
+
+
+def _named(*names: str) -> tuple[str, ...]:
+    """`names` plus their aliases, so a run record or event written before a rename matches."""
+    return names + tuple(old for old, new in ALIASES.items() if new in names)
+
+
+NOTE_TEMPLATES = _named("general_cleanup", "self_audit")   # keep audit notes without `audit: true`
+USES_NOTES = _named("cleanup", "general_cleanup")          # a finish not red logs `audit_used`
+# What they are handed is fixed at launch, so they never stage.
+NO_STAGE = ("cleanup", "disk_audit", "watch")
 # Repo-wide templates that run alone in their repo: never beside another item, readonly ones
 # included (a perf or disk measurement is skewed by anything else running), and nothing
 # behind one in its queue starts early (`state.early_starts`), so they are never starved.
-EXCLUSIVE = ("cleanup", "general_audit", "test_perf", "disk_audit", "claude_md_cleanup")
+EXCLUSIVE = _named("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup")
 
 
 def template_text(name: str) -> str:
-    return read_text(TEMPLATE_DIR / f"{name}.md")
+    return read_text(TEMPLATE_DIR / f"{canonical(name)}.md")
 
 
 def template_version(name: str) -> str:

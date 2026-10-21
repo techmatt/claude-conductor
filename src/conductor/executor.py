@@ -376,7 +376,8 @@ def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
     text = audits.fill(audits.template_text(item.template), repo=item.repo, project=cfg.project,
                        notes=notes.strip(), usage=usage.strip(), original=item.resume_of or "").rstrip() + "\n"
     if item.body.strip():
-        text += f"\n---\n\nThe planner adds, for this item:\n\n{item.body}"
+        who = "Why conductor launched this watch" if item.template == "watch" else "The planner adds, for this item"
+        text += f"\n---\n\n{who}:\n\n{item.body}"
     return text
 
 

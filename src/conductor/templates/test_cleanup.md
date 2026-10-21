@@ -1,4 +1,4 @@
-Test performance in `{{repo}}`. The tests are too slow. Make them fast to run while
+Test cleanup in `{{repo}}`: test performance. The tests are too slow. Make them fast to run while
 working, without losing what they protect.
 
 1. Measure first. Time the whole suite and find where the time goes (per-test
