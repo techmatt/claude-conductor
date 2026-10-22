@@ -1,6 +1,6 @@
 # Signals
 
-The verbs: read, clear, approve, cancel, reorder, review, reviewed, session_opened, tell,
+The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
 outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
@@ -12,6 +12,7 @@ order:
 by: planner                  # optional: every event this file causes carries detail `by`
 read: 42                     # inbox read through event #42 (`latest` or `all` = everything so far)
 clear: sandbox               # release the sandbox queue after a red
+land: sandbox/003            # land a finished red item's kept branch on main (worktrees.md)
 approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
@@ -95,6 +96,9 @@ value is ignored.
 - **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,
   *Outline*.
+- **land** — `land: <item>` (a finished item, resolved as for `reviewed`): its kept branch
+  lands on `main` as one commit, and the hold its red put on the queue is released; see
+  `worktrees.md`, *Landing a kept branch*.
 - **audit** — `audit: <item>` on a running item (resolved as for `tell`): conductor's own
   *Audit notes* text (`templates/audit.md`, the one `audit: true` gives at launch, with the
   item's notes path) sent as a tell marked `audit: true`; its run record gains `audit`, so

@@ -17,6 +17,7 @@ write.
 - `restart.ready`: the self-restart handshake (`restart.md`).
 - `memory.jsonl`: memory samples (`memory.md`).
 - `leftovers.json`: worktrees to retry removing (`worktrees.md`).
+- `landing/<repo>__NNN_name.json`: a `land:` still landing, resumed after a restart (`worktrees.md`).
 - `run-<name>.log`, `run-<name>.json`: run targets (`run-targets.md`).
 - `setup/<repo>__NNN_name.run.json` or `.stage.json`, and their `.result.json`: a setup
   runner's spec and result, removed once setup ends (`executors.md`, *Setup*).

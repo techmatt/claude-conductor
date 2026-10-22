@@ -87,7 +87,8 @@ def test_toasts_for_red_hold_and_empty_queue(env):
     env.queue("002_next", "FAKE report done")
     env.tick_until(lambda: env.events("hold"))
     titles = [t for t, _, _ in env.toasts]
-    assert "test: code/001_bad is red" in titles and "test: code/002_next held" in titles
+    assert "test: code/001_bad is red; queue `code` HELD (`clear: code`)" in titles
+    assert "test: code/002_next held" in titles
     env.signal("clear.txt", "clear: code")
     env.tick_until(lambda: env.events("queue_empty"))
     assert env.toasts[-1][0] == "test: queue `code` is empty" and "code/002_next" in env.toasts[-1][1]

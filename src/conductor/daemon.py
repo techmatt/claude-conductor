@@ -125,6 +125,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.log = EventLog(cfg.events_db, on_append=self._on_event)
         self.runs: dict[str, Run] = {}              # executing, or finished and waiting to merge
         self.stages: dict[str, Run] = {}            # staging processes still running
+        self.landings: dict[str, Run] = {}          # `land:` requests for kept red branches (daemon_merge)
         self.no_stage: set[str] = set()             # a stage failed or was discarded: launch fresh
         self.snapshot: guard.Snapshot | None = None
         self.enqueued = self._live_enqueued()
@@ -261,6 +262,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._recover_reorder()
         self._recover_signal()
         self.recover()
+        self._recover_landings()
         self._retry_leftovers("daemon start")
         self.push_ahead()
         self._compact_logs(sorted(state.scan(self.cfg, self.log).done))
@@ -428,7 +430,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
     def _active(self) -> dict[str, Run]:
         """Executor processes that may be running: guard attribution covers these. Never
         a setup, which is no executor and writes only in its worktree."""
-        active = {i: r for i, r in self.runs.items() if r.rec.get("phase", "exec") == "exec"
+        active = {i: r for i, r in [*self.runs.items(), *self.landings.items()] if r.rec.get("phase", "exec") == "exec"
                   or (r.rec.get("resolve") or {}).get("state") == "running"}
         return {**active, **{i: r for i, r in self.stages.items() if not r.setting_up}}
 
@@ -536,10 +538,15 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         if not changes:
             return
         active = self._active()
-        if not active:
-            self.log.append("drift", paths=guard.changed_paths(changes), changes=changes,
-                            note=f"changed while no executor ran ({context}); accepted")
+        own = self.own_control_git(changes)     # conductor's own push or commit (daemon_push)
+        if not active or own:
+            self.log.append("drift", paths=guard.changed_paths(changes), changes=changes, **own,
+                            note=f"changed while no executor ran ({context}); accepted" if not active else
+                            f"conductor's own git work ({own['own']}) while {', '.join(sorted(active))} ran; accepted")
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
+            for run in active.values():         # a red of conductor's making: the item still lands
+                run.rec.setdefault("own_changes", []).extend(changes)
+                self._save(run)
             return
         taken = self.snapshot.taken
         guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
@@ -1023,8 +1030,12 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         if report_status == "red" and not reasons:
             reasons.append("report says red")
         status = "red" if reasons or report_status is None else report_status
+        # Conductor's own doing (`_guard_check`) is no red of the executor's: the item still lands.
+        own = [f"conductor's own git work changed the control folder ({'; '.join(rec['own_changes'][:3])})"
+               ] if rec.get("own_changes") else []
         rec["outcome"] = {
-            "status": status, "report_status": report_status, "reasons": reasons,
+            "status": status, "report_status": report_status, "reasons": reasons + own * (status == "red"),
+            "conductor": own,
             "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
             "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
             "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),

@@ -20,11 +20,18 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   a failing or timed-out command is a launch failure (red). Links are always removed before a worktree is deleted, so
   removing a worktree never reaches into a shared folder.
 - **Merging.** When an item finishes `done` or `partial`, it waits in `running/` (phase
-  `merge`) and is merged serially per repo, in finish order: rebase the branch onto
-  current `main` inside its worktree, fast-forward the main checkout, remove the
-  worktree and the branch (`merge`, `worktree` events), then log `finish`. So
-  `finish` means merged, and a `depends_on` item never starts before its dependency's
-  changes are on `main`.
+  `merge`) and is merged serially per repo, in finish order: **squash** the branch to
+  one commit on its fork point from `main` (subject `<repo>/<NNN_name>: <title>`, the
+  title being the item's first heading; the body lists the branch's commit subjects),
+  rebase that one commit onto current `main` inside its worktree, fast-forward the main
+  checkout, remove the worktree and the branch (`merge` with `squashed`, `worktree`
+  events), then log `finish`. So `finish` means merged, a `depends_on` item never
+  starts before its dependency's changes are on `main`, and a conflict is only a real
+  one against `main`: never a replay of the branch's own commits, or of branches merged
+  into it, one by one (Word Warriors 099). The squash is one ref move, skipped when the
+  branch already is that commit, so a restart mid-merge repeats nothing; a branch whose
+  changes net to none lands nothing. A worktree removed meanwhile is made again from
+  the branch.
   - *Prose conflict:* when every conflicted file is prose (the repo's `prose` globs,
     see `items.md`), the rebase is left stopped and a short **merge executor** (headless
     Claude Code, no ask tool, no messages, at most `merge_minutes`) runs in the item's
@@ -47,7 +54,8 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   - *Rebase conflict:* the rebase is aborted, a `conflict` event names the files, the
     item ends red; branch and worktree are kept, `main` is untouched. A rebase that
     fails with no conflicted file (a stale lock, an untracked file in the way, a file
-    held open) is a hold and is retried each tick.
+    held open), a merge executor that cannot start, or a stopped rebase that vanished
+    is conductor's machinery, not the item: a hold, retried each tick.
   - *Left its branch:* an executor whose worktree HEAD is no longer on
     `conductor/<NNN_name>` (another branch, detached) ends red, worktree kept — its
     commits are not on the branch conductor would merge.
@@ -57,7 +65,26 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
     fast-forward would overwrite one.
   - *Uncommitted changes* left in the worktree make the item red (they would be lost).
   - *Red item:* never merged; branch and worktree kept for inspection (links removed).
+    A report saying `done`/`partial` gets a `conductor:` line under its header (`red
+    (…); NOT on main: branch … kept`), so nobody reads it as merged.
+  - *Red of conductor's own making:* a control-folder change the guard pins on
+    conductor's own git work (only ref moves, during or after a control push since the
+    snapshot: a `drift` with `own`, accepted, never reverted) is no red of the
+    executor's. The item lands if its own result was `done`/`partial` with a clean
+    tree; its `finish` carries `conductor` (the reasons) and its report a `conductor:
+    landed on main as … despite …` line. No `red`, so no queue hold.
   - *readonly item:* never merged; its worktree and branch are discarded.
+
+  **Landing a kept branch: `land: <repo>/<NNN_name>`** (`signals.md`). It takes a
+  finished item's kept branch through the same squash path (a merge executor for prose
+  conflicts, holds while `main` is dirty), from `.conductor/landing/` so a restart
+  resumes it. `land` events: `state: started`, then `landed` (sha, commits, squashed);
+  the worktree and branch go, the report's `conductor:` line says it landed later, and
+  the queue hold, if that item's red holds it, is released (`clear`, by `conductor`). A
+  conflict is a `conflict` with `land: true`; branch and worktree stay. Refused for an
+  item already on `main`, without a branch, or whose worktree has uncommitted changes.
+  This is how a red item's work is recovered: never a hand-written item merging the
+  branch.
 
   *Leftover worktrees.* Removing a merged, readonly or discarded item's worktree can
   fail while another process holds a file in it (a dev server an executor left

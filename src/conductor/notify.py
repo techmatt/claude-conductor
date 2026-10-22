@@ -36,7 +36,9 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
             how = "blocking" if detail.get("block") else f"default at {detail.get('deadline_clock')}"
             return f"{project}: question from {who}", f"({how}) {detail.get('text', '')}"[:250]
         case "red":
-            return f"{project}: {who} is red", "; ".join(detail.get("reasons", []))[:250]
+            # A red that holds its queue says so: a hold must never sit silently overnight.
+            held = f"; queue `{repo}` HELD (`clear: {repo}`)" if detail.get("after_red", "stop") == "stop" else ""
+            return f"{project}: {who} is red{held}", "; ".join(detail.get("reasons", []))[:250]
         case "tamper":
             who = who or ", ".join(detail.get("concurrent", [])) or "an executor"
             return (f"{project}: {who} changed the control folder",

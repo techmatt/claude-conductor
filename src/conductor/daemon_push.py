@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import git, procs
-from .util import read_text
+from .util import read_text, stamp
 
 PUSH_SECONDS = 300          # a push still running after this is killed and reported
 CONTROL = ".control"        # the control folder's target name (`push: control` asks for it)
@@ -61,6 +61,7 @@ class PushMixin:
         self.push_wanted: dict[str, set[str]] = {}       # target → why it is wanted next
         self.closeout_push: dict | None = None           # a closeout's pushes still out, and their results
         self.control_dirty: tuple[float, float] | None = None   # (first, last) unpushed control commit, monotonic
+        self.control_pushed_at: str | None = None        # stamp of the last control push's start or end
         # target → the failure it is in (its signature), from the log: a restart repeats no warning.
         self.push_failing: dict[str, str] = {}
         for e in self.log.query(kinds=["push", "push_failed"]):
@@ -120,6 +121,18 @@ class PushMixin:
         for t in targets:
             self.want_push(t, "closeout")
 
+    def own_control_git(self, changes: list[str]) -> dict:
+        """`{"own": what}` when the guard's `changes` are conductor's own git work in the
+        control folder, else {}: only ref moves (no file, commit, HEAD or index), while a
+        control push runs or after one ran since the snapshot. Remote-tracking refs are not
+        watched at all (`guard._guarded`); this catches whatever else a push moves."""
+        if not changes or not all(c.startswith("ref ") for c in changes):
+            return {}
+        if CONTROL in self.pushes or (self.control_pushed_at and self.snapshot
+                                      and self.control_pushed_at >= self.snapshot.taken):
+            return {"own": "the control folder's push"}
+        return {}
+
     def process_pushes(self) -> None:
         if (c := self.control_dirty) and (time.monotonic() - c[1] >= CONTROL_QUIET_SECONDS
                                           or time.monotonic() - c[0] >= CONTROL_MAX_WAIT_SECONDS):
@@ -157,9 +170,13 @@ class PushMixin:
                 self._push_failed(target, branch, remote, whys, f"git did not start: {exc}", "no git")
                 return
         self.pushes[target] = Push(target, path, remote, branch, whys, popen, log)
+        if target == CONTROL:
+            self.control_pushed_at = stamp()
 
     def _push_done(self, p: Push, code: int, error: str | None = None) -> None:
         del self.pushes[p.target]
+        if p.target == CONTROL:
+            self.control_pushed_at = stamp()
         try:
             lines = [ln for ln in read_text(p.log).splitlines() if ln.strip() and not ln.startswith("hint:")]
         except OSError:

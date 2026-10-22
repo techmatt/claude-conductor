@@ -1,9 +1,10 @@
 """Per-item git worktrees: create, link shared folders, run setup, merge, remove.
 
 Each item runs on `conductor/<NNN_name>` in `<worktree_root>/<repo>/<NNN_name>`, cut
-from the repo's main branch. A finished item is merged by rebasing that branch onto
-current main inside its worktree, then fast-forwarding the main checkout. Every step is
-safe to repeat, so a merge interrupted by a daemon restart is simply run again.
+from the repo's main branch. A finished item lands as one commit: the branch is squashed
+onto its fork point, that commit is rebased onto current main inside the worktree, then
+the main checkout is fast-forwarded. Every step is safe to repeat, so a merge
+interrupted by a daemon restart is simply run again.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from . import git, procs, setup_run
 from .config import Config
 
 BRANCH_PREFIX = "conductor/"
+SQUASH_LISTED = 100              # branch commit subjects listed in a squash commit's body
 
 
 class WorktreeError(RuntimeError):
@@ -135,6 +137,7 @@ class Merge:
     sha: str | None = None       # main after the merge
     reason: str = ""
     files: list[str] = field(default_factory=list)
+    squashed: int = 0            # the branch's commits folded into the one that lands (0: done earlier)
 
 
 def _main_ready(repo_path: Path, main: str) -> Merge | None:
@@ -147,9 +150,10 @@ def _main_ready(repo_path: Path, main: str) -> Merge | None:
     return None
 
 
-def merge(cfg: Config, repo: str, path: Path, branch: str) -> Merge:
-    """Rebase `branch` onto main in its worktree, then fast-forward the main checkout.
-    A rebase that stops on conflicts in prose files only is left stopped (`resolve`)."""
+def merge(cfg: Config, repo: str, path: Path, branch: str, subject: str) -> Merge:
+    """Squash `branch` into one commit (`squash`), rebase that onto main in its worktree,
+    then fast-forward the main checkout. A rebase that stops on conflicts in prose files
+    only is left stopped (`resolve`). A worktree removed meanwhile is made again."""
     repo_path, main = cfg.repos[repo], cfg.opts(repo).main
     tip = git.rev(repo_path, f"refs/heads/{branch}")
     if tip is None:
@@ -159,12 +163,47 @@ def merge(cfg: Config, repo: str, path: Path, branch: str) -> Merge:
     if hold := _main_ready(repo_path, main):
         return hold
     if not path.is_dir():
-        return Merge("conflict", reason=f"worktree {path} is gone; cannot rebase")
+        git.run(repo_path, "worktree", "prune", check=False)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        git.run(repo_path, "worktree", "add", "-q", str(path), branch)
     if git.rebase_in_progress(path):
         git.run(path, "rebase", "--abort", check=False)
     if git.symbolic_head(path) != f"refs/heads/{branch}":
         return Merge("conflict", reason=f"the worktree is not on {branch} (HEAD {git.symbolic_head(path) or 'detached'})")
-    return _rebase(cfg, repo, path, branch, ["rebase", "-q", main, branch])
+    if changed(path):
+        return Merge("conflict", reason="uncommitted changes in the worktree: commit or discard them first")
+    if (n := squash(repo_path, path, branch, main, subject)) is None:
+        return Merge("merged", git.rev(repo_path, main), "nothing to land: the branch's changes net to none")
+    m = _rebase(cfg, repo, path, branch, ["rebase", "-q", main, branch])
+    m.squashed = n
+    return m
+
+
+def squash(repo_path: Path, path: Path, branch: str, main: str, subject: str) -> int | None:
+    """Make `branch` one commit on its fork point from main, holding its whole tree: so a
+    rebase replays the item's net change once, never each commit (or a merged branch's
+    commits) in turn. The message is `subject`, then the branch's commit subjects, oldest
+    first. One atomic ref move (`commit-tree`, then `reset --soft` to it: same tree, so
+    the worktree stays clean), and skipped when the branch already is that one commit.
+    Returns how many commits it held (0: already squashed), or None when its tree is the
+    fork point's (nothing to land; the branch is moved there)."""
+    base = git.run(repo_path, "merge-base", main, branch).strip()
+    log = git.run(repo_path, "log", "--reverse", "--format=%H %s", f"{base}..{branch}")
+    commits = [ln.split(" ", 1)[1] if " " in ln else "" for ln in log.splitlines() if ln]
+    if commits == [subject]:
+        return 0
+    trees = git.run(repo_path, "rev-parse", f"{branch}^{{tree}}", f"{base}^{{tree}}").split()
+    if trees[0] == trees[1]:
+        git.run(path, "reset", "-q", "--soft", base)
+        return None
+    listed = [f"- {c}" for c in commits[:SQUASH_LISTED]]
+    if len(commits) > SQUASH_LISTED:
+        listed.append(f"- … and {len(commits) - SQUASH_LISTED} more")
+    message = f"{subject}\n\nSquashed by conductor from {branch} ({len(commits)} commit(s)):\n" + "\n".join(listed)
+    sha = git.run(repo_path, "commit-tree", f"{branch}^{{tree}}", "-p", base, "-F", "-",
+                  input=message.encode("utf-8")).strip()
+    git.run(path, "reset", "-q", "--soft", sha)
+    return len(commits)
 
 
 def continue_rebase(cfg: Config, repo: str, path: Path, branch: str, files: list[str]) -> Merge:
@@ -174,7 +213,8 @@ def continue_rebase(cfg: Config, repo: str, path: Path, branch: str, files: list
     if hold := _main_ready(repo_path, main):
         return hold
     if not git.rebase_in_progress(path):
-        return Merge("conflict", reason="the stopped rebase is gone; cannot continue it")
+        # Conductor's machinery, not the item: the landing starts over next tick.
+        return Merge("hold", reason="the stopped rebase is gone; landing again from the branch")
     git.run(path, "add", "--", *files)
     staged = git.run(path, "diff", "--cached", "--name-only", check=False).strip()
     # A resolution identical to main leaves the replayed commit empty: skip it.

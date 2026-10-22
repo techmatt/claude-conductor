@@ -94,7 +94,8 @@ def test_ask_forks_the_original_session_and_answers_from_it(env, claude_config):
     assert original.read_text(encoding="utf-8") == before            # the original is untouched
     p = prompt(env, "003_ask")
     assert "This session is your own run of code/001_orig, resumed as a fork" in p
-    assert "This item is readonly" in p and "fake: b.txt" in p and "fake: a.txt" not in p
+    # main's commits since the original merged: 002's, squashed under its id (worktrees.squash)
+    assert "This item is readonly" in p and "code/002_later" in p and "fake: a.txt" not in p
     orig = executor.RunPaths.for_name(env.cfg, "code", "001_orig")
     extract = executor.RunPaths.for_name(env.cfg, "code", "003_ask").original
     for path in (orig.prompt, orig.report, orig.log, extract):

@@ -1,30 +1,65 @@
-"""Serial merges into main, the prose-conflict resolver, and concluding an item."""
+"""Serial merges into main (each item squashed to one commit), the prose-conflict
+resolver, `land:` for a kept red branch, the report's `conductor:` stamp, and concluding
+an item."""
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import audits, executor, git, items, procs, talk, worktrees
-from .util import file_hash, now, parse_stamp, stamp, write_text
+from . import audits, executor, git, items, procs, state, talk, worktrees
+from .util import file_hash, now, parse_stamp, read_text, stamp, write_text
 
 if TYPE_CHECKING:
     from .daemon import Run
 
+STAMP_KEY = "conductor:"
+
+
+def stamp_report(report: Path, text: str) -> bool:
+    """Put `conductor: <text>` under a report's header (after its status, blocks, carry,
+    slow and pick lines), replacing an earlier stamp. False when there is no report."""
+    try:
+        lines = read_text(report).splitlines()
+    except OSError:
+        return False
+    lines = [ln for ln in lines if not ln.strip().lower().startswith(STAMP_KEY)]
+    at, seen = 0, 0
+    for n, ln in enumerate(lines):
+        s = ln.strip()
+        if not s or s == "---":
+            continue
+        if not re.match(r"^\**(status|blocks|carry|slow|pick)\**\s*:", s, re.IGNORECASE) or seen == 5:
+            break
+        at, seen = n + 1, seen + 1
+    lines.insert(at, f"{STAMP_KEY} {text}")
+    write_text(report, "\n".join(lines) + "\n")
+    return True
+
 
 class MergeMixin:
     def process_merges(self) -> None:
-        """Merge finished items into main, per repo serially in finish order."""
+        """Land finished items on main, per repo serially in finish order, then the
+        `land:` requests (kept red branches)."""
         pending: dict[str, list[Run]] = {}
-        for run in self.runs.values():
-            if run.rec.get("phase") == "merge":
+        for run in [*self.runs.values(), *self.landings.values()]:
+            if run.rec.get("phase") in ("merge", "land"):
                 pending.setdefault(run.rec["repo"], []).append(run)
         for repo, runs in pending.items():
-            for run in sorted(runs, key=lambda r: (r.rec["exited"], r.item_id)):
+            for run in sorted(runs, key=lambda r: (r.rec["phase"] == "land", r.rec["exited"], r.item_id)):
                 if not self._merge(run):
                     break
+
+    def _squash_subject(self, run: Run) -> str:
+        """The landed commit's subject: the item id and its title (the body's first
+        heading, less a leading item number)."""
+        body = items.parse(run.md_path, run.rec["repo"]).body if run.md_path.is_file() else ""
+        title = next((ln.lstrip("#").strip() for ln in body.splitlines() if ln.startswith("#")), "")
+        title = re.sub(r"^\d+[a-z]?\s*[—–:.-]\s*", "", title)[:100].strip()
+        return f"{run.rec['item']}: {title}" if title else run.rec["item"]
 
     def _merge(self, run: Run) -> bool:
         """One merge attempt; False when it holds or a merge executor is resolving a
@@ -53,17 +88,13 @@ class MergeMixin:
                     rec.pop("resolve")              # the stopped rebase is over, one way or another
                     self._save(run)
             else:
-                m = worktrees.merge(self.cfg, rec["repo"], wt, rec["branch"])
+                m = worktrees.merge(self.cfg, rec["repo"], wt, rec["branch"], self._squash_subject(run))
         except git.GitError as exc:
             m = worktrees.Merge("hold", reason=f"git failed: {str(exc)[:300]}")
         if m.outcome == "resolve":
             return self._start_resolver(run, m)
         if m.outcome == "hold":
-            reason = f"merge waits: {m.reason}"
-            if self.holds.get(rec["item"]) != reason:
-                self.holds[rec["item"]] = reason
-                self.log.append("hold", item=rec["item"], reason=reason, merge=True)
-            return False
+            return self._merge_hold(run, m.reason)
         out = rec["outcome"]
         if m.outcome == "conflict":
             self._conflict(run, m.files, m.reason, f"rebase onto {self.cfg.opts(rec['repo']).main} conflicted",
@@ -73,8 +104,13 @@ class MergeMixin:
         # the cut isn't counted; from the cut point when main already held them (a restart).
         since = before if before and before != m.sha else rec["base"]
         commits = git.commits_between(repo_path, since, m.sha) if m.sha else []
-        out["merged"] = m.sha
         extra = {"resolved": rec["resolved"]} if rec.get("resolved") else {}
+        if m.squashed:
+            extra["squashed"] = m.squashed
+        if rec["phase"] == "land":
+            self._landed(run, m.sha, len(commits), m.reason, extra)
+            return True
+        out["merged"] = m.sha
         self.log.append("merge", item=rec["item"], branch=rec["branch"], sha=m.sha, commits=len(commits),
                         note=m.reason, **extra)
         rec["phase"] = "concluding"
@@ -84,11 +120,23 @@ class MergeMixin:
         self._conclude(run)
         return True
 
+    def _merge_hold(self, run: Run, why: str) -> bool:
+        """The landing waits on something that is not the item's content (a dirty main
+        checkout, a git failure, conductor's own machinery): tried again next tick."""
+        reason = f"merge waits: {why}"
+        if self.holds.get(run.item_id) != reason:
+            self.holds[run.item_id] = reason
+            self.log.append("hold", item=run.item_id, reason=reason, merge=True)
+        return False
+
     def _conflict(self, run: Run, files: list[str], error: str, reason: str, note: str, **extra) -> None:
         """The merge failed on content: red, rebase aborted, branch and worktree kept."""
         rec, out = run.rec, run.rec["outcome"]
         worktrees.abort_rebase(Path(rec["worktree"]))
         rec.pop("resolve", None)
+        if rec["phase"] == "land":
+            self._land_failed(run, files, error, reason, note, **extra)
+            return
         out["status"] = "red"
         out["reasons"] = out["reasons"] + [reason]
         self.log.append("conflict", item=rec["item"], branch=rec["branch"], files=files, error=error, note=note,
@@ -101,7 +149,7 @@ class MergeMixin:
     # ---------------------------------------------------------------- merge executors
     def _start_resolver(self, run: Run, m: worktrees.Merge) -> bool:
         """The rebase stopped on prose files only: a short merge executor resolves them in
-        the item's worktree. False while it runs; True if it could not start (concluded red)."""
+        the item's worktree. False while it runs or when it could not start (a hold)."""
         cfg, rec = self.cfg, run.rec
         wt, repo = Path(rec["worktree"]), rec["repo"]
         paths = executor.RunPaths.for_name(cfg, repo, rec["name"])
@@ -130,9 +178,11 @@ class MergeMixin:
             run.resolver = procs.spawn(executor.command(cfg, session, None), wt, paths.merge_prompt,
                                        paths.merge_log, paths.merge_stderr)
         except OSError as exc:
-            self._conflict(run, m.files, str(exc), f"prose conflict in {', '.join(m.files)}: the merge executor "
-                           f"did not start ({exc})", note="rebase aborted; worktree kept")
-            return True
+            # Conductor's machinery, not the item's content: abort and land again next tick.
+            worktrees.abort_rebase(wt)
+            rec.pop("resolve", None)
+            self._save(run)
+            return self._merge_hold(run, f"the merge executor did not start ({exc})")
         res["pid"], res["create_time"] = run.resolver.pid, procs.create_time(run.resolver.pid)
         self._save(run)
         self.log.append("resolve", item=rec["item"], paths=[cfg.rel(paths.merge_log)], files=m.files, step=step,
@@ -222,9 +272,13 @@ class MergeMixin:
                 continue
             self.log.append("warning", item=item_id, tell=msg.get("id"),
                             note=f"message #{msg.get('id')} was never delivered: the executor exited first")
+        if text := self._outcome_stamp(rec):
+            stamp_report(Path(rec["report"]), text)
         if out["status"] == "red":
             self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
                             reasons=out["reasons"], after_red=rec.get("after_red", "stop"))
+        if out.get("conductor"):
+            extra["conductor"] = out["conductor"]       # a red of conductor's making, landed anyway
         self.log.append(
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
@@ -248,3 +302,87 @@ class MergeMixin:
             self.log.append("queue_empty", item=item_id, repo=repo, last=item_id)
             # Not this item's own leftover: whatever held it a moment ago still does.
             self._retry_leftovers("queue empty", repo=repo, skip=item_id)
+
+    @staticmethod
+    def _outcome_stamp(rec: dict) -> str | None:
+        """The report's `conductor:` line when conductor's outcome differs from the
+        executor's `status:` line, else None."""
+        out = rec["outcome"]
+        if out.get("merged") and out.get("conductor"):
+            return (f"landed on main as {out['merged'][:10]} despite a red of conductor's own making "
+                    f"({'; '.join(out['conductor'])}); the work is on main")
+        if out["status"] == "red" and out.get("report_status") in ("done", "partial"):
+            kept = rec.get("branch") and not rec.get("readonly") and not out.get("launch_failed")
+            where = f"branch `{rec['branch']}` kept; `land: {rec['item']}` lands it" if kept else "nothing landed"
+            return f"red ({'; '.join(out['reasons'])}); NOT on main: {where}"
+        return None
+
+    # ---------------------------------------------------------------- land: a kept red branch
+    def _landing_path(self, item_id: str) -> Path:
+        return self.cfg.state_dir / "landing" / f"{item_id.replace('/', '__')}.json"
+
+    def _land(self, ref: str, rel: str) -> None:
+        """`land: <item>`: land a finished item's kept branch on main through the same
+        squash path as any merge (a merge executor for prose conflicts). Its record lives in
+        `.conductor/landing/` until it lands or conflicts, so a restart resumes it."""
+        from .daemon import Run
+        item_id, view = self._finished_item("land", ref)
+        repo, name = item_id.split("/", 1)
+        fin = view.finishes[item_id]
+        if item_id in self.landings:
+            raise ValueError(f"land: {item_id} is already landing")
+        if fin.detail.get("merged") or (prior := self.log.last("land", item=item_id)) \
+                and prior.detail.get("state") == "landed":
+            raise ValueError(f"land: {item_id} is already on main")
+        rec_path = self.cfg.path("done", repo, f"{name}.run.json")
+        rec = state.read_run(rec_path) if rec_path.is_file() else {}
+        branch = rec.get("branch")
+        if not branch or rec.get("readonly") or not git.rev(self.cfg.repos[repo], f"refs/heads/{branch}"):
+            raise ValueError(f"land: {item_id} has no kept branch to land")
+        wt = Path(rec["worktree"])
+        if wt.is_dir() and worktrees.changed(wt):
+            raise ValueError(f"land: {item_id}'s worktree {wt} has uncommitted changes; commit or discard them first")
+        rec.pop("resolve", None)
+        rec.update(phase="land", resolved=[], resolve_steps=0, land_signal=rel)
+        run = Run(rec, self._landing_path(item_id), self.cfg.path("done", repo, f"{name}.md"))
+        run.rec_path.parent.mkdir(parents=True, exist_ok=True)
+        self._save(run)
+        self.landings[item_id] = run
+        self.log.append("land", item=item_id, paths=[rel], branch=branch, state="started")
+
+    def _recover_landings(self) -> None:
+        from .daemon import Run
+        for p in sorted((self.cfg.state_dir / "landing").glob("*.json")):
+            rec = state.read_run(p)
+            self.landings[rec["item"]] = Run(rec, p, self.cfg.path("done", rec["repo"], f"{rec['name']}.md"))
+            self.log.append("recover", item=rec["item"], note="land: interrupted by a restart; resumed")
+
+    def _end_landing(self, run: Run) -> None:
+        run.rec_path.unlink(missing_ok=True)
+        self.landings.pop(run.item_id, None)
+        self.holds.pop(run.item_id, None)
+
+    def _landed(self, run: Run, sha: str | None, commits: int, note: str, extra: dict) -> None:
+        from .daemon_signals import report_hashes
+        rec, item_id, repo = run.rec, run.item_id, run.rec["repo"]
+        self.want_push(repo, "merge")
+        self._worktree_op(rec, "removed", "landed by land:")
+        stamp_report(Path(rec["report"]), f"red at finish ({'; '.join(rec['outcome']['reasons'])}); landed "
+                                          f"later by `land:` on main as {(sha or '')[:10]}")
+        # The stamp is conductor's: a reviewed report stays reviewed (`check_reviewed_reports`).
+        self.log.append("land", item=item_id, paths=[self.cfg.rel(Path(rec["report"]))], branch=rec["branch"],
+                        sha=sha, commits=commits, state="landed", note=note,
+                        hashes=report_hashes(self.cfg, item_id), **extra)
+        self._end_landing(run)
+        if (ev := state.scan(self.cfg, self.log).red_hold.get(repo)) and ev.item == item_id:
+            self.log.append("clear", repo=repo, paths=[rec["land_signal"]], by="conductor",
+                            note=f"{item_id}, whose red held the queue, landed")
+
+    def _land_failed(self, run: Run, files: list[str], error: str, reason: str, note: str, **extra) -> None:
+        rec = run.rec
+        self.log.append("conflict", item=run.item_id, branch=rec["branch"], files=files, error=error, note=note,
+                        land=True, **extra)
+        self._worktree_op(rec, "kept", "land: conflicted; branch and worktree kept")
+        stamp_report(Path(rec["report"]), f"red ({'; '.join(rec['outcome']['reasons'])}); `land:` failed too "
+                                          f"({reason}); NOT on main: branch `{rec['branch']}` kept")
+        self._end_landing(run)

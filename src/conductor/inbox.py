@@ -98,6 +98,10 @@ def describe(ev: Event) -> str:
             text = f"{who} finished **{d.get('status')}**"
             if d.get("reasons"):
                 text += f" ({'; '.join(d['reasons'])})"
+            if d.get("status") == "red" and d.get("report_status") in ("done", "partial"):
+                text += f" · its report says {d['report_status']}: NOT on main"
+            if d.get("conductor"):
+                text += f" · landed despite conductor's own red ({'; '.join(d['conductor'])})"
             if resumed := resume_label(d):
                 text += f" · {resumed}"
             if d.get("blocks") not in (None, "none"):
@@ -200,14 +204,23 @@ def describe(ev: Event) -> str:
             text = f"{who} staged; waits for the lock" + (f": {plan[0][:160]}" if plan else "")
         case "merge":
             text = f"{who} merged `{d.get('branch')}` into main at {str(d.get('sha') or '')[:10]} ({d.get('commits')} commit(s))"
+            if d.get("squashed"):
+                text += f", squashed from {d['squashed']}"
             if d.get("resolved"):
                 text += f"; prose conflict resolved in {', '.join(d['resolved'][:5])}"
+        case "land" if d.get("state") == "started":
+            text = f"{who} landing `{d.get('branch')}` on main (`land:`)"
+        case "land":
+            text = f"{who} landed `{d.get('branch')}` on main at {str(d.get('sha') or '')[:10]} (`land:`)"
+            if d.get("squashed"):
+                text += f", squashed from {d['squashed']}"
         case "resolve":
             text = (f"{who} prose conflict in {', '.join(d.get('files', [])[:5])}; merge executor resolving "
                     f"(pid {d.get('pid')})")
         case "conflict":
             files = f" in {', '.join(d['files'][:5])}" if d.get("files") else ""
-            text = f"{who} rebase conflicted{files}; `{d.get('branch')}` kept, main untouched"
+            text = (f"{who} {'`land:` ' if d.get('land') else ''}rebase conflicted{files}; `{d.get('branch')}` kept, "
+                    "main untouched")
             if d.get("resolver"):
                 text += f"; merge executor failed: {d.get('error')}"
         case "paths_violation":
@@ -233,7 +246,7 @@ def describe(ev: Event) -> str:
         case "read":
             text = f"read mark → #{d.get('through')}" + (f" (closeout {d['closeout']})" if d.get("closeout") else "")
         case "clear":
-            text = f"queue `{ev.repo}` cleared"
+            text = f"queue `{ev.repo}` cleared" + (f": {d['note']}" if d.get("note") else "")
         case "enqueue":
             extras = [f"{k}: {d[k]}" for k in ("depends_on", "locks") if d.get(k)]
             extras += [k for k in ("needs_planner", "readonly", "ultracode", "audit") if d.get(k)]

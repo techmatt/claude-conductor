@@ -165,7 +165,7 @@ class SignalsMixin:
             elif key in ("clear", "push"):
                 if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit"):
+            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit", "land"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reorder":
@@ -235,6 +235,8 @@ class SignalsMixin:
             self._tell(value, rel)
         elif key == "outline":
             self._tell(f"{value} {talk.OUTLINE_REQUEST}", rel, outline_request=True)
+        elif key == "land":
+            self._land(value, rel)                      # daemon_merge
         elif key == "audit":
             self._audit(value, rel)
         elif key == "checkpoint":
@@ -380,6 +382,9 @@ class SignalsMixin:
                 continue                    # held or mid-save: never a change; looked at again next scan
             self.report_stats[item_id] = key
             if now_hashes == base.detail["hashes"]:
+                continue
+            landed = self.log.last("land", item=item_id)    # conductor's own stamp after a `land:`
+            if landed and landed.id > base.id and landed.detail.get("hashes") == now_hashes:
                 continue
             # What differs from the review, not just from the last change: the flag names it all.
             what = [k for k in now_hashes if now_hashes[k] != rev.detail["hashes"].get(k)]
