@@ -89,11 +89,11 @@ class ReceiptsMixin:
                 shared = d.get("shares_number")
                 self._write_receipt(rel, [ev], result=f"queued as {ev.item}" + (
                     f"; its number is also {', '.join(shared)}'s: name it in full, never by number"
-                    if shared else ""))
+                    if shared else ""), warning=d.get("warning"))
             case "edited":
                 how = "the launch it raced was undone; " if d.get("launching") else ""
                 how += "its stage is redone" if d.get("staged") else "it runs the new text"
-                self._write_receipt(rel, [ev], result=f"rewritten: {how}")
+                self._write_receipt(rel, [ev], result=f"rewritten: {how}", warning=d.get("warning"))
             case "invalid" if ev.item and rel.startswith("queue/"):
                 self._write_receipt(rel, [ev], reason=self._reason(ev))
             case "amended":
@@ -131,13 +131,13 @@ class ReceiptsMixin:
     def _nap(self) -> None:
         """One poll's sleep, cut short by any planner write (a request, signal, queue item or
         amendment, proposal, answer or backlog file, new or rewritten), and by a file still
-        settling (`SIGNAL_SETTLE_SECONDS`) coming of age: every kind's receipt is there about
-        a second after the write, not a poll or two later (Word Warriors session 11)."""
-        settle = daemon_signals.SIGNAL_SETTLE_SECONDS
+        settling (`daemon_signals.signal_settle`) coming of age: every kind's receipt is there
+        about a second after the write, not a poll or two later (Word Warriors session 11)."""
         before, pending = self._planner_writes(), request.pending(self.cfg)
         end = time.monotonic() + self.cfg.poll_seconds
-        if young := [m for m in before.values() if time.time() - m / 1e9 < settle]:
-            end = min(end, time.monotonic() + max(young) / 1e9 + settle - time.time() + 0.05)
+        ages = [m / 1e9 + daemon_signals.signal_settle(os.path.basename(p)) for p, m in before.items()]
+        if young := [t for t in ages if t > time.time()]:
+            end = min(end, time.monotonic() + min(young) - time.time() + 0.05)
         while (left := end - time.monotonic()) > 0:
             time.sleep(min(left, WRITE_WAKE_SECONDS))
             if request.pending(self.cfg) != pending or self._planner_writes() != before:
@@ -217,10 +217,12 @@ class ReceiptsMixin:
         return f"---\n{head}\n---\n" + "".join(f"{ln}\n" for ln in lines)
 
     def _write_receipt(self, rel: str, evs: list[Event], result: str | None = None,
-                       reason: str | None = None, applied: list | None = None, pending: str | None = None) -> None:
-        """`outcome: accepted` with what happened (`result`), `refused` with `reason` (and,
-        for a signal cut short, the lines `applied` before it), or `pending` with what it
-        waits for (`result`); then one line per event."""
+                       reason: str | None = None, applied: list | None = None, pending: str | None = None,
+                       warning: str | None = None) -> None:
+        """`outcome: accepted` with what happened (`result`) and any `warning` (a queue item
+        whose `depends_on` will hold it), `refused` with `reason` (and, for a signal cut short,
+        the lines `applied` before it), or `pending` with what it waits for (`result`); then
+        one line per event."""
         if not pending:
             self._pending.pop(rel, None)
         try:
@@ -228,7 +230,7 @@ class ReceiptsMixin:
         except OSError:
             mtime = None                    # a signal or request is gone by now; its name is unique anyway
         outcome = "refused" if reason else "pending" if pending else "accepted"
-        meta = {"write": rel, "outcome": outcome, "result": pending or result,
+        meta = {"write": rel, "outcome": outcome, "result": pending or result, "warning": warning,
                 "reason": reason, "applied": applied, "at": clock(now()), "written_ms": mtime,
                 "events": [e.id for e in evs]}
         lines = [self._line(e) for e in evs[:LINES]]

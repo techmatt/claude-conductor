@@ -337,3 +337,28 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
         if status not in ("queued", "running", "done"):
             return hold(f"dependency {dep} ended {status}")
     return None
+
+
+def dependency_warning(view: View, item: Item, cancelled: set[str]) -> str | None:
+    """Why `item`'s `depends_on` can never be met in order, said at write time so the planner
+    fixes it at once instead of finding a hold later: a later item in its own queue, or one
+    already red, partial or cancelled (`cancelled`: ids of cancelled items). None if it can
+    be met, or names something not written yet."""
+    known = view.known()
+    queue = [i.id for i in view.queued.get(item.repo, [])]
+    out = []
+    for ref in item.depends_on:
+        dep = items.resolve_ref(ref, item.repo, known)
+        if dep is None:
+            if gone := items.resolve_ref(ref, item.repo, sorted(cancelled)):
+                out.append(f"`{ref}` names {gone}, which was cancelled: it holds as an unknown dependency")
+            continue
+        status = view.status_of(dep)
+        if status == "queued" and dep in queue and item.id in queue and queue.index(dep) > queue.index(item.id):
+            out.append(f"`{ref}` names {dep}, later in its own queue: it holds once it is the head")
+        elif status not in ("queued", "running", "done"):
+            out.append(f"`{ref}` names {dep}, which ended {status}: it holds once it is the head")
+    if not out:
+        return None
+    return "depends_on can't be met: " + "; ".join(out) + (
+        ". Same-repo order already serializes; drop it or name an item that can finish done")

@@ -200,6 +200,57 @@ def test_any_planner_write_cuts_the_nap_short(env, monkeypatch):
     assert time.monotonic() - start < 1.5
 
 
+def test_a_planner_signal_receipt_lands_within_a_second_and_a_half(env, monkeypatch):
+    """The daemon's loop (tick, nap) with the real settles: a `planner-*` signal's receipt is
+    there as fast as a request's (Word Warriors session 11 saw 2-3s), another signal waits 1s."""
+    import threading
+    monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", 1.0)
+    monkeypatch.setattr(daemon_signals, "PLANNER_SIGNAL_SETTLE_SECONDS", 0.25)
+    env.d.cfg.poll_seconds = 2
+    env.d.tick()
+    for name, low in [("planner-20261022-100000.signal", 0), ("app-20261022-100000.signal", 1.0)]:
+        got = env.control / rel_for(f"signals/{name}")
+        timer = threading.Timer(0.1, env.signal, (name, "by: planner\ncheckpoint: fast\n"))
+        start = time.monotonic()
+        timer.start()
+        while not got.exists() and time.monotonic() - start < 5:
+            env.d._nap()
+            env.d.tick()
+        took = time.monotonic() - 0.1 - start
+        assert got.exists() and low <= took < low + 1.5, (name, took)
+        assert receipt(env, f"signals/{name}")[0]["outcome"] == "accepted"
+
+
+def test_an_impossible_dependency_is_warned_of_at_write_time(env):
+    """Accepted, with a `warning` naming why it will hold (Word Warriors 098 → 100 → 102)."""
+    (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)
+    (env.control / "done" / "code" / "001_p.md").write_text("x\n", encoding="utf-8")
+    env.d.log.append("finish", item="code/001_p", repo="code", status="partial")
+    env.queue("010_a", "do it", depends_on="011_b")         # held at the head: nothing launches
+    env.queue("011_b", "do it")
+    env.queue("012_c", "do it")
+    env.queue("013_d", "do it", depends_on="010")           # earlier in its queue: fine
+    env.d.tick()
+    meta, _ = receipt(env, "queue/code/010_a.md")
+    assert meta["outcome"] == "accepted" and meta["result"] == "queued as code/010_a"
+    assert "`011_b` names code/011_b, later in its own queue" in meta["warning"]
+    assert "warning" not in receipt(env, "queue/code/011_b.md")[0]
+    assert "warning" not in receipt(env, "queue/code/013_d.md")[0]
+    env.signal("planner-1.signal", "by: planner\ncancel: 012_c\n")
+    env.d.tick()
+    env.queue("014_e", "do it", depends_on="[001_p, 012_c]")
+    env.d.tick()
+    meta, _ = receipt(env, "queue/code/014_e.md")
+    assert meta["outcome"] == "accepted" and "code/001_p, which ended partial" in meta["warning"]
+    assert "code/012_c, which was cancelled" in meta["warning"]
+    [ev] = [e for e in env.events("enqueue") if e.item == "code/014_e"]
+    from conductor import inbox
+    assert "warning: depends_on can't be met" in inbox.describe(ev)
+    env.queue("010_a", "do it again")                       # a rewrite that drops it: no warning
+    env.d.tick()
+    assert "warning" not in receipt(env, "queue/code/010_a.md")[0]
+
+
 def test_old_receipts_are_pruned(env, monkeypatch):
     old = env.control / "receipts" / "signals" / "planner-0.md"
     old.parent.mkdir(parents=True, exist_ok=True)

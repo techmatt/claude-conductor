@@ -49,6 +49,12 @@ An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numb
 numerically, so it still resolves. A number two items share (`receipts.md`)
 names neither: a `depends_on` on it holds.
 
+A `depends_on` that can never be met in order is flagged when the item is queued or
+rewritten, not only as a hold once it is the head: the receipt stays `accepted` and gains
+a `warning` naming each such dependency and why (later in the same queue; already ended
+`partial`, `red` or the like; cancelled), and the `enqueue` event carries it too
+(`state.dependency_warning`). A dependency not written yet is not flagged.
+
 **Scheduling.** Each repo starts its items strictly in NNN order (readonly and
 `alongside` items excepted, below); the head of a queue that cannot run holds everything behind it. Different repos run in parallel. The head
 runs when all of these hold:

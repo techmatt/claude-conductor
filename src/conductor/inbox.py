@@ -254,6 +254,7 @@ def describe(ev: Event) -> str:
             extras += [f"alongside: {d['alongside']}"] if d.get("alongside") else []
             extras += [resume_label(d)] if d.get("resume_of") else []
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
+            text += f"; warning: {d['warning']}" if d.get("warning") else ""
         case "edited":
             text = f"{who} rewritten in the queue; it runs the new text" + (
                 " (its stage is discarded; it launches fresh)" if d.get("staged") else "")

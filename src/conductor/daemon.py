@@ -630,6 +630,17 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._refuse_late_writes(view)
         queued: dict[str, items.Item] = {}
         edited: set[str] = set()
+        cancelled: set[str] | None = None
+
+        def dep_warning(item: items.Item) -> dict:
+            nonlocal cancelled
+            if not item.depends_on:
+                return {}
+            if cancelled is None:
+                cancelled = {e.item for e in self.log.query(kinds=["cancel"]) if e.item}
+            warning = state.dependency_warning(view, item, cancelled)
+            return {"warning": warning} if warning else {}      # its receipt says so (docs/receipts.md)
+
         for repo, queue in view.queued.items():
             for item in queue:
                 queued[item.id] = item
@@ -640,14 +651,15 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     if shared := [i for i in items.ref_matches(str(item.num), repo, view.known())
                                   if i != item.id and item.num]:
                         meta["shares_number"] = shared              # its receipt says: name it in full
-                    self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)], **meta)
+                    self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)],
+                                    **meta, **dep_warning(item))
                 # A queued item may be rewritten until it launches: the launch (and a
                 # stage, which a change discards below) reads the file as it is then.
                 digest = file_hash(item.path)
                 if self.queued_hashes.get(item.id, digest) != digest:
                     edited.add(item.id)
                     self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    staged=item.id in view.staged)
+                                    staged=item.id in view.staged, **dep_warning(item))
                 self.queued_hashes[item.id] = digest
                 if item.errors:
                     # Per file version and reason: a `resume:` item's reason moves with the queue.

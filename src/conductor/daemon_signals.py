@@ -24,6 +24,13 @@ if TYPE_CHECKING:
 
 
 SIGNAL_SETTLE_SECONDS = 1.0     # a signal or amend file younger than this may still be being written
+# The planner's bridge writes a signal whole in one call, so a `planner-*` signal is taken once
+# it reads and is this old: its receipt lands as fast as a request's (docs/receipts.md).
+PLANNER_SIGNAL_SETTLE_SECONDS = 0.25
+
+
+def signal_settle(name: str) -> float:
+    return PLANNER_SIGNAL_SETTLE_SECONDS if name.startswith("planner-") else SIGNAL_SETTLE_SECONDS
 AUDIT_LATE = "From conductor: this item now keeps audit notes, for the rest of its run.\n\n"   # `audit:`
 
 
@@ -74,7 +81,11 @@ class SignalsMixin:
         if not sdir.is_dir():
             return
         for f in sorted(p for p in sdir.iterdir() if p.is_file()):
-            if f.suffix in (".bad", ".tmp") or time.time() - f.stat().st_mtime < SIGNAL_SETTLE_SECONDS:
+            if f.suffix in (".bad", ".tmp") or time.time() - f.stat().st_mtime < signal_settle(f.name):
+                continue
+            try:
+                f.read_bytes()                          # its writer still holds it: a later tick
+            except OSError:
                 continue
             rel = f"signals/{f.name}"
             by, applied = None, []

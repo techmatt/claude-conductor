@@ -36,6 +36,8 @@ events: [812, 813]
 ```
 
 - `outcome`: `accepted`, with `result` (what happened), or `refused`, with `reason`.
+  A queue item's `accepted` receipt (enqueued or rewritten) may also carry `warning`: a
+  `depends_on` that can never be met in order, so it will hold (`items.md`); fix it now.
   A signal refused part-way also has `applied`: the lines that applied before the one
   that failed (they stay applied). A request held by an earlier one on the same targets
   is `pending`, its `result` what it waits for, replaced by the final receipt. A request
@@ -71,8 +73,11 @@ take ~6s). Between ticks (`poll_seconds`, 2) the daemon looks every 0.25s
 `proposed/`, `questions/`, `queue/<repo>/`, `backlog/<repo>/`) and ticks at once when
 anything there is new or rewritten, or when a file still settling comes of age. A
 queue item, proposal, backlog file or request is taken as soon as it reads (a file its
-writer holds open does not); a signal or amend file, applied exactly once, waits until
-it is 1s old (`SIGNAL_SETTLE_SECONDS`). A tick's own length adds to all of them.
+writer holds open does not); a signal or amend file, applied exactly once, also waits
+until it has stopped changing: a `planner-*` signal 0.25s (`PLANNER_SIGNAL_SETTLE_SECONDS`;
+the bridge writes it whole in one call), any other 1s (`SIGNAL_SETTLE_SECONDS`). The nap
+ends when the first settling file comes of age. A tick's own length adds to all of them:
+a planner signal's receipt lands about 1.3s after the write, like a request's.
 
 ## Lifetime
 

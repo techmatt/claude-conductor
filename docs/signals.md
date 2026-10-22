@@ -145,7 +145,9 @@ value is ignored.
 - **autopilot** — `autopilot: off|night|always` (`on` is `always`): logs `autopilot`
   (mode, was), which every later decision reads (`night-shift.md`, *Autopilot*).
 
-Conductor processes a file about a second after it stops changing and deletes it. The
+Conductor processes a file once it reads and has stopped changing, then deletes it: a
+`planner-*` file (the planner's bridge writes it whole, in one call) at 0.25s old
+(`PLANNER_SIGNAL_SETTLE_SECONDS`), any other at a second (`SIGNAL_SETTLE_SECONDS`). The
 whole file is syntax-checked first: an unknown key or malformed line rejects it with
 nothing applied. Each verb then checks what it acts on before changing anything; a
 verb that fails there stops the file, and the lines before it stay applied (the
