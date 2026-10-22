@@ -17,7 +17,7 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Each upload goes once to a fresh workspace path, never edited after.
 - Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
-- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (a signal: `receipts\signals\planner-<stamp>.md`, never `.signal.md`; a request: `receipts\requests\<stamp>.md`): `accepted` with `result`, `pending` (a request waiting: for what), or `refused` with `reason`. Missing: not handled yet. `written_ms` older than a rewrite: the old version's.
+- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (a signal: `receipts\signals\planner-<stamp>.md`, never `.signal.md`; a request: `receipts\requests\<stamp>.md`): `accepted` with `result`, `pending` (a request held by an earlier one: which), or `refused` with `reason`. Missing: not handled yet (a request applies within a second of `request.md` landing; re-stage once). `written_ms` older than a rewrite: the old version's.
 - **Never list a control folder recursively**: every file is named below.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (in a code repo), or a command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.
 
@@ -42,7 +42,7 @@ C:\Code\<project>-control\
 
 **Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad`; lines before the failing one stay applied. Rules: `docs/signals.md`.
 
-**Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md`:
+**Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md`, written last (it applies the moment its targets are there):
 
 ```
 ---

@@ -14,8 +14,8 @@ from . import git
 from .config import RUNTIME, Config
 from .util import FrontMatterError, read_text, split_front_matter
 
-SETTLE_SECONDS = 2.0      # a request is applied only once its files stop changing
 REQUEST_WAIT_SECONDS = 60.0  # how long after request.md appears its missing targets are waited for
+FRESH_SECONDS = 2.0       # a request.md this young that does not parse may still be being written
 FAILED_SUFFIX = ".failed"
 
 
@@ -52,9 +52,14 @@ def pending(cfg: Config) -> list[Path]:
                   if d.is_dir() and not d.name.endswith(FAILED_SUFFIX) and (d / "request.md").is_file())
 
 
-def settled(d: Path) -> bool:
-    newest = max((p.stat().st_mtime for p in d.rglob("*") if p.is_file()), default=0)
-    return time.time() - newest >= SETTLE_SECONDS
+def readable(d: Path, names: list[str]) -> bool:
+    """Every file opens and reads: on Windows a file still held open by its writer does not."""
+    try:
+        for n in names:
+            (d / n).read_bytes()
+    except OSError:
+        return False
+    return True
 
 
 def _check_target(t: str) -> str:
@@ -103,35 +108,27 @@ def parse(d: Path) -> Request:
 
 
 def ready(d: Path) -> Request | None:
-    """The request once settled with every target present; None while it is still being written.
+    """The request once request.md and every target it lists are present and readable; None
+    while its files are still arriving. No settle timer: the planner writes request.md last.
 
     Missing targets are waited for until REQUEST_WAIT_SECONDS after request.md's mtime (so the
-    wait survives a restart), then fail. Any other parse error fails at once.
+    wait survives a restart), then fail. A request.md that does not parse is waited for while it
+    is younger than FRESH_SECONDS (half written); any other parse error fails at once.
     """
-    if not settled(d):
-        return None
     try:
+        if not readable(d, ["request.md"]):
+            return None
         req = parse(d)
     except MissingTargets as exc:
         waited = time.time() - (d / "request.md").stat().st_mtime
         if waited < REQUEST_WAIT_SECONDS:
             return None
         raise MissingTargets(exc.missing, waited) from None
-    # A late target that turned up between the settle check and parse's scan may be half written:
-    # its fresh mtime unsettles the folder again, and the request waits for a later tick.
-    return req if settled(d) else None
-
-
-def waiting_for(d: Path) -> str:
-    """What a request `ready` returned None for is waiting for, in words (its pending receipt)."""
-    try:
-        parse(d)
-    except MissingTargets as exc:
-        return (f"its targets {exc.missing} (until {REQUEST_WAIT_SECONDS:g}s after request.md was "
-                "written; then it fails)")
-    except (RequestError, OSError):
-        pass
-    return "its files to settle (still being written)"
+    except RequestError:
+        if time.time() - (d / "request.md").stat().st_mtime < FRESH_SECONDS:
+            return None
+        raise
+    return req if readable(d, req.targets) else None
 
 
 def _normalize(data: bytes) -> bytes:

@@ -169,7 +169,7 @@ def env_template(tmp_path_factory) -> Path:
 
 @pytest.fixture
 def env(tmp_path, monkeypatch, env_template):
-    monkeypatch.setattr(request, "SETTLE_SECONDS", 0)
+    monkeypatch.setattr(request, "FRESH_SECONDS", 0)
     monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", 0)
     e = Env(tmp_path, env_template)
     yield e

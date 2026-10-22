@@ -28,6 +28,7 @@ notify: ready when you are   # a desktop toast
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 watch: now                   # queue a watch item now (night-shift.md); refused while one is queued or running
 push: sandbox                # push sandbox's main to its remote now (push.md); its push or push_failed follows
+push: control                # the same for the control folder (when no repo is named control)
 autopilot: night             # off | night | always (`on` = always): may the night shift start work itself (night-shift.md)
 ```
 

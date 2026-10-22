@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import desktop, items, nightshift, procs, state, talk
+from .daemon_push import CONTROL
 from . import review as review_mod
 from . import session as session_mod
 from .events import Event
@@ -156,7 +157,7 @@ class SignalsMixin:
                 if value.lower() not in ("latest", "all") and not value.lstrip("#").isdigit():
                     raise ValueError(f"line {n}: read: expects an event id or `latest`, got {value!r}")
             elif key in ("clear", "push"):
-                if value not in self.cfg.repos:
+                if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
             elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened"):
                 if not value or len(value.split()) != 1:
@@ -212,7 +213,8 @@ class SignalsMixin:
         elif key == "clear":
             self.log.append("clear", repo=value, paths=[rel])
         elif key == "push":
-            self.want_push(value, "signal")     # its `push` or `push_failed` follows (daemon_push)
+            # its `push` or `push_failed` follows (daemon_push); `control` is the control folder
+            self.want_push(CONTROL if value == "control" and value not in self.cfg.repos else value, "signal")
         elif key == "approve":
             self._approve(value, rel)
         elif key == "cancel":

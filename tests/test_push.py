@@ -106,3 +106,52 @@ def test_closeout_pushes_the_control_folder_and_every_push_repo(env):
     assert git(bare, "rev-parse", "main").strip() == git(env.repo, "rev-parse", "main").strip()
     text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
     assert "closeout push: " in text and "FAILED" not in text
+    env.tick_until(settled(env))
+    assert not env.d.control_dirty and len(env.events("push")) == 2    # the closeout carried the batch
+
+
+def write_request(env, name: str, text: str, message: str) -> None:
+    req = env.control / "requests" / name
+    req.mkdir(parents=True)
+    (req / "state.md").write_text(text, encoding="utf-8")
+    (req / "request.md").write_text(f"---\ntargets: [state.md]\nmessage: {message}\n---\n", encoding="utf-8")
+
+
+def test_control_commits_are_pushed_as_one_batch(env, monkeypatch):
+    from conductor import daemon_push
+    monkeypatch.setattr(daemon_push, "CONTROL_QUIET_SECONDS", 0.5)
+    control_bare = remote(env, env.control, "control.git")
+    write_request(env, "20261021-1100", "# state\n\nv1\n", "state v1")
+    write_request(env, "20261021-1101", "# state\n\nv2\n", "state v2")
+    env.d.tick()
+    assert len(env.events("commit")) >= 2 and not env.d.pushes and env.d.control_dirty
+    env.tick_until(lambda: env.events("push"))
+    env.tick_until(settled(env))
+    [push] = env.events("push")
+    assert push.detail["target"] == ".control" and push.detail["why"] == ["commit"]
+    assert git(control_bare, "rev-parse", "main").strip() == git(env.control, "rev-parse", "main").strip()
+    assert "ahead" not in git(env.control, "status", "-sb").splitlines()[0]      # level with origin/main
+
+
+def test_a_control_folder_without_a_remote_is_skipped_quietly(env, monkeypatch):
+    from conductor import daemon_push
+    monkeypatch.setattr(daemon_push, "CONTROL_QUIET_SECONDS", 0)
+    write_request(env, "20261021-1200", "# state\n\nv1\n", "state v1")
+    env.d.tick()
+    env.d.tick()
+    assert env.events("commit") and not env.d.control_dirty and settled(env)()
+    assert not env.events("push") and not env.events("push_failed")
+
+
+def test_control_ahead_at_start_and_push_control_signal(env):
+    control_bare = remote(env, env.control, "control.git")
+    git(env.control, "commit", "-q", "--allow-empty", "-m", "unpushed")
+    env.d.log.close()
+    env.d = env.new_daemon()
+    assert env.d.push_wanted == {".control": {"start"}}
+    env.tick_until(lambda: env.events("push") and settled(env)())
+    git(env.control, "commit", "-q", "--allow-empty", "-m", "by hand")
+    env.signal("pc.signal", "push: control\n")
+    env.tick_until(lambda: len(env.events("push")) == 2)
+    assert env.events("push")[1].detail["why"] == ["signal"]
+    assert git(control_bare, "rev-parse", "main").strip() == git(env.control, "rev-parse", "main").strip()

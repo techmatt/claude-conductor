@@ -18,6 +18,22 @@ push = true                   # push main to the remote after each merge (conduc
   `push = true` repo, after the closeout's own commit. `closeout_push` reports the lot once
   every one is done: what was pushed, what failed.
 
+## The control folder
+
+A control folder with a remote is pushed the same way, with no setting: the remote is all
+it takes. Without one it is skipped quietly (no `push_failed`), except on `push: control`.
+
+- **After conductor's own commits** (requests), batched: one push 30s after the last
+  commit of a burst (`CONTROL_QUIET_SECONDS`), or 5 minutes after the first unpushed one
+  however busy the burst (`CONTROL_MAX_WAIT_SECONDS`). `why: ["commit"]`.
+- **At daemon start**, when its main is ahead of the remote-tracking ref.
+- **On `push: control`** (a retry; the name means the control folder unless a repo is called
+  `control`), and **on a `closeout:`**, at once, which carries any batch waiting.
+
+Its target name in events and logs is `.control`. Generated and runtime files never reach
+the remote: receipts, `session.md`, `review.md`, `inbox.md`, `events.db` and `.conductor/`
+are git-ignored (the startup check warns when one is not).
+
 The remote is main's upstream (`branch.main.remote`), else `origin`, else the only remote.
 A `push = true` repo with none fails with "no remote".
 

@@ -168,7 +168,7 @@ change made from outside during a live executor's window.
 
 The only way a tracked control file changes. The planner creates
 `requests/<stamp>/` holding whole replacement files at their paths relative to the
-control folder, plus `request.md`, all in one bridge call, in any order:
+control folder, plus `request.md`, all in one bridge call, `request.md` last:
 
 ```
 ---
@@ -181,18 +181,20 @@ Commit message (used when `message:` is absent; first line is the subject).
 The front-matter is YAML: a `message:` containing a colon must be quoted
 (`message: "state: v0.2"`). Unquoted, the YAML fails and the request lands `.failed`.
 
-Conductor waits until nothing in the folder has changed for 2 seconds
-(`SETTLE_SECONDS`) and every target is present, checks the guard, copies the files in
-(UTF-8 text is written with LF endings; anything else byte for byte), stages and
-commits exactly the targets, logs `request` and `commit`, removes the request folder
-and re-snapshots. Targets not there yet are waited for, with no event, until 60s
+There is no settle timer: as soon as `request.md` and every target it lists are present
+and readable (a file its writer still holds open is not), conductor checks the guard,
+copies the files in (UTF-8 text is written with LF endings; anything else byte for byte),
+stages and commits exactly the targets, logs `request` and `commit`, removes the request
+folder and re-snapshots. Between ticks the daemon looks for a new request every 0.25s
+(`REQUEST_WAKE_SECONDS`), so one is applied well within a second. A request waiting only
+for its own files gets no receipt yet. Targets not there yet are waited for, with no event, until 60s
 (`REQUEST_WAIT_SECONDS`) after `request.md`'s mtime (so the wait survives a restart;
 rewriting `request.md` starts it again); then the request fails (`targets listed but
-not in the request folder after waiting 60s: [...]`). Every other error fails at once:
-bad front-matter, no `targets:`, a target that is absolute, uses `..` or points into
-the runtime paths or `.git`, no commit message. Every file in the folder must be a
-target, checked once nothing is missing. A target that lands while the folder is being
-checked sends it round once more (it is never applied half-written). Requests keep stamp
+not in the request folder after waiting 60s: [...]`). Every other error fails, at once
+when `request.md` is 2s old (`FRESH_SECONDS`; younger, it may be half written and is
+looked at again): bad front-matter, no `targets:`, a target that is absolute, uses `..`
+or points into the runtime paths or `.git`, no commit message. Every file in the folder
+must be a target, checked once nothing is missing. Requests keep stamp
 order where their targets overlap: a later one naming a target of an earlier, waiting
 one waits too. A bad request is logged `request_failed` (red)
 and renamed `requests/<stamp>.failed/`. A request that changes nothing is logged with

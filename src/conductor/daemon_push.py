@@ -2,7 +2,10 @@
 
 A repo with `push = true` is pushed after every merge into its main branch, at daemon
 start when its main is ahead of the remote's, on a `push: <repo>` signal, and (with the
-control folder, when that has a remote) on a planner's `closeout:` request. One `git
+control folder, when that has a remote) on a planner's `closeout:` request. The control
+folder, when it has a remote, is pushed after its own commits, batched (`CONTROL_QUIET_SECONDS`
+after the last, or `CONTROL_MAX_WAIT_SECONDS` after the first unpushed), at daemon start when
+ahead, and on `push: control`. One `git
 push` per target at a time, a plain fast-forward push of the main branch only: never a
 `conductor/*` branch, never `--force`. A push is a process the tick polls, so a slow
 network never holds a tick or a merge. A failure is one `push_failed` event; the same
@@ -21,7 +24,9 @@ from . import git, procs
 from .util import read_text
 
 PUSH_SECONDS = 300          # a push still running after this is killed and reported
-CONTROL = ".control"        # the control folder's target name; `push:` takes repo names only
+CONTROL = ".control"        # the control folder's target name (`push: control` asks for it)
+CONTROL_QUIET_SECONDS = 30.0      # a burst of control commits is one push, this long after the last
+CONTROL_MAX_WAIT_SECONDS = 300.0  # ... or this long after the first, however busy the burst
 TAIL_LINES = 6
 
 
@@ -55,6 +60,7 @@ class PushMixin:
         self.pushes: dict[str, Push] = {}               # target → its running push
         self.push_wanted: dict[str, set[str]] = {}       # target → why it is wanted next
         self.closeout_push: dict | None = None           # a closeout's pushes still out, and their results
+        self.control_dirty: tuple[float, float] | None = None   # (first, last) unpushed control commit, monotonic
         # target → the failure it is in (its signature), from the log: a restart repeats no warning.
         self.push_failing: dict[str, str] = {}
         for e in self.log.query(kinds=["push", "push_failed"]):
@@ -68,6 +74,14 @@ class PushMixin:
         if target == CONTROL:
             return self.cfg.control, (git.symbolic_head(self.cfg.control) or "refs/heads/main").removeprefix("refs/heads/")
         return self.cfg.repos[target], self.cfg.opts(target).main
+
+    def control_committed(self) -> None:
+        """Conductor committed to the control folder: pushed once the burst goes quiet."""
+        now = time.monotonic()
+        self.control_dirty = (self.control_dirty[0] if self.control_dirty else now, now)
+
+    def _control_remote(self) -> str | None:
+        return remote_for(self.cfg.control, self._push_where(CONTROL)[1])
 
     def want_push(self, target: str, why: str) -> None:
         """Push `target` when its current push (if any) is done."""
@@ -85,6 +99,12 @@ class PushMixin:
             local, tracked = git.rev(path, branch), remote and git.rev(path, f"refs/remotes/{remote}/{branch}")
             if local and local != tracked:
                 self.want_push(repo, "start")
+        # The control folder likewise, when it has a remote; without one, quietly nothing.
+        branch = self._push_where(CONTROL)[1]
+        if remote := self._control_remote():
+            local, tracked = git.rev(self.cfg.control, branch), git.rev(self.cfg.control, f"refs/remotes/{remote}/{branch}")
+            if local and local != tracked:
+                self.want_push(CONTROL, "start")
 
     def closeout_pushes(self, request: str) -> None:
         """A `closeout:` request: the control folder (when it has a remote) and every
@@ -93,6 +113,7 @@ class PushMixin:
         branch = self._push_where(CONTROL)[1]
         if remote_for(self.cfg.control, branch):
             targets.insert(0, CONTROL)
+            self.control_dirty = None           # this push carries the batch
         if not targets:
             return
         self.closeout_push = {"request": request, "left": set(targets), "pushed": [], "failed": []}
@@ -100,6 +121,11 @@ class PushMixin:
             self.want_push(t, "closeout")
 
     def process_pushes(self) -> None:
+        if (c := self.control_dirty) and (time.monotonic() - c[1] >= CONTROL_QUIET_SECONDS
+                                          or time.monotonic() - c[0] >= CONTROL_MAX_WAIT_SECONDS):
+            self.control_dirty = None
+            if self._control_remote():           # a control folder with no remote: skipped quietly
+                self.want_push(CONTROL, "commit")
         for target, p in list(self.pushes.items()):
             code = p.popen.poll()
             if code is None and time.monotonic() - p.started > PUSH_SECONDS:
@@ -147,9 +173,10 @@ class PushMixin:
             self._closeout_result(p.target, p.whys, None)
             return
         if rejected("\n".join(lines)):
+            name = "control" if p.target == CONTROL else p.target
             error = (f"rejected: {p.remote}/{p.branch} has commits {p.branch} lacks (pushed from elsewhere). "
                      f"Conductor never force-pushes: pull them into {p.path} ({p.branch}) while nothing merges "
-                     f"there, then signal `push: {p.target}`")
+                     f"there, then signal `push: {name}`")
             signature = "rejected"
         else:
             error = error or f"git push exited {code}"

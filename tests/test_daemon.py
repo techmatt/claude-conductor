@@ -151,32 +151,43 @@ def test_request_missing_target_fails_after_wait(env, monkeypatch):
     assert (env.control / "requests" / "late.failed").is_dir()
 
 
-def test_late_target_arriving_during_parse_waits(env, monkeypatch):
-    # The late target lands between the settle check and parse's scan, possibly half written:
-    # the request is not applied this time round, and is once the folder settles again.
+def test_a_fresh_request_applies_at_once_without_a_settle_timer(env, monkeypatch):
+    # Files written this instant: request.md last, so its targets are whole. One tick applies it.
     from conductor import request
-    monkeypatch.setattr(request, "SETTLE_SECONDS", 1.0)
+    monkeypatch.setattr(request, "FRESH_SECONDS", 2.0)
     req = env.control / "requests" / "20261015-1400"
     req.mkdir(parents=True)
-    (req / "request.md").write_text("---\ntargets: [state.md, big.md]\n---\nLate\n", encoding="utf-8")
+    (req / "state.md").write_text("# state\n\nnow\n", encoding="utf-8")
+    (req / "request.md").write_text("---\ntargets: [state.md]\n---\nNow\n", encoding="utf-8")
+    env.d.tick()
+    assert not req.exists() and env.events("request")
+
+
+def test_an_unreadable_target_or_half_written_request_waits_without_a_receipt(env, monkeypatch):
+    from pathlib import Path
+
+    from conductor import request
+    monkeypatch.setattr(request, "FRESH_SECONDS", 2.0)
+    req = env.control / "requests" / "20261015-1410"
+    req.mkdir(parents=True)
     (req / "state.md").write_text("# state\n", encoding="utf-8")
-    old = time.time() - 10
-    for p in req.iterdir():
-        os.utime(p, (old, old))
-    real = request.settled
-    calls = []
+    (req / "request.md").write_text("---\ntargets: [state.md", encoding="utf-8")     # still being written
+    env.d.tick()
+    assert req.is_dir() and not env.events("request_failed")
+    (req / "request.md").write_text("---\ntargets: [state.md]\n---\nHeld\n", encoding="utf-8")
+    real = Path.read_bytes
 
-    def settled(d):
-        ok = real(d)
-        if not calls:
-            (req / "big.md").write_text("HALF", encoding="utf-8")
-        calls.append(ok)
-        return ok
+    def held(p):                    # its writer still holds it open (a sharing violation on Windows)
+        if p.name == "state.md" and p.parent == req:
+            raise PermissionError(13, "in use")
+        return real(p)
 
-    monkeypatch.setattr(request, "settled", settled)
-    assert request.ready(req) is None and calls == [True, False]
-    os.utime(req / "big.md", (old, old))
-    assert request.ready(req).targets == ["state.md", "big.md"]
+    monkeypatch.setattr(Path, "read_bytes", held)
+    env.d.tick()
+    assert req.is_dir() and not (env.control / "receipts" / "requests" / f"{req.name}.md").exists()
+    monkeypatch.setattr(Path, "read_bytes", real)
+    env.d.tick()
+    assert not req.exists() and env.events("request")[0].detail["request"] == req.name
 
 
 def test_waiting_request_is_not_overtaken(env):

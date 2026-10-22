@@ -7,7 +7,7 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **show events** [since X / for Y] | Stages `events.db` and queries it. "since checkpoint N": event id ≥ N; plain "since checkpoint": the latest. Kinds: `docs/events.md`. |
 | **postmortem Y** | Y's events, prompt and report: where it went wrong. |
 | **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap, listed in their **new** order; the current order is a no-op): numbers swap, each renamed item is a new id. Fix old names in `state.md`. |
-| **push R** | Signal `push: <repo>` (retry). |
+| **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |

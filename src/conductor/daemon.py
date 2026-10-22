@@ -49,6 +49,7 @@ from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp,
 
 INBOX_REFRESH_SECONDS = 30
 TICK_FAILURES_BEFORE_EXIT = 3     # consecutive ticks failing on an OSError
+REQUEST_WAKE_SECONDS = 0.25       # how often a poll's sleep looks for a new request
 # What a running item is told when the box's memory level changes (`sample_memory`).
 MEMORY_TELLS = {
     "pressure": ("Conductor: the machine is low on memory ({free} GiB free, {percent}% of commit used). Keep "
@@ -308,7 +309,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     break
                 if self.restart_due():
                     break               # the new daemon is up and waits for this one to exit
-                time.sleep(self.cfg.poll_seconds)
+                self._nap()
         except KeyboardInterrupt:
             self._log_stop("interrupt")
         finally:
@@ -319,6 +320,16 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 pass
             self.write_inbox(force=True)
             self.release()
+
+    def _nap(self) -> None:
+        """One poll's sleep, cut short by a new request: its receipt is there when the planner
+        reads it straight after writing, not a poll later."""
+        before = request.pending(self.cfg)
+        end = time.monotonic() + self.cfg.poll_seconds
+        while (left := end - time.monotonic()) > 0:
+            time.sleep(min(left, REQUEST_WAKE_SECONDS))
+            if request.pending(self.cfg) != before:
+                return
 
     def _recover_in_place(self, exc: OSError) -> None:
         """A tick died on an OSError part-way through: forget what this process holds in
@@ -574,9 +585,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
                     os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
                     continue
-                if req is None:      # still being written: unsettled, or targets not all here yet
+                if req is None:      # its files still arriving: no receipt yet (pending is a real wait)
                     waiting |= request.listed_targets(d)
-                    self._pending_receipt(rel, request.waiting_for(d))
                     continue
                 self._guard_check(f"before request {d.name}")
                 try:
@@ -592,6 +602,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 if sha:
                     self.log.append("commit", paths=req.targets, scope="control", sha=sha,
                                     subject=req.message.splitlines()[0])
+                    self.control_committed()             # pushed with its burst (daemon_push)
                 if request.is_closeout(req.message):     # the session ended: what it saw is read
                     self.log.append("read", paths=[rel], through=self.log.max_id(), closeout=d.name)
                     self.closeout_pushes(d.name)         # and its work goes to the remotes (daemon_push)

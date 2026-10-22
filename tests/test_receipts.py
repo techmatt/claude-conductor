@@ -67,7 +67,7 @@ def test_request_receipts_applied_unchanged_and_failed(env):
     assert meta["outcome"] == "refused" and "not listed as targets: ['stray.md']" in meta["reason"]
 
 
-def test_a_waiting_request_has_a_pending_receipt(env):
+def test_only_a_request_held_by_an_earlier_one_has_a_pending_receipt(env):
     d = env.control / "requests" / "20261021-1100-two"
     d.mkdir(parents=True)
     (d / "request.md").write_text("---\ntargets: [state.md, notes.md]\nmessage: two\n---\n", encoding="utf-8")
@@ -80,8 +80,8 @@ def test_a_waiting_request_has_a_pending_receipt(env):
     for p in [*d.iterdir(), *later.iterdir(), d, later]:
         os.utime(p, (old, old))
     env.d.tick()
-    meta, _ = receipt(env, "requests/20261021-1100-two")
-    assert meta["outcome"] == "pending" and "waiting for its targets ['notes.md']" in meta["result"]
+    # Only waiting for its own files: no receipt yet (missing = not handled yet).
+    assert not (env.control / "receipts" / "requests" / "20261021-1100-two.md").exists()
     meta, _ = receipt(env, "requests/20261021-1101-after")
     assert meta["outcome"] == "pending" and "an earlier request still waiting on ['state.md']" in meta["result"]
     (d / "notes.md").write_text("notes\n", encoding="utf-8")
