@@ -1,6 +1,6 @@
 # claude-ai-new-project — starting, parking and resuming a project
 
-**Read `planner.md` first.** It is the method for every session and the vocab (rarer phrases: `planner-vocab.md`). This file adds what only a new, parked or resumed project needs, plus detail on memory, run targets and picks beyond what `planner.md` needs to act. How conductor itself works is in its `README.md` and `docs/`.
+**Read `planner.md` first** (a session's start itself is `planner-start.md`). It is the method for every session and the vocab (rarer phrases: `planner-vocab.md`). This file adds what only a new, parked or resumed project needs, plus detail on memory, run targets and picks beyond what `planner.md` needs to act. How conductor itself works is in its `README.md` and `docs/`.
 
 ## Layout (per project)
 

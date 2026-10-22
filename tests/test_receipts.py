@@ -221,6 +221,33 @@ def test_a_planner_signal_receipt_lands_within_a_second_and_a_half(env, monkeypa
         assert receipt(env, f"signals/{name}")[0]["outcome"] == "accepted"
 
 
+def test_a_signal_written_with_a_request_is_not_left_a_whole_poll(env, monkeypatch):
+    """Word Warriors session 12: a signal and a request in one bridge call; the tick that
+    applied the request found the signal too young, and the nap after it, the signal by then
+    of age, slept the whole poll: its receipt came ~2.1s after the request's."""
+    monkeypatch.setattr(daemon_signals, "PLANNER_SIGNAL_SETTLE_SECONDS", 0.25)
+    env.d.cfg.poll_seconds = 2
+    env.d.tick()
+    req = env.control / "requests" / "20261022-1120-x"
+    req.mkdir(parents=True)
+    (req / "state.md").write_text("# state\n\nnew\n", encoding="utf-8")
+    env.signal("planner-20261022-112000.signal", "by: planner\ncheckpoint: with a request\n")
+    (req / "request.md").write_text('---\ntargets: [state.md]\nmessage: "state: x"\n---\n', encoding="utf-8")
+    env.d.tick()
+    assert receipt(env, "requests/20261022-1120-x")[0]["outcome"] == "accepted"
+    assert (env.control / "signals" / "planner-20261022-112000.signal").exists()     # too young then
+    time.sleep(0.3)                                 # a live tick's own length: of age before the nap
+    start = time.monotonic()
+    env.d._nap()
+    assert time.monotonic() - start < 0.2
+    env.d.tick()
+    assert receipt(env, "signals/planner-20261022-112000.signal")[0]["outcome"] == "accepted"
+    start = time.monotonic()                        # nothing settling now: a full nap again
+    env.d.cfg.poll_seconds = 0.5
+    env.d._nap()
+    assert time.monotonic() - start >= 0.45
+
+
 def test_an_impossible_dependency_is_warned_of_at_write_time(env):
     """Accepted, with a `warning` naming why it will hold (Word Warriors 098 → 100 → 102)."""
     (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)

@@ -37,8 +37,10 @@ files, its own settings, starting the daemon, and opening a console on a finishe
 `2 open question(s)`, `idle`; the project is the tab's name), its daemon
 (`.conductor/daemon.json`, pid + creation time: **up** since a time, amber **not
 answering** when its heartbeat is stale, red **died** when its lock outlived it, or
-**down**; the pid and heartbeat in its tooltip; see `memory.md`), and a count of the app's
-signals still waiting in `signals/` (or rejected as `.bad`). A second line, the memory
+**down**; the pid and heartbeat in its tooltip; see `memory.md`), a count of the app's
+signals still waiting in `signals/`, and "N rejected": signals refused (`invalid`) since the
+latest checkpoint and not acknowledged, with **Dismiss** (an `ack: invalid` signal; each
+one's reason in its tooltip). A checkpoint clears the count too. A second line, the memory
 line (`memory.line`, as in the inbox's *Now*), shows only when it needs Matt: amber under
 pressure, red when critical (with the biggest item). At `ok` it is hidden and takes no
 space; `conductor status` and the inbox's *Now* still show it always.

@@ -1,6 +1,6 @@
 # planner — running a project with conductor
 
-Read this whole file every planner session; its last section, **Vocab**, is what Matt can say. `claude-ai-new-project.md`: only to start, park or resume a project. How conductor works: its `README.md` and `docs/` (`C:\Code\claude-conductor`), read only as the work needs.
+A session starts with `planner-start.md` alone; it says when to read this file, then whole. Its last section, **Vocab**, is what Matt can say. `claude-ai-new-project.md`: only to start, park or resume a project. How conductor works: its `README.md` and `docs/` (`C:\Code\claude-conductor`), read only as the work needs.
 
 On mechanics this file beats memory and saved preferences; Matt's preferences on content and judgement still apply.
 
@@ -12,8 +12,7 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 
 ## The bridge
 
-- The chat must be **linked to the box** (the desktop app's Chat tab, not Code). No device tools: say first that the chat isn't linked and ask Matt to link it, never work around it.
-- Load all four device tools in one tool search, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. Access is per existing folder: ask once, for `C:\Code\<project>-control`, each code repo beside it as `C:\Code\<repo>` (`wordwarriors`; `corelight-engine`, `corelight-web`; a new project's: `conductor.toml` `[repos]`) and `C:\Code\claude-conductor`.
+- Linking, the device tools and folder access: `planner-start.md`, steps 1–2.
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Each upload goes once to a fresh workspace path, never edited after.
 - Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
@@ -55,10 +54,11 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## Every session
 
-- **Start** (**start a new <project> session**) is exactly four bridge steps: the tool search and access request (*The bridge*, paths as written there: never a memory read or past-chat search for them); stage `planner.md`; signal `by: planner` + `session: start`; stage `session.md` (again if its header names an older signal). No memory reads, past-chat search, folder listings, `claude-ai-new-project.md`, inbox, `state.md` or design docs. The digest's *From state.md* carries `state.md`'s *Waiting on Matt*, *Open questions* and the *Pending fixes* and *Maintenance* lines saying "due", as written; stage `state.md` only before a request that changes it.
-- **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken. At start, from the digest, then: *Waiting on Matt*, due pending fixes, unreviewed reports, pickers waiting, conductor's reports (a line each), maintenance recommendations.
+- **Start**: `planner-start.md`. Stage `state.md` only before a request that changes it.
+- **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken.
+- **Rejected signals** (`invalid`, *Red* in the inbox and digest, "N rejected" in the app's header) show until a checkpoint or an acknowledgement: once the cause is addressed (resent, fixed, or moot), signal `ack: invalid #<event>` unasked.
 - Matt raises every next step: answer what is asked, never assume or schedule the next leg.
-- **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`). One instruction, one signal file; nothing rides along.
+- **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`), or the rejected-signal rule below (`ack:`). One instruction, one signal file; nothing rides along.
 - Design and scoping are decided with Matt, never by an executor; executors add facts, usually as `readonly` items.
 - If this file is wrong or lacking, say so and add it to `planner-notes.md`.
 
@@ -123,7 +123,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 | Phrase | What the planner does |
 |---|---|
-| **start a new <project> session** | *Every session*. |
+| **start a new <project> session** | `planner-start.md`. |
 | **checkpoint** [label] | Signal `checkpoint: <label>`. |
 | **check inbox** | Reads `inbox.md`, leads with open questions then unreviewed reports, says what changed; signals `read: <its top id>`. |
 | **check reports** [verbose] | A table of unreviewed reports (item, status, finish time), oldest first, then running or staged items as "not in yet"; verbose: a few lines each. |
@@ -150,4 +150,5 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **watch now** | Signal `watch: now` (refused while one is live). |
 | **autopilot off / night / on** | Signal `autopilot: off\|night\|always`: whether the night shift may start work itself (draws, a watch's tells and draws); the app's header shows it and what is next. |
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
+| **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
 | **read the workflow** / **remind me the vocab** | Re-reads this file / prints this table and `planner-vocab.md`'s. |

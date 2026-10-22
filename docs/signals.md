@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot.
+outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot, ack.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -31,12 +31,13 @@ watch: now                   # queue a watch item now (night-shift.md); refused 
 push: sandbox                # push sandbox's main to its remote now (push.md); its push or push_failed follows
 push: control                # the same for the control folder (when no repo is named control)
 autopilot: night             # off | night | always (`on` = always): may the night shift start work itself (night-shift.md)
+ack: invalid #2712           # that rejected signal is dealt with (plain `ack: invalid`: every one still live)
 ```
 
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
 What became of each file is its receipt, `receipts/signals/<name>.md` (`receipts.md`).
 Items are named `NNN_name` or `NNN` (numerically: `7` is `007`). A ` # comment` after a
-value is ignored.
+value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` (its `#<event>`).
 
 - **approve** — the `proposed/` file must parse as a valid item whose `repo:` is
   configured, and `<repo>/NNN_name` must not already be queued, running, staged or done.
@@ -144,11 +145,12 @@ value is ignored.
   the next start adopts them.
 - **autopilot** — `autopilot: off|night|always` (`on` is `always`): logs `autopilot`
   (mode, was), which every later decision reads (`night-shift.md`, *Autopilot*).
+- **ack** — `ack: invalid [#<event> …]` (none named: every live one) logs `ack`; those
+  rejected signals leave the app's "N rejected" and the inbox (`inbox.md`), not Events.
+  A non-live id rejects the file. The app's **Dismiss** sends `ack: invalid`.
 
-Conductor processes a file once it reads and has stopped changing, then deletes it: a
-`planner-*` file (the planner's bridge writes it whole, in one call) at 0.25s old
-(`PLANNER_SIGNAL_SETTLE_SECONDS`), any other at a second (`SIGNAL_SETTLE_SECONDS`). The
-whole file is syntax-checked first: an unknown key or malformed line rejects it with
+Conductor processes a file once it reads and has stopped changing (a `planner-*` one at
+0.25s, any other at 1s: `receipts.md`, *When*), then deletes it. The whole file is syntax-checked first: an unknown key or malformed line rejects it with
 nothing applied. Each verb then checks what it acts on before changing anything; a
 verb that fails there stops the file, and the lines before it stay applied (the
 `invalid` event lists them as `applied`). A rejected file is logged `invalid` and

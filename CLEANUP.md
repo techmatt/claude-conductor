@@ -17,7 +17,8 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 
 | Path | Budget | Why |
 |---|---|---|
-| `planner.md` | 20 KB | a planner reads it whole every session |
+| `planner-start.md` | 3 KB | the only file a session start reads |
+| `planner.md` | 20 KB | a planner reads it whole once the work goes past the start |
 | `planner-vocab.md` | 6 KB | the rarer vocab rows, read only when Matt uses one |
 | `HANDOFF.md` | 16 KB | starts every claude.ai session on conductor; *Open* is a wavefront, not a log |
 | `CLAUDE.md` | 6 KB | read at every Claude Code session here |

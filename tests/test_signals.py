@@ -644,8 +644,10 @@ def test_digest_hides_reviewed_items_and_a_closed_session_and_closeout_moves_the
         env.d.log.append(kind, **({"scope": "control"} if kind == "commit" else {}), **{key: text})
     text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
     assert "code/002_new finished" in text and "code/001_seen" not in text
-    assert "state: fresh" in text and "old news" not in text and "closeout: s1" not in text
-    assert "hidden as settled: " in text and " of reviewed items, 4 requests and control commits up to closeout #" in text
+    assert "state: fresh" in text and "old news" not in text
+    assert "closeout: s1 ends · committed" in text          # the request that passed over the rest, one line
+    assert "hidden as settled: " in text and " of reviewed items" in text
+    assert "2 passed over by `state.md` request #" in text     # old news and its commit
     req = env.control / "requests" / "20261021-1000"
     req.mkdir(parents=True)
     (req / "state.md").write_text("# state\n\nclosed\n", encoding="utf-8")
@@ -655,6 +657,64 @@ def test_digest_hides_reviewed_items_and_a_closed_session_and_closeout_moves_the
     assert read.detail["closeout"] == "20261021-1000" and read.detail["through"] == read.id - 1
     text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
     assert "code/002_new finished" not in text and "state: fresh" not in text
+
+
+@pytest.mark.slow
+def test_digest_drops_pushes_folds_commits_and_reds_a_state_request_passed_over(env):
+    """Word Warriors session 12's start: 263 events, ~60% settled. Pushes go, each request
+    and its commit are one line, and a red a later `state.md` request passed over goes."""
+    from conductor import inbox, state
+    log = env.d.log
+    log.append("tamper", changes=["old tamper"])
+    log.append("memory_critical", level="critical", was="pressure")
+    log.append("push", target="control", branch="main", remote="origin", sha="abc", why=["commit"])
+    log.append("warning", note="seen in session 11")
+    log.append("request", paths=["state.md"], request="r1", message="state: process 1", targets=["state.md"])
+    log.append("commit", paths=["state.md"], scope="control", sha="1234567890ab", subject="state: process 1")
+    log.append("request", paths=["docs/x.md"], request="r2", message="docs: x", targets=["docs/x.md"])
+    log.append("commit", paths=["docs/x.md"], scope="control", sha="feedfacecafe", subject="docs: x")
+    log.append("tamper", changes=["new tamper"])
+    log.append("push", target="control", branch="main", remote="origin", sha="def", why=["commit"])
+    log.append("finish", item="code/009_open", status="done")
+    send(env, "by: planner\nsession: start", "planner-1.signal")
+    text = (env.control / "session.md").read_text(encoding="utf-8")
+    assert "pushed" not in text and "old tamper" not in text and "memory critical" not in text
+    assert "seen in session 11" not in text and "new tamper" in text
+    assert "request r1 applied: state: process 1 — state.md · committed 1234567890" in text
+    assert "request r2 applied: docs: x — docs/x.md · committed feedfaceca (#" in text
+    assert "control commit" not in text
+    assert "2 pushes" in text and "passed over by `state.md` request #" in text
+    assert "is still unreviewed at checkpoint" not in text and "- code/009_open **done**" in text
+
+
+def test_a_rejected_signal_shows_until_acknowledged_or_a_checkpoint(env):
+    """The app header's "N rejected", the inbox and the digest: rejected signals since the
+    latest checkpoint, less those an `ack: invalid` acknowledged (Word Warriors' 7:59am picks)."""
+    from conductor import inbox, state
+    from conductor.events import live_invalids
+    from conductor.app import actions
+    send(env, "checkpoint: s", "cp")
+    for n in (1, 2, 3):
+        send(env, "by: app\nbogus: x", f"app-{n}.signal")
+    bad_ids = [e.id for e in live_invalids(env.d.log)]
+    assert len(bad_ids) == 3
+    render = lambda: inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
+    assert "app-1.signal invalid" in render()
+    send(env, f"by: planner\nack: invalid #{bad_ids[0]}", "planner-ack.signal")
+    assert [e.id for e in live_invalids(env.d.log)] == bad_ids[1:]
+    assert "app-1.signal invalid" not in render() and "app-2.signal invalid" in render()
+    assert f"acknowledged invalid #{bad_ids[0]}" in render()
+    send(env, f"by: planner\nack: invalid #{bad_ids[0]}", "planner-again.signal")    # already acknowledged
+    assert bad(env, "planner-again.signal")
+    path = actions.ack_invalid(env.control)                 # the app's Dismiss: all of them
+    env.tick_until(lambda: not path.exists())
+    assert live_invalids(env.d.log) == [] and "app-3.signal invalid" not in render()
+    send(env, "by: app\nbogus: y", "app-4.signal")
+    assert len(live_invalids(env.d.log)) == 1
+    send(env, "checkpoint: next", "cp2")                    # a checkpoint clears it too
+    assert live_invalids(env.d.log) == [] and "app-4.signal invalid" not in render()
+    with pytest.raises(ValueError):
+        env.d._parse_signal("ack: everything")
 
 
 def test_events_since_checkpoint_on_the_cli(env, capsys):

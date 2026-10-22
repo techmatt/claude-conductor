@@ -43,6 +43,32 @@ def test_header_is_short_with_one_daemon_button_and_autopilot(qapp, env, tmp_pat
     win.close()
 
 
+def test_rejected_shows_until_dismissed_or_a_checkpoint(qapp, env, tmp_path):
+    """Word Warriors: "2 rejected" stayed hours after the 7:59am picks; nothing cleared it."""
+    from conductor.app.window import MainWindow
+    win = MainWindow([env.control], settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat),
+                     tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    for n in (1, 2):
+        env.signal(f"app-{n}.signal", "by: app\nbogus: x\n")
+    env.tick_until(lambda: len(env.events("invalid")) == 2)
+    win.refresh()
+    assert "2 rejected" in view.pending_label.text() and not view.dismiss_btn.isHidden()
+    view.dismiss_btn.click()
+    env.tick_until(lambda: env.events("ack"))
+    win.refresh()
+    assert "rejected" not in view.pending_label.text() and view.dismiss_btn.isHidden()
+    env.signal("app-3.signal", "by: app\nbogus: x\n")
+    env.tick_until(lambda: len(env.events("invalid")) == 3)
+    win.refresh()
+    assert "1 rejected" in view.pending_label.text()
+    env.signal("cp.signal", "checkpoint: next\n")
+    env.tick_until(lambda: env.events("checkpoint"))
+    win.refresh()
+    assert "rejected" not in view.pending_label.text()
+    win.close()
+
+
 def test_a_send_box_wraps_and_enter_sends(qapp):
     from conductor.app.widgets import SEND_HINT, MessageDialog
     from PySide6.QtWidgets import QLabel

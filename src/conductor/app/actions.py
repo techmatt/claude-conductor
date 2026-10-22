@@ -145,6 +145,11 @@ def stop_daemon(control: Path) -> Path:
     return write_signal(control, "stop: daemon")
 
 
+def ack_invalid(control: Path) -> Path:
+    """Dismiss the header's "N rejected": every rejected signal since the checkpoint is seen."""
+    return write_signal(control, "ack: invalid")
+
+
 def autopilot(control: Path, mode: str) -> Path:
     """`off`, `night` or `always`: whether the night shift may start work on its own."""
     return write_signal(control, f"autopilot: {mode}")

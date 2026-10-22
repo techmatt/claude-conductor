@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from . import audits, memory, nightshift, picks, questions, talk
 from .config import Config
-from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog
+from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog, live_invalids, signal_invalid
 from .request import is_closeout
 from .resume import label as resume_label
 from .state import View, decide
@@ -243,6 +243,9 @@ def describe(ev: Event) -> str:
             text = f"request {d.get('request')} failed: {d.get('error')}"
         case "invalid":
             text = f"{who or d.get('path')} invalid: {d.get('error')}"
+        case "ack":
+            ids = d.get("events") or []
+            text = f"acknowledged invalid {', '.join(f'#{i}' for i in ids)}" if ids else "acknowledged: no invalid signal was live"
         case "read":
             text = f"read mark → #{d.get('through')}" + (f" (closeout {d['closeout']})" if d.get("closeout") else "")
         case "clear":
@@ -386,10 +389,11 @@ def pick_lines(cfg: Config, log: EventLog, view: View) -> list[str]:
     return out
 
 
-def _line(ev: Event) -> str:
+def _line(ev: Event, commit: Event | None = None) -> str:
     shown = ev.paths[:1] if ev.kind == "finish" else ev.paths     # the report; log and done/ are derivable
     paths = f" — {', '.join(shown)}" if shown and ev.kind in ("finish", "tamper", "request") else ""
-    return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}"
+    folded = f" · committed {commit.detail.get('sha', '')[:10]} (#{commit.id})" if commit else ""
+    return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}{folded}"
 
 
 def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
@@ -412,23 +416,44 @@ def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
     return out
 
 
-def closeout_id(events: list[Event]) -> int:
-    """The newest `closeout:` request (or its control commit) among `events`, else 0."""
-    return max((e.id for e in events
-                if (e.kind == "request" and is_closeout(e.detail.get("message") or ""))
-                or (e.kind == "commit" and e.detail.get("scope") == "control"
-                    and is_closeout(e.detail.get("subject") or ""))), default=0)
+def passed_over_id(events: list[Event]) -> int:
+    """The newest request among `events` that rewrote `state.md` (a `closeout:` whatever its
+    targets), else 0: the planner wrote down what it made of everything before it."""
+    return max((e.id for e in events if e.kind == "request" and (
+        "state.md" in (e.detail.get("targets") or []) or is_closeout(e.detail.get("message") or ""))), default=0)
 
 
-def settled_event(ev: Event, view: View, closeout: int) -> bool:
-    """Already dealt with, so hidden behind a count: any event of an item whose report is
-    reviewed (a red aside), and the requests and control commits of a session that closed
-    out (up to its `closeout:`), which a mark older than the closeout still covers."""
-    if ev.kind in RED_KINDS:
-        return False
-    if ev.item and view.reviewed(ev.item) and not view.is_watch(ev.item):   # a watch's warnings stay
-        return True
-    return ev.id <= closeout and (ev.kind == "request" or (ev.kind == "commit" and ev.detail.get("scope") == "control"))
+def settled_why(ev: Event, view: View, passed: int, live_bad: set[int]) -> str | None:
+    """Why `ev` is hidden behind a count as already dealt with, or None to show it. A
+    rejected signal shows until acknowledged or a checkpoint passes; every push is noise;
+    an item's events go once its report is reviewed (reds aside); and whatever a later
+    `state.md` request passed over goes too, bar what is still live: an unreviewed finish
+    and a hold (shown only while in effect)."""
+    if signal_invalid(ev):
+        return None if ev.id in live_bad else "rejected signals acknowledged or before the checkpoint"
+    if ev.kind == "push":
+        return "pushes"
+    if ev.kind == "warning" and ev.detail.get("checkpoint") and ev.detail.get("finish"):
+        return "still-unreviewed warnings (see *Unreviewed reports*)"
+    if ev.item and ev.kind not in RED_KINDS and view.reviewed(ev.item) and not view.is_watch(ev.item):
+        return "of reviewed items"      # a watch's warnings stay
+    if ev.id < passed and ev.kind not in ("finish", "hold"):
+        return f"passed over by `state.md` request #{passed}"
+    return None
+
+
+def fold_commits(evs: list[Event]) -> tuple[list[Event], dict[int, Event]]:
+    """Each control commit folded into the request it committed (the one just before it
+    with its subject): the events left, and request id → its commit."""
+    out, folded, last = [], {}, None
+    for e in evs:
+        if (e.kind == "commit" and e.detail.get("scope") == "control" and last is not None
+                and (last.detail.get("message") or "").splitlines()[:1] == [e.detail.get("subject")]):
+            folded[last.id], last = e, None
+            continue
+        last = e if e.kind == "request" else last
+        out.append(e)
+    return out, folded
 
 
 def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -> str:
@@ -436,8 +461,9 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
     the mark-read hint, since the digest moves the read mark itself."""
     mark = log.read_mark()
     since_mark = log.query(since_id=mark)
-    closeout = closeout_id(since_mark)
-    events = [e for e in since_mark if not settled_event(e, view, closeout)]
+    passed, live_bad = passed_over_id(since_mark), {e.id for e in live_invalids(log)}
+    why = {e.id: w for e in since_mark if (w := settled_why(e, view, passed, live_bad))}
+    events = [e for e in since_mark if e.id not in why]
     top = log.max_id()
     mark_ev = log.last("read")
     red = sorted((e for e in events if e.kind in RED_KINDS), key=lambda e: (e.kind != "tamper", e.id))
@@ -452,7 +478,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
                 moved[f"{e.repo}/{name}"] = e.id
     holds = [e for e in events if e.kind == "hold" and moved.get(e.item, 0) < e.id]
     finished = [e for e in events if e.kind == "finish" and not view.is_watch(e.item)]     # Night shift lists those
-    changes = [e for e in events if e.kind in ("request", "commit")]
+    changes, commits = fold_commits([e for e in events if e.kind in ("request", "commit")])
     open_qs = [q for q in questions.scan(cfg.control) if q.is_open]
     open_ids = {q.id for q in open_qs}
     asked = [e for e in events if e.kind in QUESTION_KINDS
@@ -460,15 +486,14 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
     changes += [e for e in events if e.kind == "merge"]
     other = [e for e in events if e not in red + holds + finished + changes + asked
              and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress", "setup",
-                                "finish", *NIGHT_KINDS)]
+                                "finish", "request", "commit", *NIGHT_KINDS)]
 
     out = [heading or f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")
-    kept = {e.id for e in events}
-    of_reviewed = sum(1 for e in since_mark if e.item and e.id not in kept)
-    hidden = ([f"{of_reviewed} of reviewed items"] if of_reviewed else []) + (
-        [f"{n} requests and control commits up to closeout #{closeout}"]
-        if (n := len(since_mark) - len(events) - of_reviewed) else [])
+    counts: dict[str, int] = {}
+    for w in why.values():
+        counts[w] = counts.get(w, 0) + 1
+    hidden = [f"{n} {w}" for w, n in counts.items()]
     out.append(f"Generated {clock(now())} · {len(since_mark)} event(s) {since}, through #{top}"
                + (f" · hidden as settled: {', '.join(hidden)}" if hidden else "") + ".")
     if heading is None:
@@ -502,7 +527,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
                 ("Requests and commits", changes), ("Other", other)]
     for title, evs in sections:
         if evs:
-            out += ["", f"## {title}", *(_line(e) for e in evs)]
+            out += ["", f"## {title}", *(_line(e, commits.get(e.id)) for e in evs)]
     if not events:
         out += ["", "Nothing new."]
 

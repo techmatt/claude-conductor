@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .. import config as config_mod
 from .. import git, items, memory, nightshift, picks, questions, state, talk, targets
-from ..events import RED_KINDS, Event, EventLog
+from ..events import RED_KINDS, Event, EventLog, live_invalids
 from ..executor import RunPaths
 from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
 from ..resume import label as resume_label
@@ -188,6 +188,7 @@ class Snapshot:
     picks: dict[str, picks.PickInfo] = field(default_factory=dict)  # finished item → its picker (`picks.pending`)
     memory: tuple[str, str] = ("", "ok")                       # `memory.line`: text, level
     autopilot: tuple[str, str] = ("always", "")                # mode, what it starts next (`nightshift.plan`)
+    rejected: list[Event] = field(default_factory=list)        # `events.live_invalids`: the header's "N rejected"
 
     @property
     def to_pick(self) -> int:
@@ -517,7 +518,7 @@ class Project:
         except (OSError, ValueError) as exc:
             pilot = (nightshift.autopilot(self.log), f"could not read the backlog: {exc}")
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
-                        view.checkpoint, pending, mem, pilot)
+                        view.checkpoint, pending, mem, pilot, live_invalids(self.log))
 
     def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
         """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only

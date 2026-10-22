@@ -36,6 +36,20 @@ RED_KINDS = {"red", "tamper", "conflict", "paths_violation", "kill", "request_fa
 QUESTION_KINDS = ("ask", "answer", "default", "late", "question_closed")
 
 
+def signal_invalid(ev: "Event") -> bool:
+    """A rejected signal file (its `invalid` event), as against an invalid queue item or config."""
+    return ev.kind == "invalid" and any(p.startswith("signals/") for p in ev.paths)
+
+
+def live_invalids(log: "EventLog") -> list["Event"]:
+    """Rejected signals still to be seen: since the latest checkpoint (a session start's
+    included) and not acknowledged by an `ack: invalid` (planner or the app's dismiss)."""
+    cp = log.last("checkpoint")
+    floor = cp.id if cp else 0
+    acked = {i for e in log.query(since_id=floor, kinds=["ack"]) for i in e.detail.get("events", [])}
+    return [e for e in log.query(since_id=floor, kinds=["invalid"]) if signal_invalid(e) and e.id not in acked]
+
+
 def item_matches(item_id: str, ref: str) -> bool:
     """`sandbox/001_x` matches `sandbox/001_x`, `001_x`, `001`, `sandbox/001`."""
     repo, _, name = item_id.partition("/")

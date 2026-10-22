@@ -76,8 +76,11 @@ queue item, proposal, backlog file or request is taken as soon as it reads (a fi
 writer holds open does not); a signal or amend file, applied exactly once, also waits
 until it has stopped changing: a `planner-*` signal 0.25s (`PLANNER_SIGNAL_SETTLE_SECONDS`;
 the bridge writes it whole in one call), any other 1s (`SIGNAL_SETTLE_SECONDS`). The nap
-ends when the first settling file comes of age. A tick's own length adds to all of them:
-a planner signal's receipt lands about 1.3s after the write, like a request's.
+ends when the first settling file comes of age, and is skipped when one came of age
+during the tick: a signal written with a request is too young when the tick that
+applies the request begins, and Word Warriors session 12 (Conductor 45) saw its receipt
+a whole poll (~2.1s) after the request's. A tick's own length adds to all of them, so a
+signal and a request written together get receipts within about a second of each other.
 
 ## Lifetime
 

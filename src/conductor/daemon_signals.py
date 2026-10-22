@@ -16,7 +16,7 @@ from . import audits, desktop, executor, items, nightshift, procs, state, talk
 from .daemon_push import CONTROL
 from . import review as review_mod
 from . import session as session_mod
-from .events import Event
+from .events import Event, live_invalids
 from .util import clock, read_text, retry_io, write_text
 
 if TYPE_CHECKING:
@@ -165,7 +165,8 @@ class SignalsMixin:
             key, sep, value = s.partition(":")
             key = key.strip().lower()
             # A message is free text: a ` # ` in it is part of it, not a comment.
-            value = value.strip() if key in ("tell", "checkpoint", "session", "notify") else _strip_comment(value)
+            # So is `ack:`'s, whose `#<event>` ids would otherwise read as one.
+            value = value.strip() if key in ("tell", "checkpoint", "session", "notify", "ack") else _strip_comment(value)
             if not sep or not key:
                 raise ValueError(f"line {n}: expected `key: value`, got {s!r}")
             if key == "by":
@@ -209,6 +210,10 @@ class SignalsMixin:
             elif key == "watch":
                 if value.lower() != "now":
                     raise ValueError(f"line {n}: watch: only `watch: now` is known, got {value!r}")
+            elif key == "ack":
+                what, *ids = value.split() or [""]
+                if what.lower() != "invalid" or not all(i.lstrip("#").isdigit() for i in ids):
+                    raise ValueError(f"line {n}: ack: expects `invalid` or `invalid #<event> ...`, got {value!r}")
             elif key == "autopilot":
                 value = {"on": "always"}.get(value.lower(), value.lower())
                 if value not in nightshift.AUTOPILOT:
@@ -274,6 +279,8 @@ class SignalsMixin:
             # Asked for: the planner rule and memory don't hold it back (daemon_watch).
             if why := self._launch_watch(f"asked for by {self._by or 'unknown'} (`watch: now`)", [], force=True):
                 raise ValueError(f"watch: {why}")
+        elif key == "ack":
+            self._ack([int(i.lstrip("#")) for i in value.split()[1:]], rel)
         elif key == "autopilot":
             self.log.append("autopilot", paths=[rel], mode=value, was=nightshift.autopilot(self.log),
                             by=self._by or "unknown")
@@ -437,6 +444,16 @@ class SignalsMixin:
                             note=f"{fin.item} is still unreviewed at checkpoint #{cp.id} (finished "
                                  f"{fin.detail.get('status')} {clock(fin.ts)}); it carries forward: raise it first")
         return cp
+
+    def _ack(self, ids: list[int], rel: str) -> None:
+        """`ack: invalid [#N ...]`: the rejected signals named (without ids, every live one)
+        are dealt with, so they drop from the app's header, the inbox and the next digest; a
+        checkpoint clears them anyway. They stay in Events."""
+        live = [e.id for e in live_invalids(self.log)]
+        if stale := [i for i in ids if i not in live]:
+            raise ValueError(f"ack: {', '.join(f'#{i}' for i in stale)}: not a rejected signal still unacknowledged "
+                             "since the latest checkpoint")
+        self.log.append("ack", paths=[rel], what="invalid", events=sorted(ids or live), by=self._by or "unknown")
 
     def _session(self, label: str, rel: str) -> None:
         """A planner session's start in one signal: a checkpoint with the label, then

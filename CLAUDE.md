@@ -1,6 +1,6 @@
 # Working in claude-conductor
 
-Conductor is a daemon that runs queued Claude Code prompts for a project: per-repo queues, locks, headless executors, an event log, an inbox, questions, and every commit to the project's control folder. `planner.md` is how a planner session uses it, read whole every session (ending with the planner's vocab); `claude-ai-new-project.md` is starting, parking and resuming a project; `README.md` and `docs/` are how it works. Prompts for this repo are pasted into a Claude Code session by hand — conductor never runs its own queue.
+Conductor is a daemon that runs queued Claude Code prompts for a project: per-repo queues, locks, headless executors, an event log, an inbox, questions, and every commit to the project's control folder. `planner.md` is how a planner session uses it (ending with its vocab; a start reads only `planner-start.md`); `claude-ai-new-project.md` is starting, parking and resuming a project; `README.md` and `docs/` are how it works. Prompts for this repo are pasted into a Claude Code session by hand — conductor never runs its own queue.
 
 ## Conventions
 

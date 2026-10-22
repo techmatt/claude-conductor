@@ -39,6 +39,14 @@ def rel_for(write_rel: str) -> str:
     return (PurePosixPath(ROOT) / p.parent / f"{name}.md").as_posix()
 
 
+def _settles(path: str) -> bool:
+    """A write taken only once it has stopped changing: a signal or an amendment."""
+    name = os.path.basename(path)
+    if os.path.basename(os.path.dirname(path)) == "signals":
+        return not name.endswith((".bad", ".tmp"))
+    return ".amend" in name
+
+
 def _q(value) -> str:
     return json.dumps(value, ensure_ascii=False)     # a JSON scalar or list is valid YAML
 
@@ -49,6 +57,7 @@ class ReceiptsMixin:
         self._pruned_at = 0.0
         self.proposed_seen: dict[str, int] = {}     # proposed file → the mtime its receipt covers
         self._pending: dict[str, str] = {}          # waiting request → what its pending receipt says
+        self._woke_for: set[tuple[str, int]] = set()    # settled files a nap already cut short for (`_nap`)
 
     def _prepare_receipts(self) -> None:
         root = self.cfg.path(ROOT)
@@ -132,8 +141,17 @@ class ReceiptsMixin:
         """One poll's sleep, cut short by any planner write (a request, signal, queue item or
         amendment, proposal, answer or backlog file, new or rewritten), and by a file still
         settling (`daemon_signals.signal_settle`) coming of age: every kind's receipt is there
-        about a second after the write, not a poll or two later (Word Warriors session 11)."""
+        about a second after the write, not a poll or two later (Word Warriors session 11).
+        A settling file that came of age during the tick (a signal written with a request,
+        too young when the tick began) ends it at once: Word Warriors session 12 saw such a
+        signal's receipt a whole poll after its request's."""
         before, pending = self._planner_writes(), request.pending(self.cfg)
+        settling = {p: m for p, m in before.items() if _settles(p)}
+        ripe = {(p, m) for p, m in settling.items() if m / 1e9 + daemon_signals.signal_settle(os.path.basename(p)) <= time.time()}
+        if ripe - self._woke_for:           # once per file version: one a later tick can't take yet won't spin
+            self._woke_for = ripe
+            return
+        self._woke_for = ripe
         end = time.monotonic() + self.cfg.poll_seconds
         ages = [m / 1e9 + daemon_signals.signal_settle(os.path.basename(p)) for p, m in before.items()]
         if young := [t for t in ages if t > time.time()]:

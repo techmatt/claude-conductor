@@ -94,6 +94,11 @@ class ProjectView(QWidget):
         for w in (self.state_label, self.daemon_label):
             head.addWidget(w)
         head.addWidget(self.pending_label, 1)
+        # Dismisses "N rejected" once Matt has seen why (a checkpoint clears it too).
+        self.dismiss_btn = QPushButton("Dismiss")
+        self.dismiss_btn.setVisible(False)
+        self.dismiss_btn.clicked.connect(self.dismiss_rejected)
+        head.addWidget(self.dismiss_btn)
         # One Run button per `[run.<name>]` target, rebuilt when the targets change, each
         # with a Stop button beside it, shown while the target is up or starting.
         self.run_bar = QHBoxLayout()
@@ -208,12 +213,14 @@ class ProjectView(QWidget):
               "Repos, Events and the inbox (a `checkpoint:` signal)")
         sdir =self.project.control / "signals"
         pending = sorted(sdir.glob("app-*.signal")) if sdir.is_dir() else []
-        bad = sorted(sdir.glob("app-*.signal.bad")) if sdir.is_dir() else []
         bits = []
         if pending:
             bits.append(f"{len(pending)} action(s) waiting for the daemon")
-        if bad:
-            bits.append(f"{len(bad)} rejected (see Events: invalid)")
+        if snap.rejected:       # since the checkpoint, not acknowledged (`events.live_invalids`)
+            bits.append(f"{len(snap.rejected)} rejected (see Events: invalid)")
+        self.dismiss_btn.setVisible(bool(snap.rejected))
+        self.dismiss_btn.setToolTip("Acknowledge: " + "; ".join(f"#{e.id} {e.detail.get('error')}" for e in snap.rejected)
+                                    + " (an `ack: invalid` signal; they stay in Events)")
         if snap.error:
             bits.append(snap.error)
         self.pending_label.setText(" · ".join(bits))
@@ -268,6 +275,10 @@ class ProjectView(QWidget):
                 return
         path = actions.checkpoint(self.project.control, label)
         self.notify(f"new checkpoint: wrote signals/{path.name}; the daemon logs it")
+
+    def dismiss_rejected(self) -> None:
+        path = actions.ack_invalid(self.project.control)
+        self.notify(f"dismiss rejected: wrote signals/{path.name}; the daemon logs `ack` and the count goes")
 
     def set_autopilot(self, mode: str) -> None:
         path = actions.autopilot(self.project.control, mode)

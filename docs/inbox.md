@@ -126,11 +126,18 @@ Then **Night shift** (`night-shift.md`): each repo's backlog, tonight's budget a
 it sleeps, and since the mark the draws, flags, watch launches and watch reports (which
 never wait in *Unreviewed reports*); their events leave *Other*.
 
-Then every event after the read mark that is not *settled*: an event of an item whose
-report is reviewed (a red kind aside), or a request or control commit at or before the
-newest `closeout:` request among them (a session that closed out before closeouts moved
-the mark). The header counts them: `· hidden as settled: N of reviewed items, M requests
-and control commits up to closeout #<id>`. A request whose message starts `closeout:`
+Then every event after the read mark that is not *settled* (`inbox.settled_why`), so
+the digest shows what is live (Word Warriors session 12's start: 263 events, ~60%
+settled). Settled: every `push`; a checkpoint's still-unreviewed `warning` (*Unreviewed
+reports* lists the item); an event of an item whose report is reviewed (a red
+kind aside); anything before the newest request among them that rewrote `state.md` (a
+`closeout:` one whatever its targets), reds included, since the planner wrote down what
+it made of them, bar an unreviewed `finish` and a hold still in effect; and a rejected
+signal (`invalid` of a `signals/` file) once acknowledged (`ack: invalid`) or before the
+latest checkpoint (a session start's included), whatever else applies to it. The header
+counts each reason: `· hidden as settled: 23 pushes, 132 of reviewed items, 99 passed over
+by `state.md` request #2917, …`. A control commit is folded into the request it
+committed: one line, `… · committed <sha> (#<id>)`. A request whose message starts `closeout:`
 also logs a `read` event through the newest event (detail `closeout`: the request
 folder's name), so the next inbox and digest start after the ended session. The rest are
 grouped **Red** (tamper first,
