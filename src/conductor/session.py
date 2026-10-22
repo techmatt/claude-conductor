@@ -1,6 +1,7 @@
 """`session.md`: the start digest a `session:` signal writes, so a planner session opens
 with one signal and one read. It is the inbox since the previous read mark, plus
-conductor's own reports past the planner's marker and each repo's maintenance facts."""
+`state.md`'s lines a start raises, conductor's own reports past the planner's marker and
+each repo's maintenance facts."""
 
 from __future__ import annotations
 
@@ -137,15 +138,66 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
     return out
 
 
+def state_sections(text: str) -> dict[str, list[str]]:
+    """`state.md`'s `## ` sections by lowercased heading (any `(…)` after the name dropped),
+    each body's lines as written."""
+    out: dict[str, list[str]] = {}
+    body: list[str] | None = None
+    for ln in text.splitlines():
+        if ln.startswith("## "):
+            body = out.setdefault(ln[3:].split("(", 1)[0].strip().lower(), [])
+        elif ln.startswith("# "):
+            body = None
+        elif body is not None:
+            body.append(ln)
+    return out
+
+
+def due_items(lines: list[str]) -> list[str]:
+    """The top-level bullet items (with their indented continuation lines) saying `due`."""
+    items: list[list[str]] = []
+    for ln in lines:
+        if ln.startswith(("- ", "* ")):
+            items.append([ln])
+        elif items and ln.startswith((" ", "\t")) and ln.strip():
+            items[-1].append(ln)
+        else:
+            items.append([])            # a blank or paragraph line ends the item
+    return [ln for it in items if it and re.search(r"\bdue\b", " ".join(it), re.I) for ln in it]
+
+
+def from_state(control: Path) -> list[str]:
+    """`state.md`'s lines a session start raises, copied as written: *Waiting on Matt* and
+    *Open questions* whole, and the *Pending fixes* and *Maintenance* items marked due."""
+    try:
+        sections = state_sections(read_text(control / "state.md"))
+    except (OSError, UnicodeDecodeError):
+        return ["## From state.md", "", "No `state.md` readable."]
+    out = ["## From state.md"]
+    for name, due in (("Waiting on Matt", False), ("Open questions", False),
+                      ("Pending fixes", True), ("Maintenance", True)):
+        out += ["", f"### {name}" + (", due" if due else "")]
+        if (body := sections.get(name.lower())) is None:
+            out.append(f"No *{name}* section.")
+            continue
+        lines = due_items(body) if due else body
+        while lines and not lines[0].strip():
+            lines = lines[1:]
+        while lines and not lines[-1].strip():
+            lines = lines[:-1]
+        out += lines or ["none marked due" if due else "empty"]
+    return out
+
+
 def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int,
            root: Path | None = None) -> str:
     """The digest: the inbox since the previous read mark, headed by the session's
-    checkpoint, then conductor's reports and the maintenance facts."""
+    checkpoint, then `state.md`'s due lines, conductor's reports and the maintenance facts."""
     head = (f"# Session start — {cfg.project}\n\n"
             f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
             f"The read mark moves to #{top} as this is written; no `read:` is needed.")
     body = inbox.render(cfg, log, view, heading=head)
-    out = [body.rstrip(), "", "## Conductor reports", *conductor_reports(root or CONDUCTOR_ROOT), "", "## Maintenance facts"]
+    out = [body.rstrip(), "", *from_state(cfg.control), "", "## Conductor reports", *conductor_reports(root or CONDUCTOR_ROOT), "", "## Maintenance facts"]
     for repo in cfg.repos:
         out += maintenance(cfg, log, view, repo)
     return "\n".join(out) + "\n"

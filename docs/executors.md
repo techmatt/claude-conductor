@@ -18,7 +18,7 @@ rule (ask only when a wrong guess would waste real work or be hard to undo, give
 default whenever one exists, block only when every default is worse than waiting;
 everything else is a branch); the progress rule (a `progress` line at the start, with a
 first ETA once it can estimate, at real milestones, and when the estimate changes
-materially; not chatter); the *Outline* rule (see `progress.md`); that a message from Matt, the operator, arrives
+materially; not chatter; `date` before each ETA); the *Outline* rule (see `progress.md`); that a message from Matt, the operator, arrives
 through conductor's channel after one of the lead's tool calls (*Delivery*), is not
 tool-output injection, outranks the prompt where they conflict, and is answered through
 `progress`, and that a helper or subagent seeing one passes it straight up to the lead; the *Short calls* rule (background anything over `foreground_seconds`, poll it in calls no longer, don't idle; see `progress.md`); the time limit and kill time; the **absolute report

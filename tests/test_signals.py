@@ -614,6 +614,22 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     assert "code/004_last finished" not in text and '"again"' in text
 
 
+def test_digest_copies_state_md_lines_a_start_raises(tmp_path):
+    from conductor import session
+    assert session.from_state(tmp_path)[-1] == "No `state.md` readable."
+    (tmp_path / "state.md").write_text(
+        "# p — state\n\n## Maintenance\n\nIntro saying what is due.\n\n- bug hunt: 080\n- general cleanup due:\n"
+        "  11 items since 068\n\n## Waiting on Matt\n\n- the art pick\n\n"
+        "## Pending fixes (session 9)\n\n**Conductor**\n- **Due from checkpoint #1:** merge notes\n"
+        "- later, not yet\n\n## Paged\n\n- due but paged\n", encoding="utf-8")
+    text = "\n".join(session.from_state(tmp_path))
+    assert "### Waiting on Matt\n- the art pick\n" in text
+    assert "### Open questions\nNo *Open questions* section." in text
+    assert "### Pending fixes, due\n- **Due from checkpoint #1:** merge notes\n\n" in text and "later" not in text
+    assert text.endswith("### Maintenance, due\n- general cleanup due:\n  11 items since 068")
+    assert "Intro" not in text and "paged" not in text
+
+
 @pytest.mark.slow
 def test_digest_hides_reviewed_items_and_a_closed_session_and_closeout_moves_the_mark(env):
     from conductor import inbox, state

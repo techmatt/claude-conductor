@@ -44,6 +44,12 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    planner that staged it too early sees it is the previous one and stages again. The
    body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
    reports, picks, every unsettled event since the previous read mark, *Now*), then:
+   - **From state.md**: the control folder's `state.md` lines a start raises, copied as
+     written, so the planner need not stage it: *Waiting on Matt* and *Open questions*
+     whole, and *Pending fixes, due* and *Maintenance, due*: each top-level bullet (with
+     its indented lines) of that section saying the word `due`, any case. Sections match
+     by `## ` heading, ignoring a `(…)` after the name; a missing one says so, as does a
+     missing `state.md`;
    - **Conductor reports**: every `reports/NN_name_report.md` in conductor's own
      checkout (found from the installed package, `src/conductor/` → the repo root) whose
      prompt is past the `Last report reviewed by the planner: NN_name` line in its

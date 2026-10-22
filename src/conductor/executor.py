@@ -30,7 +30,8 @@ didn't, and continue. The only hard stop is a wrong-repo guard in the prompt.
 Progress. `progress` (mcp__conductor__progress) shows Matt one short line about how
 this item is going and returns at once. Call it at the start, with a first `eta` as soon
 as you can estimate one; at real milestones; and whenever your estimate changes
-materially. Not chatter.
+materially. Not chatter. Run `date` before every `eta` or outline time: never work one
+out from a clock you read earlier.
 
 Outline. Once you've oriented and have a plan, call `progress` with `outline`: your
 sections in order, the report last, at most ~8 rows, each a few words with a rough local

@@ -12,12 +12,12 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 
 ## The bridge
 
-- The chat must be **linked to the box** (the desktop app's Chat tab, not Code). No device tools: ask Matt to link it, never work around it.
-- Load all four device tools (request access, list, stage, commit) in one tool search. Access is per existing folder: ask once, for the control folder, the code repos and `claude-conductor`.
+- The chat must be **linked to the box** (the desktop app's Chat tab, not Code). No device tools: say first that the chat isn't linked and ask Matt to link it, never work around it.
+- Load all four device tools in one tool search, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. Access is per existing folder: ask once, for `C:\Code\<project>-control`, each code repo beside it as `C:\Code\<repo>` (`wordwarriors`; `corelight-engine`, `corelight-web`; a new project's: `conductor.toml` `[repos]`) and `C:\Code\claude-conductor`.
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Each upload goes once to a fresh workspace path, never edited after.
 - Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
-- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path ending `.md` (a request: `receipts\requests\<stamp>.md`): `accepted` with `result`, `pending` (a request waiting: for what), or `refused` with `reason`. Missing: not handled yet. `written_ms` older than a rewrite: the old version's.
+- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (a signal: `receipts\signals\planner-<stamp>.md`, never `.signal.md`; a request: `receipts\requests\<stamp>.md`): `accepted` with `result`, `pending` (a request waiting: for what), or `refused` with `reason`. Missing: not handled yet. `written_ms` older than a rewrite: the old version's.
 - **Never list a control folder recursively**: every file is named below.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (in a code repo), or a command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.
 
@@ -55,8 +55,8 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## Every session
 
-- **Start** (**start a new <project> session**) is exactly four bridge steps: request access (above); stage `planner.md` + `state.md`; signal `by: planner` + `session: start`; stage `session.md` (again if its header names an older signal). No folder listings, `claude-ai-new-project.md`, inbox or design docs.
-- **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken. At start, from the digest, then: *Waiting on Matt*, unreviewed reports, pickers waiting, conductor's reports (a line each), maintenance recommendations.
+- **Start** (**start a new <project> session**) is exactly four bridge steps: the tool search and access request (*The bridge*, paths as written there: never a memory read or past-chat search for them); stage `planner.md`; signal `by: planner` + `session: start`; stage `session.md` (again if its header names an older signal). No memory reads, past-chat search, folder listings, `claude-ai-new-project.md`, inbox, `state.md` or design docs. The digest's *From state.md* carries `state.md`'s *Waiting on Matt*, *Open questions* and the *Pending fixes* and *Maintenance* lines saying "due", as written; stage `state.md` only before a request that changes it.
+- **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken. At start, from the digest, then: *Waiting on Matt*, due pending fixes, unreviewed reports, pickers waiting, conductor's reports (a line each), maintenance recommendations.
 - Matt raises every next step: answer what is asked, never assume or schedule the next leg.
 - **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`). One instruction, one signal file; nothing rides along.
 - Design and scoping are decided with Matt, never by an executor; executors add facts, usually as `readonly` items.
