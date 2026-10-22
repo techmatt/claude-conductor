@@ -30,6 +30,16 @@ class Snapshot:
         return self.__dict__.copy()
 
 
+REMOTE_REFS = "refs/remotes/"
+
+
+def _guarded(refs: dict[str, str]) -> dict[str, str]:
+    """The refs the guard watches: all but remote-tracking ones, which only record what a
+    remote holds. Conductor's own push of the control folder moves them (`daemon_push`):
+    never drift, never tamper, never reverted."""
+    return {r: sha for r, sha in refs.items() if not r.startswith(REMOTE_REFS)}
+
+
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -54,7 +64,7 @@ def take(control: Path, state_dir: Path, taken: str) -> Snapshot:
         else:
             files[rel] = ""
     snap = Snapshot(
-        head=git.head(control), branch=git.symbolic_head(control), refs=git.refs(control),
+        head=git.head(control), branch=git.symbolic_head(control), refs=_guarded(git.refs(control)),
         tree=git.write_tree(control), files=files, blobs=blobs, taken=taken,
     )
     (new / "meta.json").write_text(json.dumps(snap.to_json(), indent=1), encoding="utf-8", newline="\n")
@@ -90,9 +100,9 @@ def diff(control: Path, snap: Snapshot) -> list[str]:
         changes.append(f"HEAD moved to {git.symbolic_head(control) or 'detached'} (was {snap.branch})")
     if git.head(control) != snap.head:
         changes.append(f"new commit: HEAD {(git.head(control) or '-')[:10]} (was {(snap.head or '-')[:10]})")
-    now_refs = git.refs(control)
-    for ref in sorted(set(now_refs) | set(snap.refs)):
-        if now_refs.get(ref) != snap.refs.get(ref) and ref != snap.branch:
+    now_refs, was = _guarded(git.refs(control)), _guarded(snap.refs)     # a snapshot from before 43 has them
+    for ref in sorted(set(now_refs) | set(was)):
+        if now_refs.get(ref) != was.get(ref) and ref != snap.branch:
             changes.append(f"ref {ref} changed")
     tracked = git.ls_files(control)
     for rel in sorted(set(tracked) - set(snap.files)):
@@ -131,11 +141,11 @@ def named(touched: list[str], changes: list[str]) -> bool:
 
 def restore(control: Path, state_dir: Path, snap: Snapshot) -> None:
     """Put refs, HEAD, index and every tracked file back exactly as snapshotted."""
-    now_refs = git.refs(control)
-    for ref, sha in snap.refs.items():
+    now_refs, was = _guarded(git.refs(control)), _guarded(snap.refs)
+    for ref, sha in was.items():
         if now_refs.get(ref) != sha:
             git.run(control, "update-ref", ref, sha)
-    for ref in set(now_refs) - set(snap.refs):
+    for ref in set(now_refs) - set(was):
         git.run(control, "update-ref", "-d", ref)
     if snap.branch:
         git.run(control, "symbolic-ref", "HEAD", snap.branch)

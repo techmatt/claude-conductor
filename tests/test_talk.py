@@ -236,6 +236,26 @@ def test_pre_hook_keeps_shell_calls_short(tmp_path):
     assert talk.main(["pre", "--cap", "60"]) == 0       # stdin is empty under pytest: prints nothing
 
 
+def test_audit_on_a_running_item_sends_the_audit_text(env):
+    """`audit: X` on a running item (Word Warriors 093): conductor's own audit text as a tell,
+    and the finish carries `audit`, so the next cleanup reads its notes."""
+    env.queue("001_x", "FAKE until-message 30\nFAKE report done")
+    env.queue("002_q", "FAKE report done", stage="false")
+    env.tick_until(lambda: env.events("start"))
+    send(env, "by: planner\naudit: 002", "queued")
+    assert bad(env, "queued") and "has not started" in env.events("invalid")[-1].detail["error"]
+    send(env, "by: planner\naudit: 001")
+    [tell] = env.events("tell")
+    notes = env.control / "reports" / "code__001_x.audit.md"
+    assert tell.detail["audit"] is True and tell.detail["by"] == "planner"
+    assert "keep a running notes file at exactly this path" in tell.detail["text"] and str(notes.resolve()) in tell.detail["text"]
+    send(env, "audit: 001", "again")
+    assert bad(env, "again") and "already keeps audit notes" in env.events("invalid")[-1].detail["error"]
+    env.tick_until(lambda: env.finished("code/001_x"))
+    assert env.d.log.last("finish", item="code/001_x").detail["audit"] is True
+    env.tick_until(lambda: env.finished("code/002_q"))
+
+
 def test_cli_tell_and_open(env, capsys, monkeypatch):
     env.queue("001_x", "FAKE until-message 30")
     env.tick_until(lambda: env.events("start"))

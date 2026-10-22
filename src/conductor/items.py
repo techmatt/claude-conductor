@@ -10,7 +10,8 @@ from . import globs
 from .audits import TEMPLATES, canonical
 from .util import FrontMatterError, read_text, split_front_matter
 
-NAME_RE = re.compile(r"^(\d{3,})_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
+NAME_RE = re.compile(r"^(\d{3,}|W\d+)_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
+WATCH_RE = re.compile(r"^W(\d+)_")     # a watch's own series (`W12_watch`): never a queue number
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
           "paths", "stage", "ultracode", "audit", "template", "alongside", "resume"}
 GIST_CHARS = 160
@@ -21,7 +22,7 @@ class Item:
     repo: str
     name: str                    # `001_hello` (file stem)
     path: Path
-    num: int = 0
+    num: int = 0                 # 0 for a watch (`W12_watch`), which sorts first and shares no number
     locks: list[str] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     after_red: str = "stop"
@@ -75,7 +76,7 @@ def parse(path: Path, repo: str) -> Item:
     m = NAME_RE.match(path.stem)
     if not m:
         item.errors.append("file name must be NNN_name.md")
-    else:
+    elif m.group(1).isdigit():
         item.num = int(m.group(1))
     if amend_of(path) is not None:          # the queue would take it for an amendment
         item.errors.append("named like an amendment (.amend[.<tag>].md); rename it")
@@ -137,6 +138,8 @@ def parse(path: Path, repo: str) -> Item:
         _resume(item, meta)
     elif item.template in RESUME_TEMPLATES:
         item.errors.append(f"`template: {item.template}` needs `resume: <repo>/<NNN_name>`, the finished item it looks back on")
+    if WATCH_RE.match(item.name) and item.template != "watch":
+        item.errors.append("a `W<n>_` name is a watch item's; name the item NNN_name.md")
     if not body.strip() and item.template is None:          # a template is a whole prompt
         item.errors.append("the prompt body is empty")
     return item

@@ -10,15 +10,21 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import desktop, items, nightshift, procs, state, talk
+from typing import TYPE_CHECKING
+
+from . import audits, desktop, executor, items, nightshift, procs, state, talk
 from .daemon_push import CONTROL
 from . import review as review_mod
 from . import session as session_mod
 from .events import Event
 from .util import clock, read_text, retry_io, write_text
 
+if TYPE_CHECKING:
+    from .daemon import Run
+
 
 SIGNAL_SETTLE_SECONDS = 1.0     # a signal or amend file younger than this may still be being written
+AUDIT_LATE = "From conductor: this item now keeps audit notes, for the rest of its run.\n\n"   # `audit:`
 
 
 def _strip_comment(value: str) -> str:
@@ -159,7 +165,7 @@ class SignalsMixin:
             elif key in ("clear", "push"):
                 if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened"):
+            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reorder":
@@ -229,6 +235,8 @@ class SignalsMixin:
             self._tell(value, rel)
         elif key == "outline":
             self._tell(f"{value} {talk.OUTLINE_REQUEST}", rel, outline_request=True)
+        elif key == "audit":
+            self._audit(value, rel)
         elif key == "checkpoint":
             self._checkpoint(value, rel)
         elif key == "session":
@@ -429,7 +437,25 @@ class SignalsMixin:
         the PostToolUse hook (or its next `progress` call) to deliver. An `outline:`
         signal is a tell of the fixed request, marked `outline_request`."""
         ref, text = value.split(None, 1)
-        verb = "outline" if extra.get("outline_request") else "tell"
+        run = self._running_target(ref, "outline" if extra.get("outline_request") else "tell")
+        ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=self._by or "unknown", **extra)
+        talk.post(self.cfg.control, run.item_id, ev.id, text, self._by)
+
+    def _audit(self, ref: str, rel: str) -> None:
+        """`audit: <item>` on a running item: conductor's own *Audit notes* text, the one
+        `audit: true` gives at launch, sent as a tell; its run record gains `audit`, so its
+        finish lists the notes for the next cleanup as if it had been asked at launch."""
+        run = self._running_target(ref, "audit")
+        if audits.writes_notes(run.rec):
+            raise ValueError(f"audit: {run.item_id} already keeps audit notes")
+        notes = executor.RunPaths.for_name(self.cfg, run.rec["repo"], run.rec["name"]).audit
+        text = AUDIT_LATE + audits.fill(audits.template_text("audit"), notes_path=str(notes.resolve()))
+        run.rec["audit"] = True
+        self._save(run)
+        self._tell(f"{run.item_id} {text}", rel, audit=True)
+
+    def _running_target(self, ref: str, verb: str) -> Run:
+        """The running executor `ref` names, or why a message can't reach it."""
         prefix, slash, name_ref = ref.rpartition("/")
         if slash and prefix not in self.cfg.repos:
             raise ValueError(f"{verb}: {prefix!r} is not a repo")
@@ -450,9 +476,7 @@ class SignalsMixin:
             started = ids[0] in view.finishes or ids[0] in view.running
             raise ValueError(f"{verb}: {ids[0]} " + ("has exited; a message reaches only a running executor"
                                                    if started else "has not started; a message reaches only a running executor"))
-        item_id = hits[0]
-        ev = self.log.append("tell", item=item_id, paths=[rel], text=text, by=self._by or "unknown", **extra)
-        talk.post(self.cfg.control, item_id, ev.id, text, self._by)
+        return run
 
     def _cancel_file(self, src: Path, origin: str, item_id: str, repo: str, rel: str) -> None:
         cdir = self.cfg.state_dir / "cancelled"
@@ -493,7 +517,7 @@ class SignalsMixin:
             src = self._one(found, "reorder", ref, label)
             if src in chosen:
                 raise ValueError(f"reorder: {src.stem} is listed twice")
-            if not items.NAME_RE.match(src.stem):
+            if not items.NAME_RE.match(src.stem) or items.WATCH_RE.match(src.stem):
                 raise ValueError(f"reorder: {src.name} is not named NNN_name.md")
             chosen.append(src)
         listed = [p.stem for p in chosen]

@@ -13,17 +13,19 @@ runtime state: the folder ignores itself (`receipts/.gitignore`), and files olde
 from __future__ import annotations
 
 import json
+import os
 import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
-from . import daemon_signals, inbox, items
+from . import daemon_signals, inbox, items, request
 from .events import Event
 from .util import FrontMatterError, clock, now, read_text, split_front_matter, write_text
 
 ROOT = "receipts"
 KEEP_SECONDS = 3 * 86400        # a receipt is read within minutes of its write; three days is ample
 PRUNE_EVERY = 3600
+WRITE_WAKE_SECONDS = 0.25       # how often a poll's sleep looks for a new planner write (`_nap`)
 LINES = 8                       # event lines in a receipt's body; the rest are only ids
 # Events that mean the write (or a line of it) was not carried out.
 REFUSALS = ("invalid", "request_failed", "amend_refused", "late", "open_refused", "pick_failed")
@@ -126,6 +128,36 @@ class ReceiptsMixin:
         lines = [ln for ln in body.strip().splitlines() if ln.strip()] + [self._line(ev)]
         write_text(path, self._render(meta, lines))
 
+    def _nap(self) -> None:
+        """One poll's sleep, cut short by any planner write (a request, signal, queue item or
+        amendment, proposal, answer or backlog file, new or rewritten), and by a file still
+        settling (`SIGNAL_SETTLE_SECONDS`) coming of age: every kind's receipt is there about
+        a second after the write, not a poll or two later (Word Warriors session 11)."""
+        settle = daemon_signals.SIGNAL_SETTLE_SECONDS
+        before, pending = self._planner_writes(), request.pending(self.cfg)
+        end = time.monotonic() + self.cfg.poll_seconds
+        if young := [m for m in before.values() if time.time() - m / 1e9 < settle]:
+            end = min(end, time.monotonic() + max(young) / 1e9 + settle - time.time() + 0.05)
+        while (left := end - time.monotonic()) > 0:
+            time.sleep(min(left, WRITE_WAKE_SECONDS))
+            if request.pending(self.cfg) != pending or self._planner_writes() != before:
+                return
+
+    def _planner_writes(self) -> dict[str, int]:
+        """Each entry of the folders the planner writes into, by path → mtime (ns). A request
+        folder's mtime moves as its files are added."""
+        dirs = [self.cfg.path(d) for d in ("requests", "signals", "proposed", "questions")]
+        dirs += [self.cfg.path(top, repo) for top in ("queue", "backlog") for repo in self.cfg.repos]
+        out = {}
+        for d in dirs:
+            try:
+                with os.scandir(d) as it:
+                    for e in it:
+                        out[e.path] = e.stat().st_mtime_ns
+            except OSError:
+                continue
+        return out
+
     def process_proposed(self) -> None:
         """A receipt for each new or rewritten `proposed/` file: waiting for Matt's approval,
         or refused for what `approve:` would refuse it for. No event: a proposal changes nothing."""
@@ -140,9 +172,10 @@ class ReceiptsMixin:
                 self._write_receipt(rel, [], result=f"proposed for {repo}: waits for Matt (`approve: {p.stem}`)")
 
     def _new_versions(self, paths: list[Path], seen: dict[str, int]) -> tuple[list[tuple[Path, str]], dict[str, int]]:
-        """The settled files among `paths` that are new or rewritten since `seen` (rel → the
-        mtime its receipt covers), as (path, rel), and the new `seen`. A file still being
-        written waits for a later tick; one whose receipt predates a restart is not new."""
+        """The readable files among `paths` that are new or rewritten since `seen` (rel → the
+        mtime its receipt covers), as (path, rel), and the new `seen`. No settle delay, as for
+        a queue item: a file its writer still holds (unreadable on Windows) waits for a later
+        tick, and a rewrite gets a new receipt. One whose receipt predates a restart is not new."""
         fresh, now_seen = [], {}
         for p in paths:
             rel = self.cfg.rel(p)
@@ -153,7 +186,9 @@ class ReceiptsMixin:
             if seen.get(rel) == mtime:
                 now_seen[rel] = mtime
                 continue
-            if time.time() - mtime / 1e9 < daemon_signals.SIGNAL_SETTLE_SECONDS:
+            try:
+                p.read_bytes()
+            except OSError:
                 continue
             now_seen[rel] = mtime
             if rel not in seen and self._receipt_meta(rel).get("written_ms") == mtime // 1_000_000:

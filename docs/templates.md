@@ -27,7 +27,8 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   covering every task, under four headings: what was poorly structured, what took
   longer than expected and why, what should be refactored or cleaned up, and what
   CLAUDE.md or README should say. Nobody reviews notes per item. The item's `finish`
-  event carries `audit: true` and lists the notes file among its paths.
+  event carries `audit: true` and lists the notes file among its paths. Once running,
+  the `audit:` signal sends the same paragraph as a message instead (`signals.md`).
 - **`template: cleanup`**. The prompt after the preamble is `cleanup.md` with every
   *unused* note of the repo inlined, oldest first, each headed `### Notes from <item>,
   finished <status> <time>`; then, after `---` and "The planner adds, for this item:",

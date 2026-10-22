@@ -49,7 +49,6 @@ from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp,
 
 INBOX_REFRESH_SECONDS = 30
 TICK_FAILURES_BEFORE_EXIT = 3     # consecutive ticks failing on an OSError
-REQUEST_WAKE_SECONDS = 0.25       # how often a poll's sleep looks for a new request
 # What a running item is told when the box's memory level changes (`sample_memory`).
 MEMORY_TELLS = {
     "pressure": ("Conductor: the machine is low on memory ({free} GiB free, {percent}% of commit used). Keep "
@@ -320,16 +319,6 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 pass
             self.write_inbox(force=True)
             self.release()
-
-    def _nap(self) -> None:
-        """One poll's sleep, cut short by a new request: its receipt is there when the planner
-        reads it straight after writing, not a poll later."""
-        before = request.pending(self.cfg)
-        end = time.monotonic() + self.cfg.poll_seconds
-        while (left := end - time.monotonic()) > 0:
-            time.sleep(min(left, REQUEST_WAKE_SECONDS))
-            if request.pending(self.cfg) != before:
-                return
 
     def _recover_in_place(self, exc: OSError) -> None:
         """A tick died on an OSError part-way through: forget what this process holds in

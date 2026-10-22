@@ -22,6 +22,7 @@ push = true                   # push main to the remote after each merge (conduc
 
 A control folder with a remote is pushed the same way, with no setting: the remote is all
 it takes. Without one it is skipped quietly (no `push_failed`), except on `push: control`.
+The guard ignores the remote-tracking ref a push moves (`control-folder.md`, *Control-folder guard*).
 
 - **After conductor's own commits** (requests), batched: one push 30s after the last
   commit of a burst (`CONTROL_QUIET_SECONDS`), or 5 minutes after the first unpushed one

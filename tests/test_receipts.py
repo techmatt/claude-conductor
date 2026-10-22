@@ -3,7 +3,7 @@
 import os
 import time
 
-from conductor import daemon_receipts
+from conductor import daemon_receipts, daemon_signals
 from conductor.daemon_receipts import rel_for
 from conductor.util import read_text, split_front_matter
 
@@ -172,6 +172,32 @@ def test_proposed_receipts_once_per_version(env):
     before = bad_receipt.read_text(encoding="utf-8")
     env.d.tick()
     assert bad_receipt.read_text(encoding="utf-8") == before
+
+
+def test_any_planner_write_cuts_the_nap_short(env, monkeypatch):
+    """Every receipt kind as fast as a queue item's (Word Warriors session 11): a proposal,
+    a request or a signal ends the poll's sleep, not just a request."""
+    import threading
+    env.d.cfg.poll_seconds = 5
+    env.d.tick()
+    for rel, text in [("proposed/012_idea.md", "---\nrepo: code\n---\n\nan idea\n"),
+                      ("requests/20261022-1000/request.md", "---\ntargets: [state.md]\nmessage: x\n---\n"),
+                      ("signals/planner-1.signal", "by: planner\ncheckpoint: x\n"),
+                      ("backlog/code/later.md", "---\nrepo: code\n---\n\nlater\n")]:
+        path = env.control / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        timer = threading.Timer(0.3, path.write_text, (text,), {"encoding": "utf-8"})
+        start = time.monotonic()
+        timer.start()
+        env.d._nap()
+        timer.join()
+        assert time.monotonic() - start < 1.5, rel
+    # A file still settling (younger than SIGNAL_SETTLE_SECONDS, 0 in tests) ends the nap once it settles.
+    monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", 1.0)
+    path.write_text("---\nrepo: code\n---\n\nlater again\n", encoding="utf-8")
+    start = time.monotonic()
+    env.d._nap()
+    assert time.monotonic() - start < 1.5
 
 
 def test_old_receipts_are_pruned(env, monkeypatch):

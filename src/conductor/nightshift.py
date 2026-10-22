@@ -49,9 +49,17 @@ def queue_name(cfg: Config, view: View, repo: str, stem: str) -> str:
     rest = re.sub(r"^\d+_", "", stem)
     names = [i.split("/", 1)[1] for i in view.known() if i.startswith(repo + "/")]
     names += [p.stem for p in items.item_files(cfg.path("proposed")) if items.front_repo(p) == repo]
-    nums = [m.group(1) for n in names if (m := items.NAME_RE.match(n))]
+    nums = [m.group(1) for n in names if (m := items.NAME_RE.match(n)) and m.group(1).isdigit()]
     width = max([3, *(len(n) for n in nums)])
     return f"{max([0, *(int(n) for n in nums)]) + 1:0{width}d}_{rest}"
+
+
+def watch_name(view: View, repo: str) -> str:
+    """The repo's next watch item, `W<n>_watch`: a series of its own, so a watch never takes
+    (or moves) a queue number. Watches named `NNN_watch` before it stay as they are."""
+    nums = [int(m.group(1)) for i in view.known() if i.startswith(repo + "/")
+            and (m := items.WATCH_RE.match(i.split("/", 1)[1]))]
+    return f"W{max([0, *nums]) + 1}_watch"
 
 
 def full_length(meta: dict) -> bool:

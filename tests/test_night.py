@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from conductor import daemon_watch, nightshift, questions
+from conductor import daemon_watch, items, nightshift, questions, state
 from conductor.util import read_text
 
 
@@ -39,8 +39,8 @@ def test_a_stall_is_flagged_and_a_watch_tells_the_item(env, monkeypatch):
     [flag] = env.events("watch_flag")
     assert flag.detail["flag"] == "quiet" and flag.item == "code/001_long" and "watch" not in flag.detail
     [watch] = env.events("watch")
-    assert watch.item == "code/002_watch" and "no progress line" in watch.detail["reason"]
-    env.tick_until(lambda: env.finished("code/002_watch") and env.finished("code/001_long"))
+    assert watch.item == "code/W1_watch" and "no progress line" in watch.detail["reason"]
+    env.tick_until(lambda: env.finished("code/W1_watch") and env.finished("code/001_long"))
     text = watch_prompt(env, watch)
     assert "Watch over test" in text and "> FAKE until-message 30" in text     # the item's prompt, quoted
     assert "Why conductor launched this watch:" in text and "The planner adds" not in text
@@ -51,10 +51,18 @@ def test_a_stall_is_flagged_and_a_watch_tells_the_item(env, monkeypatch):
     # De-duplicated: the same silence is one flag however many checks see it (its reply starts a new one).
     assert [e.detail["key"] for e in env.events("watch_flag")].count("quiet:code/001_long:0") == 1
     inbox = read_text(env.control / "inbox.md")
-    assert "## Night shift" in inbox and "watch report code/002_watch **done**" in inbox
-    assert "code/002_watch" not in inbox.split("## Unreviewed reports", 1)[-1].split("##", 1)[0]
-    env.signal("planner-1.signal", "by: planner\nreviewed: code/002_watch")     # needs none, and breaks nothing
+    assert "## Night shift" in inbox and "watch report code/W1_watch **done**" in inbox
+    assert "code/W1_watch" not in inbox.split("## Unreviewed reports", 1)[-1].split("##", 1)[0]
+    env.signal("planner-1.signal", "by: planner\nreviewed: code/W1_watch")     # needs none, and breaks nothing
     env.tick_until(lambda: "needs no review" in env.events("warning")[-1].detail["note"])
+    # Watches have their own series (Word Warriors 093_watch beside 093_hunt5_calls): the queue's
+    # next number is still one past the last real item, and the next watch one past the last.
+    view = state.scan(env.d.cfg, env.d.log)
+    watches = [e.item for e in env.events("watch")]
+    assert watches == [f"code/W{n}_watch" for n in range(1, len(watches) + 1)]
+    assert nightshift.queue_name(env.d.cfg, view, "code", "next") == "002_next"
+    assert nightshift.watch_name(view, "code") == f"W{len(watches) + 1}_watch"
+    assert "watch item's" in items.parse(env.queue("W3_x", "FAKE report done"), "code").errors[-1]
 
 
 def test_no_watch_while_the_planner_is_active_until_asked(env):
@@ -199,7 +207,7 @@ def test_autopilot_holds_draws_and_watch_tells(env, monkeypatch):
     env.signal("cli-1.signal", "by: cli\nautopilot: off")
     env.queue("001_long", env.hold())
     env.signal("cli-2.signal", "by: cli\nwatch: now")
-    env.tick_until(lambda: env.finished("code/002_watch"))
+    env.tick_until(lambda: env.finished("code/W1_watch"))
     assert not env.events("tell")
     assert any("autopilot is off: recommended only" in w.detail["note"] for w in env.events("warning"))
     env.release()

@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot.
+outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -95,6 +95,12 @@ value is ignored.
 - **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,
   *Outline*.
+- **audit** — `audit: <item>` on a running item (resolved as for `tell`): conductor's own
+  *Audit notes* text (`templates/audit.md`, the one `audit: true` gives at launch, with the
+  item's notes path) sent as a tell marked `audit: true`; its run record gains `audit`, so
+  its `finish` carries `audit: true` and the next cleanup reads its notes. Refused for an
+  item not running, or one already keeping notes. A queued item takes `audit: true` in its
+  front-matter instead (`templates.md`).
 - **checkpoint** — `checkpoint: <label>` (any text, a ` # ` included, or none): see
   `inbox.md`.
 - **session** — `session: <label>` (any text, or none): a checkpoint with that label,

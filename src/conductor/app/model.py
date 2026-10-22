@@ -216,7 +216,7 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
                 errors.append(f"repo {repo!r} is not in conductor.toml")
         elif not errors:
             errors.append("front-matter `repo:` is required")
-        out.append(ProposedItem(p.stem, p, int(m.group(1)) if m else 0,
+        out.append(ProposedItem(p.stem, p, int(m.group(1)) if m and m.group(1).isdigit() else 0,
                                 None if repo is None else str(repo), summary[:200], errors))
     return sorted(out, key=lambda x: (x.num, x.name))
 

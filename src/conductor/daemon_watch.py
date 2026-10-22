@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 from . import items, nightshift, questions, state
+from . import daemon_signals
 from .util import clock, duration, now, parse_stamp, read_text, retry_io, write_text
 
 WATCH_BODY = "{reason}\n"           # the watch item's body: why conductor launched it
@@ -64,7 +65,8 @@ class WatchMixin:
     def _night_shift(self) -> None:
         self.process_backlog()
         # A draw depends on the log, the settled backlog and the night; unchanged, it is not retried.
-        key = (self.log.max_id(), tuple(sorted(self.backlog_seen.items())), bool(nightshift.night(self.cfg)))
+        settled = sum(map(self._settled, self.backlog_seen))
+        key = (self.log.max_id(), tuple(sorted(self.backlog_seen.items())), settled, bool(nightshift.night(self.cfg)))
         if self.backlog_seen and key != self._draw_key:
             self._draw_key = key
             view = state.scan(self.cfg, self.log)
@@ -90,6 +92,12 @@ class WatchMixin:
                 full = " (full-length: drawn only after Matt acts)" if nightshift.full_length(item.meta()) else ""
                 self._write_receipt(rel, [], result=f"in the backlog for {repo}: drawn when its queue is empty{full}")
 
+    def _settled(self, rel: str) -> bool:
+        """A receipted backlog file old enough to draw: its receipt comes as soon as it reads,
+        a draw only once it can't still be being written."""
+        mtime = self.backlog_seen.get(rel)
+        return mtime is not None and mtime / 1e9 < time.time() - daemon_signals.SIGNAL_SETTLE_SECONDS
+
     def _eligible(self, view: state.View, repo: str) -> tuple[items.Item | None, str]:
         """The backlog item a draw would take now, or None and why none."""
         if view.queued.get(repo):
@@ -103,7 +111,7 @@ class WatchMixin:
         if self._reorder_pending() == repo:
             return None, "a reorder is being finished"
         # Only files settled and receipted (`process_backlog`): never one still being written.
-        queue = [i for i in nightshift.backlog(self.cfg)[repo] if self.cfg.rel(i.path) in self.backlog_seen]
+        queue = [i for i in nightshift.backlog(self.cfg)[repo] if self._settled(self.cfg.rel(i.path))]
         if not queue:
             return None, "the backlog is empty"
         if hold := nightshift.autopilot_holds(self.cfg, self.log):
@@ -178,7 +186,8 @@ class WatchMixin:
             flags.append((f"run_failed:{ev.id}", "run_failed", None,
                           f"run target `{ev.detail.get('target')}` failed: {ev.detail.get('error')}"))
         self._watch_seen = self.log.max_id()
-        if (window := nightshift.night(self.cfg)) and all(
+        settling = not all(map(self._settled, self.backlog_seen))
+        if (window := nightshift.night(self.cfg)) and not settling and all(
                 not view.queued.get(r) and not any(x["repo"] == r for x in view.running.values()) for r in self.cfg.repos):
             self._sleep(window, "idle", "nothing in any queue and nothing eligible in the backlog")
         new = [f for f in flags if f[0] not in self.watch_keys]
@@ -239,7 +248,7 @@ class WatchMixin:
         repo = item.split("/", 1)[0] if item else (running[0] if running else next(iter(self.cfg.repos)))
         if self._reorder_pending() == repo:
             return f"a reorder of {repo} is being finished"
-        name = nightshift.queue_name(self.cfg, view, repo, "watch")
+        name = nightshift.watch_name(view, repo)
         path = self.cfg.path("queue", repo, f"{name}.md")
         write_text(path, WATCH_FRONT.format(repo=repo, hours=self.cfg.watch_max_hours) + WATCH_BODY.format(reason=reason))
         rel = self.cfg.rel(path)

@@ -12,7 +12,7 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
 | **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency*'s rule allows; else says why not. |
-| **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item or a queued X (not once running) / lists unused notes per repo, reading one if asked. |
+| **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item or a queued X; a running X: signal `audit: <repo>/<NNN_name>` (conductor sends its audit text, never a hand-written `tell`) / lists unused notes per repo, reading one if asked. |
 | **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none (it would hold its queue), says so. |
 | **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`. |
 | **test cleanup R** / **claude.md cleanup R** / **disk space audit R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_audit` (body: Matt's extras). |

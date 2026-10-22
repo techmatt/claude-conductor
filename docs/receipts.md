@@ -56,11 +56,23 @@ events: [812, 813]
 | queue item | `enqueue`, `edited` | `queued as <id>` (plus, if a watch or draw took its number meanwhile, `its number is also <id>'s: name it in full`); `rewritten: it runs the new text` / `its stage is redone` | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` | `late` (the question had resolved) |
-| proposed item | settled, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |
+| proposed item | readable, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |
 
 A `tell:` or `outline:` signal's receipt likewise gains a `delivered #N` line when the
 message reaches the executor. A queue item rewritten while the daemon was down gets no
 new receipt.
+
+## When
+
+Every kind lands about a second after its write, so one combined stage of several
+receipts finds them all (Word Warriors session 11 saw a proposal's and a request's
+take ~6s). Between ticks (`poll_seconds`, 2) the daemon looks every 0.25s
+(`WRITE_WAKE_SECONDS`) at the folders the planner writes into (`requests/`, `signals/`,
+`proposed/`, `questions/`, `queue/<repo>/`, `backlog/<repo>/`) and ticks at once when
+anything there is new or rewritten, or when a file still settling comes of age. A
+queue item, proposal, backlog file or request is taken as soon as it reads (a file its
+writer holds open does not); a signal or amend file, applied exactly once, waits until
+it is 1s old (`SIGNAL_SETTLE_SECONDS`). A tick's own length adds to all of them.
 
 ## Lifetime
 

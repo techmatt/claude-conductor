@@ -132,8 +132,10 @@ not an error: its queue holds until it is one.
 ## Control-folder guard
 
 The guard's snapshot (`.conductor/snapshot/`) holds every tracked file's bytes, every
-ref, symbolic HEAD and the index tree. It is persisted, so an item adopted after a
-restart is judged against the snapshot it launched under.
+ref but remote-tracking ones, symbolic HEAD and the index tree. It is persisted, so an
+item adopted after a restart is judged against the snapshot it launched under.
+`refs/remotes/*` (what a remote holds; conductor's own push moves them) are never drift,
+tamper or reverted.
 
 - Before a launch while **no executor is running**, the folder is compared with the
   snapshot; a difference is `drift` (made outside an executor's window — accepted,
@@ -185,8 +187,7 @@ There is no settle timer: as soon as `request.md` and every target it lists are 
 and readable (a file its writer still holds open is not), conductor checks the guard,
 copies the files in (UTF-8 text is written with LF endings; anything else byte for byte),
 stages and commits exactly the targets, logs `request` and `commit`, removes the request
-folder and re-snapshots. Between ticks the daemon looks for a new request every 0.25s
-(`REQUEST_WAKE_SECONDS`), so one is applied well within a second. A request waiting only
+folder and re-snapshots. A nap wakes within 0.25s of any planner write (`receipts.md`, *When*). A request waiting only
 for its own files gets no receipt yet. Targets not there yet are waited for, with no event, until 60s
 (`REQUEST_WAIT_SECONDS`) after `request.md`'s mtime (so the wait survives a restart;
 rewriting `request.md` starts it again); then the request fails (`targets listed but

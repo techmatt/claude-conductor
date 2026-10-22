@@ -131,6 +131,9 @@ def test_control_commits_are_pushed_as_one_batch(env, monkeypatch):
     assert push.detail["target"] == ".control" and push.detail["why"] == ["commit"]
     assert git(control_bare, "rev-parse", "main").strip() == git(env.control, "rev-parse", "main").strip()
     assert "ahead" not in git(env.control, "status", "-sb").splitlines()[0]      # level with origin/main
+    # Conductor's own push moved refs/remotes/origin/main: not drift (Word Warriors #2650), nor tamper.
+    env.d._guard_check("after the push")
+    assert not env.events("drift") and not env.events("tamper")
 
 
 def test_a_control_folder_without_a_remote_is_skipped_quietly(env, monkeypatch):

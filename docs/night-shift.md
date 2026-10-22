@@ -24,10 +24,12 @@ remembered from the log, so a restart flags nothing twice. Watch items are never
 
 ## The watch item
 
-A short readonly run of `template: watch`. Conductor writes it as the next item of a repo's
-queue (`queue/<repo>/NNN_watch.md`: `readonly`, `max_hours` = `watch_max_hours` (0.5),
-`after_red: continue`, `stage: false`; its body is why it was launched) and logs a `watch`
-event (item, reason, flags, file, by). It is launched:
+A short readonly run of `template: watch`. Conductor writes it into a repo's queue under a
+series of its own (`queue/<repo>/W<n>_watch.md`, n one past the repo's last watch), so it never
+takes or moves a queue number; older `NNN_watch` items keep their names, and a `W<n>_` name on
+anything but a watch is invalid. It is `readonly`, `max_hours` = `watch_max_hours` (0.5),
+`after_red: continue`, `stage: false`; its body is why it was launched. Conductor logs a
+`watch` event (item, reason, flags, file, by). It is launched:
 
 - when a check raises a new `quiet` or `eta` flag (the stall's repo); the other flags are
   logged only, and the next watch sees them;
