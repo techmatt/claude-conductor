@@ -105,11 +105,10 @@ Its tooltip lists each project's state; clicking opens the window. Closing the w
 hides it to the tray; *Quit* in the tray menu exits. Neither touches a daemon or an
 executor. Without a system tray, closing the window quits.
 
-**Toast click.** Not wired. Toasts are raised under Command Prompt's app id, so a plain
-click is delivered to that app id, never to this app. `windows-toasts` can
+**Toast click.** Not wired. Toasts are raised under Command Prompt's app id (`inbox.md`,
+*Toasts*), so a plain click goes to that app, never to this one. `windows-toasts` can
 make a toast *protocol*-activated (`Toast(launch_action="scheme:…")`), which Windows
 honours for unpackaged apps; opening the app on an item would need a URI scheme
 (e.g. `conductor-app:`) registered under `HKCU\Software\Classes` pointing at
 `conductor-app`, plus a single-instance hand-off to a running app. Unverified and left
-for later; the toast's tag (`<project>#<event id>`) names the event, and *Events* lists
-ids in its first column.
+for later; *Events* lists the ids a toast's tag names in its first column.

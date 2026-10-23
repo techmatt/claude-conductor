@@ -26,7 +26,7 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 | `CLEANUP.md` | 9 KB | read whole by every cleanup |
 | `claude-ai-new-project.md` | 10 KB | read with `planner.md` to start, park or resume a project |
 | `docs/*.md` | 12 KB | one topic each, small enough to read whole |
-| `src/conductor/daemon.py` | 1100 lines | the loop, launch, stage and finish; four `daemon_*` mixins hold the rest |
+| `src/conductor/daemon.py` | 1100 lines | the loop, launch, stage and finish; the `daemon_*` mixins hold the rest |
 | `src/**/*.py` | 900 lines | a module that grows past this has more than one concern |
 | `tests/*.py` | 900 lines | one area per file |
 | `tools/*.py` | 300 lines | small scripts |

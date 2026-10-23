@@ -13,7 +13,7 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
 `resume.md`). The
 preamble names the item and says the session is unattended; says where it works (the
 worktree, its branch and cut point, shared folders, the commit rule) and any declared
-`paths`; gives its *Port* (below) and any *Beside you* warning (`items.md`, *Alongside items*); gives the asking
+`paths`; gives its *Port* (below) and any *Beside you* warning (`scheduling.md`, *Alongside items*); gives the asking
 rule (ask only when a wrong guess would waste real work or be hard to undo, give a
 default whenever one exists, block only when every default is worse than waiting;
 everything else is a branch); the progress rule (a `progress` line at the start, with a

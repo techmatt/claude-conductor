@@ -241,6 +241,7 @@ def test_failed_removal_is_retried_on_queue_empty_and_at_start(env, monkeypatch)
 
 
 # ---------------------------------------------------------------- shared folders and ultracode
+@pytest.mark.slow
 def test_missing_shared_folder_is_created_in_the_main_checkout(env):
     env.configure('[repos.code]\npath = "../code"\nshared = ["data/cache"]\n')
     env.queue("001_use", "FAKE write data/cache/x.bin made\nFAKE check data/cache/x.bin\nFAKE commit a.txt a")

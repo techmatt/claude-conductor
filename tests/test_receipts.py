@@ -186,7 +186,7 @@ def test_any_planner_write_cuts_the_nap_short(env, monkeypatch):
                       ("backlog/code/later.md", "---\nrepo: code\n---\n\nlater\n")]:
         path = env.control / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        timer = threading.Timer(0.3, path.write_text, (text,), {"encoding": "utf-8"})
+        timer = threading.Timer(0.1, path.write_text, (text,), {"encoding": "utf-8"})
         start = time.monotonic()
         timer.start()
         env.d._nap()

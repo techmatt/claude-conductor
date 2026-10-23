@@ -663,7 +663,6 @@ def test_digest_hides_reviewed_items_and_a_closed_session_and_closeout_moves_the
 def test_digest_drops_pushes_folds_commits_and_reds_a_state_request_passed_over(env):
     """Word Warriors session 12's start: 263 events, ~60% settled. Pushes go, each request
     and its commit are one line, and a red a later `state.md` request passed over goes."""
-    from conductor import inbox, state
     log = env.d.log
     log.append("tamper", changes=["old tamper"])
     log.append("memory_critical", level="critical", was="pressure")

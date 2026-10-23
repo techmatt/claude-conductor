@@ -13,9 +13,10 @@ write.
 - `progress/`, `mail/`: progress lines, and messages waiting for executors (`progress.md`).
 - `touch/`: the control-folder paths each item's tool calls named, for tamper
   attribution (`control-folder.md`).
-- `open.log`: `open:` launches (`signals.md`).
+- `open.log`: `open:` launches (`open.md`).
 - `restart.ready`: the self-restart handshake (`restart.md`).
 - `memory.jsonl`: memory samples (`memory.md`).
+- `push/<target>.log`: the last push's output (`push.md`).
 - `leftovers.json`: worktrees to retry removing (`worktrees.md`).
 - `landing/<repo>__NNN_name.json`: a `land:` still landing, resumed after a restart (`worktrees.md`).
 - `run-<name>.log`, `run-<name>.json`: run targets (`run-targets.md`).

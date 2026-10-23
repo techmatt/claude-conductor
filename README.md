@@ -33,7 +33,7 @@ uv run conductor session [<label…>] [--control <folder>]      # a checkpoint p
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
 uv run conductor pick <repo>/<manifest path> [--control <folder>]  # open a picker in the browser (docs/picks.md)
-uv run conductor open-path <folder|reveal|file|text|url> <target…> [--control <folder>]  # the open: verbs (docs/signals.md)
+uv run conductor open-path <folder|reveal|file|text|url> <target…> [--control <folder>]  # the open: verbs (docs/open.md)
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
 uv run conductor app [<control folder> …]                  # the desktop app (docs/app.md)
 ```
@@ -59,16 +59,18 @@ never as a Claude Code background command (`docs/restart.md`).
 |---|---|
 | `docs/control-folder.md` | The control folder's layout and `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
 | `docs/runtime.md` | The `.conductor/` folder: the daemon's lock, heartbeat, journals and scratch state |
-| `docs/items.md` | Queue items: front-matter, rewriting, scheduling, holds, readonly and `alongside` items, exclusive templates, max_hours; legacy `paths:` concurrency and prose files |
+| `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
+| `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/push.md` | Pushing main to a remote after each merge, the control folder after its commits, on `push:` and at closeout; failures and rejections |
 | `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, setup, log compaction, the report header, the outcome |
-| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk audit, claude.md cleanup, bug hunt, self audit, watch) |
+| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk audit, claude.md cleanup, content audit, bug hunt, self audit, watch) |
 | `docs/night-shift.md` | The stall check, the watch item, autopilot, the backlog and its draws, the nightly budget |
 | `docs/resume.md` | Resume items: asking a finished item's own session (forked), and its self-audit |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress` and outlines, messages (`tell:`), short calls, amendments, opening a finished session |
 | `docs/signals.md` | Every signal verb and how a signal file is applied |
+| `docs/open.md` | Desktop actions: `open:` (checked paths and URLs) and `notify:` toasts |
 | `docs/receipts.md` | The receipt each planner write gets: where, what it says, how long it lives |
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |

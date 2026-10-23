@@ -8,7 +8,7 @@ carries `template` and `template_version` (the text's sha256, first 12 hex digit
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
 `.prompt.md`). The texts use `{{name}}` placeholders (`repo`, `project`, `notes`, `usage`,
-`original`).
+`original`; `audit.md`'s `notes_path`).
 
 **Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
 `self_audit`); one that edits is a *cleanup*. So `general_audit` became `general_cleanup` and
@@ -18,7 +18,7 @@ record carrying an old one still counts (maintenance facts, exclusivity, notes).
 
 Every template but `bug_hunt`, `self_audit` and `watch` is
 *exclusive* (`audits.EXCLUSIVE`): it runs alone in its repo, and a template item with
-`alongside` is invalid (`items.md`, *Exclusive templates*).
+`alongside` is invalid (`scheduling.md`, *Exclusive templates*).
 
 - **`audit: true`** (any item; explicit, never automatic). The preamble gains an
   *Audit notes* paragraph (`audit.md`) naming an absolute path,

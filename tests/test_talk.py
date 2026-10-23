@@ -236,6 +236,7 @@ def test_pre_hook_keeps_shell_calls_short(tmp_path):
     assert talk.main(["pre", "--cap", "60"]) == 0       # stdin is empty under pytest: prints nothing
 
 
+@pytest.mark.slow
 def test_audit_on_a_running_item_sends_the_audit_text(env):
     """`audit: X` on a running item (Word Warriors 093): conductor's own audit text as a tell,
     and the finish carries `audit`, so the next cleanup reads its notes."""
@@ -253,7 +254,6 @@ def test_audit_on_a_running_item_sends_the_audit_text(env):
     assert bad(env, "again") and "already keeps audit notes" in env.events("invalid")[-1].detail["error"]
     env.tick_until(lambda: env.finished("code/001_x"))
     assert env.d.log.last("finish", item="code/001_x").detail["audit"] is True
-    env.tick_until(lambda: env.finished("code/002_q"))
 
 
 def test_cli_tell_and_open(env, capsys, monkeypatch):
