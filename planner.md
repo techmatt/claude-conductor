@@ -1,6 +1,6 @@
 # planner — running a project with conductor
 
-A session starts with `planner-start.md` alone; it says when to read this file, then whole. Its last section, **Vocab**, is what Matt can say. `claude-ai-new-project.md`: only to start, park or resume a project. How conductor works: its `README.md` and `docs/` (`C:\Code\claude-conductor`), read only as the work needs.
+A session starts with `planner-start.md`, whose step 5 reads this file whole. Its last section, **Vocab**, is what Matt can say. `claude-ai-new-project.md`: only to start, park or resume a project. How conductor works: its `README.md` and `docs/` (`C:\Code\claude-conductor`), read only as the work needs.
 
 On mechanics this file beats memory and saved preferences; Matt's preferences on content and judgement still apply.
 
