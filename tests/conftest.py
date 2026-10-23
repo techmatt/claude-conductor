@@ -146,6 +146,14 @@ def no_code_restart(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_conductor_reports(tmp_path, monkeypatch):
+    """Every inbox lists conductor's own reports past the planner's marker: a test reads a
+    stand-in checkout it builds, never this one's real reports."""
+    from conductor import session
+    monkeypatch.setattr(session, "CONDUCTOR_ROOT", tmp_path / "no-conductor")
+
+
+@pytest.fixture(autouse=True)
 def claude_config(tmp_path, monkeypatch):
     """Claude Code's config folder, where the fake executor keeps its session transcripts
     and a resume item's launch looks for its original's: never the real `~/.claude`."""

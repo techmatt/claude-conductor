@@ -13,19 +13,19 @@ The report is `reports/cleanup_<YYYY-MM-DD>_report.md` (a second pass the same d
 
 ## 1. Size budgets
 
-Every file over budget gets cut, deduplicated or split. A split doc gets its own `docs/` file and a README index line. `tools/sizes.py` reads this table: a file takes the first row whose glob matches, so specific rows come first. A cleanup may revise a budget, with the reason in the row and the report.
+Every file over budget gets cut, deduplicated or split. A split doc gets its own `docs/` file and a README index line. `tools/sizes.py` reads this table: a file takes the first row whose glob matches, so specific rows come first. A cleanup may revise a budget, with the reason in the row and the report. Files read every session (`planner.md`, `CLAUDE.md`) hold their budgets; docs read on demand cost only when opened, so theirs sit ~20% above their size at prompt 51, and one still splits past it.
 
 | Path | Budget | Why |
 |---|---|---|
 | `planner-start.md` | 3 KB | the session start checklist, read with `session.md` and `planner.md` |
 | `planner.md` | 20 KB | a planner reads it whole at every session start |
 | `planner-vocab.md` | 6 KB | the rarer vocab rows, read only when Matt uses one |
-| `HANDOFF.md` | 16 KB | starts every claude.ai session on conductor; *Open* is a wavefront, not a log |
+| `HANDOFF.md` | 20 KB | starts a claude.ai session on conductor, on demand; *Open* is a wavefront, not a log |
 | `CLAUDE.md` | 6 KB | read at every Claude Code session here |
 | `README.md` | 7 KB | an overview and an index into `docs/`, nothing more |
 | `CLEANUP.md` | 9 KB | read whole by every cleanup |
 | `claude-ai-new-project.md` | 10 KB | read with `planner.md` to start, park or resume a project |
-| `docs/*.md` | 12 KB | one topic each, small enough to read whole |
+| `docs/*.md` | 15 KB | one topic each, small enough to read whole |
 | `src/conductor/daemon.py` | 1100 lines | the loop, launch, stage and finish; the `daemon_*` mixins hold the rest |
 | `src/**/*.py` | 900 lines | a module that grows past this has more than one concern |
 | `tests/*.py` | 900 lines | one area per file |

@@ -101,8 +101,36 @@ def write_notes(root, text: str) -> None:
 def test_no_marker_line_lists_no_conductor_reports(tmp_path):
     write_notes(tmp_path, "# Planner notes\n\nNothing about reports here.\n")
     assert session.reports_past_marker(tmp_path) == (None, [])
-    [head] = session.conductor_reports(tmp_path)
-    assert head.startswith("No `Last report reviewed by the planner:` line found in ") and "nothing listed" in head
+    assert session.conductor_reports(tmp_path) == []
+    assert session.reports_head(tmp_path, None, []).startswith("No `Last report reviewed by the planner:` line found in ")
+
+
+def test_a_marker_the_ledger_names_orders_by_its_done_lines(tmp_path):
+    """A cleanup pass's marker has no number: every report used to count as past it."""
+    write_notes(tmp_path, "Last report reviewed by the planner: cleanup_2026-10-23\n")
+    for name in ("cleanup_2026-10-23", "14_new", "cleanup_2026-10-24"):
+        (tmp_path / "reports" / f"{name}_report.md").write_text("status: partial\n", encoding="utf-8")
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "ledger.md").write_text(
+        "9:00am start 12_x\n9:10am done 12_x → reports/12_x_report.md\n9:20am done 13_z → reports/13_z_report.md\n"
+        "9:30am done cleanup_2026-10-23 → reports/cleanup_2026-10-23_report.md\n9:40am start 14_new\n"
+        "9:50am done 14_new → reports/14_new_report.md\n10:00am done cleanup_2026-10-24 → r\n", encoding="utf-8")
+    marker, found = session.reports_past_marker(tmp_path)
+    assert marker == "cleanup_2026-10-23" and [name for name, _ in found] == ["14_new", "cleanup_2026-10-24"]
+    assert session.conductor_reports(tmp_path)[0] == (
+        f"- conductor's 14_new **partial** — `{tmp_path / 'reports' / '14_new_report.md'}`")
+    write_notes(tmp_path, "Last report reviewed by the planner: cleanup_2026-01-01\n")     # not in the ledger
+    assert session.reports_past_marker(tmp_path) == ("cleanup_2026-01-01", [])
+
+
+def test_the_inbox_lists_conductor_reports_past_the_marker(env, tmp_path):
+    root = tmp_path / "conductor"
+    write_notes(root, "Last report reviewed by the planner: 12_x\n")
+    text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log), root=root)
+    section = text.split("## Unreviewed reports", 1)[1].split("\n## ", 1)[0]
+    assert f"- conductor's 13_z **done** — `{root / 'reports' / '13_z_report.md'}`" in section
+    assert "12_x" not in section and "process all moves `Last report reviewed by the planner:`" in section
+    assert "## Unreviewed reports" not in inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
 
 
 @pytest.mark.parametrize("line", ["- Last report reviewed by the planner: 12_x",

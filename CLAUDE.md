@@ -1,6 +1,6 @@
 # Working in claude-conductor
 
-Conductor is a daemon that runs queued Claude Code prompts for a project: per-repo queues, locks, headless executors, an event log, an inbox, questions, and every commit to the project's control folder. `planner.md` is how a planner session uses it (ending with its vocab; a start follows `planner-start.md`); `claude-ai-new-project.md` is starting, parking and resuming a project; `README.md` and `docs/` are how it works. Prompts for this repo are pasted into a Claude Code session by hand — conductor never runs its own queue.
+Conductor is a daemon that runs queued Claude Code prompts for a project and makes every commit to its control folder. `planner.md` is how a planner session uses it (ending with its vocab; a start follows `planner-start.md`); `claude-ai-new-project.md` is starting, parking and resuming a project; `README.md` and `docs/` are how it works. Prompts for this repo are pasted into a Claude Code session by hand — conductor never runs its own queue.
 
 ## Conventions
 
@@ -16,7 +16,7 @@ When Matt says "launch the conductor" (or "open conductor" and the like), run `u
 
 ## "Restart all"
 
-When Matt says "restart all" (or "restart everything" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). Running executors are adopted by the new daemon, not killed. The warning comes first: Matt times a restart.
+When Matt says "restart all" (or "restart everything" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). The warning comes first: Matt times a restart.
 
 ## "Run next prompt"
 

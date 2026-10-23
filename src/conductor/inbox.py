@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from . import audits, memory, nightshift, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog, live_invalids, signal_invalid
@@ -467,9 +469,10 @@ def fold_commits(evs: list[Event]) -> tuple[list[Event], dict[int, Event]]:
     return out, folded
 
 
-def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -> str:
+def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, root: Path | None = None) -> str:
     """The inbox; with `heading` (the session digest's), that replaces its title and
-    the mark-read hint, since the digest moves the read mark itself."""
+    the mark-read hint, since the digest moves the read mark itself. `root` is conductor's
+    own checkout, whose reports past the planner's marker join *Unreviewed reports*."""
     mark = log.read_mark()
     since_mark = log.query(since_id=mark)
     passed, live_bad = passed_over_id(since_mark), {e.id for e in live_invalids(log)}
@@ -525,10 +528,15 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
             out.append(f"- {clock(q.asked)} `{q.id}` from {q.item} — {how}")
             out += [f"  > {ln}" if ln else "  >" for ln in q.body.rstrip().splitlines()]
             out.append(f"  Answer: write `questions/{q.id}.answer.md`.")
-    if unreviewed := view.unreviewed():
+    from . import session        # imports this module
+    unreviewed, theirs = view.unreviewed(), session.conductor_reports(root)
+    if unreviewed or theirs:
         # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
-        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed)]
-        out.append("  Each stays unreviewed until Matt says process X (or process next / process all).")
+        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed), *theirs]
+        if unreviewed:
+            out.append("  Each stays unreviewed until Matt says process X (or process next / process all).")
+        if theirs:
+            out.append(f"  Conductor's stay until process all moves `{session.MARKER}` in its `{session.NOTES}`.")
     if pick_rows := pick_lines(cfg, log, view):
         # Standing too: a picker waits for Matt whatever the read mark says.
         out += ["", "## Picks", *pick_rows]

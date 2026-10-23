@@ -1,7 +1,7 @@
 """`session.md`: the start digest a `session:` signal writes, so a planner session opens
-with one signal and one read. It is the inbox since the previous read mark, plus
-`state.md`'s lines a start raises, conductor's own reports past the planner's marker and
-each repo's maintenance facts."""
+with one signal and one read. It is the inbox since the previous read mark (conductor's own
+reports past the planner's marker among its unreviewed reports), plus `state.md`'s lines a
+start raises and each repo's maintenance facts."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from .util import clock, read_text
 CONDUCTOR_ROOT = Path(__file__).resolve().parents[2]
 NOTES = "planner-notes.md"
 MARKER = "Last report reviewed by the planner:"
+LEDGER = Path("prompts") / "ledger.md"     # the run ledger: the order conductor's reports were written in
 
 # What `state.md`'s *Maintenance* section tracks, in the planner's words.
 MAINTENANCE = (("bug_hunt", "bug hunt"), ("general_cleanup", "general cleanup"), ("cleanup", "cleanup"),
@@ -34,12 +35,27 @@ def _report_key(name: str) -> tuple[int, str] | None:
     return (int(m.group(1)), m.group(2)) if m else None
 
 
+def ledger_order(root: Path) -> list[str]:
+    """The run names of `prompts/ledger.md`'s `<time> done <name> → …` lines, oldest first
+    (a rerun counts at its latest); [] without a ledger."""
+    try:
+        text = read_text(root / LEDGER)
+    except (OSError, UnicodeDecodeError):
+        return []
+    names: dict[str, None] = {}
+    for m in re.finditer(r"^\S+ done (\S+)", text, re.M):
+        names.pop(m[1], None)
+        names[m[1]] = None
+    return list(names)
+
+
 def reports_past_marker(root: Path) -> tuple[str | None, list[tuple[str, Path]]] | None:
-    """The planner's marker (in `planner-notes.md`) and every `reports/NN_name_report.md` of
-    conductor's own repo whose prompt is past it, in natural order, as (name, path); None
-    without the notes file. The
-    marker line may start with `- ` or `**`; without one the marker is None and nothing is
-    past it, since listing every report ever written would bury the planner."""
+    """The planner's marker (in `planner-notes.md`) and every `reports/<name>_report.md` of
+    conductor's own repo past it, as (name, path); None without the notes file. A marker
+    the ledger names (a prompt or a cleanup pass) orders by the ledger's `done` lines;
+    otherwise numbered prompts in natural order. The marker line may start with `- ` or
+    `**`; without one the marker is None and nothing is past it, as for an unnumbered
+    marker the ledger lacks, since listing every report ever written would bury the planner."""
     notes = root / NOTES
     if not notes.is_file():
         return None
@@ -47,13 +63,13 @@ def reports_past_marker(root: Path) -> tuple[str | None, list[tuple[str, Path]]]
                    if ln.lstrip("-* ").startswith(MARKER)), None)
     if marker is None:
         return None, []
-    floor = _report_key(marker) or (-1, "")
-    found = []
-    for p in (root / "reports").glob("*_report.md"):
-        name = p.name.removesuffix("_report.md")
-        if (key := _report_key(name)) and key > floor:
-            found.append((key, name, p))
-    return marker, [(name, p) for _, name, p in sorted(found)]
+    reports = {p.name.removesuffix("_report.md"): p for p in (root / "reports").glob("*_report.md")}
+    if marker in (order := ledger_order(root)):
+        return marker, [(name, reports[name]) for name in order[order.index(marker) + 1:] if name in reports]
+    if (floor := _report_key(marker)) is None:
+        return marker, []
+    found = sorted((key, name) for name in reports if (key := _report_key(name)) and key > floor)
+    return marker, [(name, reports[name]) for _, name in found]
 
 
 def reports_head(root: Path, marker: str | None, found: list) -> str:
@@ -73,19 +89,20 @@ def report_status(text: str) -> str:
     return next((ln for ln in lines[:5] if ln.lower().startswith("status:")), "no status line")
 
 
-def conductor_reports(root: Path) -> list[str]:
-    """Conductor's own reports past the planner's marker, one line each with its status line."""
-    if (past := reports_past_marker(root)) is None:
-        return [missing_handoff(root)]
-    marker, found = past
+def conductor_reports(root: Path | None = None) -> list[str]:
+    """Conductor's own reports past the planner's marker, one line each with its status, for
+    the inbox's *Unreviewed reports*: [] when none, or with no notes file or marker line
+    (`review: all` says which)."""
+    past = reports_past_marker(root or CONDUCTOR_ROOT)
     out = []
-    for name, p in found:
+    for name, p in past[1] if past else []:
         try:
             status = report_status(read_text(p))
         except (OSError, UnicodeDecodeError):
             status = "no status line"
-        out.append(f"- {name}: {status} — `{p}`")
-    return [reports_head(root, marker, found), *out]
+        status = status.split(":", 1)[1].strip() if status.lower().startswith("status:") else status
+        out.append(f"- conductor's {name} **{status}** — `{p}`")
+    return out
 
 
 def slow_components(text: str | None) -> list[str]:
@@ -192,12 +209,12 @@ def from_state(control: Path) -> list[str]:
 def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int,
            root: Path | None = None) -> str:
     """The digest: the inbox since the previous read mark, headed by the session's
-    checkpoint, then `state.md`'s due lines, conductor's reports and the maintenance facts."""
+    checkpoint, then `state.md`'s due lines and the maintenance facts."""
     head = (f"# Session start — {cfg.project}\n\n"
             f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
             f"The read mark moves to #{top} as this is written; no `read:` is needed.")
-    body = inbox.render(cfg, log, view, heading=head)
-    out = [body.rstrip(), "", *from_state(cfg.control), "", "## Conductor reports", *conductor_reports(root or CONDUCTOR_ROOT), "", "## Maintenance facts"]
+    body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
+    out = [body.rstrip(), "", *from_state(cfg.control), "", "## Maintenance facts"]
     for repo in cfg.repos:
         out += maintenance(cfg, log, view, repo)
     return "\n".join(out) + "\n"

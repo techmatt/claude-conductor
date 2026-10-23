@@ -6,7 +6,8 @@ Runs an in-process daemon on the sandbox's control folder with `tests/fake_claud
 the executor (set in memory; the sandbox's `conductor.toml` is not touched) and memory
 thresholds off. It queues an item that commits to the sandbox repo and waits for its
 merge, sends `session: start` and waits for `session.md`, applies a request (it rewrites
-`proof.md` in the control folder), marks the item reviewed, and stops. Then it opens the
+`proof.md` in the control folder), marks every unreviewed item reviewed (its own and
+any earlier run's), and stops. Then it opens the
 app's window offscreen on the same folder, renders every tab, and saves a screenshot
 with `--shot`. Exit 1 on the first step that times out. Refuses to run while the
 sandbox's own daemon is up.
@@ -78,8 +79,10 @@ def daemon_steps(control: Path) -> None:
         (req / "request.md").write_text("---\ntargets: [proof.md]\nmessage: \"cleanup proof\"\n---\n",
                                         encoding="utf-8", newline="\n")
         until("request committed", lambda: any(e.kind == "commit" for e in d.log.query(since_id=before + 1)))
-        actions.reviewed(control, item)
-        until(f"{item} reviewed", lambda: d.log.last("reviewed", item=item))
+        # Every finish left unreviewed (this run's, and earlier prompts' own sandbox runs'), so none pile up.
+        left = [ev.item for ev in state.scan(cfg, d.log).unreviewed()]
+        actions.write_signal(control, *(f"reviewed: {i}" for i in left), by="proof")
+        until(f"{len(left)} item(s) reviewed, {item} among them", lambda: not state.scan(cfg, d.log).unreviewed())
     finally:
         d.release()
 

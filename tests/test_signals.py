@@ -600,9 +600,9 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     text = (env.control / "session.md").read_text(encoding="utf-8")
     assert text.startswith("# Session start — ") and "`signals/planner-1.signal`" in text
     assert "Mark read:" not in text and "code/004_last finished" in text      # the inbox since the old mark
-    reports = text.split("## Conductor reports", 1)[1].split("\n## ", 1)[0]
-    assert "12a_y: status: partial" in reports and "13_z: no status line" in reports
-    assert "12_x:" not in reports and "3_old" not in reports
+    reports = text.split("## Unreviewed reports", 1)[1].split("\n## ", 1)[0]
+    assert "conductor's 12a_y **partial**" in reports and "conductor's 13_z **no status line**" in reports
+    assert "12_x" not in reports and "3_old" not in reports and "## Conductor reports" not in text
     facts = text.split("## Maintenance facts", 1)[1]
     assert "- test cleanup: 002_perf, " in facts     # queued as `test_perf`, an alias and "· 2 non-template item(s) finished since" in facts
     assert "- bug hunt: never · 3 non-template item(s) finished" in facts

@@ -43,18 +43,14 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    names the signal file it answers and the checkpoint (number, label, time), so a
    planner that staged it too early sees it is the previous one and stages again. The
    body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
-   reports, picks, every unsettled event since the previous read mark, *Now*), then:
+   reports with conductor's own among them, picks, every unsettled event since the
+   previous read mark, *Now*), then:
    - **From state.md**: the control folder's `state.md` lines a start raises, copied as
      written, so the planner need not stage it: *Waiting on Matt* and *Open questions*
      whole, and *Pending fixes, due* and *Maintenance, due*: each top-level bullet (with
      its indented lines) of that section saying the word `due`, any case. Sections match
      by `## ` heading, ignoring a `(…)` after the name; a missing one says so, as does a
      missing `state.md`;
-   - **Conductor reports**: every `reports/NN_name_report.md` in conductor's own
-     checkout (found from the installed package, `src/conductor/` → the repo root) whose
-     prompt is past the `Last report reviewed by the planner: NN_name` line in its
-     git-ignored `planner-notes.md` (the planner's file), in natural order (12 < 12a < 13), each with its `status:` line (one
-     of its first five non-blank lines) or *no status line*, and its path;
    - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space audit; an item run under an old name, `general_audit` or `test_perf`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
@@ -85,8 +81,8 @@ marks nothing reviewed. Layout:
    log:` paths only when those files exist (never their contents), then the report
    inlined whole and raw. A missing report is one line (`- the report file is missing: …`).
 4. `all` only: `## Conductor reports`: the marker line from conductor's `planner-notes.md`
-   (or `: none.`), then each of conductor's reports past it, as for the digest
-   (`session.reports_past_marker`), as `### <NN_name>`, its absolute path and its text
+   (or `: none.`), then each of conductor's reports past it (*Conductor reports*, under
+   *Inbox*), as `### <name>`, its absolute path and its text
    inlined whole. No `planner-notes.md`, or no marker line in it (a leading `- ` or `**` is
    fine): one line saying so, nothing listed.
 
@@ -102,7 +98,19 @@ oldest first, with its status (a red one's reasons after it), finish time, finis
 line (and ` · slow: …` unless its report said `slow: none` or nothing, and
 ` · pick: <ref>` when its report named a picker; ` · resume of <orig>` for a resume
 item, `resume.md`); it shows on every inbox, read mark or not, until a `reviewed:`
-signal names the item.
+signal names the item. After them, **conductor's own reports** past the planner's
+marker (*Conductor reports* below), one line each: ``- conductor's <name> **<status>** —
+`<absolute path>` `` (the value of its `status:` line, or *no status line*), until the
+planner moves the marker; no notes file or marker line lists none.
+
+**Conductor reports** (`session.reports_past_marker`): the `reports/<name>_report.md`
+files in conductor's own checkout (found from the installed package, `src/conductor/` →
+the repo root) past the `Last report reviewed by the planner: <name>` line (a leading
+`- ` or `**` is fine) in its git-ignored `planner-notes.md` (the planner's file). A marker
+that `prompts/ledger.md` names in a `<time> done <name> → …` line, a prompt or a cleanup
+pass, orders by those lines: every report whose `done` comes after it. Any other
+numbered marker orders by natural order (12 < 12a < 13); an unnumbered one the ledger
+lacks has nothing past it.
 
 **Reviewed reports that change.** A reviewed report, or the `.audit.md` beside it,
 edited afterwards (a session resumed by hand through **Terminal** can write to it) is

@@ -36,7 +36,7 @@ C:\Code\<project>-control\
   reports\<repo>__NNN_name.md      read: executor reports (.audit.md: audit notes)
   picks\<name>.choices.json        read: Matt's picker choices
   backlog\<repo>\<name>.md         write: pre-approved items (**backlog X**)
-  events.db                        stage and query (show events, postmortem)
+  events.db                        stage and query
 ```
 
 **Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad`; lines before the failing one stay applied. Rules: `docs/signals.md`.
@@ -56,7 +56,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 - **Start**: `planner-start.md`. Stage `state.md` only before a request that changes it.
 - **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken.
-- **Rejected signals** (`invalid`, *Red* in the inbox and digest, "N rejected" in the app's header) show until a checkpoint or an acknowledgement: once the cause is addressed (resent, fixed, or moot), signal `ack: invalid #<event>` unasked.
+- **Rejected signals** (`invalid`, *Red* in the inbox) show until a checkpoint or an acknowledgement: once the cause is addressed (resent, fixed, or moot), signal `ack: invalid #<event>` unasked.
 - Matt raises every next step: answer what is asked, never assume or schedule the next leg.
 - **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`), or the rejected-signal rule below (`ack:`). One instruction, one signal file; nothing rides along.
 - Design and scoping are decided with Matt, never by an executor; executors add facts, usually as `readonly` items.
@@ -85,8 +85,8 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Questions** land in `questions\`, raised as *Open questions first* says. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on the inbox's *Now*.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; to an item blocked on its own question, at once as its answer (receipt: `delivered as the answer to <id>`). Longer, or not started: **amend**.
-- **Pause.** Matt needs the box ("pause the runs"): **pause R**, never a tell asking the item to wait (it asks itself a question and sits idle). Its items commit, stop their browsers and servers and `wait`, clocks stopped; nothing new starts there. **resume R** when he's done; it shows on *Now* until then, across sessions.
-- **Night shift** (`docs/night-shift.md`): a readonly **watch** item (`W<n>_watch`, its own series: never a queue number; never in a planner session) every 30 minutes while items run, and on a stall or a blocking question unanswered 15 minutes; it judges stalls and drift, may tell, answer (only with an answer you or Matt already gave, its source named), toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates only draws; a watch's repairs (tell, answer) run at any setting. All on the inbox's *Night shift*.
+- **Pause.** Matt needs the box ("pause the runs"): **pause R**, never a tell asking the item to wait (it asks itself a question and sits idle). **resume R** when he's done; it shows on *Now* until then, across sessions.
+- **Night shift** (`docs/night-shift.md`): a readonly **watch** item (`W<n>_watch`, its own series: never a queue number; never in a planner session) while items run; it judges stalls and drift, may tell, answer (only with an answer you or Matt already gave, its source named), toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates only draws; a watch's repairs (tell, answer) run at any setting. All on the inbox's *Night shift*.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it (**memory?**); raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) carries its log's end: say what broke.
 - **Picks.** A prompt producing candidates asks for a picker manifest, under a new name (`docs/picks.md`).
@@ -106,7 +106,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 **Deferred design calls** (a cleanup, general cleanup or bug hunt lists them with options and a pick). Raise each with Matt once; a decision becomes a new item, one he doesn't take up goes to *Paged* with the executor's pick as default. Never fold one into `state.md` as settled, or queue the pick unasked.
 
-**Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn. A report noticed in passing gets one line ("061 finished"). One changed after review (`report_changed`) needs processing again. Conductor's reports' mark: `Last report reviewed by the planner:` in its `planner-notes.md` (**process all**).
+**Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn. A report noticed in passing gets one line ("061 finished"). One changed after review (`report_changed`) needs processing again. Conductor's reports past its mark (`Last report reviewed by the planner:` in its `planner-notes.md`) are in *Unreviewed reports* with their paths; processing one moves the mark.
 
 ## state.md, maintenance and closeout
 
@@ -120,7 +120,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rarer phrases** (templates, audits, ask, picks, art rounds, trim state, fill until, reorder, push, events, postmortem, ultracode, alongside, park / resume, pipeline review, context estimate) are in `planner-vocab.md` beside this file: read it when Matt uses one.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rarer phrases** (templates, audits, ask, picks, backlog, watch, autopilot, pause, land, amend, …) are in `planner-vocab.md` beside this file: read it when Matt uses a phrase not in this table.
 
 | Phrase | What the planner does |
 |---|---|
@@ -129,29 +129,17 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **check inbox** | Reads `inbox.md`, leads with open questions then unreviewed reports, says what changed; signals `read: <its top id>`. |
 | **check reports** [verbose] | Unreviewed reports (item, status, finish time), oldest first, then running or staged ones as "not in yet"; verbose: a few lines each. |
 | **process X** | *Reading a report* for X, the carry by request, then `reviewed: <repo>/<NNN_name>`. If `slow:` causes now repeat, recommends the matching template. |
-| **process next** | **process X** for the first unreviewed report (dependencies first, then finish order). |
+| **process next** | **process X** for the first unreviewed report (dependencies first, then finish order); with none, conductor's first. |
 | **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal. **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls raised as for a cleanup); then rewrite the marker in `planner-notes.md`. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
-| **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **check questions** | Open asks with their items, blocking first, others with default and when it's taken. |
 | **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short: `012__1`); if the default was taken, says it will be `late`. |
 | **queue status** | Per repo: the running item (elapsed, progress, outline), the queue; then proposed. |
-| **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
-| **ETA on X?** | X's latest outline, else progress line, with when posted; neither: says so, never guesses. |
 | **outline X** / **tell X: …** | Signal `outline: <repo>/<NNN_name>` or `tell: <repo>/<NNN_name> <Matt's words>` (one line); reports the `reply to #N` on the next check. Refused if X isn't running. |
-| **amend X: …** | Writes `queue\<repo>\NNN_name.amend.<stamp>.md`: `by: planner` front-matter, then Matt's words. |
 | **enqueue** / **propose** | Writes a prompt to `queue\<repo>\` (*Approval*); to `proposed\` only when Matt says to hold it. |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` (a held item, to the queue) / `cancel: <item>` (proposed or queued, never running). |
 | **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
-| **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing the hold its red put on the queue. On Matt's word, after its report is read with him. |
 | **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: any "run …" means it; several and no match: asks; none: proposes one by request. |
 | **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
-| **stop conductor** | Signal `stop: daemon`; executors are adopted on restart. |
-| **backlog X** | Only on Matt's word: his prompt as `backlog\<repo>\<name>.md` (queue front-matter, no number); drawn when that queue empties. |
-| **show backlog** | The inbox's *Night shift*. |
-| **watch now** | Signal `watch: now` (refused while one is live). |
-| **autopilot off / night / on** | Signal `autopilot: off\|night\|always`: whether the night shift may start work itself (draws, a watch's included); the app's header shows it and what is next. |
-| **pause R** / **resume R** | Signal `pause: <repo>` / `resume: <repo>`: its running items commit, stop what they started and wait (clocks stopped), nothing new starts; resume moves their deadlines by the pause. |
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
-| **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
 | **read the workflow** / **remind me the vocab** | Re-reads this file / prints this table and `planner-vocab.md`'s. |
