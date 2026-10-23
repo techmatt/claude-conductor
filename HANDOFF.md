@@ -1,6 +1,6 @@
 # HANDOFF — claude-conductor
 
-The one file that starts a claude.ai session for conductor work. Read it, then `planner.md` (how a planner session uses conductor, ending with the vocab; a start reads `planner-start.md`) and `README.md` (how conductor works, with an index into `docs/`); `claude-ai-new-project.md` covers starting, parking and resuming a project. Every conductor prompt updates *Status* and *Open* before committing; nothing else in this file changes without a reason.
+The one file that starts a claude.ai session for conductor work. Read it, then `planner.md` (how a planner session uses conductor, from its *Start* to the vocab) and `README.md` (how conductor works, with an index into `docs/`); `claude-ai-new-project.md` covers starting, parking and resuming a project. Every conductor prompt updates *Status* and *Open* before committing; nothing else in this file changes without a reason.
 
 ## How work on conductor flows
 
@@ -42,14 +42,14 @@ What is live, by area (each prompt's report says when it came; the doc named hol
 - **Queue and scheduling**: per-repo queues, worktrees, items landed as one squashed commit with serial merges, `alongside` and readonly items beside others, exclusive templates alone, staging, rewrites and amendments, `depends_on` warnings, `land:` for a kept red branch (`docs/items.md`, `scheduling.md`, `worktrees.md`).
 - **Executors**: questions (a tell answers an item's own blocking one), progress lines, outlines, `tell:`, `audit:`, `pause:` / `resume:` with the `wait` tool, `resume:` items, run targets, pickers, conductor-owned templates (`content_audit` the newest) and audit notes, memory sampling with a launch guard and a leftover reaper (`docs/executors.md`, `progress.md`, `questions.md`, `templates.md`, `memory.md`).
 - **Planner loop**: one `session: start` signal makes a checkpoint, `session.md` (inbox, `state.md`'s due lines) and moves the read mark; conductor's own reports past the marker (ordered by `prompts/ledger.md`, so a cleanup can be the marker) list in every inbox's *Unreviewed reports*; a receipt per planner write, handled around each launch too; `reviewed:` / `review: all`; `ack: invalid` (`docs/inbox.md`, `receipts.md`, `signals.md`).
-- **Night shift**: a stall check, `W<n>_watch` items every 30 minutes (and for a question blocked 15), backlog draws within a nightly budget, autopilot off / night / always gating draws only (`docs/night-shift.md`).
+- **Night shift**: a stall check, `W<n>_watch` items every 30 minutes (and for a question blocked 15), backlog draws within a nightly budget, autopilot off / night / always gating draws only; in a digest routine watches are one count line, the watch's tells and answers listed (`docs/night-shift.md`).
 - **Around it**: self-restart on a code change and "restart all" (`docs/restart.md`); auto-push of repos and a control folder with a remote, this repo after each commit (`docs/push.md`); `open:` / `notify:` (`docs/open.md`); the app, whose Repos tab follows an item end to end and whose title and tray icon show live status (`docs/app.md`).
 
-The planner docs: `planner-start.md` (the session start checklist), `planner.md` (read whole at its step 5), `claude-ai-new-project.md` (only new / park / resume and setup); README is an overview plus an index into `docs/`.
+The planner docs: `planner.md` (its *Start*, then read whole at step 5 with `session.md`: the only two files a start stages), `planner-vocab.md` (rare ops only), `claude-ai-new-project.md` (only new / park / resume and setup); README is an overview plus an index into `docs/`.
 
 A next prompt should know:
 - A behaviour change updates `planner.md` (and `claude-ai-new-project.md` where it covers the topic) and the matching `docs/` file, not README's body.
-- Every doc and code file has a size budget (`CLEANUP.md`, *Size budgets*; `uv run python tools/sizes.py`): files read every session (`planner.md` ~18 of 20 KB, `CLAUDE.md`) hold theirs, on-demand docs have ~20% headroom. `tools/sandbox_proof.py` marks every unreviewed sandbox item reviewed at the end of a run. `Daemon` is `daemon.py` plus one `daemon_*` mixin per concern; the app's tabs are one `app/*_panel.py` each, an item's detail `app/trail.py`.
+- Every doc and code file has a size budget (`CLEANUP.md`, *Size budgets*; `uv run python tools/sizes.py`): files read every session (`planner.md` 24.6 of 25 KB since 52 folded in the start and a normal session's vocab, `CLAUDE.md`) hold theirs, on-demand docs have ~20% headroom. `tools/sandbox_proof.py` marks every unreviewed sandbox item reviewed at the end of a run. `Daemon` is `daemon.py` plus one `daemon_*` mixin per concern; the app's tabs are one `app/*_panel.py` each, an item's detail `app/trail.py`.
 
 ## Open
 
@@ -63,7 +63,7 @@ A next prompt should know:
 - A command the cap moves to the background is stopped by Claude Code after 10 minutes.
 - Receipts: a heavy tick (~50 checkpoint warnings) still delays one 2.5-3.2s. **They missed the first stage about a third of the time** (Word Warriors session 12); 46 and 50 fixed the signal-with-request and request-with-queue-items cases (sandbox 1.5s → 0.6–0.8s, not yet seen live). Measure every kind on the live daemon, bridge write to receipt; if ~1s can't be met, `planner.md` should make wait-or-re-stage the normal path, not a fallback.
 - **A picker whose round was cleaned up can still be opened**: Matt's app sent `pick:` for 109's manifest after 112 deleted the decided round, giving a rejected signal. The inbox's *Picks* lists every saved pick for the rest of the session. Hide a pick once saved, and have the app's pick action check that the manifest exists.
-- `planner-start.md` step 3 assumes a workspace shell and `TZ=America/Los_Angeles`; Matt's saved preference must carry steps 1–5 (the file is first read at step 5).
+- `planner.md` *Start* step 3 assumes a workspace shell and `TZ=America/Los_Angeles`; Matt's saved preference must carry steps 1–5 (the file is first read at step 5), and should now stage two files at step 5, not three (52 retired `planner-start.md`).
 - Pause (48) is proven with the fake executor only: at first real use, did the item commit, stop its servers and keep calling `wait` (not end its session, not ask)? A watch's `answer:` source is not checked by conductor; read the first few `watch_answer` events.
 - A red the planner never saw but wrote `state.md` after is hidden from the digest (46); *Now* and the app still show its effect.
 - The app's refresh probes run targets on the UI thread (0.3s timeout each) and re-reads every `finish`, `red`, `clear` and `reviewed` event: move to a worker if it gets sluggish.

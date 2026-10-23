@@ -151,7 +151,8 @@ retried only when the log, the backlog or day/night changed since the last try.
 
 The inbox and the session digest have a **Night shift** section: the autopilot mode, each repo's backlog
 (invalid and full-length marked), tonight's budget used and whether it sleeps, and since the
-read mark the draws, flags, watch launches and watch reports.
+read mark the draws, flags, the watch's tells and answers, and one count line for routine
+watches (launches and `done` reports; any other report is listed): `inbox.md`.
 
 ## Settings
 

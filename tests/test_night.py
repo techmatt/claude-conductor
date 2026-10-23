@@ -52,7 +52,9 @@ def test_a_stall_is_flagged_and_a_watch_tells_the_item(env, monkeypatch):
     # De-duplicated: the same silence is one flag however many checks see it (its reply starts a new one).
     assert [e.detail["key"] for e in env.events("watch_flag")].count("quiet:code/001_long:0") == 1
     inbox = read_text(env.control / "inbox.md")
-    assert "## Night shift" in inbox and "watch report code/W1_watch **done**" in inbox
+    night = inbox.split("## Night shift", 1)[1].split("\n## ", 1)[0]
+    assert re.search(r"- \d+ watch(es)? \(.*\), 1 tells/answers; latest report reports/code__W\d+_watch.md", night)
+    assert f"#{tell.id} message #{tell.id} for code/001_long: post where you are (by watch)" in night
     assert "code/W1_watch" not in inbox.split("## Unreviewed reports", 1)[-1].split("##", 1)[0]
     env.signal("planner-1.signal", "by: planner\nreviewed: code/W1_watch")     # needs none, and breaks nothing
     env.tick_until(lambda: "needs no review" in env.events("warning")[-1].detail["note"])
@@ -174,6 +176,33 @@ def test_only_matt_counts_between_full_length_items(env):
     later = time.time() + 5
     os.utime(env.control / "backlog" / "code" / "later.md", (later, later))
     assert nightshift.matt_since(cfg, log, start) == "backlog backlog/code/later.md"
+
+
+def test_routine_watches_are_one_line(env):
+    """Word Warriors session 13: a night of watches was ~45 digest lines. Launches and `done`
+    reports become one count line; a tell, an answer, a flag or another report stays its own."""
+    log, cfg = env.d.log, env.d.cfg
+    mark = log.max_id()
+    for n in range(1, 4):
+        log.append("watch", item=f"code/W{n}_watch", reason="every 30 minutes")
+        status = "partial" if n == 2 else "done"
+        log.append("finish", item=f"code/W{n}_watch", paths=[f"reports/code__W{n}_watch.md"], template="watch",
+                   status=status)
+    tell = log.append("tell", item="code/001_x", text="post where you are", by="watch")
+    log.append("tell", item="code/001_x", text="from the planner", by="planner")
+    log.append("watch_answer", item="code/001_x", question="001_x__1", text="yes", source="the prompt",
+               watch="code/W3_watch")
+    log.append("watch_flag", item="code/001_x", key="quiet:x", flag="quiet", text="no progress line")
+    rows = nightshift.lines(cfg, log, state.scan(cfg, log), mark)
+    text = "\n".join(rows)
+    assert sum("watches (" in r for r in rows) == 1
+    assert "3 watches (" in text and "2 tells/answers; latest report reports/code__W3_watch.md" in text
+    assert "watch report code/W2_watch **partial**" in text and "W1_watch **done**" not in text
+    assert f"#{tell.id} message #{tell.id}" in text and "from the planner" not in text
+    assert "the watch answered `001_x__1`" in text and "watch flag (quiet)" in text
+    from conductor import inbox
+    other = inbox.render(cfg, log, state.scan(cfg, log)).split("## Other", 1)[1].split("\n## ", 1)[0]
+    assert "from the planner" in other and "post where you are" not in other and "answered" not in other
 
 
 def test_the_night_budget_stops_draws(env):

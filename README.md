@@ -7,8 +7,8 @@ queues as headless `claude -p` sessions (each in its own git worktree, merged in
 `alongside`), and records everything in an append-only event log from which the inbox and
 every other view is derived.
 
-`planner.md` is how a planner session uses it (its start checklist in `planner-start.md`,
-its rarer vocab rows in `planner-vocab.md`); `claude-ai-new-project.md`
+`planner.md` is how a planner session uses it (its *Start* checklist and the vocab of a
+normal session; rare ops in `planner-vocab.md`); `claude-ai-new-project.md`
 is how a project is started, parked and resumed. This file and `docs/` are how conductor
 works: the canon for commands, file formats, fields and event kinds. Each topic file is
 small enough to read whole, and stays so: `CLEANUP.md` is the standing maintenance pass,

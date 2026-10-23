@@ -498,7 +498,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     asked = [e for e in events if e.kind in QUESTION_KINDS
              and not (e.kind == "ask" and e.detail.get("question") in open_ids)]
     changes += [e for e in events if e.kind == "merge"]
-    other = [e for e in events if e not in red + holds + finished + changes + asked
+    other = [e for e in events if e not in red + holds + finished + changes + asked and not nightshift.is_watch_act(e)
              and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress", "setup",
                                 "finish", "request", "commit", *NIGHT_KINDS)]
 

@@ -131,8 +131,10 @@ without the item:
 ```
 
 Then **Night shift** (`night-shift.md`): each repo's backlog, tonight's budget and whether
-it sleeps, and since the mark the draws, flags, watch launches and watch reports (which
-never wait in *Unreviewed reports*); their events leave *Other*.
+it sleeps, and since the mark the draws, flags, the watch's tells and answers, and its
+reports (which never wait in *Unreviewed reports*); their events leave *Other*. Routine
+watches, a launch and a `done` report, are one count line (`3 watches (9:02pm–6:40am), 1
+tells/answers; latest report <path>`); any other watch report is listed.
 
 Then every event after the read mark that is not *settled* (`inbox.settled_why`), so
 the digest shows what is live (Word Warriors session 12's start: 263 events, ~60%

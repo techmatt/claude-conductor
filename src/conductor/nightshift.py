@@ -257,9 +257,16 @@ def is_watch(meta: dict | None) -> bool:
 
 
 # ---------------------------------------------------------------- the inbox
+def is_watch_act(ev: Event) -> bool:
+    """A watch's repair: its tell (`by: watch`) or its answer, listed under *Night shift*."""
+    return ev.kind == "watch_answer" or (ev.kind == "tell" and ev.detail.get("by") == WATCH)
+
+
 def lines(cfg: Config, log: EventLog, view: View, since: int) -> list[str]:
     """The inbox's *Night shift* section: each repo's backlog, tonight's budget, and since the
-    read mark the draws, the watch's flags and its reports. Empty when there is nothing."""
+    read mark the draws, the watch's flags, tells and answers, and its reports. Routine
+    watches (a launch, a `done` report) are one count line (Word Warriors session 13's digest
+    spent ~45 lines on them); any other report is listed. Empty when there is nothing."""
     out = []
     for repo, queue in backlog(cfg).items():
         if queue:
@@ -274,13 +281,31 @@ def lines(cfg: Config, log: EventLog, view: View, since: int) -> list[str]:
         out.append(f"- tonight ({clock(window[0])}–{clock(window[1])}): {used:.1f}h of "
                    f"{cfg.backlog_night_hours:g}h backlog budget used"
                    + (f"; {how} since {clock(sleep.ts)}: {sleep.detail.get('reason')}" if asleep else ""))
+    rows, watches, acts, latest = [], [], 0, None
     for ev in log.query(since_id=since, kinds=["backlog_draw", "backlog_sleep", "watch_flag", "watch", "autopilot",
-                                               "finish"]):
-        if ev.kind != "finish":
-            out.append(f"- {clock(ev.ts)} #{ev.id} {_describe(ev)}")
-        elif is_watch(ev.detail):
-            out.append(f"- {clock(ev.ts)} #{ev.id} watch report {ev.item} **{ev.detail.get('status')}**"
-                       + (f" — {ev.paths[0]}" if ev.paths else ""))
+                                               "finish", "tell", "watch_answer"]):
+        if ev.kind == "watch":
+            watches.append(ev)
+        elif ev.kind == "finish":
+            if not is_watch(ev.detail):
+                continue
+            latest = ev
+            if ev.detail.get("status") == "done":
+                watches.append(ev)
+            else:
+                rows.append(f"- {clock(ev.ts)} #{ev.id} watch report {ev.item} **{ev.detail.get('status')}**"
+                            + (f" — {ev.paths[0]}" if ev.paths else ""))
+        elif ev.kind in ("tell", "watch_answer"):
+            if is_watch_act(ev):
+                acts += 1
+                rows.append(f"- {clock(ev.ts)} #{ev.id} {_describe(ev)}")       # a tell's ends "(by watch)"
+        else:
+            rows.append(f"- {clock(ev.ts)} #{ev.id} {_describe(ev)}")
+    if watches:
+        n, span = len({e.item for e in watches}), dict.fromkeys([clock(watches[0].ts), clock(watches[-1].ts)])
+        out.append(f"- {n} watch{'es' if n != 1 else ''} ({'–'.join(span)}), "
+                   f"{acts} tells/answers" + (f"; latest report {latest.paths[0]}" if latest and latest.paths else ""))
+    out += rows
     if (mode := autopilot(log)) != "always" or out:
         held = autopilot_holds(cfg, log)
         out.insert(0, f"- autopilot: **{mode}**" + (f" ({held}: no draws, no watch tells)" if held else ""))

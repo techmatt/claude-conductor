@@ -17,9 +17,8 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 
 | Path | Budget | Why |
 |---|---|---|
-| `planner-start.md` | 3 KB | the session start checklist, read with `session.md` and `planner.md` |
-| `planner.md` | 20 KB | a planner reads it whole at every session start |
-| `planner-vocab.md` | 6 KB | the rarer vocab rows, read only when Matt uses one |
+| `planner.md` | 25 KB | the one file every session reads whole, so the common path (*Start*, a normal session's vocab) belongs in it and nowhere else |
+| `planner-vocab.md` | 4 KB | rare ops only, read when Matt uses one; a row a normal session needs moves to `planner.md` |
 | `HANDOFF.md` | 20 KB | starts a claude.ai session on conductor, on demand; *Open* is a wavefront, not a log |
 | `CLAUDE.md` | 6 KB | read at every Claude Code session here |
 | `README.md` | 7 KB | an overview and an index into `docs/`, nothing more |
@@ -36,7 +35,7 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 
 - **Facts against code.** Every command and flag (`cli.py`), signal verb (`daemon_signals.py`), event kind (`log.append("…"` across `src/`) and its detail, front-matter field (`items.py`), `conductor.toml` key and default (`config.py`), control-folder path (`config.RUNTIME`, `executor.RunPaths`), toast kind (`notify.py`), template name, and app button named in `docs/`. A list a doc presents as complete must be complete. A read-only subagent can sweep this and report quoted snippets; apply the fixes yourself.
 - **One home per fact.** `docs/` holds mechanics; `planner.md` what a planner does; `claude-ai-new-project.md` new / park / resume and project setup; README the overview, commands and index. A fact explained in two places keeps one and the other points to it.
-- **`planner.md`**: every line must change what a planner does. Its vocab (with `planner-vocab.md`'s rarer rows) matches the signal verbs.
+- **`planner.md`**: every line must change what a planner does. Its vocab (with `planner-vocab.md`'s rare ops) matches the signal verbs.
 - **`CLAUDE.md`**: every line must change what a Claude Code session here does; mechanics it repeats from `docs/` become a pointer. Everything it names exists and is current: commands, tools and their flags (`tools/restart_all.py --check`, `tools/sizes.py`), `docs/` files, the sandbox paths, the newest control folder in *Launch the conductor* (re-derive it by its rule), and the phrases' examples (prompt names, report paths).
 - **`HANDOFF.md`**: *Status* is current state only. *Open* takes in the lines under *For HANDOFF Open* in `planner-notes.md` (the planner's, git-ignored; delete them there), drops lines that are resolved, stale or proven, and says each remaining one in as few lines as it can.
 - **Test counts and timings** live in `docs/development.md` only; update them from the step 4 numbers.

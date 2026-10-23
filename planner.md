@@ -1,8 +1,24 @@
 # planner — running a project with conductor
 
-A session starts with `planner-start.md`, whose step 5 reads this file whole. Its last section, **Vocab**, is what Matt can say. `claude-ai-new-project.md`: only to start, park or resume a project. How conductor works: its `README.md` and `docs/` (`C:\Code\claude-conductor`), as the work needs.
+A session starts with *Start* below, whose step 5 reads this file whole. Its last section, **Vocab**, is what Matt can say, grouped by use. `claude-ai-new-project.md`: only to start, park or resume a project. How conductor works: its `README.md` and `docs/` (`C:\Code\claude-conductor`), as the work needs.
 
 On mechanics this file beats memory and saved preferences; Matt's preferences on content and judgement still apply.
+
+## Start
+
+**start a new <project> session** is five calls. Steps 1–5 are the same in Matt's saved preference, so this file is first read at step 5.
+
+1. **Tool search**, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. It finds nothing: say "This chat isn't linked to the box: link it (the desktop app's Chat tab, not Code) and start again", then stop: no folder request, no other call, no workaround. If the chat is linked later, redo step 1 first; never try the folder request before it finds the tools.
+2. **Access**, one request for `C:\Code\<project>-control`, each code repo as `C:\Code\<repo>` (`wordwarriors`; `corelight-engine`, `corelight-web`; a new project's: `conductor.toml` `[repos]`) and `C:\Code\claude-conductor`. These paths as written: never a memory read or past-chat search for them.
+3. **One shell command** in the workspace writes the signal and prints its stamp, local time:
+   `s=$(TZ=America/Los_Angeles date +%Y%m%d-%H%M%S); mkdir -p /mnt/user-data/outputs; printf 'by: planner\nsession: start\n' > /mnt/user-data/outputs/planner-$s.signal; echo $s`
+   (`printf` gives LF line endings; the commit takes only paths under `/mnt/user-data/outputs/`). Never read it back.
+4. **Commit** it to `signals\planner-<stamp>.signal` in the control folder.
+5. **Stage** `session.md` and this file in one call, and read both. `session.md`'s header names the signal it was written for; an older one: stage it again, once.
+
+Steps 4 and 5 go out in the same turn (the re-stage covers a digest that lags). Nothing else at start: no memory reads, past-chat search, folder listings, `planner-vocab.md`, `claude-ai-new-project.md`, `inbox.md`, `state.md`, design docs or receipt. `session.md`'s *From state.md* carries `state.md`'s *Waiting on Matt*, *Open questions* and the *Pending fixes* and *Maintenance* lines saying "due", as written; stage `state.md` only before a request that changes it.
+
+**Then, from the digest**: open questions first (blocking ones, then each default and when it is taken), then *Waiting on Matt*, due pending fixes, unreviewed reports, pickers waiting, rejected signals (*Red*: say why each was refused), conductor's reports (a line each) and maintenance recommendations (a line each with its reason: *Maintenance*). *Night shift* routine watches are one count line; mention a flag, tell or answer only if it changed something. Then wait for Matt: never assume or schedule the next step.
 
 ## Roles
 
@@ -12,7 +28,7 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 
 ## The bridge
 
-- Linking, the device tools and folder access: `planner-start.md`, steps 1–2.
+- Linking, the device tools and folder access: *Start*, steps 1–2.
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Each upload goes once to a fresh workspace path, never edited after.
 - Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
@@ -54,7 +70,6 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## Every session
 
-- **Start**: `planner-start.md`. Stage `state.md` only before a request that changes it.
 - **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken.
 - **Rejected signals** (`invalid`, *Red* in the inbox) show until a checkpoint or an acknowledgement: once the cause is addressed (resent, fixed, or moot), signal `ack: invalid #<event>` unasked.
 - Matt raises every next step: answer what is asked, never assume or schedule the next leg.
@@ -85,7 +100,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Questions** land in `questions\`, raised as *Open questions first* says. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on the inbox's *Now*.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; to an item blocked on its own question, at once as its answer (receipt: `delivered as the answer to <id>`). Longer, or not started: **amend**.
-- **Pause.** Matt needs the box ("pause the runs"): **pause R**, never a tell asking the item to wait (it asks itself a question and sits idle). **resume R** when he's done; it shows on *Now* until then, across sessions.
+- **Pause.** Matt needs the box ("pause the runs"): **pause R**, never a tell asking the item to wait (it asks itself a question and sits idle); it shows on *Now* until **resume R**, across sessions.
 - **Night shift** (`docs/night-shift.md`): a readonly **watch** item (`W<n>_watch`, its own series: never a queue number; never in a planner session) while items run; it judges stalls and drift, may tell, answer (only with an answer you or Matt already gave, its source named), toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates only draws; a watch's repairs (tell, answer) run at any setting. All on the inbox's *Night shift*.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it (**memory?**); raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) carries its log's end: say what broke.
@@ -120,26 +135,71 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rarer phrases** (templates, audits, ask, picks, backlog, watch, autopilot, pause, land, amend, …) are in `planner-vocab.md` beside this file: read it when Matt uses a phrase not in this table.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, park / resume project) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
+
+**Session and inbox**
 
 | Phrase | What the planner does |
 |---|---|
-| **start a new <project> session** | `planner-start.md`. |
+| **start a new <project> session** | *Start*. |
 | **checkpoint** [label] | Signal `checkpoint: <label>`. |
 | **check inbox** | Reads `inbox.md`, leads with open questions then unreviewed reports, says what changed; signals `read: <its top id>`. |
+| **check questions** | Open asks with their items, blocking first, others with default and when it's taken. |
+| **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short: `012__1`); if the default was taken, says it will be `late`. |
+| **queue status** | Per repo: the running item (elapsed, progress, outline), the queue; then proposed. |
+| **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
+| **read the workflow** / **remind me the vocab** | Re-reads this file / prints these tables and `planner-vocab.md`'s. |
+
+**Queueing and maintenance** (when each is due: *Maintenance*)
+
+| Phrase | What the planner does |
+|---|---|
+| **enqueue** / **propose** | Writes a prompt to `queue\<repo>\` (*Approval*); to `proposed\` only when Matt says to hold it. |
+| **approve X** / **cancel X** | Signal `approve: NNN_name` (a held item, to the queue) / `cancel: <item>` (proposed or queued, never running). |
+| **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item or a queued X; a running X: signal `audit: <repo>/<NNN_name>` (conductor sends its audit text, never a hand-written `tell`) / lists unused notes per repo, reading one if asked. |
+| **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
+| **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency* allows; else why not. |
+| **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none (it would hold its queue), says so. |
+| **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`. |
+| **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
+| **test cleanup R** / **claude.md cleanup R** / **disk space audit R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_audit` (body: Matt's extras). |
+| **content audit R** [extras] | Queues `template: content_audit` (body: Matt's extras); never a maintenance default. |
+
+**Running items**
+
+| Phrase | What the planner does |
+|---|---|
+| **outline X** / **tell X: …** | Signal `outline: <repo>/<NNN_name>` or `tell: <repo>/<NNN_name> <Matt's words>` (one line); reports the `reply to #N` on the next check. Refused if X isn't running. |
+| **amend X: …** | Writes `queue\<repo>\NNN_name.amend.<stamp>.md`: `by: planner` front-matter, then Matt's words. |
+| **ETA on X?** | X's latest outline, else progress line, with when posted; neither: says so, never guesses. |
+| **pause R** / **resume R** | Signal `pause: <repo>` / `resume: <repo>`: its running items commit, stop what they started and wait (clocks stopped), nothing new starts; resume moves their deadlines by the pause. |
+| **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
+| **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
+| **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: any "run …" means it; several and no match: asks; none: proposes one by request. |
+| **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
+
+**Processing reports**
+
+| Phrase | What the planner does |
+|---|---|
 | **check reports** [verbose] | Unreviewed reports (item, status, finish time), oldest first, then running or staged ones as "not in yet"; verbose: a few lines each. |
 | **process X** | *Reading a report* for X, the carry by request, then `reviewed: <repo>/<NNN_name>`. If `slow:` causes now repeat, recommends the matching template. |
 | **process next** | **process X** for the first unreviewed report (dependencies first, then finish order); with none, conductor's first. |
 | **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal. **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls raised as for a cleanup); then rewrite the marker in `planner-notes.md`. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
-| **check questions** | Open asks with their items, blocking first, others with default and when it's taken. |
-| **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short: `012__1`); if the default was taken, says it will be `late`. |
-| **queue status** | Per repo: the running item (elapsed, progress, outline), the queue; then proposed. |
-| **outline X** / **tell X: …** | Signal `outline: <repo>/<NNN_name>` or `tell: <repo>/<NNN_name> <Matt's words>` (one line); reports the `reply to #N` on the next check. Refused if X isn't running. |
-| **enqueue** / **propose** | Writes a prompt to `queue\<repo>\` (*Approval*); to `proposed\` only when Matt says to hold it. |
-| **approve X** / **cancel X** | Signal `approve: NNN_name` (a held item, to the queue) / `cancel: <item>` (proposed or queued, never running). |
-| **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
-| **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: any "run …" means it; several and no match: asks; none: proposes one by request. |
-| **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
+| **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
+| **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report (X must have finished). |
+| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
+| **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing its red's hold. Only after its report is read with Matt. |
+| **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
+| **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |
+| **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
+
+**Closeout**
+
+| Phrase | What the planner does |
+|---|---|
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
-| **read the workflow** / **remind me the vocab** | Re-reads this file / prints this table and `planner-vocab.md`'s. |
+| **trim state** | One request rewriting `state.md` to the wavefront: keeps queued, open, paged and still-ruled; drops session histories and per-item lines whose facts live in the repo's docs. Durable rulings executors need ride the next prompt to that repo into its docs. |
+| **pipeline review** | Over this session: unbuilt fixes saving calls, tokens, churn or a step of Matt's, with evidence; asks which to take. Approved conductor fixes → a conductor prompt; the rest → `state.md` (conductor: `planner-notes.md`). |
+| **context estimate** | Estimates tokens. |
