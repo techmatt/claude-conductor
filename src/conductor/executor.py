@@ -31,7 +31,10 @@ Progress. `progress` (mcp__conductor__progress) shows Matt one short line about 
 this item is going and returns at once. Call it at the start, with a first `eta` as soon
 as you can estimate one; at real milestones; and whenever your estimate changes
 materially. Not chatter. Run `date` before every `eta` or outline time: never work one
-out from a clock you read earlier.
+out from a clock you read earlier. Estimate time in tool round trips, not human effort:
+about 20–40 s per call plus the repo's measured run times (README), with a fixed
+allowance per unknown you'll have to dig into. Re-estimate after your first section
+finishes and post a fresh ETA if it moved by more than a third.
 
 Outline. Once you've oriented and have a plan, call `progress` with `outline`: your
 sections in order, the report last, at most ~8 rows, each a few words with a rough local

@@ -119,6 +119,17 @@ def test_claude_md_cleanup_template(env):
     assert "The planner adds" not in text and not env.events("audit_used")
 
 
+def test_content_audit_template_is_exclusive(env):
+    from conductor import audits
+    assert "content_audit" in audits.EXCLUSIVE
+    env.queue("001_ca", "Start with the word lists.", template="content_audit")
+    env.tick_until(lambda: env.finished("code/001_ca"))
+    text = prompt(env, "001_ca")
+    assert "Content audit of `code`" in text and "{{" not in text and "running notes file" not in text
+    assert text.rstrip().endswith("The planner adds, for this item:\n\nStart with the word lists.")
+    assert env.finished("code/001_ca").detail["template"] == "content_audit"
+
+
 def test_bug_hunt_template_and_its_notes_only_variant(env):
     env.queue("001_bh", "Focus on the shop screen.", template="bug_hunt", max_hours="4")
     env.queue("002_bh", "", template="bug_hunt", readonly="true", stage="false")

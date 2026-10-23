@@ -17,6 +17,10 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`. |
 | **test cleanup R** / **claude.md cleanup R** / **disk space audit R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_audit` (body: Matt's extras). |
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
+| **content audit R** [extras] | Queues `template: content_audit` (body: Matt's extras); never a maintenance default. |
+| **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. Picks reach the next prompt to that repo, as usual. |
+| **trim state** | One request rewriting `state.md` to the wavefront: keeps queued, open, paged and still-ruled; drops session histories and per-item lines whose facts live in the repo's docs. Durable rulings executors need ride the next prompt to that repo into its docs. |
+| **fill until T** | Queues enough useful work to run until T (due maintenance, then backlog, then anything agreed with Matt), the last item finishing by T; says what it chose. |
 | **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report (X must have finished). |
 | **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |

@@ -127,7 +127,7 @@ also gains each item that starts later beside it, so the inbox's *Now* line read
 reads `running · alongside` with `beside …` and the line in its note.
 
 **Exclusive templates** (`cleanup`, `general_cleanup`, `test_cleanup`, `disk_audit`,
-`claude_md_cleanup`; not `bug_hunt`, `self_audit` or `watch`, which starts beside anything) run alone in their repo: one at the head waits for
+`claude_md_cleanup`, `content_audit`; not `bug_hunt`, `self_audit` or `watch`, which starts beside anything) run alone in their repo: one at the head waits for
 every running item, readonly and `alongside` ones included; nothing, readonly items
 included, starts beside one running; and nothing behind one in the queue starts early,
 so a stream of small items never starves it. Readonly yields here because a perf or

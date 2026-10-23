@@ -2,7 +2,7 @@
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`cleanup.md`, `general_cleanup.md`, `test_cleanup.md`,
-`disk_audit.md`, `claude_md_cleanup.md`, `bug_hunt.md`, `self_audit.md`, `watch.md`; `audit.md` is the *Audit notes*
+`disk_audit.md`, `claude_md_cleanup.md`, `content_audit.md`, `bug_hunt.md`, `self_audit.md`, `watch.md`; `audit.md` is the *Audit notes*
 paragraph, not a template) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
@@ -64,6 +64,13 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   what is wrong against the code, tighten the wording, keep the standing contract the
   new-project doc requires. Changes to how executors work go under **Deferred**. The
   report is short: **Cut**, **Fixed**, **Deferred**.
+- **`template: content_audit`** (prompt 49; **content audit R**, on Matt's word only, never a
+  *Maintenance* default). Every word, picture and line the user meets, checked against who
+  the project's docs say plays it: what is ambiguous, too rare or wrong for that audience is
+  stored (out of play), reworded or flagged, each pool kept workable (its size and spread).
+  Design-level calls go under **Deferred**. The report has **Moved** (by pool, each with a
+  reason), **Pools** (sizes before and after) and **Deferred**. It edits, so it is exclusive
+  despite the name: an audit of content, not one that only takes notes.
 - **`template: bug_hunt`**. Run the project as its intended users would (whoever its
   docs say they are), find what is broken, confusing, ugly or slow, fix the clear bugs
   and list the rest. The method: build or extend a reusable checker kept in the repo

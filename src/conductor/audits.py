@@ -20,7 +20,7 @@ from .util import clock, read_text
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
 TEMPLATES = ("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup",
-             "bug_hunt", "self_audit", "watch")  # what `template:` may name
+             "content_audit", "bug_hunt", "self_audit", "watch")  # what `template:` may name
 # Old names, still read: "audit" is kept for passes that only read and take notes, so the
 # two that edit code were renamed (prompt 36). Items and events written before keep theirs.
 ALIASES = {"general_audit": "general_cleanup", "test_perf": "test_cleanup"}
@@ -43,7 +43,8 @@ NO_STAGE = ("cleanup", "disk_audit", "watch")
 # Repo-wide templates that run alone in their repo: never beside another item, readonly ones
 # included (a perf or disk measurement is skewed by anything else running), and nothing
 # behind one in its queue starts early (`state.early_starts`), so they are never starved.
-EXCLUSIVE = _named("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup")
+EXCLUSIVE = _named("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup",
+                   "content_audit")
 
 
 def template_text(name: str) -> str:
