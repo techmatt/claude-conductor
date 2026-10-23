@@ -9,6 +9,7 @@ from datetime import datetime
 import pytest
 
 from conductor import daemon_watch, items, nightshift, questions, state
+from conductor import session as session_mod
 from conductor.util import read_text
 
 
@@ -104,8 +105,10 @@ def assert_each_once(text: str) -> None:
 
 
 @pytest.mark.slow
-def test_inbox_and_digests_print_each_section_once(env):
+def test_inbox_and_digests_print_each_section_once(env, tmp_path, monkeypatch):
     """Word Warriors' inbox printed everything after *Night shift* twice once (38)."""
+    # Not this checkout's own reports: two of them may share a heading like `## Decisions`.
+    monkeypatch.setattr(session_mod, "CONDUCTOR_ROOT", tmp_path / "no-conductor")
     env.queue("001_first", "FAKE report done")
     env.tick_until(lambda: env.finished("code/001_first"))
     backlog(env, "07_ask", "FAKE ask " + json.dumps({"question": "Which?", "block": True}) + "\nFAKE report done")
