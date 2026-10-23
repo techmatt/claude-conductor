@@ -34,6 +34,7 @@ WATCH_BODY = "{reason}\n"           # the watch item's body: why conductor launc
 STALL_FLAGS = ("quiet", "eta", "blocked")      # the flags that launch a watch; the rest are logged only
 ACTIONS = ("tell", "answer", "notify", "draw")
 ANSWER_RE = re.compile(r"^(\S+)\s+(.+?)\s*\(source:\s*([^)]+)\)\s*$")    # `<question> <answer> (source: <where>)`
+FOOTER_RE = re.compile(r"^`?report written to\b", re.IGNORECASE)     # every report's last line, often under `## Actions`
 MAX_ACTIONS = 6
 WATCH_FRONT = ("---\nrepo: {repo}\nreadonly: true\ntemplate: watch\nmax_hours: {hours:g}\n"
                "after_red: continue\nstage: false\n---\n")
@@ -284,7 +285,8 @@ class WatchMixin:
         for ln in text.splitlines():
             if re.match(r"^#+\s", ln):
                 inside = bool(re.match(r"^#+\s*actions\s*$", ln.strip(), re.IGNORECASE))
-            elif inside and (s := ln.strip().lstrip("-*").strip()) and s.lower().rstrip(".") != "none":
+            elif (inside and (s := ln.strip().lstrip("-*").strip()) and s.lower().rstrip(".") != "none"
+                  and not FOOTER_RE.match(s)):
                 lines.append(s.strip("`"))
         for n, s in enumerate(lines):
             verb, _, value = s.partition(":")

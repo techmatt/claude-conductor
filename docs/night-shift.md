@@ -58,7 +58,8 @@ drifting. Its report (short: **Items**, **Recommend**, **Actions**) never waits 
 `View.reviewed` counts it reviewed, and the inbox's *Night shift* lists it.
 
 **What it may do on its own**: its report's `## Actions` lines, carried out when it finishes
-(not when red), at most six, attributed `by: watch`:
+(not when red), at most six, attributed `by: watch` (`none` and the closing `Report written
+to …` line, which sits under `## Actions` as the last heading, are not actions):
 - `tell: <repo>/<NNN_name> <line>`: a `tell` (`progress.md`, *Messages*; to an item blocked
   on its question, that question's answer: `questions.md`);
 - `answer: <question id> <answer> (source: <where>)`: answers an open question **only** with

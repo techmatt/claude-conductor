@@ -248,6 +248,31 @@ def test_a_signal_written_with_a_request_is_not_left_a_whole_poll(env, monkeypat
     assert time.monotonic() - start >= 0.45
 
 
+def test_a_request_written_after_queue_items_is_not_left_behind_their_launch(env, monkeypatch):
+    """Word Warriors 2026-10-22: one bridge call wrote two queue items, then a request. The tick
+    the items woke found no `request.md` yet and spent its seconds creating the launched item's
+    worktree; the request's receipt came ~6s after it. It is now handled around each launch."""
+    from conductor import daemon as daemon_mod
+    req = env.control / "requests" / "20261022-1747-calls"
+    seen: list[bool] = []
+    real = daemon_mod.Daemon.launch
+
+    def launch(self, item, stage=None):
+        seen.append((env.control / rel_for(f"requests/{req.name}")).is_file())
+        req.mkdir(parents=True)                         # lands while the launch makes its worktree
+        (req / "state.md").write_text("# state\n\ncalls\n", encoding="utf-8")
+        (req / "request.md").write_text('---\ntargets: [state.md]\nmessage: "state: calls"\n---\n', encoding="utf-8")
+        real(self, item, stage)
+
+    monkeypatch.setattr(daemon_mod.Daemon, "launch", launch)
+    env.queue("001_a", env.hold())
+    env.d.tick()
+    assert seen == [False] and receipt(env, f"requests/{req.name}")[0]["outcome"] == "accepted"
+    [r] = env.events("request")
+    assert r.id > env.events("start")[0].id         # in the same tick, right after the launch
+    env.release()
+
+
 def test_an_impossible_dependency_is_warned_of_at_write_time(env):
     """Accepted, with a `warning` naming why it will hold (Word Warriors 098 → 100 → 102)."""
     (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)

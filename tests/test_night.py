@@ -224,6 +224,20 @@ def test_autopilot_holds_draws_and_watch_tells(env, monkeypatch):
     env.tick_until(lambda: list((env.control / "signals").glob("cli-4.signal.bad")))
 
 
+def test_the_report_footer_under_actions_is_no_action(env):
+    """Word Warriors W10-W17: `## Actions` is a watch report's last heading, so the footer every
+    report ends with sat under it and was refused as an action, a warning each run."""
+    report = env.control / "reports" / "code__W1_watch.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(f"# Watch\n\n## Actions\n\n- none\n\nReport written to {report}\n", encoding="utf-8")
+    env.d._watch_actions({"item": "code/W1_watch", "report": str(report)})
+    assert not env.events("warning")
+    report.write_text(f"## Actions\n\n- cancel: code/001_x\n\n`Report written to {report}`\n", encoding="utf-8")
+    env.d._watch_actions({"item": "code/W1_watch", "report": str(report)})
+    [w] = env.events("warning")
+    assert w.detail["action"] == "cancel: code/001_x"       # a real unknown action still warns
+
+
 def test_eta_night_and_full_length_rules():
     posted = datetime(2026, 10, 21, 23, 30).astimezone()
     assert nightshift.parse_eta("~12:10am", posted).day == 22                  # past midnight

@@ -83,6 +83,11 @@ during the tick: a signal written with a request is too young when the tick that
 applies the request begins, and Word Warriors session 12 (Conductor 45) saw its receipt
 a whole poll (~2.1s) after the request's. A tick's own length adds to all of them, so a
 signal and a request written together get receipts within about a second of each other.
+A launch, resume or stage takes seconds (a worktree's creation), so requests are also
+handled just before and just after each one (`process_requests(between=True)`; one
+targeting `conductor.toml` waits for the next tick): the bridge writes `request.md` after
+the call's queue files, and on 2026-10-22 two requests written with queue items got their
+receipts ~6s late, behind the item's launch (sandbox, the same order: 1.5s → 0.6–0.8s).
 
 ## Lifetime
 

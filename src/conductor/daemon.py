@@ -566,9 +566,14 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             active[item_id].tamper += changes
 
     # ---------------------------------------------------------------- requests
-    def process_requests(self) -> None:
+    def process_requests(self, between: bool = False) -> None:
+        """`between`: called from `schedule` before a launch, so a request whose `request.md`
+        landed after the tick began (the bridge writes it after the call's queue files) is
+        not left behind a worktree's creation. A config change waits for the next tick."""
         waiting: set[str] = set()   # targets of earlier requests still waiting: stamp order holds for them
         for d in request.pending(self.cfg):
+            if between and "conductor.toml" in request.listed_targets(d):
+                return                      # it and those after it: the next tick, in order
             rel = f"requests/{d.name}"
             with self._receipt(rel):     # one receipt: the request, its commit, or why it failed
                 if waiting and (ahead := request.listed_targets(d) & waiting):
@@ -705,15 +710,22 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 self.holds[d.item.id] = d.reason
                 self.log.append("hold", item=d.item.id, paths=[self.cfg.rel(d.item.path)], reason=d.reason)
             elif d.action == "run":
-                self.launch(d.item)
+                self._between_requests(self.launch, d.item)
             elif d.action == "resume":
-                self.resume(d.item, view.staged[d.item.id])
+                self._between_requests(self.resume, d.item, view.staged[d.item.id])
             elif d.action == "stage" and d.item.id not in self.no_stage and d.item.id not in self.stages:
-                self.stage(d.item)
+                self._between_requests(self.stage, d.item)
         # A readonly or alongside item behind its head starts now; its neighbours keep their order and stages.
         for item in state.early_starts(self.cfg, view, decisions) if self.mem_level == "ok" else []:
             if item.repo != reordering and item.id not in amending:
-                self.launch(item)
+                self._between_requests(self.launch, item)
+
+    def _between_requests(self, start, *args) -> None:
+        """A launch, resume or stage takes seconds (a worktree's creation): a request that
+        landed since the tick began is handled before it, and one landing during it after."""
+        self.process_requests(between=True)
+        start(*args)
+        self.process_requests(between=True)
 
     def _refuse_late_writes(self, view: state.View) -> None:
         """A queue file named for an item that already launched (a rewrite that lost the race
