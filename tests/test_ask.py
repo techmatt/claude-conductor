@@ -111,8 +111,14 @@ def test_ask_server_protocol(env, tmp_path):
         encoding="utf-8")
     c = Client(cfg)
     try:
-        tool, prog = c.start()
+        tool, prog, wait = c.start()
         assert tool["name"] == "ask" and tool["inputSchema"]["required"] == ["question"]
+        # `wait` (a paused item) returns at once when a message waits for the item.
+        assert wait["name"] == "wait" and c.request("tools/call", {"name": "wait", "arguments": {"minutes": 0}})["isError"]
+        talk.post(env.control, "code/009_x", 1, "RESUME", "cli")
+        got = c.request("tools/call", {"name": "wait", "arguments": {"minutes": 1}})
+        assert "A message from conductor is waiting" in got["content"][0]["text"]
+        talk.pending(env.control, "code/009_x")[0].unlink()
         # `note` may be left out with an `outline`, so the server checks it, not the schema.
         assert prog["name"] == "progress" and "required" not in prog["inputSchema"]
         assert prog["inputSchema"]["properties"]["outline"]["items"]["required"] == ["title", "eta"]

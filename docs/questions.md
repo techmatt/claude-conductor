@@ -38,6 +38,15 @@ Options:
   however long. That time does not count toward `max_hours`.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it
   closed by the daemon (`question_closed`).
+- **A message answers it.** A message hook can't reach an executor waiting in `ask`, so a
+  `tell:` (planner, app, cli, a watch; `pause:` / `resume:` text too) to an item with an
+  open question and no answer file yet is written as that question's answer instead:
+  `Message from <the planner | Matt | conductor's watch>: <text>`, with `by:`. The `tell`
+  event carries `answers: <id>`, its receipt says `delivered as the answer to <id>`, and
+  the executor reads it as both (its preamble says so). A question within 30s of its
+  default (`ANSWER_MARGIN_SECONDS`) is left to it: the tell waits in the mailbox.
+- **The watch answers.** A watch's `answer:` action (`night-shift.md`) writes an answer
+  only from one Matt or the planner already gave, naming its source; `watch_answer` logs it.
 
 The ask server resolves the question by creating `<id>.result.json` exclusively
 (`outcome`: `answered` | `default` | `cancelled`, `text`, `at`, `by`); the daemon only

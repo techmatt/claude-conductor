@@ -1,4 +1,5 @@
-"""The daemon's view of questions, progress lines, deliveries and amendments."""
+"""The daemon's view of questions, progress lines, deliveries and amendments; tells, and
+`pause:` / `resume:` of a repo."""
 
 from __future__ import annotations
 
@@ -7,11 +8,13 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import daemon_signals, executor, items, questions, state, talk
-from .util import FrontMatterError, clock, file_hash, parse_stamp, read_text, retry_io, split_front_matter, stamp
+from . import daemon_signals, executor, items, nightshift, questions, state, talk
+from .util import (FrontMatterError, clock, duration, file_hash, now, parse_stamp, read_text, retry_io,
+                   split_front_matter, stamp)
 
 if TYPE_CHECKING:
     from .daemon import Run
+    from .events import Event
 
 OUTCOME_KINDS = {"answered": "answer", "default": "default"}     # anything else: question_closed
 AMEND_DELIVERY = {
@@ -21,6 +24,16 @@ AMEND_DELIVERY = {
     "running": "delivered after its next tool call",
 }
 REPLY_VIAS = ("hook", "progress")       # deliveries into a running session, which replies with `progress`
+# A tell to an item waiting on its own question answers it, signed by who sent it.
+SENDERS = {"planner": "the planner", "app": "Matt (the app)", "cli": "Matt", "watch": "conductor's watch"}
+ANSWER_MARGIN_SECONDS = 30      # a question this close to its default is left to it: the tell waits in the mailbox
+PAUSE_TEXT = ("From conductor: PAUSE. Matt has paused work in `{repo}`. Commit what you have now, stop every "
+              "browser, test worker and server you started, then call `wait` (mcp__conductor__wait) again and "
+              "again, doing nothing else, until a message from conductor says RESUME. Don't ask a question to "
+              "wait and don't end the session: your time limit stops while you are paused.")
+RESUME_TEXT = ("From conductor: RESUME. Matt has resumed work in `{repo}` after {paused}. Your time limit "
+               "moved later by as much: conductor now stops this session at {deadline}. Move any end time of "
+               "your own (a bug hunt's) by {paused} too, restart what you stopped, and carry on where you left off.")
 
 
 class MessagesMixin:
@@ -112,6 +125,59 @@ class MessagesMixin:
                 out.setdefault(e.item, []).append((mid, after))
         return out
 
+    def _message(self, run: Run, text: str, rel: str, **extra) -> Event:
+        """A tell into `run`'s mailbox, delivered after its next tool call; or, while it
+        waits on a question of its own (a hook can't reach it there), that question's
+        answer, signed by the sender, so the executor reads it as both (`answers`)."""
+        by = self._by or "unknown"
+        at = now()
+        q = next((q for q in questions.scan(self.cfg.control)
+                  if q.item == run.item_id and q.is_open and not q.answer_path.exists()
+                  and (q.deadline is None or (parse_stamp(q.deadline) - at).total_seconds() > ANSWER_MARGIN_SECONDS)),
+                 None)
+        if q is not None:
+            ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=by, answers=q.id, **extra)
+            questions.write_answer(q, f"Message from {SENDERS.get(by, by)}: {text}", by=by)
+        else:
+            ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=by, **extra)
+            talk.post(self.cfg.control, run.item_id, ev.id, text, self._by)
+        return ev
+
+    # ---------------------------------------------------------------- pause
+    def _pausable(self, repo: str) -> list[Run]:
+        """The repo's items still executing or setting up; a watch only reads, for minutes."""
+        return [r for r in self.runs.values() if r.rec["repo"] == repo and not r.exited()
+                and r.rec.get("phase", "exec") in ("exec", "setup") and not nightshift.is_watch(r.rec)]
+
+    def _pause(self, repo: str, rel: str) -> None:
+        """`pause: <repo>`: nothing new launches or stages there (`state.decide`), and each item
+        running there is told to commit, stop what it started and `wait`; its clock (max_hours,
+        the stall checks) stops until `resume:`."""
+        if ev := state.scan(self.cfg, self.log).paused.get(repo):
+            raise ValueError(f"pause: {repo} is already paused (since {clock(ev.ts)})")
+        runs = self._pausable(repo)
+        self.log.append("pause", repo=repo, paths=[rel], items=[r.item_id for r in runs], by=self._by or "unknown")
+        for run in runs:
+            run.rec["paused_at"] = stamp()
+            self._save(run)
+            self._message(run, PAUSE_TEXT.format(repo=repo), rel, pause=True)
+
+    def _resume(self, repo: str, rel: str) -> None:
+        """`resume: <repo>`: the queue is released, and each paused item's deadline moves
+        later by its pause before it is told to carry on."""
+        if repo not in state.scan(self.cfg, self.log).paused:
+            raise ValueError(f"resume: {repo} is not paused")
+        runs = [r for r in self._pausable(repo) if r.rec.get("paused_at")]
+        held = {r.item_id: (now() - parse_stamp(r.rec["paused_at"])).total_seconds() for r in runs}
+        self.log.append("resume", repo=repo, paths=[rel], items=sorted(held),
+                        paused_seconds={i: round(s) for i, s in held.items()}, by=self._by or "unknown")
+        for run in runs:
+            deadline = self._extend_deadline(run, held[run.item_id], key="paused_seconds")
+            run.rec.pop("paused_at", None)
+            self._save(run)
+            self._message(run, RESUME_TEXT.format(repo=repo, paused=duration(held[run.item_id]),
+                                                  deadline=clock(deadline)), rel, resume=True)
+
     def _keep_amendment(self, msg: dict) -> Path | None:
         repo, _, name = str(msg.get("item", "")).partition("/")
         if repo not in self.cfg.repos:
@@ -198,11 +264,11 @@ class MessagesMixin:
         self.q_seen.add((kind, q.id))
         self.log.append(kind, item=q.item, paths=paths, question=q.id, **detail)
 
-    def _extend_deadline(self, run: Run, seconds: float) -> str:
-        """Time blocked on a question does not count toward max_hours."""
+    def _extend_deadline(self, run: Run, seconds: float, key: str = "blocked_seconds") -> str:
+        """Time blocked on a question, or paused, does not count toward max_hours."""
         rec = run.rec
         rec["deadline"] = stamp(parse_stamp(rec["deadline"]) + timedelta(seconds=seconds))
-        rec["blocked_seconds"] = rec.get("blocked_seconds", 0) + round(seconds)
+        rec[key] = rec.get(key, 0) + round(seconds)
         self._save(run)
         return rec["deadline"]
 

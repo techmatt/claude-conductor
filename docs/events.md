@@ -43,7 +43,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `review` | a `review:` signal wrote `review.md`; paths: the signal, `review.md`; item: the ref's (none for `all`) | which (`all` or the item id), items (inlined, oldest first), conductor (conductor reports inlined), by |
 | `checkpoint` | a `checkpoint:` (or `session:`) signal started a new session view (its id is its number) | label, by; session (`session.md`, from a `session:` signal) |
 | `progress` | the executor called `progress` | seq, at, note (absent on an outline-only line), eta, done, remaining, outline ([{title, eta, done}]); reply_to (the tell or running amendment it answers) |
-| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message or a started-beside warning (`beside`: the item that started) | text, by; outline_request (an `outline:` signal's fixed request); beside |
+| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (the event id is the message id); `by: conductor` for a memory-level message or a started-beside warning (`beside`: the item that started) | text, by; outline_request (an `outline:` signal's fixed request); beside; answers (the question it answered: `questions.md`); pause, resume |
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`; an amendment also `prompt`/`resume`; `progress` in older logs), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
@@ -65,7 +65,9 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `late` | an answer file after a default or close | question, text, outcome; by |
 | `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, outcome, reason |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
-| `watch_flag` | the night shift's check flagged something (`night-shift.md`) | flag (`quiet`, `eta`, `question`, `backlog`, `memory`, `run_failed`), key, text; watch (`skipped: <why>` for a stall no watch looked at) |
+| `watch_flag` | the night shift's check flagged something (`night-shift.md`) | flag (`quiet`, `eta`, `question`, `blocked`, `backlog`, `memory`, `run_failed`), key, text; watch (`skipped: <why>` for a stall no watch looked at) |
+| `watch_answer` | a watch's `answer:` action answered a question | question, text, source, watch |
+| `pause` / `resume` | a `pause:` / `resume:` signal (`night-shift.md`, *Pause*) | repo; items, by; paused_seconds (resume) |
 | `watch` | conductor queued a watch item | reason, flags (their keys), file, by |
 | `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
 | `autopilot` | an `autopilot:` signal set the mode (`night-shift.md`); the last one holds | mode (`off`, `night`, `always`), was, by |

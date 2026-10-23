@@ -6,14 +6,17 @@ next item number. A full-length item is drawn only if Matt acted (`nightshift.ma
 since the repo's last full-length item started, and at night only while the backlog budget lasts.
 
 The **check** costs no tokens: it flags (one `watch_flag` event per flag, de-duplicated by
-its key) a running item silent or past its ETA, a question left open, a repo whose empty
-queue leaves backlog waiting, memory pressure and a failed run target. A stall flag, or an
-hour of running work since the last watch, launches a **watch item**: a short readonly run of
-the `watch` template, unless a planner session is active. When it finishes, its report's
-`## Actions` lines (tell, notify, draw: nothing else) are carried out, attributed `by: watch`.
+its key) a running item silent or past its ETA, a question left open (and a blocking one
+left unanswered `watch_blocked_minutes`), a repo whose empty queue leaves backlog waiting,
+memory pressure and a failed run target. A stall flag, or half an hour of running work since
+the last watch, launches a **watch item**: a short readonly run of the `watch` template, unless
+a planner session is active. When it finishes, its report's `## Actions` lines (tell, answer,
+notify, draw: nothing else) are carried out, attributed `by: watch`. A paused repo's items
+(`pause:`) are neither checked nor watched.
 
-**Autopilot** (`off`, `night`, `always`; the `autopilot:` signal) gates what starts work on
-its own: draws and a watch's tells and draws. The checks and the watch itself still run.
+**Autopilot** (`off`, `night`, `always`; the `autopilot:` signal) gates only what starts work
+on its own: draws, a watch's included. Repairs (a watch's tell and answer), the checks and the
+watch itself run at any setting.
 """
 
 from __future__ import annotations
@@ -28,8 +31,9 @@ from . import daemon_signals
 from .util import clock, duration, now, parse_stamp, read_text, retry_io, write_text
 
 WATCH_BODY = "{reason}\n"           # the watch item's body: why conductor launched it
-STALL_FLAGS = ("quiet", "eta")      # the flags that launch a watch; the rest are logged only
-ACTIONS = ("tell", "notify", "draw")
+STALL_FLAGS = ("quiet", "eta", "blocked")      # the flags that launch a watch; the rest are logged only
+ACTIONS = ("tell", "answer", "notify", "draw")
+ANSWER_RE = re.compile(r"^(\S+)\s+(.+?)\s*\(source:\s*([^)]+)\)\s*$")    # `<question> <answer> (source: <where>)`
 MAX_ACTIONS = 6
 WATCH_FRONT = ("---\nrepo: {repo}\nreadonly: true\ntemplate: watch\nmax_hours: {hours:g}\n"
                "after_red: continue\nstage: false\n---\n")
@@ -158,7 +162,8 @@ class WatchMixin:
         quiet = self.cfg.watch_quiet_minutes * 60
         for item_id, run in sorted(self.runs.items()):
             rec = run.rec
-            if rec.get("phase", "exec") != "exec" or run.exited() or nightshift.is_watch(rec) or item_id in self.blocked:
+            if (rec.get("phase", "exec") != "exec" or run.exited() or nightshift.is_watch(rec) or item_id in self.blocked
+                    or rec.get("paused_at") or rec["repo"] in view.paused):
                 continue
             p = self.log.last("progress", item=item_id)
             since = parse_stamp(p.ts if p else rec["started"])
@@ -171,10 +176,17 @@ class WatchMixin:
                 flags.append((f"eta:{item_id}:{posted.id}", "eta", item_id,
                               f"{item_id}: past its ETA {eta} (posted {clock(posted.ts)})"))
         for q in questions.scan(self.cfg.control):
-            if q.is_open and (at - parse_stamp(q.asked)).total_seconds() >= self.cfg.watch_check_minutes * 60:
+            if not q.is_open or q.item.split("/", 1)[0] in view.paused:
+                continue
+            waited = (at - parse_stamp(q.asked)).total_seconds()
+            if waited >= self.cfg.watch_check_minutes * 60:
                 flags.append((f"question:{q.id}", "question", q.item,
                               f"question `{q.id}` from {q.item} open since {clock(q.asked)}"
                               + (" (blocking)" if q.block else "")))
+            # A blocked item does nothing until answered: a watch looks for an answer already given.
+            if q.block and self.cfg.watch_blocked_minutes and waited >= self.cfg.watch_blocked_minutes * 60:
+                flags.append((f"blocked:{q.id}", "blocked", q.item,
+                              f"{q.item} blocked on question `{q.id}` since {clock(q.asked)}, unanswered"))
         for repo, queue in nightshift.backlog(self.cfg).items():
             idle = not view.queued.get(repo) and not any(r["repo"] == repo for r in view.running.values())
             if queue and idle and (why := self._eligible(view, repo)[1]) != "the backlog is empty":   # unsettled
@@ -199,7 +211,7 @@ class WatchMixin:
             why_not = self._launch_watch("; ".join(f[3] for f in stalls), sorted(keys), item=stalls[0][2])
             self._unwatched = (self._unwatched | keys) if why_not else (self._unwatched - keys)
         elif self._watch_due(at):
-            self._launch_watch(f"the hourly look while items run ({clock(at)})", [])
+            self._launch_watch(f"the routine look while items run ({clock(at)})", [])
         for key, flag, item_id, text in new:
             self.watch_keys.add(key)
             extra = {"watch": f"skipped: {why_not}"} if why_not and flag in STALL_FLAGS else {}
@@ -216,11 +228,12 @@ class WatchMixin:
         return (e.detail.get("eta"), e) if e else (None, None)
 
     def _watch_due(self, at) -> bool:
-        """An hour (`watch_every_minutes`) of running work since the later of the last watch
-        and the earliest start among the items executing now."""
+        """Half an hour (`watch_every_minutes`) of running work since the later of the last
+        watch and the earliest start among the items executing now, paused ones aside."""
         every = self.cfg.watch_every_minutes
         starts = [parse_stamp(r.rec["started"]) for r in self.runs.values()
-                  if not nightshift.is_watch(r.rec) and r.rec.get("phase", "exec") == "exec" and not r.exited()]
+                  if not nightshift.is_watch(r.rec) and r.rec.get("phase", "exec") == "exec" and not r.exited()
+                  and not r.rec.get("paused_at")]
         if not every or not starts:
             return False
         ref = min(starts)
@@ -244,7 +257,7 @@ class WatchMixin:
                 return f"a planner session is active (its last signal or request {clock(p)})"
             if self.mem_level != "ok":
                 return f"memory is at {self.mem_level}"
-        running = [r["repo"] for r in view.running.values() if not nightshift.is_watch(r)]
+        running = [r["repo"] for r in view.running.values() if not nightshift.is_watch(r) and r["repo"] not in view.paused]
         repo = item.split("/", 1)[0] if item else (running[0] if running else next(iter(self.cfg.repos)))
         if self._reorder_pending() == repo:
             return f"a reorder of {repo} is being finished"
@@ -259,7 +272,8 @@ class WatchMixin:
     # ---------------------------------------------------------------- its actions
     def _watch_actions(self, rec: dict) -> None:
         """A finished watch's `## Actions` lines, carried out `by: watch`; anything else
-        it wrote there is refused with a warning (it recommends those in its report)."""
+        it wrote there is refused with a warning (it recommends those in its report).
+        Autopilot holds back only a draw: a tell or an answer repairs, it starts nothing."""
         item_id, report = rec["item"], Path(rec["report"])
         rel = self.cfg.rel(report)
         try:
@@ -279,12 +293,14 @@ class WatchMixin:
                 if n >= MAX_ACTIONS:
                     raise ValueError(f"more than {MAX_ACTIONS} actions")
                 if verb not in ACTIONS or not value:
-                    raise ValueError("a watch may only tell, notify or draw; it recommends the rest in its report")
-                if verb != "notify" and (hold := nightshift.autopilot_holds(self.cfg, self.log)):
+                    raise ValueError("a watch may only tell, answer, notify or draw; it recommends the rest in its report")
+                if verb == "draw" and (hold := nightshift.autopilot_holds(self.cfg, self.log)):
                     raise ValueError(f"{hold}: recommended only")
                 with self._attributed("watch"):
                     if verb == "tell":
                         self._tell(value, rel)
+                    elif verb == "answer":
+                        self._watch_answer(value, item_id, rel)
                     elif verb == "notify":
                         self.log.append("notify", item=item_id, paths=[rel], text=value)
                     elif value not in self.cfg.repos:
@@ -294,3 +310,23 @@ class WatchMixin:
             except Exception as exc:        # noqa: BLE001 - a bad action never stops its item concluding
                 self.log.append("warning", item=item_id, paths=[rel], action=s,
                                 note=f"watch action `{s}` not carried out: {exc}")
+
+    def _watch_answer(self, value: str, watch_id: str, rel: str) -> None:
+        """`answer: <question> <answer> (source: <where>)`: an open question answered only with
+        what Matt or the planner already said (a message, the item's prompt or an amendment),
+        its source named in the answer. Conductor can't judge the source; the watch template
+        forbids anything new, and the `watch_answer` event keeps the source for review."""
+        m = ANSWER_RE.match(value)
+        if not m:
+            raise ValueError("an answer is `answer: <question id> <answer> (source: <where Matt or the planner "
+                             "gave it>)`")
+        ref, text, source = m.groups()
+        q = questions.find(self.cfg.control, ref)
+        if q is None or not q.is_open:
+            raise ValueError(f"no open question {ref!r}")
+        if q.answer_path.exists():
+            raise ValueError(f"{q.id} already has an answer waiting")
+        self.log.append("watch_answer", item=q.item, paths=[rel], question=q.id, text=text, source=source,
+                        watch=watch_id)
+        questions.write_answer(q, f"{text}\n\n(Answered by conductor's watch from what was already said: {source}.)",
+                               by="watch")

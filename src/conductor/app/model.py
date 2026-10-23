@@ -189,6 +189,8 @@ class Snapshot:
     memory: tuple[str, str] = ("", "ok")                       # `memory.line`: text, level
     autopilot: tuple[str, str] = ("always", "")                # mode, what it starts next (`nightshift.plan`)
     rejected: list[Event] = field(default_factory=list)        # `events.live_invalids`: the header's "N rejected"
+    repo_names: list[str] = field(default_factory=list)        # every configured repo, for Pause/Resume
+    paused: dict[str, Event] = field(default_factory=dict)     # repo → its `pause` event (`View.paused`)
 
     @property
     def to_pick(self) -> int:
@@ -261,7 +263,8 @@ ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "as
                   "approve", "cancel", "reorder", "clear", "edited", "request", "request_failed", "daemon_restart",
                   "daemon_start", "daemon_stop", "progress", "tell", "amended", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed",
-                  "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify", "closeout_push"}
+                  "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify", "closeout_push",
+                  "pause", "resume", "watch_answer"}
 ALWAYS_KINDS = RED_KINDS | {"warning", "push_failed"}
 
 
@@ -300,8 +303,11 @@ def activity_text(ev: Event) -> str:
             return f"{name}{reply_to(ev)}: {progress_text(ev).replace(chr(10), ' · ')}"
         case "tell" if d.get("outline_request"):
             return f"outline request #{ev.id} to {name}{by}"
+        case "tell" if d.get("pause") or d.get("resume"):
+            return f"{'pause' if d.get('pause') else 'resume'} message #{ev.id} to {name}{by}"
         case "tell":
-            return f"message #{ev.id} to {name}{by}: {d.get('text')}"
+            answers = f" (as the answer to {d['answers']})" if d.get("answers") else ""
+            return f"message #{ev.id} to {name}{by}{answers}: {d.get('text')}"
         case "delivered":
             if d.get("amend"):
                 return f"amendment #{d['amend']} reached {name} (via {d.get('via')})"
@@ -518,7 +524,7 @@ class Project:
         except (OSError, ValueError) as exc:
             pilot = (nightshift.autopilot(self.log), f"could not read the backlog: {exc}")
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
-                        view.checkpoint, pending, mem, pilot, live_invalids(self.log))
+                        view.checkpoint, pending, mem, pilot, live_invalids(self.log), list(cfg.repos), view.paused)
 
     def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
         """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only
@@ -671,6 +677,8 @@ def conversation(events: list[Event]) -> list[Turn]:
                     t.under.append(("reply", r.ts, progress_text(r)))
                 elif w := undelivered.get(e.id):
                     t.note, t.tone = str(w.detail.get("note") or "never delivered"), "warn"
+                elif d.get("answers"):
+                    t.under.append(("delivered", e.ts, f"as the answer to {d['answers']}"))
                 elif dv and dv.detail.get("via") in ("hook", "progress"):
                     t.note, t.tone = "waiting for a reply", "wait"
                 elif not dv:

@@ -53,16 +53,18 @@ events: [812, 813]
 
 | write | written when | result | refused when |
 |---|---|---|---|
-| signal | its lines applied or it was rejected | `applied` | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line |
+| signal | its lines applied or it was rejected | `applied`; with tells (`tell:`, `outline:`, `pause:`, `resume:`) where each went, `; `-joined | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line |
 | request | applied or failed (within a second of `request.md`); `pending` while an earlier request holds it | `committed <sha>`, `applied; nothing changed` | `request_failed` (it is `.failed`) |
 | queue item | `enqueue`, `edited` | `queued as <id>` (plus, if a watch or draw took its number meanwhile, `its number is also <id>'s: name it in full`); `rewritten: it runs the new text` / `its stage is redone` | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` | `late` (the question had resolved) |
 | proposed item | readable, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |
 
-A `tell:` or `outline:` signal's receipt likewise gains a `delivered #N` line when the
-message reaches the executor. A queue item rewritten while the daemon was down gets no
-new receipt.
+A tell's receipt is never a bare `applied`: `delivered as the answer to <question>` (the
+item waits on its own question: `questions.md`), or `message #N to <item>: delivered after
+its next tool call`, whose `result` later becomes `delivered #N (<via>, after Ns)` when it
+reaches the executor, or `not delivered: message #N: the executor exited first`. A queue
+item rewritten while the daemon was down gets no new receipt.
 
 ## When
 

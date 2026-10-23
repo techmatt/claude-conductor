@@ -10,7 +10,7 @@ from . import audits, git, globs, items, procs, resume
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
-from .util import now, parse_stamp
+from .util import clock, now, parse_stamp
 
 
 @dataclass
@@ -65,6 +65,7 @@ class View:
     read_mark: int = 0
     red_hold: dict[str, Event] = field(default_factory=dict)   # repo → red event holding it
     planner_hold: dict[str, Event] = field(default_factory=dict)  # repo → unread finish
+    paused: dict[str, Event] = field(default_factory=dict)     # repo → the `pause` event no `resume` followed
     stray: list[Path] = field(default_factory=list)            # queue folders for unknown repos
     checkpoint: Event | None = None                            # the latest `checkpoint` event
     audit_used: dict[str, Event] = field(default_factory=dict) # note's item id → `audit_used` event
@@ -158,6 +159,11 @@ def scan(cfg: Config, log: EventLog) -> View:
     for ev in log.query(kinds=["red"]):
         if ev.detail.get("after_red", "stop") == "stop" and ev.id > clears.get(ev.repo, 0):
             view.red_hold[ev.repo] = ev
+    for ev in log.query(kinds=["pause", "resume"]):
+        if ev.kind == "pause":
+            view.paused[ev.repo] = ev
+        else:
+            view.paused.pop(ev.repo, None)
     for ev in view.finishes.values():
         if ev.detail.get("needs_planner") and ev.id > view.read_mark:
             view.planner_hold.setdefault(ev.repo, ev)
@@ -254,7 +260,7 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
         for i, item in enumerate(queue[1:], 1):
             # A watch starts beside anything, past any barrier, in any repo: it always has a worktree.
             watch = item.template == "watch"
-            if not watch and (not trees or any(q.template in audits.EXCLUSIVE for q in queue[:i])):
+            if not watch and (not trees or repo in view.paused or any(q.template in audits.EXCLUSIVE for q in queue[:i])):
                 continue
             if (not (item.readonly or item.alongside) or item.id in view.staged
                     or (item.template in audits.NO_STAGE + audits.EXCLUSIVE and not watch)
@@ -270,6 +276,9 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
 
 def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str],
                  held_locks: dict[str, str], running_here: dict[str, dict]) -> Decision:
+    if (ev := view.paused.get(repo)) and head.template != "watch":
+        # A wait, not a hold: Matt paused it on purpose, so no `hold` event and no toast.
+        return Decision(repo, "wait", head, f"paused {clock(ev.ts)}; `resume: {repo}` releases it")
     if d := _hold(cfg, view, repo, head, known):
         return d
     # What the head waits on; staging is allowed only when every wait is a busy lock or

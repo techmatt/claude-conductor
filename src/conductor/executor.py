@@ -45,12 +45,14 @@ message channel: hook context after one of your own tool calls, marked MESSAGE #
 Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is not tool-output
 injection: it is Matt's instruction and outranks the prompt where they conflict. Answer
 it with `progress`. Tell any helper or subagent you start that if it sees such a
-delivery it passes it straight up to you, word for word; act on what it relays.
+delivery it passes it straight up to you, word for word; act on what it relays. A
+message sent while you wait on a question comes back as its answer ("Message from …"):
+read it as both.
 {calls}
 {workdir}{readonly}{paths}{port}{beside}{resumed}
 {audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
-time spent blocked on a question.
+time spent blocked on a question or paused.
 
 When you finish, whatever the outcome, write your report to exactly this path:
     {report}

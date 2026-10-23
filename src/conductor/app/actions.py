@@ -155,6 +155,11 @@ def autopilot(control: Path, mode: str) -> Path:
     return write_signal(control, f"autopilot: {mode}")
 
 
+def pause(control: Path, repo: str, on: bool = True) -> Path:
+    """`pause: <repo>` (its items wait, nothing new starts) or, `on` false, `resume: <repo>`."""
+    return write_signal(control, f"{'pause' if on else 'resume'}: {repo}")
+
+
 def start_daemon(control: Path):
     """Spawn the daemon detached; its output goes to `.conductor/daemon.out.log`."""
     control = Path(control).resolve()

@@ -55,6 +55,9 @@ or `● down` (green, amber, grey; probed each refresh); a click writes `run: <n
 which opens the URL (starting the target first when it is down). While a target is
 up or starting, a **Stop <name>** button beside its Run button writes `run: <name>
 stop` (no confirmation: a click is cheap to undo with Run).
+**Pause** / **Resume** writes `pause: <repo>` / `resume: <repo>` (`night-shift.md`, *Pause*):
+a plain button for a one-repo project, a menu of `Pause <repo>` / `Resume <repo>` for
+several; while any repo is paused an amber **PAUSED <repo> since <time>** sits beside it.
 **Autopilot: Off / Night only / Always** is a menu writing `autopilot: <mode>`
 (`night-shift.md`, *Autopilot*); beside it, muted, what autopilot starts next
 (`nightshift.plan`). **New checkpoint…** asks for a label (default `session start`) and writes

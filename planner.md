@@ -84,8 +84,9 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 - **Questions** land in `questions\`, raised as *Open questions first* says. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on the inbox's *Now*.
-- **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper or a blocking question. Longer, or not started: **amend**.
-- **Night shift** (`docs/night-shift.md`): a readonly **watch** item (`W<n>_watch`, its own series: never a queue number; never in a planner session) judges stalls and drift, may tell, toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates the draws and the watch's tells and draws. All on the inbox's *Night shift*.
+- **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; to an item blocked on its own question, at once as its answer (receipt: `delivered as the answer to <id>`). Longer, or not started: **amend**.
+- **Pause.** Matt needs the box ("pause the runs"): **pause R**, never a tell asking the item to wait (it asks itself a question and sits idle). Its items commit, stop their browsers and servers and `wait`, clocks stopped; nothing new starts there. **resume R** when he's done; it shows on *Now* until then, across sessions.
+- **Night shift** (`docs/night-shift.md`): a readonly **watch** item (`W<n>_watch`, its own series: never a queue number; never in a planner session) every 30 minutes while items run, and on a stall or a blocking question unanswered 15 minutes; it judges stalls and drift, may tell, answer (only with an answer you or Matt already gave, its source named), toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates only draws; a watch's repairs (tell, answer) run at any setting. All on the inbox's *Night shift*.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it (**memory?**); raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) carries its log's end: say what broke.
 - **Picks.** A prompt producing candidates asks for a picker manifest, under a new name (`docs/picks.md`).
@@ -148,7 +149,8 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **backlog X** | Only on Matt's word: his prompt as `backlog\<repo>\<name>.md` (queue front-matter, no number); drawn when that queue empties. |
 | **show backlog** | The inbox's *Night shift*. |
 | **watch now** | Signal `watch: now` (refused while one is live). |
-| **autopilot off / night / on** | Signal `autopilot: off\|night\|always`: whether the night shift may start work itself (draws, a watch's tells and draws); the app's header shows it and what is next. |
+| **autopilot off / night / on** | Signal `autopilot: off\|night\|always`: whether the night shift may start work itself (draws, a watch's included); the app's header shows it and what is next. |
+| **pause R** / **resume R** | Signal `pause: <repo>` / `resume: <repo>`: its running items commit, stop what they started and wait (clocks stopped), nothing new starts; resume moves their deadlines by the pause. |
 | **prepare for closeout** / **closeout** | *state.md, maintenance and closeout*. |
 | **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
 | **read the workflow** / **remind me the vocab** | Re-reads this file / prints this table and `planner-vocab.md`'s. |

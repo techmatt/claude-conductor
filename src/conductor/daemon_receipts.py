@@ -47,6 +47,13 @@ def _settles(path: str) -> bool:
     return ".amend" in name
 
 
+def tell_result(ev: Event) -> str:
+    """Where a tell went: never a bare `applied` (`delivered #N` or `not delivered` follows)."""
+    if q := ev.detail.get("answers"):
+        return f"delivered as the answer to {q}"
+    return f"message #{ev.id} to {ev.item}: delivered after its next tool call"
+
+
 def _q(value) -> str:
     return json.dumps(value, ensure_ascii=False)     # a JSON scalar or list is valid YAML
 
@@ -82,8 +89,10 @@ class ReceiptsMixin:
             else:
                 commit = next((e for e in got if e.kind == "commit"), None)
                 request = next((e for e in got if e.kind == "request"), None)
+                tells = [e for e in got if e.kind == "tell"]
                 result = (f"committed {commit.detail.get('sha', '')[:8]}" if commit else
-                          "applied; nothing changed" if request else "applied")
+                          "applied; nothing changed" if request else
+                          "; ".join(map(tell_result, tells)) if tells else "applied")
                 self._write_receipt(rel, got, result=result)
 
     def _receipt_event(self, ev: Event) -> None:
@@ -113,6 +122,8 @@ class ReceiptsMixin:
                 self._write_receipt(rel, [ev], reason=self._reason(ev))
             case "delivered":
                 self._receipt_delivered(ev)
+            case "warning" if d.get("tell"):
+                self._receipt_delivered(ev, f"not delivered: message #{d['tell']}: the executor exited first")
 
     def _reason(self, ev: Event) -> str:
         d = ev.detail
@@ -120,7 +131,8 @@ class ReceiptsMixin:
             return f"the question had already resolved ({d.get('outcome')}); the executor never saw this answer"
         return str(d.get("error") or d.get("reason") or inbox.describe(ev))
 
-    def _receipt_delivered(self, ev: Event) -> None:
+    def _receipt_delivered(self, ev: Event, result: str | None = None) -> None:
+        """A delivery (or, with `result`, a failure to deliver) onto its message's receipt."""
         mid = ev.detail.get("tell") or ev.detail.get("amend")
         row = self.log.conn.execute("SELECT * FROM events WHERE id = ?", (mid,)).fetchone() if mid else None
         orig = Event.from_row(row) if row else None
@@ -132,7 +144,7 @@ class ReceiptsMixin:
         except (OSError, FrontMatterError, UnicodeDecodeError):
             return                          # pruned or never written: nothing to add to
         meta = meta or {}
-        meta["result"] = f"delivered #{mid} ({ev.detail.get('via')}, after {ev.detail.get('waited_seconds')}s)"
+        meta["result"] = result or f"delivered #{mid} ({ev.detail.get('via')}, after {ev.detail.get('waited_seconds')}s)"
         meta["events"] = [*meta.get("events", []), ev.id]
         lines = [ln for ln in body.strip().splitlines() if ln.strip()] + [self._line(ev)]
         write_text(path, self._render(meta, lines))

@@ -174,7 +174,7 @@ class SignalsMixin:
             if key == "read":
                 if value.lower() not in ("latest", "all") and not value.lstrip("#").isdigit():
                     raise ValueError(f"line {n}: read: expects an event id or `latest`, got {value!r}")
-            elif key in ("clear", "push"):
+            elif key in ("clear", "push", "pause", "resume"):
                 if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
             elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit", "land"):
@@ -234,6 +234,10 @@ class SignalsMixin:
             self.log.append("read", paths=[rel], through=through)
         elif key == "clear":
             self.log.append("clear", repo=value, paths=[rel])
+        elif key == "pause":
+            self._pause(value, rel)                     # daemon_messages
+        elif key == "resume":
+            self._resume(value, rel)
         elif key == "push":
             # its `push` or `push_failed` follows (daemon_push); `control` is the control folder
             self.want_push(CONTROL if value == "control" and value not in self.cfg.repos else value, "signal")
@@ -467,12 +471,12 @@ class SignalsMixin:
 
     def _tell(self, value: str, rel: str, **extra) -> None:
         """A message for a running executor: logged `tell`, then left in its mailbox for
-        the PostToolUse hook (or its next `progress` call) to deliver. An `outline:`
-        signal is a tell of the fixed request, marked `outline_request`."""
+        the PostToolUse hook to deliver, or, while it waits on its own question, given as
+        that question's answer (`daemon_messages._message`). An `outline:` signal is a tell
+        of the fixed request, marked `outline_request`."""
         ref, text = value.split(None, 1)
         run = self._running_target(ref, "outline" if extra.get("outline_request") else "tell")
-        ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=self._by or "unknown", **extra)
-        talk.post(self.cfg.control, run.item_id, ev.id, text, self._by)
+        self._message(run, text, rel, **extra)
 
     def _audit(self, ref: str, rel: str) -> None:
         """`audit: <item>` on a running item: conductor's own *Audit notes* text, the one

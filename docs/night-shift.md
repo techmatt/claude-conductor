@@ -15,12 +15,14 @@ daemon flags:
 | `quiet` | an executing item has posted no progress line for `watch_quiet_minutes` (20), since its last line or its start; not while it waits on a blocking question | item + its last progress event |
 | `eta` | it is past its newest ETA: a progress `eta` or its outline's last row, whichever is newer; a clock time (`5:40pm`, `17:40`; on the day it was posted, the next day if that is over an hour before the posting) or a duration from the posting (`25m`, `1h30m`) | item + the progress event that posted it |
 | `question` | a question open longer than one check interval | question id |
+| `blocked` | a blocking question unanswered for `watch_blocked_minutes` (15): its item does nothing meanwhile | `blocked:` + question id |
 | `backlog` | a repo is idle (empty queue, nothing running) while its backlog has items that were not drawn; the text says why | repo + why |
 | `memory` | the memory level is not `ok` | the `memory` event that set it |
 | `run_failed` | a run target failed since the last check | that event |
 
 Each flag is a `watch_flag` event (flag, key, text; item where there is one). The keys are
-remembered from the log, so a restart flags nothing twice. Watch items are never flagged.
+remembered from the log, so a restart flags nothing twice. Watch items are never flagged,
+nor a paused repo's items or questions.
 
 ## The watch item
 
@@ -31,10 +33,11 @@ anything but a watch is invalid. It is `readonly`, `max_hours` = `watch_max_hour
 `after_red: continue`, `stage: false`; its body is why it was launched. Conductor logs a
 `watch` event (item, reason, flags, file, by). It is launched:
 
-- when a check raises a new `quiet` or `eta` flag (the stall's repo); the other flags are
-  logged only, and the next watch sees them;
-- about once an hour (`watch_every_minutes`, 60; 0: only on flags) while any item executes:
-  an hour after the later of the last watch and the earliest start among those running;
+- when a check raises a new `quiet`, `eta` or `blocked` flag (the stall's repo); the other
+  flags are logged only, and the next watch sees them;
+- every half hour (`watch_every_minutes`, 30; 0: only on flags) while any item executes:
+  that long after the later of the last watch and the earliest start among those running
+  (a paused item doesn't count). No item running, or only paused ones: no watch;
 - by the `watch: now` signal (**watch now**; `signals.md`).
 
 Never two at once (one queued or running refuses another), nor during a reorder of its repo.
@@ -56,12 +59,18 @@ drifting. Its report (short: **Items**, **Recommend**, **Actions**) never waits 
 
 **What it may do on its own**: its report's `## Actions` lines, carried out when it finishes
 (not when red), at most six, attributed `by: watch`:
-- `tell: <repo>/<NNN_name> <line>`: a `tell` (`progress.md`, *Messages*);
+- `tell: <repo>/<NNN_name> <line>`: a `tell` (`progress.md`, *Messages*; to an item blocked
+  on its question, that question's answer: `questions.md`);
+- `answer: <question id> <answer> (source: <where>)`: answers an open question **only** with
+  an answer Matt or the planner already gave (a message, a ruling in the item's prompt or
+  an amendment), naming it; the answer file says so, and `watch_answer` (question, text,
+  source, watch) logs it. Refused without `(source: …)`, or for a question not open or
+  already answered. Conductor can't check the source: the template forbids anything new;
 - `notify: <line>`: a toast (`notify` event);
 - `draw: <repo>`: a backlog draw (the rules below still apply).
 
-Anything else there (cancel, kill, amend, answer) is never carried out: a `warning` says
-so. It recommends those in its report, for Matt or the planner.
+Anything else there (cancel, kill, amend) is never carried out: a `warning` says so. It
+recommends those, and any answer nobody has given yet, in its report.
 
 ## Autopilot
 
@@ -69,13 +78,36 @@ One switch per project for whether the night shift may start work on its own: **
 **night** (only inside the night window, `night_start_hour` to `night_end_hour`) or
 **always** (the default, and the behaviour before it existed). The mode is the last
 `autopilot` event's (set by the `autopilot:` signal from the app's header or the planner),
-so it survives restarts and needs no tracked file. Outside what it allows there are no
-backlog draws and no watch `tell:` or `draw:` actions (refused with a `warning`: "recommended
-only"); a watch's `notify:`, the checks and the watch itself still run, so Matt sees what it
-would have done. A repo's `backlog` flag then says `autopilot is off` (or night only).
+so it survives restarts and needs no tracked file. It gates only what starts work: outside
+what it allows there are no backlog draws, a watch's `draw:` included (refused with a
+`warning`: "recommended only"). Repair is not starting work: a watch's `tell:` and
+`answer:`, its `notify:`, the checks and the watch itself run at any setting (Word Warriors
+125, 2026-10-22: a correct diagnosis every hour from 7:20pm, its fix only recommended, the
+item idle until 11:55pm). A repo's `backlog` flag then says `autopilot is off` (or night only).
 `nightshift.plan` says in a few words what it will start next (`next: bug_sweep when the
 queue empties`, `next: bug_sweep from 6pm`, `held: back-to-back`, `held: budget`): the app's
 header shows it beside the mode, and the inbox's *Night shift* opens with the mode.
+
+## Pause
+
+`pause: <repo>` (**pause R**; the app's **Pause**) is for when Matt needs the box (playing
+the game, say). The daemon logs `pause` (repo, items, by), stamps each item executing or
+setting up there (watches aside) `paused_at` in its run record, and sends each conductor's
+pause text as a tell (`pause: true`; to an item blocked on a question, as its answer):
+commit, stop every browser, test worker and server it started, then call `wait`
+(`mcp__conductor__wait`, which returns when a message waits for it or after up to 20
+minutes) again and again, never asking a question. Nothing in the repo launches or stages
+until `resume:` (the head's decision is a `wait`, `paused …`, never a toasted `hold`; no
+early start either), and no draw or watch starts for it. A paused item is never killed at
+its deadline, never flagged and never counted toward the routine look.
+
+`resume: <repo>` (**resume R**) logs `resume` (items, paused_seconds), moves each paused
+item's deadline later by its pause (`paused_seconds` in its run record), and sends the
+resume text (`resume: true`): the new stop time, and to move its own end times (a bug
+hunt's) by as much. A pause outlives sessions and restarts (`View.paused`: the last
+`pause` with no `resume` after it): the inbox's *Now* line says `**PAUSED** since …` and
+the app's header shows it, until resumed. Pausing a paused repo, or resuming one that
+isn't, is refused.
 
 ## The backlog
 
@@ -123,5 +155,5 @@ read mark the draws, flags, watch launches and watch reports.
 ## Settings
 
 `[defaults]` in `conductor.toml`: `watch_check_minutes` 10, `watch_quiet_minutes` 20,
-`watch_every_minutes` 60, `watch_planner_minutes` 30, `watch_max_hours` 0.5,
+`watch_every_minutes` 30, `watch_planner_minutes` 30, `watch_blocked_minutes` 15, `watch_max_hours` 0.5,
 `backlog_night_hours` 6, `night_start_hour` 18, `night_end_hour` 8.

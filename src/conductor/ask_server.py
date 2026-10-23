@@ -3,11 +3,13 @@
 
     python -m conductor.ask_server --control <folder> --item <repo/NNN_name> --default-minutes 10
 
-Two tools. `ask(question, options?, default?, block?)` writes the question file, then
+Three tools. `ask(question, options?, default?, block?)` writes the question file, then
 holds the tool call open until the question resolves: an answer file appears, or (with
 a default and `block` false) the default deadline passes. `progress(note, eta?, done?,
 remaining?, outline?)` appends a progress line (`talk.record_progress`) and returns at once; it
-hands out no waiting message (the PostToolUse hook after it does, on the lead's call only). JSON-RPC 2.0 over
+hands out no waiting message (the PostToolUse hook after it does, on the lead's call only).
+`wait(minutes?)` is how a paused item idles: it returns once a message waits for the item
+(the hook after it delivers it) or the minutes pass. JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
 `notifications/cancelled` are still served while one waits.
 """
@@ -31,7 +33,10 @@ PROGRESS_SECONDS = 60.0
 SERVER_NAME = "conductor"
 TOOL_NAME = "ask"
 PROGRESS_NAME = "progress"
+WAIT_NAME = "wait"
 OUTLINE_ROWS = 12               # the preamble asks for ~8; a few more are taken, not refused
+WAIT_MINUTES = 10               # `wait`'s default; at most WAIT_MAX_MINUTES, inside Claude Code's MCP idle timeout
+WAIT_MAX_MINUTES = 20
 
 TOOL = {
     "name": TOOL_NAME,
@@ -92,6 +97,23 @@ PROGRESS_TOOL = {
 }
 
 
+WAIT_TOOL = {
+    "name": WAIT_NAME,
+    "description": (
+        "Wait, doing nothing, until a message from conductor arrives (or `minutes` pass); it is "
+        "delivered as soon as this call returns. Use it only when conductor tells you to wait "
+        "(a pause); never to wait for anything else."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "minutes": {"type": "number", "description": f"At most this long (default {WAIT_MINUTES}, "
+                                                         f"at most {WAIT_MAX_MINUTES}); then call it again."},
+        },
+    },
+}
+
+
 def parse_outline(value) -> tuple[list[dict], str | None]:
     """The `outline` argument as stored rows ({title, eta, done}), or an error."""
     if not isinstance(value, list) or not value:
@@ -140,7 +162,7 @@ class Server:
                 "serverInfo": {"name": SERVER_NAME, "version": "1"},
             })
         elif method == "tools/list":
-            self.reply(mid, {"tools": [TOOL, PROGRESS_TOOL]})
+            self.reply(mid, {"tools": [TOOL, PROGRESS_TOOL, WAIT_TOOL]})
         elif method == "tools/call" and params.get("name") == PROGRESS_NAME:
             try:
                 text, is_error = self.progress(params.get("arguments") or {})
@@ -148,13 +170,14 @@ class Server:
                 text, is_error = f"progress failed: {exc}", True
             self.reply(mid, {"content": [{"type": "text", "text": text}], "isError": is_error})
         elif method == "tools/call":
-            if params.get("name") != TOOL_NAME:
+            if params.get("name") not in (TOOL_NAME, WAIT_NAME):
                 self.error(mid, -32602, f"unknown tool {params.get('name')!r}")
                 return
             cancel = threading.Event()
             self._cancel[mid] = cancel
             token = (params.get("_meta") or {}).get("progressToken")
-            threading.Thread(target=self._call, args=(mid, params.get("arguments") or {}, cancel, token),
+            fn = self.ask if params["name"] == TOOL_NAME else self.wait
+            threading.Thread(target=self._call, args=(mid, params.get("arguments") or {}, cancel, token, fn),
                              daemon=True).start()
         elif method == "notifications/cancelled":
             if ev := self._cancel.get(params.get("requestId")):
@@ -165,11 +188,12 @@ class Server:
             self.error(mid, -32601, f"method not found: {method}")
         # other notifications need no reply
 
-    def _call(self, mid, args: dict, cancel: threading.Event, token=None) -> None:
+    def _call(self, mid, args: dict, cancel: threading.Event, token=None, fn=None) -> None:
+        fn = fn or self.ask
         try:
-            text, is_error = self.ask(args, cancel, token)
+            text, is_error = fn(args, cancel, token)
         except Exception as exc:          # never leave a call hanging on a bug
-            text, is_error = f"ask failed: {exc}", True
+            text, is_error = f"{fn.__name__} failed: {exc}", True
         self._cancel.pop(mid, None)
         if text is not None:
             self.reply(mid, {"content": [{"type": "text", "text": text}], "isError": is_error})
@@ -238,6 +262,26 @@ class Server:
                 questions.resolve(q, "default", q.default, "server")
                 continue
             time.sleep(POLL_SECONDS)
+
+    def wait(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
+        """Return once a message waits in the item's mailbox (the PostToolUse hook right
+        after this call delivers it), or after `minutes`."""
+        minutes = args.get("minutes", WAIT_MINUTES)
+        if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or minutes <= 0:
+            return "`minutes` must be a positive number", True
+        started = last_progress = time.time()
+        end = started + min(minutes, WAIT_MAX_MINUTES) * 60
+        while not cancel.is_set():
+            if talk.pending(self.control, self.item):
+                return "A message from conductor is waiting: it reaches you as this call returns. Do what it says.", False
+            if time.time() >= end:
+                return "No message yet. If conductor told you to wait, call `wait` again; do nothing else.", False
+            if token is not None and time.time() - last_progress >= PROGRESS_SECONDS:
+                last_progress = time.time()
+                self.send({"jsonrpc": "2.0", "method": "notifications/progress", "params": {
+                    "progressToken": token, "progress": round(last_progress - started), "message": "waiting"}})
+            time.sleep(POLL_SECONDS)
+        return None, False
 
     def _text(self, q: questions.Question) -> str:
         r = q.result

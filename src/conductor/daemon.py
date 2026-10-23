@@ -979,8 +979,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 self._poll_run_setup(run)
             elif run.exited():
                 self.finish(run)
-            elif now() > parse_stamp(run.rec["deadline"]) and (run.item_id not in self.blocked
-                                                               or run.rec.get("template") == "watch"):
+            elif now() > parse_stamp(run.rec["deadline"]) and not run.rec.get("paused_at") and (
+                    run.item_id not in self.blocked or run.rec.get("template") == "watch"):
                 pid = run.pid()
                 procs.kill_tree(pid)
                 self.log.append("kill", item=run.item_id, pid=pid,

@@ -19,6 +19,7 @@
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
                                              the result text goes into the report
     FAKE progress <json arguments>           call the progress tool; its text goes into the report
+    FAKE wait <json arguments>               call the wait tool (a paused item); its text goes into the report
     FAKE until-message <seconds>             "work" (a tool call every 0.2s) until a message
                                              arrives or the time is up; then answer it with progress
     FAKE reply-with <seconds> <json>         the same, answering with these progress arguments
@@ -198,6 +199,10 @@ for ln in lines:
                 time.sleep(0.05)
         case "progress":
             progress(json.loads(ln.split(" ", 2)[2]))
+        case "wait":
+            from mcp_client import call_tool
+            text, _ = call_tool(Path(args[args.index("--mcp-config") + 1]), "wait", json.loads(ln.split(" ", 2)[2]))
+            answers.append(text)
         case "until-message" | "reply-with":
             end = time.time() + float(parts[2])
             # A message may already have come with the previous line's hook.

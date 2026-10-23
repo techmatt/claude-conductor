@@ -1,7 +1,8 @@
 # Signals
 
 The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot, ack.
+outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot, ack,
+pause, resume.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -32,6 +33,8 @@ push: sandbox                # push sandbox's main to its remote now (push.md); 
 push: control                # the same for the control folder (when no repo is named control)
 autopilot: night             # off | night | always (`on` = always): may the night shift start work itself (night-shift.md)
 ack: invalid #2712           # that rejected signal is dealt with (plain `ack: invalid`: every one still live)
+pause: sandbox               # its items commit, stop what they started and wait, clocks stopped; nothing new starts
+resume: sandbox              # they carry on, deadlines moved by the pause; the queue is released (night-shift.md)
 ```
 
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
@@ -95,6 +98,9 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   item's report can be reviewed`, `review: no finished item '009'`); a multi-word
   value fails the syntax check.
 - **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
+  An item waiting on its own question gets it as that question's answer (`questions.md`).
+- **pause** / **resume** — `pause: <repo>`, `resume: <repo>` (refused when already so):
+  `night-shift.md`, *Pause*.
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,
   *Outline*.
 - **land** — `land: <item>` (a finished item, resolved as for `reviewed`): its kept branch

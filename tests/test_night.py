@@ -202,13 +202,14 @@ def test_autopilot_holds_draws_and_watch_tells(env, monkeypatch):
     snap = model.Project(env.control).snapshot()
     assert snap.autopilot == ("night", "next: 07_feature from 6pm")
     assert "autopilot: **night** (autopilot is night only (from 6pm)" in read_text(env.control / "inbox.md")
-    # Off: the watch still runs, but its tell is only recommended.
-    monkeypatch.setattr(daemon_watch, "WATCH_BODY", "{reason}\nFAKE note ## Actions\\n- tell: code/001_long hi\n")
+    # Off: the watch still runs and repairs (its tell goes out), but its draw is only recommended.
+    monkeypatch.setattr(daemon_watch, "WATCH_BODY", "{reason}\nFAKE note ## Actions\\n- tell: code/001_long hi"
+                                                    "\\n- draw: code\n")
     env.signal("cli-1.signal", "by: cli\nautopilot: off")
     env.queue("001_long", env.hold())
     env.signal("cli-2.signal", "by: cli\nwatch: now")
     env.tick_until(lambda: env.finished("code/W1_watch"))
-    assert not env.events("tell")
+    assert env.events("tell")[0].detail["by"] == "watch"
     assert any("autopilot is off: recommended only" in w.detail["note"] for w in env.events("warning"))
     env.release()
     env.tick_until(lambda: env.finished("code/001_long"))

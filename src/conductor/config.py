@@ -62,7 +62,7 @@ MEMORY_KEYS = ("memory_sample_seconds", "memory_keep_hours", "memory_pressure_pe
                "memory_pressure_free_gb", "memory_critical_percent", "memory_critical_free_gb",
                "memory_calm_seconds")
 NIGHT_KEYS = ("watch_check_minutes", "watch_quiet_minutes", "watch_every_minutes", "watch_planner_minutes",
-              "watch_max_hours", "backlog_night_hours", "night_start_hour", "night_end_hour")
+              "watch_blocked_minutes", "watch_max_hours", "backlog_night_hours", "night_start_hour", "night_end_hour")
 
 
 @dataclass
@@ -95,8 +95,9 @@ class Config:
     # The night shift (`daemon_watch.py`, docs/night-shift.md).
     watch_check_minutes: float = 10.0    # the daemon's stall check (no tokens; 0: off)
     watch_quiet_minutes: float = 20.0    # a running item with no progress line this long is flagged
-    watch_every_minutes: float = 60.0    # a watch item about this often while any item runs (0: only on flags)
+    watch_every_minutes: float = 30.0    # a watch item about this often while any item runs (0: only on flags)
     watch_planner_minutes: float = 30.0  # no watch item within this long of a planner signal or request
+    watch_blocked_minutes: float = 15.0  # a blocking question unanswered this long launches a watch (0: never)
     watch_max_hours: float = 0.5         # a watch item's max_hours
     backlog_night_hours: float = 6.0     # executor-hours of backlog work drawn per night
     night_start_hour: float = 18.0       # the night: from this local hour ...

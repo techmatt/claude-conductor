@@ -127,8 +127,19 @@ def describe(ev: Event) -> str:
                 text += f" · {outline_line(ev, posted=False)}"
         case "tell" if d.get("outline_request"):
             text = f"outline request #{ev.id} for {who}"
+        case "tell" if d.get("pause") or d.get("resume"):
+            text = f"{'pause' if d.get('pause') else 'resume'} message #{ev.id} for {who}" + (
+                f", as the answer to `{d['answers']}`" if d.get("answers") else "")
         case "tell":
-            text = f"message #{ev.id} for {who}: {d.get('text')}"
+            text = f"message #{ev.id} for {who}" + (f" (as the answer to `{d['answers']}`)" if d.get("answers") else "") \
+                + f": {d.get('text')}"
+        case "pause":
+            text = f"`{ev.repo}` **paused** by {d.get('by', 'unknown')}: {', '.join(d.get('items') or []) or 'nothing'} told to wait"
+        case "resume":
+            text = f"`{ev.repo}` resumed by {d.get('by', 'unknown')}" + (
+                f": {', '.join(d.get('items') or [])} told to carry on" if d.get("items") else "")
+        case "watch_answer":
+            text = f"the watch answered `{d.get('question')}` for {who} (source: {d.get('source')}): {d.get('text')}"
         case "delivered":
             waited = f" after {d['waited_seconds']}s" if d.get("waited_seconds") is not None else ""
             what = f"amendment #{d['amend']}" if d.get("amend") else f"message #{d.get('tell')}"
@@ -552,13 +563,15 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None) -
             running.append(text)
         staged = [f"{rec['name']} ({rec.get('phase')})" for rec in view.staged.values() if rec["repo"] == repo]
         parts = []
+        if ev := view.paused.get(repo):
+            parts.append(f"**PAUSED** since {clock(ev.ts)} by {ev.detail.get('by', 'unknown')} (`resume: {repo}`)")
         if running:
             parts.append(f"running {', '.join(running)}")
         if staged:
             parts.append(f"staged {', '.join(staged)}")
         if queued:
             parts.append(f"queued {', '.join(queued)}")
-        if d.action in ("hold", "wait"):
+        if d.action in ("hold", "wait") and repo not in view.paused:
             parts.append(f"{d.action}: {d.reason}")
         elif ev := view.red_hold.get(repo):
             parts.append(f"held after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")

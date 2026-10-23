@@ -89,6 +89,13 @@ class ProjectView(QWidget):
         menu.setToolTipsVisible(True)
         self.autopilot_btn.setMenu(menu)
         self.autopilot_label = muted(QLabel())
+        # Pause / Resume (`pause:` / `resume:` a repo): a plain button for one repo, a menu for several.
+        self.pause_btn = QPushButton("Pause")
+        self.pause_btn.clicked.connect(self.toggle_pause)
+        self.pause_label = QLabel()
+        self.pause_label.setStyleSheet(f"color: {theme.AMBER}; font-weight: bold")
+        self.pause_label.hide()
+        self._pause_key: tuple | None = None
         for w in (self.pending_label, self.autopilot_label):       # clipped when narrow; the tooltip has it all
             w.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         for w in (self.state_label, self.daemon_label):
@@ -105,6 +112,8 @@ class ProjectView(QWidget):
         head.addLayout(self.run_bar)
         self.run_buttons: dict[str, QPushButton] = {}
         self.stop_buttons: dict[str, QPushButton] = {}
+        head.addWidget(self.pause_label)
+        head.addWidget(self.pause_btn)
         head.addWidget(self.autopilot_btn)
         head.addWidget(self.autopilot_label, 1)
         head.addWidget(self.checkpoint_btn)
@@ -205,6 +214,7 @@ class ProjectView(QWidget):
             a.setChecked(m == mode)
         self.autopilot_label.setText(plan)
         self.autopilot_label.setToolTip(plan)
+        self._update_pause(snap)
         self._update_run_buttons(snap)
         cp = snap.checkpoint
         self.checkpoint_btn.setToolTip(
@@ -279,6 +289,37 @@ class ProjectView(QWidget):
     def dismiss_rejected(self) -> None:
         path = actions.ack_invalid(self.project.control)
         self.notify(f"dismiss rejected: wrote signals/{path.name}; the daemon logs `ack` and the count goes")
+
+    def _update_pause(self, snap: Snapshot) -> None:
+        paused, repos = snap.paused, snap.repo_names
+        self.pause_label.setText("PAUSED " + ", ".join(f"{r} since {clock(e.ts)}" for r, e in paused.items()))
+        self.pause_label.setVisible(bool(paused))
+        key = (tuple(repos), tuple(sorted(paused)))
+        if key == self._pause_key:
+            return                  # the menu is rebuilt only when it changes, never while open for nothing
+        self._pause_key = key
+        if len(repos) == 1:
+            self.pause_btn.setMenu(None)
+            self.pause_btn.setText("Resume" if repos[0] in paused else "Pause")
+        else:
+            menu = QMenu(self.pause_btn)
+            for r in repos:
+                on = r not in paused
+                menu.addAction(f"{'Pause' if on else 'Resume'} {r}").triggered.connect(
+                    lambda _=False, r=r, on=on: self.set_pause(r, on))
+            self.pause_btn.setMenu(menu)
+            self.pause_btn.setText("Resume" if paused else "Pause")
+        self.pause_btn.setToolTip("Pause: each running item commits, stops what it started and waits, its clock "
+                                  "stopped; nothing new starts in the repo until Resume (`pause:` / `resume:`)")
+
+    def toggle_pause(self) -> None:
+        repos = self.snap.repo_names if self.snap else []
+        if len(repos) == 1:
+            self.set_pause(repos[0], repos[0] not in self.snap.paused)
+
+    def set_pause(self, repo: str, on: bool) -> None:
+        path = actions.pause(self.project.control, repo, on)
+        self.notify(f"{'pause' if on else 'resume'} {repo}: wrote signals/{path.name}; the daemon applies it")
 
     def set_autopilot(self, mode: str) -> None:
         path = actions.autopilot(self.project.control, mode)

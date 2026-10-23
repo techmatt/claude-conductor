@@ -72,7 +72,9 @@ class TemplatesMixin:
             started = parse_stamp(rec["started"])
             head = (f"### {item_id}\n\nStarted {clock(started)} ({duration((at - started).total_seconds())} ago); "
                     f"max_hours {rec.get('max_hours', 0):g}, stopped at {clock(rec['deadline'])}"
-                    + ("; **blocked on a question now**" if item_id in self.blocked else "") + ".")
+                    + ("; **blocked on a question now**" if item_id in self.blocked else "")
+                    + (f"; **paused** by Matt since {clock(rec['paused_at'])}: leave it be" if rec.get("paused_at") else "")
+                    + ".")
             try:
                 prompt = read_text(run.md_path)
             except (OSError, UnicodeDecodeError) as exc:

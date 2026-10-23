@@ -51,7 +51,7 @@ def call_tool(mcp_config: Path, name: str, arguments: dict) -> tuple[str, bool]:
     c = Client(mcp_config)
     try:
         tools = c.start()
-        assert [t["name"] for t in tools] == ["ask", "progress"], tools
+        assert [t["name"] for t in tools] == ["ask", "progress", "wait"], tools
         result = c.request("tools/call", {"name": name, "arguments": arguments})
         return result["content"][0]["text"], result.get("isError", False)
     finally:
