@@ -203,6 +203,7 @@ class MergeMixin:
             exited = True
         if exited:
             run.resolver = None
+            procs.release_job(res.get("pid"), res.get("create_time"))
         return exited
 
     def _judge_resolver(self, run: Run) -> str | None:

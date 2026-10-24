@@ -351,6 +351,14 @@ def pending(cfg: Config, view: View, log: EventLog) -> list[PickInfo]:
     return out
 
 
+def saved_at(cfg: Config, view: View) -> dict[str, str]:
+    """item id → when its picker was saved, for each finish whose `pick:` manifest has a
+    choices file saved after it (the digests' "picks saved <time>")."""
+    choices = scan_choices(cfg.control)
+    return {item_id: c["saved_at"] for item_id, fin in view.finishes.items()
+            if (ref := fin.detail.get("pick")) and (c := choices.get(ref)) and _after(c.get("saved_at"), fin.ts)}
+
+
 def _after(saved_at, ts: str) -> bool:
     try:
         return parse_stamp(str(saved_at)) >= parse_stamp(ts)

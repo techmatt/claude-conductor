@@ -857,6 +857,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         if problem:
             self._discard_stage(run, problem)
             return
+        procs.release_job(rec.get("pid"), rec.get("create_time"))
         rec["phase"] = "staged"
         rec["staged"] = stamp()
         self._save(run)
@@ -880,7 +881,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             self._end_setup(run, reason)         # kills the runner
         elif run.pid() and not run.exited():
             procs.kill_tree(run.pid())
-        self._reap(rec["item"], rec.get("worktree"), rec.get("started"), "its stage was discarded")
+        self._reap(rec["item"], rec.get("worktree"), rec.get("started"), "its stage was discarded",
+                   job=(rec.get("pid"), rec.get("create_time")))
         if rec["item"] in self.stages:
             # Its window closes here: what it did to the control folder is its own tamper.
             self._guard_check(f"discarding the stage of {rec['item']}")
@@ -924,7 +926,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         cfg, rec = self.cfg, run.rec
         item_id, repo = rec["item"], rec["repo"]
         self._guard_check(f"after {item_id} exited")
-        self._reap(item_id, rec.get("worktree"), rec.get("started"), "its executor exited")
+        self._reap(item_id, rec.get("worktree"), rec.get("started"), "its executor exited",
+                   job=(rec.get("pid"), rec.get("create_time")))
         self.mem_told.pop(item_id, None)
         reasons: list[str] = []
         if run.tamper:

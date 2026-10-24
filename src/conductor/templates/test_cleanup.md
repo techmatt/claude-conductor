@@ -11,7 +11,9 @@ working, without losing what they protect.
    CLAUDE.md.
 3. Speed tests up generally: shared or cheaper fixtures, shorter waits and polls,
    smaller data, parallelism where the runner supports it and the tests are
-   independent.
+   independent. Browser tests stay at one worker unless the repo says otherwise:
+   several browsers at once exhaust this box's memory. Measure with one browser run
+   at a time, a workflow or subagent's included.
    - Lowering thoroughness slightly is acceptable when it buys real speed (fewer
      parameter combinations, smaller inputs). Say what was given up.
    - Moving a slow test to the slow lane is acceptable where that makes sense. Never

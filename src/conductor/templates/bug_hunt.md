@@ -57,6 +57,11 @@ fixed is committed and green: never start a fix you can't finish and test before
    convention): each finding fixed, deferred to Matt with a recommendation, or won't-fix
    with a reason. Read it first, and never re-report an item already on it.
 
+**Browsers: at most one browser test lane plus one checker sweep at a time**, whatever
+else the hunt wants to run. Workflows and subagents that drive a browser (a
+contact-sheet run, a real-speed session) count toward that cap. Code reads, unit tests
+and reading finished screenshots can run alongside.
+
 **Notes only.** If this item is readonly (the preamble says so), find and record but
 change nothing tracked: no fixes, no tests, no findings-list edits, no commit. Build the
 checker and keep its screenshots in one of the repo's `shared` folders if the preamble

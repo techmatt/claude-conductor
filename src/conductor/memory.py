@@ -42,20 +42,16 @@ class Tree:
 
 
 def tree(*pids: int | None) -> Tree:
-    """Each process in `pids` and every descendant (an executor, its subagents, the
-    servers, browsers and shells under it; an orphan it left in its worktree), by kind."""
+    """Each process in `pids`, every descendant and everything in its job (an executor,
+    its subagents, the servers, browsers and shells under it, orphans included; an
+    orphan it left in its worktree), by kind."""
     t = Tree()
-    members, seen = [], set()
-    for pid in pids:
-        if not pid:
-            continue
+    members = []
+    for pid in sorted(set().union(set(), *(procs.family(p) for p in pids if p))):
         try:
-            root = psutil.Process(pid)
-            found = [root, *root.children(recursive=True)]
+            members.append(psutil.Process(pid))
         except psutil.Error:
             continue
-        members += [p for p in found if p.pid not in seen]
-        seen |= {p.pid for p in found}
     for p in members:
         try:
             with p.oneshot():

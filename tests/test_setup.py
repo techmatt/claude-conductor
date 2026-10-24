@@ -161,8 +161,9 @@ def test_a_save_lost_after_the_executor_spawned_is_adopted_not_requeued(env, mon
 
 @pytest.mark.slow
 def test_restart_mid_setup_reaps_a_stray_before_discarding(env):
-    """A stray the setup left in the worktree (it outlives the runner's tree) is reaped
-    first: on Windows its cwd would hold the worktree and the discard would fail."""
+    """A stray the setup left in the worktree (it outlives the runner's tree) is killed
+    first: on Windows its cwd would hold the worktree and the discard would fail. There
+    it dies with the runner's job (`procs.spawn`); elsewhere the reaper finds it."""
     slow_setup(env, stray=True)
     env.queue("001_a", "FAKE commit a.txt a")
     pid_file = env.root / "stray.pid"
@@ -170,8 +171,9 @@ def test_restart_mid_setup_reaps_a_stray_before_discarding(env):
     pid = int(pid_file.read_text())
     assert procs.alive(pid, None)
     restart(env)
-    [reaped] = env.events("reaped")
-    assert reaped.detail["context"] == "daemon stopped during setup" and pid in [r["pid"] for r in reaped.detail["processes"]]
+    if not procs.WINDOWS:
+        [reaped] = env.events("reaped")
+        assert reaped.detail["context"] == "daemon stopped during setup" and pid in [r["pid"] for r in reaped.detail["processes"]]
     assert not procs.alive(pid, None) and not env.worktree("001_a").exists()
     assert env.events("requeue")[0].detail["reason"] == "daemon stopped during setup"
 

@@ -409,9 +409,11 @@ def _line(ev: Event, commit: Event | None = None) -> str:
     return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}{folded}"
 
 
-def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
+def unreviewed_lines(view: View, finishes: list[Event], saved: dict[str, str] | None = None) -> list[str]:
     """The *Unreviewed reports* summary: one line per finish, with its report, carry,
-    `slow:`, pick, a red item's reasons and whether it was carried from before the checkpoint."""
+    `slow:`, pick (and "picks saved <time>" from `saved`, `picks.saved_at`), a red item's
+    reasons and whether it was carried from before the checkpoint."""
+    saved = saved or {}
     out = []
     for ev in finishes:
         d = ev.detail
@@ -420,6 +422,7 @@ def unreviewed_lines(view: View, finishes: list[Event]) -> list[str]:
         carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
         slow = f" · slow: {s}" if (s := slow_text(d)) else ""
         pick = f" · pick: {d['pick']}" if d.get("pick") else ""
+        pick += f" · **picks saved {clock(saved[ev.item])}**" if pick and ev.item in saved else ""
         resumed = f" · {r}" if (r := resume_label(d)) else ""
         resumed += f" · **{changed_text(chg)}**" if (chg := view.changed_since_review(ev.item)) else ""
         old = (" · **carried from before checkpoint "
@@ -532,7 +535,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     unreviewed, theirs = view.unreviewed(), session.conductor_reports(root)
     if unreviewed or theirs:
         # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
-        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed), *theirs]
+        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed, picks.saved_at(cfg, view)), *theirs]
         if unreviewed:
             out.append("  Each stays unreviewed until Matt says process X (or process next / process all).")
         if theirs:
@@ -585,7 +588,8 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
             parts.append(f"held after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
         if notes := view.unused_notes(cfg, repo):
             parts.append(audits.pending(len(notes), [n.item for n in notes]))
-        out.append(f"- `{repo}`: {'; '.join(parts) or 'idle'}")
+        nxt = nightshift.queue_name(cfg, view, repo, "x").split("_", 1)[0]
+        out.append(f"- `{repo}`: {'; '.join(parts) or 'idle'} · next item {nxt}")
     for d in view.stray:
         out.append(f"- `queue/{d.name}` is not a repo in conductor.toml; its items never run")
     proposed = list(cfg.path("proposed").glob("*.md")) if cfg.path("proposed").is_dir() else []

@@ -96,7 +96,9 @@ First **Questions**: every open ask, regardless of the read
 mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`
 line (and ` · slow: …` unless its report said `slow: none` or nothing, and
-` · pick: <ref>` when its report named a picker; ` · resume of <orig>` for a resume
+` · pick: <ref>` when its report named a picker, then ` · **picks saved <time>**` once its
+choices are saved (`picks.saved_at`; `session.md` and `review.md` too, so a planner reads
+the choices instead of asking); ` · resume of <orig>` for a resume
 item, `resume.md`); it shows on every inbox, read mark or not, until a `reviewed:`
 signal names the item. After them, **conductor's own reports** past the planner's
 marker (*Conductor reports* below), one line each: ``- conductor's <name> **<status>** —
@@ -159,6 +161,8 @@ included), **Other**; then **Now**: first the memory line (`memory.line`: commit
 limit, percent, free GiB, the biggest item from the daemon's latest sample, and the
 level, bold with *launches and stages paused* when not ok), then per repo, what is running (or merging), staged
 (`staging`/`staged`), queued, waiting or held, and *audit pending* if notes are unused,
+ending ` · next item NNN` (`nightshift.queue_name`: one past every number queued,
+running, done or proposed there; a planner had no other way but listing `reports\`),
 plus proposed items. A hold stays in
 the Holds section until the item starts, merges, finishes or is cancelled, or a
 reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,

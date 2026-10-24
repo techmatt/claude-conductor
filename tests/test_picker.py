@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from conductor import cli, config, executor, inbox, picker, picks, procs, state
+from conductor import cli, config, executor, inbox, picker, picks, procs, review, state
 from conductor.events import EventLog
 from conductor.util import stamp
 
@@ -505,6 +505,16 @@ def test_inbox_waiting_opened_saved(env):
             ": 1 changed, 1 note; `picks/art_alts.choices.json` (code/001_art)")
         [p] = picks.pending(env.cfg, state.scan(env.cfg, env.d.log), env.d.log)
         assert (p.state, p.changed, p.notes, p.rows, p.choices) == ("saved", 1, 1, 2, "picks/art_alts.choices.json")
+        # The digests say so on the report's line too: a planner reads the choices, never asks.
+        done = env.cfg.path("done", "code", "001_art.md")
+        done.parent.mkdir(parents=True, exist_ok=True)
+        done.write_text("art\n", encoding="utf-8")
+        view = state.scan(env.cfg, env.d.log)
+        text = inbox.render(env.d.cfg, env.d.log, view)
+        [row] = [ln for ln in text.splitlines() if ln.startswith("- code/001_art **done**")]
+        assert f"· pick: {REF} · **picks saved " in row
+        assert "· **picks saved " in review.render(env.cfg, view, "review.md").text
+        assert "`code`: idle · next item 002" in text
     finally:
         srv.close()
     # A later item reusing the manifest path starts again at waiting.

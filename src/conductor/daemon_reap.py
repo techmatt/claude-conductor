@@ -14,12 +14,20 @@ from .util import clock, parse_stamp, stamp, write_text
 
 class ReapMixin:
     def _reap(self, item_id: str, worktree: str | None, since: str | None, context: str,
-              until: str | None = None) -> None:
+              until: str | None = None, job: tuple[int | None, float | None] | None = None) -> None:
         """Kill what an item left running in its worktree (a Vite server, a browser, a
-        waiter loop): processes started while it ran (`procs.strays`). Never a run
+        waiter loop): processes started while it ran (`procs.strays`), and what is left
+        in its executor's job (`job`: the executor's pid and creation time). Never a run
         target, another item's or a stage's processes, or the daemon's own. Logged
         `reaped`. Found live: 030's Vite preview and twenty waiter loops held its
         worktree for a day, so its removal kept failing."""
+        try:
+            self._reap_now(item_id, worktree, since, context, until, job or (None, None))
+        finally:
+            procs.release_job(*(job or (None, None)))
+
+    def _reap_now(self, item_id: str, worktree: str | None, since: str | None, context: str,
+                  until: str | None, job: tuple[int | None, float | None]) -> None:
         if not worktree or not since or not Path(worktree).is_dir():
             return
         spare = set()
@@ -33,10 +41,10 @@ class ReapMixin:
                     spare |= procs.family(r.resolver.pid)
         start = parse_stamp(since).timestamp() - 5
         end = parse_stamp(until).timestamp() + 60 if until else time.time()
-        roots = procs.strays(Path(worktree), start, end, spare)
+        roots = [p.pid for p in procs.strays(Path(worktree), start, end, spare)] + list(procs.job_members(*job))
         if not roots:
             return
-        pids = set().union(*(procs.family(p.pid) for p in roots)) - spare
+        pids = set().union(*(procs.family(p) for p in roots)) - spare
         found = []
         for pid in sorted(pids):
             try:

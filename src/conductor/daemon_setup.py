@@ -85,6 +85,7 @@ class SetupMixin:
             self._kill_setup(run.rec)               # one read back from disk, if still alive
         elif run.setup.poll() is None:
             procs.kill_tree(run.setup.pid)
+        procs.release_job(s.get("pid"), s.get("create_time"))
         s |= {"state": "failed" if error else "ok", "finished": stamp(), "error": error}
         run.setup = None
         for p in (s["spec"], s["result"]):

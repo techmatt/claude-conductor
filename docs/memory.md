@@ -18,10 +18,26 @@ items biggest first). Past 4 MB the file keeps only the last `memory_keep_hours`
 Each sample also rewrites the heartbeat (`beat` in `daemon.json`). No event is logged
 per sample.
 
+**Jobs.** On Windows, `procs.spawn` starts each executor (and stage, merge executor,
+setup runner) suspended, puts it in a job object named for its pid and creation time,
+then lets it run. Everything it starts is in the job, an orphan whose parent has exited
+included, so the samples, the tells, `others` ("outside conductor's items"), a kill and
+the reaper all see the item's real size. Found live, 2026-10-24 (Word Warriors 142, 144):
+16–19 GB of an item's `chrome.exe`/`node.exe` (leftover Playwright runs) counted as
+outside, a third to a half of its footprint. The job allows no breakaway (libuv's
+detached spawns don't ask for it). A job's name lasts only while a handle is open: the
+daemon holds one until the item is reaped (`release_job`), and plants a copy in the
+executor, so a restarted daemon finds the job while the executor lives. Off Windows, or
+after both a daemon restart and the executor's exit, the descendants walk plus `strays`
+is all there is.
+
 **Levels.** `ok`, `pressure`, `critical`: commit at or over `memory_*_percent` of its
 limit, or free RAM at or under `memory_*_free_gb` (0 turns a threshold off). A level is
 left only when it is clear by 3 points or 0.5 GiB, and has stayed clear for
-`memory_calm_seconds` (300); a rise counts at once. So a box hovering at a threshold
+`memory_calm_seconds` (300); a rise counts at once. Between samples every daemon tick
+(`poll_seconds`, 2s) reads the box alone (`GetPerformanceInfo`, microseconds), and a
+level that rises samples at once: found live 2026-10-24, commit went from 84% to 95%
+inside one 30s interval, so ok jumped straight to critical with no pressure tell first. So a box hovering at a threshold
 doesn't flap: found live, Alienware's `OCControl.Service` on this box grew its private
 memory by ~3 GiB a minute and was recycled near 9–10 GiB, swinging free RAM by gigabytes
 every few minutes. Free RAM is the main signal: with an auto-managed page file Windows grows
@@ -46,7 +62,8 @@ process and the MiB freed). A leftover is an **orphan** (its parent is gone: it
 outlived the executor or the shell that started it) started while the item ran (5s
 before its start, up to now) whose working folder is the worktree or under it, or a
 tool (`chromium`, `vite`, `playwright`, `node`, `python`, `shell`) whose command line
-names the worktree. It is killed with everything under it. A terminal or editor Matt
+names the worktree, or anything still in the executor's job (*Jobs*). It is killed with
+everything under it. A terminal or editor Matt
 opened on the worktree has a live parent, so it is never matched. Never reaped: a run
 target's process tree, another item's or a stage's, or the daemon and its parents. The
 scan reads creation times and psutil's parent map first (a working folder costs ~10ms

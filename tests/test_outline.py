@@ -23,7 +23,8 @@ def rows(*done: int) -> list[dict]:
 def now_line(env) -> str:
     env.d.write_inbox(force=True)
     now = (env.control / "inbox.md").read_text(encoding="utf-8").split("## Now")[1]
-    return next(ln for ln in now.splitlines() if ln.startswith("- `code`"))
+    line = next(ln for ln in now.splitlines() if ln.startswith("- `code`"))
+    return line.rsplit(" · next item ", 1)[0]
 
 
 @pytest.mark.slow

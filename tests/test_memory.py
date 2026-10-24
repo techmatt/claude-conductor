@@ -256,6 +256,48 @@ def test_a_daemon_under_claude_code_warns(env, monkeypatch):
     assert any("runs under a Claude Code session" in e.detail["note"] for e in env.events("warning"))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="job objects are Windows")
+def test_an_executors_orphans_stay_in_its_job(env, tmp_path):
+    """Found live (wordwarriors 142, 144): a Playwright browser whose runner had exited
+    counted as "outside" the item. One started outside the worktree, from a parent that
+    has exited, is still the item's: in its tree, its family, and reaped with it."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "in").write_text("")
+    code = ("import subprocess, sys, time; "
+            f"p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], cwd={str(elsewhere)!r}, "
+            "creationflags=0x8); print(p.pid, flush=True); time.sleep(1)")
+    p = procs.spawn([sys.executable, "-c", code], tmp_path, tmp_path / "in",
+                    tmp_path / "out", tmp_path / "err")
+    created = procs.create_time(p.pid)
+    p.wait(timeout=30)
+    orphan = int((tmp_path / "out").read_text().split()[0])
+    try:
+        assert orphan in procs.job_members(p.pid, created)
+        assert memory.tree(orphan).private > 0
+        env.d._reap("code/x", str(tmp_path), stamp(), "test", job=(p.pid, created))
+        assert gone(orphan)
+        assert procs.job_members(p.pid, created) == set()       # released, and empty
+    finally:
+        procs.kill_tree(orphan)
+
+
+def test_a_rising_level_samples_between_intervals(env):
+    """Found live 2026-10-24: commit went 84% -> 95% inside one 30s interval, skipping
+    pressure. Each tick reads the box alone; a rise samples at once."""
+    cfg = guarded(env.d.cfg)
+    cfg.memory_sample_seconds = 1000
+    box = {"s": status(50, 10)}
+    env.d.memory_probe = lambda: box["s"]
+    env.d.sample_memory(force=True)
+    box["s"] = status(88, 10)
+    env.d.sample_memory()
+    assert env.d.mem_level == "pressure"
+    box["s"] = status(50, 10)
+    env.d.sample_memory()                           # a fall waits for the next sample
+    assert env.d.mem_level == "pressure"
+
+
 def test_spawn_detached_leaves_no_parent(tmp_path):
     """A tree kill of the caller (Claude Code reaping the app) must not reach it."""
     p = procs.spawn_detached([sys.executable, "-c", "import time; time.sleep(60)"], tmp_path, tmp_path / "out.log")

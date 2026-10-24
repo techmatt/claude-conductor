@@ -8,6 +8,7 @@ is not lost: a restarted daemon finds the process again and adopts it.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import socket
@@ -71,15 +72,123 @@ def free_port(avoid: set[int] = frozenset()) -> int:
 
 def spawn(cmd: list[str], cwd: Path, stdin: Path, stdout: Path, stderr: Path,
           env: dict[str, str] | None = None) -> subprocess.Popen:
-    """`env`: variables added to the child's environment."""
+    """`env`: variables added to the child's environment. On Windows the child starts
+    suspended, joins a job object named for it (`job_members`), then runs: everything
+    it starts is in the job before it can start anything."""
     kwargs: dict = {}
     if WINDOWS:
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        kwargs["creationflags"] = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+                                   | _CREATE_SUSPENDED)
     else:
         kwargs["start_new_session"] = True
     with open(stdin, "rb") as fin, open(stdout, "ab") as fout, open(stderr, "ab") as ferr:
-        return subprocess.Popen(cmd, cwd=str(cwd), stdin=fin, stdout=fout, stderr=ferr,
-                                env={**child_env(), **(env or {})}, **kwargs)
+        p = subprocess.Popen(cmd, cwd=str(cwd), stdin=fin, stdout=fout, stderr=ferr,
+                             env={**child_env(), **(env or {})}, **kwargs)
+    if WINDOWS:
+        try:
+            _join_job(p)
+        finally:
+            try:
+                psutil.Process(p.pid).resume()
+            except psutil.Error as exc:
+                p.kill()
+                raise OSError(f"could not resume {cmd[0]}: {exc!r}") from exc
+    return p
+
+
+# ---------------------------------------------------------------- job objects
+# Found live, 2026-10-24 (wordwarriors 142, 144): 16-19 GB of an item's chrome.exe and
+# node.exe counted as "outside", a third to a half of its real footprint. A Playwright
+# browser whose runner had exited has no live parent, so no walk of the executor's
+# children finds it. A job object holds every process started under the executor,
+# orphans included; nothing breaks away, since the job never allows it (libuv's
+# detached spawns don't ask). Named for the executor's pid and creation time. A name
+# lasts only while a handle is open, so the daemon keeps one (`_JOBS`, closed by
+# `release_job` once the item is reaped) and plants a copy in the executor: a restarted
+# daemon finds the job by name while the executor lives. Past both a daemon restart and
+# the executor's exit, `strays` is all there is.
+_CREATE_SUSPENDED = 0x4
+_JOB_QUERY = 0x0004
+_JOB_PROCESS_IDS = 3          # JobObjectBasicProcessIdList
+_JOBS: dict[str, int] = {}    # job name → the handle this process holds
+
+
+def _job_name(pid: int, created: float) -> str:
+    return f"Local\\conductor-job-{pid}-{int(created)}"
+
+
+@functools.cache
+def _kernel32():
+    import ctypes
+    from ctypes import wintypes
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    k.CreateJobObjectW.restype = wintypes.HANDLE
+    k.OpenJobObjectW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    k.OpenJobObjectW.restype = wintypes.HANDLE
+    k.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    k.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                            wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    k.GetCurrentProcess.restype = wintypes.HANDLE
+    k.DuplicateHandle.argtypes = [wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE,
+                                  ctypes.POINTER(wintypes.HANDLE), wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k.CloseHandle.argtypes = [wintypes.HANDLE]
+    return k
+
+
+def _join_job(p: subprocess.Popen) -> None:
+    """Put a just-started process in a new job named for it. A failure leaves it
+    outside any job: the descendants walk and `strays` still find most of its tree."""
+    import ctypes
+    from ctypes import wintypes
+    created = create_time(p.pid)
+    if created is None:
+        return
+    k = _kernel32()
+    name = _job_name(p.pid, created)
+    job = k.CreateJobObjectW(None, name)
+    if not job:
+        return
+    if not k.AssignProcessToJobObject(job, int(p._handle)):
+        k.CloseHandle(job)
+        return
+    _JOBS[name] = job
+    planted = wintypes.HANDLE()
+    k.DuplicateHandle(k.GetCurrentProcess(), job, int(p._handle), ctypes.byref(planted), 0, False, 2)
+
+
+def release_job(pid: int | None, created: float | None) -> None:
+    """Close the handle this process holds on an executor's job (its item is done)."""
+    if WINDOWS and pid and created is not None and (job := _JOBS.pop(_job_name(pid, created), None)):
+        _kernel32().CloseHandle(job)
+
+
+def job_members(pid: int | None, created: float | None) -> set[int]:
+    """Every live process in the job `spawn` made for this executor, the executor itself
+    if it still runs and orphans included (empty off Windows, or with no such job). A
+    job found by name (an executor adopted after a restart) is held from then on."""
+    if not (WINDOWS and pid and created is not None):
+        return set()
+    import ctypes
+    from ctypes import wintypes
+    k = _kernel32()
+    name = _job_name(pid, created)
+    job = _JOBS.get(name)
+    if job is None:
+        job = k.OpenJobObjectW(_JOB_QUERY, False, name)
+        if not job:
+            return set()
+        _JOBS[name] = job
+    skip = 8 // ctypes.sizeof(ctypes.c_size_t)     # two DWORD counts, then ULONG_PTR pids
+    n = 1024
+    while True:
+        buf = (ctypes.c_size_t * (n + skip))()
+        if k.QueryInformationJobObject(job, _JOB_PROCESS_IDS, buf, ctypes.sizeof(buf), None):
+            listed = ctypes.cast(buf, ctypes.POINTER(wintypes.DWORD))[1]
+            return {int(buf[skip + i]) for i in range(listed)}
+        if ctypes.get_last_error() != 234 or n > 65536:      # ERROR_MORE_DATA
+            return set()
+        n *= 4
 
 
 def console_python() -> str:
@@ -308,10 +417,16 @@ def _outermost(p: psutil.Process, marker: str, cmdline: list[str] | None) -> boo
 
 
 def kill_tree(pid: int) -> None:
-    """Hard-kill a process and every descendant."""
+    """Hard-kill a process and every descendant, and everything in its job (`spawn`)."""
     try:
         root = psutil.Process(pid)
         procs = root.children(recursive=True) + [root]
+        seen = {p.pid for p in procs}
+        for m in job_members(pid, root.create_time()) - seen:
+            try:
+                procs.append(psutil.Process(m))
+            except psutil.Error:
+                continue
     except psutil.Error:            # gone already, or gone between the two calls
         return
     for p in procs:
@@ -323,12 +438,13 @@ def kill_tree(pid: int) -> None:
 
 
 def family(pid: int | None) -> set[int]:
-    """A live process and every descendant, as pids (empty when it is gone)."""
+    """A live process and every descendant, and everything in its job (`spawn`), as
+    pids (empty when it is gone)."""
     if not pid:
         return set()
     try:
         root = psutil.Process(pid)
-        return {pid} | {c.pid for c in root.children(recursive=True)}
+        return {pid} | {c.pid for c in root.children(recursive=True)} | job_members(pid, root.create_time())
     except psutil.Error:
         return set()
 

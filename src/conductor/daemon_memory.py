@@ -26,16 +26,25 @@ class MemoryMixin:
     def sample_memory(self, force: bool = False) -> None:
         """Every `memory_sample_seconds`: the box's commit and free RAM, each live item's
         process tree by kind (stored in `.conductor/memory.jsonl`), the heartbeat, and a
-        `memory` event (`memory_critical` at the top level) when the level changes."""
+        `memory` event (`memory_critical` at the top level) when the level changes.
+        Between samples, every tick reads the box alone (microseconds): a level that
+        rises samples at once. Found live 2026-10-24 (wordwarriors 142): commit went
+        from 84% to 95% inside one 30s interval, so ok jumped straight to critical."""
         every = self.cfg.memory_sample_seconds
-        if not every or (not force and self._mem_at is not None and time.monotonic() - self._mem_at < every):
+        if not every:
             return
-        self._mem_at = time.monotonic()
         try:
             status = self.memory_probe()
         except OSError as exc:
-            self.log.append("warning", note=f"memory sample failed: {exc!r}")
+            if force or self._mem_at is None or time.monotonic() - self._mem_at >= every:
+                self._mem_at = time.monotonic()
+                self.log.append("warning", note=f"memory sample failed: {exc!r}")
             return
+        if not force and self._mem_at is not None and time.monotonic() - self._mem_at < every:
+            rising = memory.level(status, self.cfg, self.mem_level)
+            if memory.LEVELS.index(rising) <= memory.LEVELS.index(self.mem_level):
+                return
+        self._mem_at = time.monotonic()
         trees = {}
         live = [*self.runs.items(), *self.stages.items()]
         claimed = set().union(set(), *(procs.family(r.pid()) for _, r in live))

@@ -8,6 +8,8 @@ of text or audio the user meets against who plays it, then act on what you found
    dialogue, UI text, pictures and their captions, voice lines. Flag what is risky for
    that audience: ambiguous (two readings, a picture that could be something else),
    too rare or too hard, or wrong for them (tone, topic, a regional or dated term).
+   Content seen through the running app takes one browser at a time, a workflow or
+   subagent's included; reading files and finished screenshots runs alongside.
 3. Act on each finding: store it (move it out of play, keeping it where the repo keeps
    retired content, or beside the pool if there is no such place), reword it, or flag it
    when neither fits. Keep each pool workable: no pool drops below what the code or
