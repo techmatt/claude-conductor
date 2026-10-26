@@ -197,7 +197,7 @@ def may_stage(cfg: Config, view: View, head: Item) -> bool:
     opts = cfg.opts(head.repo)
     wanted = head.stage if head.stage is not None else opts.stage
     others = [i for i, rec in view.staged.items() if rec["repo"] == head.repo and i != head.id]
-    # A cleanup or disk audit never stages: what it is handed (notes, sizes) is fixed at
+    # A cleanup or disk cleanup never stages: what it is handed (notes, sizes) is fixed at
     # launch, and an item running meanwhile may still change it. A resume item never
     # does: a stage is a new session, and its whole point is the original's.
     return (opts.worktrees and wanted and not others and head.template not in audits.NO_STAGE

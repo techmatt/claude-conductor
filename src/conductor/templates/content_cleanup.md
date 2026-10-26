@@ -1,4 +1,4 @@
-Content audit of `{{repo}}` (project `{{project}}`). Audit every word, picture and line
+Content cleanup of `{{repo}}` (project `{{project}}`). Check every word, picture and line
 of text or audio the user meets against who plays it, then act on what you found.
 
 1. Read who plays it from the project's docs (README, design docs, CLAUDE.md): age,

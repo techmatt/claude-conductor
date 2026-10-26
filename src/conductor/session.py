@@ -25,7 +25,7 @@ LEDGER = Path("prompts") / "ledger.md"     # the run ledger: the order conductor
 # What `state.md`'s *Maintenance* section tracks, in the planner's words.
 MAINTENANCE = (("bug_hunt", "bug hunt"), ("general_cleanup", "general cleanup"), ("cleanup", "cleanup"),
                ("test_cleanup", "test cleanup"), ("claude_md_cleanup", "claude.md cleanup"),
-               ("disk_audit", "disk space audit"))
+               ("disk_cleanup", "disk space cleanup"))
 SLOW_WINDOW = 5     # a `slow:` component named in two or more of a repo's last five reports
 
 

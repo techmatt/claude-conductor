@@ -64,7 +64,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/push.md` | Pushing main to a remote after each merge, the control folder after its commits, on `push:` and at closeout; failures and rejections |
 | `docs/executors.md` | How an executor is launched: the preamble, its port, MCP and settings files, ultracode, long tool calls, setup, log compaction, the report header, the outcome |
-| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk audit, claude.md cleanup, content audit, bug hunt, self audit, watch) |
+| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk cleanup, claude.md cleanup, content cleanup, bug hunt, self audit, watch) |
 | `docs/night-shift.md` | The stall check, the watch item, autopilot, the backlog and its draws, the nightly budget |
 | `docs/resume.md` | Resume items: asking a finished item's own session (forked), and its self-audit |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |

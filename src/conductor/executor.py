@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,7 +27,16 @@ exists: an unanswered question returns its default after {ask_minutes:g} minutes
 carry on with it. Block (`block: true`) only when every default would be worse than
 waiting; a blocking question waits until answered, and that time does not count toward
 your time limit. Everything else is still a branch: do what fits the goal, record what
-didn't, and continue. The only hard stop is a wrong-repo guard in the prompt.
+didn't, and continue. The only hard stop is a wrong-repo guard in the prompt. When a
+question's default can't be undone (a delete, an overwrite), leave that step until last
+in the item, so a late answer or message can still change it.
+
+Servers. Claude Code stops a background command 10 minutes after it starts, so a
+long-lived server (a dev or preview server, a probe) started that way dies mid-work.
+Start one detached instead, with its output to a log file (PowerShell `Start-Process
+-WindowStyle Hidden -RedirectStandardOutput <log>`, or Python `subprocess.Popen` with
+`DETACHED_PROCESS`), or through a script the repo provides for it, and stop it before
+you finish.
 
 Progress. `progress` (mcp__conductor__progress) shows Matt one short line about how
 this item is going and returns at once. Call it at the start, with a first `eta` as soon
@@ -320,7 +331,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
                  resumed: str = "") -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
-    audit notes, inlined; `usage`: a disk audit's control-folder sizes and worktrees;
+    audit notes, inlined; `usage`: a disk cleanup's control-folder sizes and worktrees;
     `amends`: amendments written before the launch, appended in order; `beside`: the
     (id, gist) of each item it is warned about starting beside (`BESIDE`); `resumed`: a
     resume item's paragraph on its original (`resume.paragraph`)."""
@@ -375,7 +386,7 @@ def build_stage_prompt(cfg: Config, item: Item, run: dict) -> str:
 
 def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
     """What follows the preamble: the item body, or for a `template:` item the
-    template's text (a cleanup's with its audit notes inlined, a disk audit's with
+    template's text (a cleanup's with its audit notes inlined, a disk cleanup's with
     conductor's measurements) and then whatever the planner wrote."""
     if not item.template:
         return item.body
@@ -428,12 +439,33 @@ def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False
             *cfg.args]
 
 
+def gz_path(log: Path) -> Path:
+    return log.with_name(log.name + ".gz")
+
+
+def stored_log(log: Path) -> Path | None:
+    """Where a run log is now: `log` itself, or `log.gz` once its item finished
+    (`gzip_log`), or None."""
+    for p in (log, gz_path(log)):
+        if p.is_file():
+            return p
+    return None
+
+
+def open_log(log: Path):
+    """A run log opened for reading in binary, gzipped or not; OSError when it has neither form."""
+    p = stored_log(log)
+    if p is None:
+        raise FileNotFoundError(str(log))
+    return gzip.open(p, "rb") if p.suffix == ".gz" else open(p, "rb")
+
+
 def read_result(log: Path) -> dict | None:
     """The final `{"type": "result", ...}` line of a stream-json log, or None."""
-    if not log.is_file():
+    if stored_log(log) is None:
         return None
     result = None
-    with open(log, "rb") as fh:
+    with open_log(log) as fh:
         for raw in fh:
             raw = raw.strip()
             if not raw.startswith(b"{"):
@@ -502,6 +534,28 @@ def compact_log(log: Path) -> tuple[int, int] | None:
     tmp.write_bytes(b"".join(out))
     os.replace(tmp, log)
     return before, log.stat().st_size
+
+
+GZIP_MIN_BYTES = 256 << 10      # a finished log smaller than this stays plain text
+
+
+def gzip_log(log: Path) -> tuple[int, int] | None:
+    """Replace a finished item's run log with `log.gz` (after `compact_log`): stream-json
+    shrinks ~10×, and a bug hunt's log is 8-23 MB even compacted. Every reader goes
+    through `stored_log` / `open_log`. Returns (bytes before, bytes after), or None."""
+    try:
+        before = log.stat().st_size
+    except OSError:
+        return None
+    if before < GZIP_MIN_BYTES:
+        return None
+    gz = gz_path(log)
+    tmp = gz.with_name(gz.name + ".tmp")
+    with open(log, "rb") as src, gzip.open(tmp, "wb", compresslevel=6) as dst:
+        shutil.copyfileobj(src, dst, 1 << 20)
+    os.replace(tmp, gz)
+    log.unlink()
+    return before, gz.stat().st_size
 
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:

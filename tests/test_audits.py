@@ -97,18 +97,18 @@ def test_general_cleanup_writes_and_uses_its_own_notes(env):
     assert "audit pending" not in out
 
 
-def test_disk_audit_is_handed_conductors_measurements(env):
+def test_disk_cleanup_is_handed_conductors_measurements(env):
     (env.control / "reports" / "code__000_old.log").write_bytes(b"x" * 5000)
-    env.queue("001_disk", "Leave the fixtures alone.", template="disk_audit")
+    env.queue("001_disk", "Leave the fixtures alone.", template="disk_cleanup")
     env.tick_until(lambda: env.finished("code/001_disk"))
     text = prompt(env, "001_disk")
-    assert "Disk space audit of `code`" in text and "{{" not in text
+    assert "Disk space cleanup of `code`" in text and "{{" not in text
     assert "| Control folder | Size |" in text and "`code__000_old.log` 4.9 KB" in text
     assert f"Worktrees of `code`: `{env.worktree('x').parent}`" in text
     assert "`001_disk`: live (this item's own working directory)" in text
     assert "Main checkout:" in text and text.rstrip().endswith("Leave the fixtures alone.")
     assert not env.events("stage") and not env.events("audit_used")
-    assert env.finished("code/001_disk").detail["template"] == "disk_audit"
+    assert env.finished("code/001_disk").detail["template"] == "disk_cleanup"
 
 
 def test_claude_md_cleanup_template(env):
@@ -119,15 +119,15 @@ def test_claude_md_cleanup_template(env):
     assert "The planner adds" not in text and not env.events("audit_used")
 
 
-def test_content_audit_template_is_exclusive(env):
+def test_content_cleanup_template_is_exclusive_and_its_old_name_runs_it(env):
     from conductor import audits
-    assert "content_audit" in audits.EXCLUSIVE
+    assert {"content_cleanup", "content_audit", "disk_cleanup", "disk_audit"} <= set(audits.EXCLUSIVE)
     env.queue("001_ca", "Start with the word lists.", template="content_audit")
     env.tick_until(lambda: env.finished("code/001_ca"))
     text = prompt(env, "001_ca")
-    assert "Content audit of `code`" in text and "{{" not in text and "running notes file" not in text
+    assert "Content cleanup of `code`" in text and "{{" not in text and "running notes file" not in text
     assert text.rstrip().endswith("The planner adds, for this item:\n\nStart with the word lists.")
-    assert env.finished("code/001_ca").detail["template"] == "content_audit"
+    assert env.finished("code/001_ca").detail["template"] == "content_cleanup"   # recorded under the new name
 
 
 def test_bug_hunt_template_and_its_notes_only_variant(env):
@@ -177,6 +177,30 @@ def test_daemon_start_compacts_finished_items_logs(env):
     env.d = env.new_daemon()
     assert (env.control / "reports" / "code__001_old.log").stat().st_size < 1000
     assert (env.control / "reports" / "code__002_queued.log").stat().st_size > 2 << 20
+
+
+def test_a_finished_log_is_gzipped_and_still_read(env):
+    from conductor import audits, executor, resume
+    from conductor.app.streamlog import render_stream_json
+    said = {"type": "assistant", "message": {"content": [{"type": "text", "text": "looking " * 40}]}}
+    result = {"type": "result", "subtype": "success", "result": "done", "total_cost_usd": 1.5}
+    (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)
+    (env.control / "done" / "code" / "001_old.md").write_text("---\nrepo: code\n---\nx\n", encoding="utf-8")
+    log = env.control / "reports" / "code__001_old.log"
+    log.write_text((json.dumps(said) + "\n") * 2000 + json.dumps(result) + "\n", encoding="utf-8")
+    small = env.control / "reports" / "code__001_old.stage.log"
+    small.write_text(json.dumps(result) + "\n", encoding="utf-8")
+    plain = log.stat().st_size
+    env.d.log.close()
+    env.d = env.new_daemon()                       # daemon start: compacted, then gzipped
+    gz = executor.gz_path(log)
+    assert not log.exists() and gz.stat().st_size < plain / 10
+    assert small.is_file() and not executor.gz_path(small).exists()     # under 256 KB: plain
+    assert executor.stored_log(log) == gz and executor.read_result(log) == result
+    assert "looking" in render_stream_json(gz)
+    assert gz in resume.readable(env.d.cfg, "code/001_old", env.root / "extract.md")
+    assert "`code__001_old.log.gz`" in audits.control_usage(env.d.cfg, "code")
+    assert executor.gzip_log(log) is None and executor.stored_log(env.root / "none.log") is None
 
 
 def test_test_cleanup_template_and_bad_template(env, tmp_path):

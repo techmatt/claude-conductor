@@ -94,8 +94,11 @@ an item's detail in `trail.py`.
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
   `questions/<id>.answer.md` through the same function as `conductor answer` (never
   overwriting one), with `by: app` front-matter so the `answer` event names the app. An answer to a question that resolved meanwhile (its default taken)
-  is reported as late, as the CLI does. Resolved questions are listed beneath, newest
-  first. Question files are re-parsed only when they or their result change.
+  is reported as late, as the CLI does. A card never outgrows the window: its banner and
+  body wrap, the option buttons flow onto new rows (a label past 40 characters is cut,
+  the whole on hover), and there is no sideways scroll, so **Answer** stays in view.
+  Resolved questions are listed beneath, newest first; a long *Text* is elided, the
+  whole on hover. Question files are re-parsed only when they or their result change.
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
   `report X reviewed`, `X used N audit note(s)`, `X: <progress line>`, `message #n to X: …` and `message #n

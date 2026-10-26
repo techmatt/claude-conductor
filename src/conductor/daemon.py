@@ -1009,9 +1009,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._conclude(run)
 
     def _compact_logs(self, item_ids) -> None:
-        """Shrink finished items' run logs (`executor.compact_log`): after each finish,
-        and at daemon start for every finished item, which also catches logs written
-        before compaction existed."""
+        """Shrink finished items' run logs (`executor.compact_log`, then `gzip_log`): after
+        each finish, and at daemon start for every finished item, which also catches logs
+        written before either existed."""
         for item_id in item_ids:
             if item_id in self.runs or item_id in self.stages:
                 continue
@@ -1019,6 +1019,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             for log in (paths.log, paths.stage_log, paths.merge_log):
                 try:
                     executor.compact_log(log)
+                    executor.gzip_log(log)
                 except OSError as exc:
                     self.log.append("warning", item=item_id, paths=[self.cfg.rel(log)],
                                     note=f"could not compact {log.name}: {exc!r}")

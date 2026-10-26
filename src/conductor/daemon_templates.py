@@ -1,5 +1,5 @@
 """What conductor hands a template item at launch, since executors never see the control
-folder: a cleanup's audit notes, a disk audit's measurements, a watch's view of the running
+folder: a cleanup's audit notes, a disk cleanup's measurements, a watch's view of the running
 items (`{{notes}}` and `{{usage}}` in `templates/`)."""
 
 from __future__ import annotations
@@ -32,18 +32,18 @@ class TemplatesMixin:
         return audits.render_notes(self.cfg, rec["notes"], finishes)
 
     def _template_usage(self, rec: dict) -> str:
-        """`{{usage}}`: a disk audit's measurements or a watch's view; nothing for the rest."""
-        if rec.get("template") == "disk_audit":
+        """`{{usage}}`: a disk cleanup's measurements or a watch's view; nothing for the rest."""
+        if audits.canonical(rec.get("template")) == "disk_cleanup":
             return self._disk_usage(rec)
         if nightshift.is_watch(rec):
             return self._watch_context()
         return ""
 
     def _disk_usage(self, rec: dict) -> str:
-        """A disk audit's view of what only conductor sees: the control folder's sizes
+        """A disk cleanup's view of what only conductor sees: the control folder's sizes
         and what each of the repo's worktrees is. Leftover removals are retried first."""
         repo = rec["repo"]
-        self._retry_leftovers("disk audit", repo=repo)
+        self._retry_leftovers("disk cleanup", repo=repo)
         live = {str(Path(r.rec["worktree"])): r.item_id for r in [*self.runs.values(), *self.stages.values()]
                 if r.rec.get("worktree") and r.rec.get("repo") == repo}
         if rec.get("worktree"):

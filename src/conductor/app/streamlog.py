@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 
@@ -11,8 +12,8 @@ _RENDERED: dict[tuple, str] = {}
 
 
 def render_stream_json(path: Path, limit: int = TEXT_LIMIT) -> str:
-    """An executor's stream-json log as readable text: what it said, each tool call
-    and a short form of each result, then the final result line. Cached per file
+    """An executor's stream-json log (or a finished one's `.log.gz`) as readable text: what
+    it said, each tool call and a short form of each result, then the final result line. Cached per file
     version: moving through a trail never re-parses a log that has not changed."""
     try:
         st = path.stat()
@@ -32,9 +33,10 @@ def render_stream_json(path: Path, limit: int = TEXT_LIMIT) -> str:
 
 def _render_stream_json(path: Path, limit: int) -> str:
     try:
-        raw = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        data = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+    except (OSError, EOFError, gzip.BadGzipFile):
         return ""
+    raw = data.decode("utf-8", errors="replace")
     out: list[str] = []
     for line in raw.splitlines():
         line = line.strip()

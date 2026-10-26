@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPus
 
 from . import actions, theme
 from .model import Project, Snapshot
-from .widgets import SEND_HINT, Panel, SendBox, countdown, muted, when
+from .widgets import SEND_HINT, FlowLayout, Panel, SendBox, countdown, muted, when
 
 
 class QuestionCard(QGroupBox):
@@ -20,15 +20,20 @@ class QuestionCard(QGroupBox):
         self.panel = panel
         lay = QVBoxLayout(self)
         lay.setSpacing(8)
-        lay.addWidget(muted(QLabel(f"{q.id}   ·   {q.item}   ·   asked {when(q.asked)}")))
-        # The status is a badge (tinted, larger than the question) so the deadline or the
+        # Every label wraps and the options flow onto new rows: nothing in the card may be
+        # wider than the window, or the Answer button hides behind a sideways scroll.
+        head = muted(QLabel(f"{q.id}   ·   {q.item}   ·   asked {when(q.asked)}"))
+        head.setWordWrap(True)
+        lay.addWidget(head)
+        # The status is a banner (tinted, larger than the question) so the deadline or the
         # block reads as state, not as more question text.
         self.status = QLabel()
+        self.status.setWordWrap(True)
         f = self.status.font()
         f.setPointSizeF(theme.BASE_POINT_SIZE * 1.25)
         f.setBold(True)
         self.status.setFont(f)
-        lay.addWidget(self.status, 0, Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(self.status)
         opts = [ln[2:].strip() for ln in q.body.split("\nOptions:", 1)[-1].splitlines()
                 if "\nOptions:" in q.body and ln.startswith("- ")]
         # Options that become buttons are not listed again in the body.
@@ -41,7 +46,8 @@ class QuestionCard(QGroupBox):
         body.setFont(f)
         lay.addWidget(body)
         if opts:
-            row = QHBoxLayout()
+            holder = QWidget()
+            row = FlowLayout(holder)
             row.addWidget(QLabel("Use option:"))
             for o in opts:
                 label = o if len(o) < 40 else o[:37] + "…"
@@ -52,8 +58,7 @@ class QuestionCard(QGroupBox):
                 b.setToolTip(o)
                 b.clicked.connect(lambda _=False, o=o: self.box.setPlainText(o))
                 row.addWidget(b)
-            row.addStretch(1)
-            lay.addLayout(row)
+            lay.addWidget(holder)
         row = QHBoxLayout()
         self.box = SendBox(lines=3)
         self.box.setPlaceholderText("Your answer (written to questions/<id>.answer.md)")
@@ -117,6 +122,7 @@ class QuestionsPanel(Panel):
         tl.addWidget(self._heading("Open"))
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.holder = QWidget()
         self.cards_lay = QVBoxLayout(self.holder)
         self.cards_lay.setContentsMargins(0, 0, 4, 0)
@@ -135,6 +141,9 @@ class QuestionsPanel(Panel):
         self.resolved.setHeaderLabels(["Question", "Item", "Outcome", "At", "Text"])
         self.resolved.setRootIsDecorated(False)
         self.resolved.setAlternatingRowColors(True)
+        # Text is the stretched last column: a long one elides, its whole text on hover.
+        self.resolved.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.resolved.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.resolved.itemDoubleClicked.connect(
             lambda w, _c: self.open_item.emit(w.text(1)) if w.text(1) else None)
         bl.addWidget(self.resolved)
@@ -188,8 +197,10 @@ class QuestionsPanel(Panel):
             for q in snap.resolved_questions:
                 r = q.result
                 at = when(r.get("at"))
-                self.resolved.addTopLevelItem(QTreeWidgetItem(
-                    [q.id, q.item, str(r.get("outcome")), at, str(r.get("text") or r.get("reason") or "")]))
+                text = str(r.get("text") or r.get("reason") or "")
+                row = QTreeWidgetItem([q.id, q.item, str(r.get("outcome")), at, " ".join(text.split())])
+                row.setToolTip(4, text)
+                self.resolved.addTopLevelItem(row)
             for c in range(4):
                 self.resolved.resizeColumnToContents(c)
             # An empty Resolved list collapses to one line, leaving the room to open cards.

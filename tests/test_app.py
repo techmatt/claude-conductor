@@ -854,3 +854,32 @@ def test_a_second_launch_hands_its_folders_to_the_running_app(qapp, env, tmp_pat
     win.server.close()
     win._quitting = True
     win.close()
+
+
+def test_a_long_question_wraps_to_the_window(qapp, env, tmp_path):
+    from PySide6.QtCore import QPoint
+    from conductor.app.window import MainWindow
+    words = " ".join(f"word{n}" for n in range(80))
+    default = "keep every screenshot and delete only the duplicated originals " * 3
+    opts = [default.strip(), "delete everything under scratch/shots and start again from nothing",
+            "move the whole folder to Drive", "ask me again tomorrow"]
+    q = questions.create(env.control, "code/001_x", f"Long body: {words}", opts, opts[0], False, 10)
+    questions.create(env.control, "code/001_x", "Done?", ["yes"], "yes", False, 1)
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    win.show()
+    win.refresh()
+    view = win.views[env.control.resolve()]
+    panel = view.questions_panel
+    view.tabs.setCurrentWidget(panel)
+    for width in (1250, 760):                      # the default size, then narrowed
+        win.resize(width, 780)
+        for _ in range(5):
+            qapp.processEvents()
+        port = panel.scroll.viewport()
+        card = panel.cards[q.id]
+        assert card.width() <= port.width(), width
+        right = card.send.mapTo(port, QPoint(card.send.width(), 0)).x()
+        assert right <= port.width(), width
+        assert card.status.width() <= port.width() and card.status.wordWrap()
+    win._quitting = True
+    win.close()

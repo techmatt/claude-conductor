@@ -13,7 +13,8 @@ running/<repo>/NNN_name.md     the item while it runs or waits to merge, plus NN
 running/<repo>/NNN_name.stage.json   a staged queue head (the item itself stays in queue/)
 done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
-reports/<repo>__NNN_name.log   raw executor output (stream-json); also .stderr.log, .prompt.md,
+reports/<repo>__NNN_name.log   raw executor output (stream-json; .log.gz once finished, as are
+                               .stage.log and .merge.log, executors.md); also .stderr.log, .prompt.md,
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
                                .stage.prompt.md / .stage.stderr.log for a stage; .merge.log /
                                .merge.prompt.md / .merge.stderr.log for a merge executor;

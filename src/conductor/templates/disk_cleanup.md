@@ -1,4 +1,4 @@
-Disk space audit of `{{repo}}` (project `{{project}}`). The project takes too much disk.
+Disk space cleanup of `{{repo}}` (project `{{project}}`). The project takes too much disk.
 Find where the space goes and free what can safely be freed.
 
 This item may act outside its working directory, overriding the preamble only as this
@@ -44,7 +44,7 @@ the same way: count a link's target once, at its real home.
 
 Conductor measured what you cannot see (the control folder is never yours to touch).
 It already shrinks a finished item's run logs by dropping the image bytes and file
-copies they repeat; say if what is left still looks too big.
+copies they repeat, then gzipping them; say if what is left still looks too big.
 
 {{usage}}
 

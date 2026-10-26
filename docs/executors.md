@@ -16,7 +16,10 @@ worktree, its branch and cut point, shared folders, the commit rule) and any dec
 `paths`; gives its *Port* (below) and any *Beside you* warning (`scheduling.md`, *Alongside items*); gives the asking
 rule (ask only when a wrong guess would waste real work or be hard to undo, give a
 default whenever one exists, block only when every default is worse than waiting;
-everything else is a branch); the progress rule (a `progress` line at the start, with a
+everything else is a branch; a question whose default can't be undone leaves that step
+until last in the item, so a late answer or message can still change it); the *Servers*
+rule (Claude Code stops a background command after 10 minutes, so a long-lived server is
+started detached with its output to a log, or by a repo script, and stopped before the end); the progress rule (a `progress` line at the start, with a
 first ETA once it can estimate, at real milestones, and when the estimate changes
 materially; not chatter; `date` before each ETA); the *Outline* rule (see `progress.md`); that a message from Matt, the operator, arrives
 through conductor's channel after one of the lead's tool calls (*Delivery*), is not
@@ -130,9 +133,15 @@ image an executor reads appears twice as base64 (the tool result and
 as `dropped_by_conductor` (`executor.compact_log`; a log under 1 MB is left alone).
 The result line, what the executor said and every tool call stay, so the app's *Log*
 view and `read_result` are unchanged; 18 MB typically becomes under 2 MB. The full
-session, images included, stays in Claude Code's own store (`conductor open`). At
-daemon start the same pass runs over every finished item's logs, which also compacts
-logs from before this existed. A failure is a `warning`; the log is left as it was.
+session, images included, stays in Claude Code's own store (`conductor open`). Then
+each of those logs of 256 KB or more is gzipped to `<name>.log.gz` and the plain one
+removed (`executor.gzip_log`): compacted logs still ran 8–23 MB per bug hunt (Word
+Warriors' control folder ~278 MB), and stream-json shrinks ~10×. Every reader goes
+through `executor.stored_log` / `open_log` (`read_result`, the app's *Log* and *Stage log*
+tabs, a resume item's readable files, a disk cleanup's measurements), so either form
+works; by hand, `python -c "import gzip,sys; sys.stdout.write(gzip.open(sys.argv[1],'rt',encoding='utf-8').read())" <file>`.
+At daemon start the same pass runs over every finished item's logs, which also covers
+logs from before either step existed. A failure is a `warning`; the log is left as it was.
 
 **Report header.** The report starts with:
 

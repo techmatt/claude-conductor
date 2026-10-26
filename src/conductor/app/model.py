@@ -18,7 +18,7 @@ from pathlib import Path
 from .. import config as config_mod
 from .. import git, items, memory, nightshift, picks, questions, state, talk, targets
 from ..events import RED_KINDS, Event, EventLog, live_invalids
-from ..executor import RunPaths
+from ..executor import RunPaths, stored_log
 from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
 from ..resume import label as resume_label
 from ..state import DaemonInfo, daemon_info
@@ -774,8 +774,8 @@ def build_trail(cfg: config_mod.Config, events: list[Event], item_id: str) -> Tr
         item=item_id, repo=repo, name=name, where=where, item_path=item_path, prompt=prompt,
         events=own,
         report=_read(paths.report),
-        log=render_stream_json(paths.log) if paths.log.is_file() else "",
-        stage_log=render_stream_json(paths.stage_log) if paths.stage_log.is_file() else "",
+        log=render_stream_json(p) if (p := stored_log(paths.log)) else "",
+        stage_log=render_stream_json(p) if (p := stored_log(paths.stage_log)) else "",
     )
 
 

@@ -52,7 +52,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      by `## ` heading, ignoring a `(…)` after the name; a missing one says so, as does a
      missing `state.md`;
    - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
-     general cleanup, cleanup, test cleanup, claude.md cleanup, disk space audit; an item run under an old name, `general_audit` or `test_perf`, counts as the new one) the
+     general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's
      `CLAUDE.md` size (KB and lines, from the main checkout); its unused audit notes;

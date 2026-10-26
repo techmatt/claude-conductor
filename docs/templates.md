@@ -2,7 +2,7 @@
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`cleanup.md`, `general_cleanup.md`, `test_cleanup.md`,
-`disk_audit.md`, `claude_md_cleanup.md`, `content_audit.md`, `bug_hunt.md`, `self_audit.md`, `watch.md`; `audit.md` is the *Audit notes*
+`disk_cleanup.md`, `claude_md_cleanup.md`, `content_cleanup.md`, `bug_hunt.md`, `self_audit.md`, `watch.md`; `audit.md` is the *Audit notes*
 paragraph, not a template) and are versioned with this repo: the `start` event of a template item
 carries `template` and `template_version` (the text's sha256, first 12 hex digits), so
 `git log` on the file finds the exact text sent. Executors never see the control
@@ -11,10 +11,13 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
 `original`; `audit.md`'s `notes_path`).
 
 **Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
-`self_audit`); one that edits is a *cleanup*. So `general_audit` became `general_cleanup` and
-`test_perf` `test_cleanup` (prompt 36); the old names are aliases (`audits.ALIASES`): an item
+`self_audit`); one that edits, deletes or moves anything is a *cleanup*. So `general_audit` became
+`general_cleanup` and `test_perf` `test_cleanup` (prompt 36), `disk_audit` `disk_cleanup` and
+`content_audit` `content_cleanup` (prompt 54); the old names are aliases (`audits.ALIASES`): an item
 queued under one runs the new text and is recorded under the new name, and an event or run
-record carrying an old one still counts (maintenance facts, exclusivity, notes).
+record carrying an old one still counts (maintenance facts, exclusivity, notes). A project's
+`state.md` *Maintenance* may still say "disk space audit": the planner's own file, renamed at
+its next write.
 
 Every template but `bug_hunt`, `self_audit` and `watch` is
 *exclusive* (`audits.EXCLUSIVE`): it runs alone in its repo, and a template item with
@@ -42,7 +45,7 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   up generally; a small loss of thoroughness or moving a slow test to the slow lane is
   allowed; the report gives before/after timings per lane (the one report where test
   detail belongs). It uses no notes.
-- **`template: disk_audit`**. Find why the project takes so much disk and free what
+- **`template: disk_cleanup`** (was `disk_audit`). Find why the project takes so much disk and free what
   can safely go, under the project's storage policy (`claude-ai-new-project.md`, *Storage*):
   delete what is cheaply rebuilt or clearly obsolete, move what is expensive or
   irreplaceable but not needed day to day into `archive\` under the project's Drive
@@ -58,19 +61,18 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   folder under the repo's worktree root, marked live (never touch), a leftover removal
   conductor retries, a red item's kept worktree, or stray. The executor never deletes a
   worktree folder itself. The report gives a before/after size table by location. A
-  disk audit never stages.
+  disk cleanup never stages.
 - **`template: claude_md_cleanup`**. A quick pass through the repo's `CLAUDE.md`:
   cut what is extraneous or duplicated (a README fact gets a pointer, not a copy), fix
   what is wrong against the code, tighten the wording, keep the standing contract the
   new-project doc requires. Changes to how executors work go under **Deferred**. The
   report is short: **Cut**, **Fixed**, **Deferred**.
-- **`template: content_audit`** (prompt 49; **content audit R**, on Matt's word only, never a
+- **`template: content_cleanup`** (prompt 49, was `content_audit`; **content cleanup R**, on Matt's word only, never a
   *Maintenance* default). Every word, picture and line the user meets, checked against who
   the project's docs say plays it: what is ambiguous, too rare or wrong for that audience is
   stored (out of play), reworded or flagged, each pool kept workable (its size and spread).
   Design-level calls go under **Deferred**. The report has **Moved** (by pool, each with a
-  reason), **Pools** (sizes before and after) and **Deferred**. It edits, so it is exclusive
-  despite the name: an audit of content, not one that only takes notes.
+  reason), **Pools** (sizes before and after) and **Deferred**. It edits, so it is exclusive.
 - **`template: bug_hunt`**. Run the project as its intended users would (whoever its
   docs say they are), find what is broken, confusing, ugly or slow, fix the clear bugs
   and list the rest. The method: build or extend a reusable checker kept in the repo

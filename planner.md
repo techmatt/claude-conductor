@@ -128,7 +128,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 - **Handoff docs are the active wavefront, not a history**: a line stays only if it would change a future decision and can't live in code; mechanics live in the repo's docs, one home each.
 - **state.md is status, plan and flags**: what is queued, running, open and ruled. Past ~25 KB, recommend **trim state**.
 - **Waiting on Matt / Open questions / Paged**: each item for Matt sits in one. *Waiting on Matt*: what work is blocked on, raised every session start. *Open questions*: decisions for upcoming work, asked once, then *Paged* with the planner's default. *Paged*: raised only by Matt, or when a prompt touches that code.
-- **Maintenance.** `state.md` keeps per repo when each template last ran (item and date, or "never") and the project's triggers. Defaults: **bug hunt** after a wave of big features or a new surface; **general cleanup** after ~10 feature items or a large rework; **cleanup** when audit notes pile up; **test cleanup** when a full run has grown ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space audit** after much generated media; a `slow:` cause in 2-3 reports (slow tests → test cleanup; much searching → claude.md cleanup; a slow build or failing tool → general cleanup). The digest counts. At start, recommend what looks due, a line each with its reason; never queue one unasked, or repeat a declined one until its reason grows.
+- **Maintenance.** `state.md` keeps per repo when each template last ran (item and date, or "never") and the project's triggers. Defaults: **bug hunt** after a wave of big features or a new surface; **general cleanup** after ~10 feature items or a large rework; **cleanup** when audit notes pile up; **test cleanup** when a full run has grown ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space cleanup** after much generated media; a `slow:` cause in 2-3 reports (slow tests → test cleanup; much searching → claude.md cleanup; a slow build or failing tool → general cleanup). The digest counts. At start, recommend what looks due, a line each with its reason; never queue one unasked, or repeat a declined one until its reason grows.
 - **Conductor's own upkeep.** Recommend "cleanup conductor" when HANDOFF's *How work flows* says it is due.
 - **Closeout**: the final `state.md` (and any doc the session changed) as one request. **Prepare for closeout** lists open questions, items still expecting a report and parked edits, then a short **pipeline review** (the full one only when Matt asks).
 - A mistake the planner repeats becomes a line in the project's docs; a one-off is said in chat.
@@ -162,8 +162,8 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none (it would hold its queue), says so. |
 | **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`. |
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
-| **test cleanup R** / **claude.md cleanup R** / **disk space audit R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_audit` (body: Matt's extras). |
-| **content audit R** [extras] | Queues `template: content_audit` (body: Matt's extras); never a maintenance default. |
+| **test cleanup R** / **claude.md cleanup R** / **disk space cleanup R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_cleanup` (body: Matt's extras). |
+| **content cleanup R** [extras] | Queues `template: content_cleanup` (body: Matt's extras); never a maintenance default. |
 
 **Running items**
 

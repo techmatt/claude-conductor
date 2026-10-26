@@ -19,11 +19,12 @@ from .events import Event
 from .util import clock, read_text
 
 TEMPLATE_DIR = Path(__file__).with_name("templates")
-TEMPLATES = ("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup",
-             "content_audit", "bug_hunt", "self_audit", "watch")  # what `template:` may name
+TEMPLATES = ("cleanup", "general_cleanup", "test_cleanup", "disk_cleanup", "claude_md_cleanup",
+             "content_cleanup", "bug_hunt", "self_audit", "watch")  # what `template:` may name
 # Old names, still read: "audit" is kept for passes that only read and take notes, so the
-# two that edit code were renamed (prompt 36). Items and events written before keep theirs.
-ALIASES = {"general_audit": "general_cleanup", "test_perf": "test_cleanup"}
+# ones that edit were renamed (prompts 36 and 54). Items and events written before keep theirs.
+ALIASES = {"general_audit": "general_cleanup", "test_perf": "test_cleanup", "disk_audit": "disk_cleanup",
+           "content_audit": "content_cleanup"}
 
 
 def canonical(name: str | None) -> str | None:
@@ -39,12 +40,12 @@ def _named(*names: str) -> tuple[str, ...]:
 NOTE_TEMPLATES = _named("general_cleanup", "self_audit")   # keep audit notes without `audit: true`
 USES_NOTES = _named("cleanup", "general_cleanup")          # a finish not red logs `audit_used`
 # What they are handed is fixed at launch, so they never stage.
-NO_STAGE = ("cleanup", "disk_audit", "watch")
+NO_STAGE = _named("cleanup", "disk_cleanup", "watch")
 # Repo-wide templates that run alone in their repo: never beside another item, readonly ones
 # included (a perf or disk measurement is skewed by anything else running), and nothing
 # behind one in its queue starts early (`state.early_starts`), so they are never starved.
-EXCLUSIVE = _named("cleanup", "general_cleanup", "test_cleanup", "disk_audit", "claude_md_cleanup",
-                   "content_audit")
+EXCLUSIVE = _named("cleanup", "general_cleanup", "test_cleanup", "disk_cleanup", "claude_md_cleanup",
+                   "content_cleanup")
 
 
 def template_text(name: str) -> str:
@@ -129,7 +130,7 @@ def render_notes(cfg: Config, ids: list[str], finishes: dict[str, Event]) -> str
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------- disk audit
+# ---------------------------------------------------------------- disk cleanup
 def tree_size(path: Path) -> int:
     """Bytes under `path`, never following a symlink or junction (a Drive-homed folder
     or a worktree's shared link would count its target twice, or walk off the folder)."""
@@ -162,13 +163,14 @@ def human(n: int) -> str:
 
 def control_usage(cfg: Config, repo: str) -> str:
     """What the control folder occupies, by location, as a markdown table: a disk
-    audit's executor never sees the control folder, so conductor measures it."""
+    cleanup's executor never sees the control folder, so conductor measures it."""
     control = cfg.control
     rows: list[tuple[str, int]] = []
-    logs = [p for p in (control / "reports").glob("*.log") if p.is_file()]
+    logs = [p for pat in ("*.log", "*.log.gz") for p in (control / "reports").glob(pat) if p.is_file()]
     log_bytes = sum(p.stat().st_size for p in logs)
     mine = sum(p.stat().st_size for p in logs if p.name.startswith(f"{repo}__"))
-    rows.append((f"`reports/*.log` (run logs; {human(mine)} of it `{repo}`'s)", log_bytes))
+    rows.append((f"`reports/*.log`, `*.log.gz` (run logs, a finished one gzipped; {human(mine)} of it "
+                 f"`{repo}`'s)", log_bytes))
     rows.append(("`reports/`, everything else (reports, prompts, audit notes)",
                  tree_size(control / "reports") - log_bytes))
     rows.append(("`events.db` (with `-wal`, `-shm`)",
