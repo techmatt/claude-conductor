@@ -18,7 +18,8 @@ in the inbox's *Now*, `conductor status`, the app's Repos tab and the Activity v
 last, each `{title, eta, done}` (a few words, a local clock time, a bool; ~8 rows asked,
 12 taken). With an outline, `note` may be left out. It is stored on the progress line
 and logged on the `progress` event (`outline`); the newest one per item is its current
-outline (`inbox.latest_outline`). The preamble's *Outline* rule: post one once oriented
+outline (`inbox.latest_outline`). The full preamble's *Outline* rule (a light item's preamble asks only for one line at
+the start, another past ~15 minutes): post one once oriented
 with a plan, again whenever a message asks, and resend it with a row `done` when that
 section finishes, re-estimating the others only if they moved a lot; coarse, no
 descriptions, no effort on accuracy. A staging session ends its plan with the

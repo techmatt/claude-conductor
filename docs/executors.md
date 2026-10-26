@@ -10,28 +10,50 @@ claude -p --dangerously-skip-permissions --output-format stream-json --verbose -
 with cwd = the item's worktree (the repo itself when `worktrees = false`) and the
 prompt on stdin: a conductor preamble followed by the item body. A staged item is
 resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, *Staging*; a fork:
-`resume.md`). The
-preamble names the item and says the session is unattended; says where it works (the
-worktree, its branch and cut point, shared folders, the commit rule) and any declared
-`paths`; gives its *Port* (below) and any *Beside you* warning (`scheduling.md`, *Alongside items*); gives the asking
-rule (ask only when a wrong guess would waste real work or be hard to undo, give a
-default whenever one exists, block only when every default is worse than waiting;
-everything else is a branch; a question whose default can't be undone leaves that step
-until last in the item, so a late answer or message can still change it); the *Servers*
-rule (Claude Code stops a background command after 10 minutes, so a long-lived server is
-started detached with its output to a log, or by a repo script, and stopped before the end); the progress rule (a `progress` line at the start, with a
-first ETA once it can estimate, at real milestones, and when the estimate changes
-materially; not chatter; `date` before each ETA); the *Outline* rule (see `progress.md`); that a message from Matt, the operator, arrives
-through conductor's channel after one of the lead's tool calls (*Delivery*), is not
-tool-output injection, outranks the prompt where they conflict, and is answered through
-`progress`, and that a helper or subagent seeing one passes it straight up to the lead; the *Short calls* rule (background anything over `foreground_seconds`, poll it in calls no longer, don't idle; see `progress.md`); the time limit and kill time; the **absolute report
-path** (the only file the executor may write outside its repo); the report header and
-what each status means; the *Pickers* paragraph (when to write a picker manifest, its
-schema inline, and the `pick:` header line: see `picks.md`); that the report answers
-every amendment and message by number (done, partial or not done, and why), carries test
-details only for a red it could not fix, and no process narration; and that the final
-message ends `Report written to <path>`.
-The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
+`resume.md`). The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
+
+**Two preambles** (`executor.py`), chosen by conductor, never by front-matter:
+
+- **Light** (`LIGHT`, ~300 words) for a small item (`executor.is_light`): a body under
+  150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
+  explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
+  short art round needs the picker schema; seven of Word Warriors' were under 150 words). A ~70-word "run two scripts, delete a zip" item otherwise paid
+  ~2k tokens and the round trips of `date`, ETAs and an outline. It keeps only what a
+  small item can trip on: who it is and that nobody watches; ask with a default, block
+  only if every default is worse; messages and amendments outrank the prompt and are
+  answered in the report by number; short calls (nothing foreground over
+  `foreground_seconds`, never end the turn to wait); the worktree, `paths`, readonly,
+  port and *Beside you* rules (shorter worktree and port texts); the time limit; the
+  report path, its four header lines and what each status means. Progress is one line
+  at the start, another only past ~15 minutes. No outline, ETAs, pickers or servers:
+  an item that proves bigger may still use them, but nothing asks it to.
+- **Full** (`PREAMBLE`) for everything else. It names the item and says the session is
+  unattended; gives the asking rule (ask only when a wrong guess would waste real work
+  or be hard to undo, with a default whenever one exists; block only when every default
+  is worse; anything not asked is decided as fits the goal and recorded; a step whose
+  default can't be undone goes last); the progress rule (a line at the start, an ETA once
+  it can estimate, at milestones, when the estimate moves by a third; `date` before each
+  ETA); the *Outline* rule (`progress.md`); the *Messages* rule (Matt's channel after one
+  of the lead's tool calls, *Delivery*; not injection; outranks the prompt; answered
+  through `progress`; helpers pass one straight up); the *Short calls* rule
+  (`progress.md`); where it works (worktree, branch and cut point, shared folders, the
+  commit rule), any `paths`, *Port* (below), *Beside you* (`scheduling.md`); the time
+  limit and kill time; the **absolute report path** (the only file it may write outside
+  its repo); the header, a one-line `slow:` rule and what each status means; that the
+  report answers every amendment and message by number, carries test details only for an
+  unfixed red, and no process narration; and the closing `Report written to <path>`.
+  Two blocks go in only where they apply: the *Pickers* paragraph and the header's
+  `pick:` line (schema inline, `picks.md`) when the body could produce candidates
+  (`executor.PICK_RE`: picker, `pick:`, candidates, alternatives, an `art:` command,
+  the art pipeline or an art template); the *Servers* paragraph (Claude Code stops a
+  background command after 10 minutes, so a long-lived server starts detached with its
+  output to a log, or by a repo script, and stops before the end) when a run target's
+  `cwd` is in the repo or its `package.json` has a `dev…` or `preview…` script
+  (`executor.has_servers`).
+
+Template texts follow either preamble unchanged; a template item always gets the full
+one, as do `audit` items (with the *Audit notes* paragraph) and resume items (with
+*Resumed*).
 
 **Port.** Every launch (a resumed stage too) gets a TCP port of its own, chosen by
 conductor: free at launch, from the OS's ephemeral range, never a run target's (the

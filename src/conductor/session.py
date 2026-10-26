@@ -206,6 +206,20 @@ def from_state(control: Path) -> list[str]:
     return out
 
 
+HABITS_NOTE = "The planner's own rules, from `state.md`: follow them; never list them to Matt."
+
+
+def planner_habits(control: Path) -> list[str]:
+    """`state.md`'s *Planner habits* whole, under its own heading so the planner follows
+    them without relaying them as fixes; nothing when the section is absent or empty."""
+    try:
+        body = state_sections(read_text(control / "state.md")).get("planner habits") or []
+    except (OSError, UnicodeDecodeError):
+        return []
+    lines = "\n".join(body).strip("\n").splitlines()
+    return ["## Planner habits", "", HABITS_NOTE, "", *lines] if any(ln.strip() for ln in lines) else []
+
+
 def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int,
            root: Path | None = None) -> str:
     """The digest: the inbox since the previous read mark, headed by the session's
@@ -214,7 +228,8 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
             f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
             f"The read mark moves to #{top} as this is written; no `read:` is needed.")
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
-    out = [body.rstrip(), "", *from_state(cfg.control), "", "## Maintenance facts"]
+    habits = planner_habits(cfg.control)
+    out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]
     for repo in cfg.repos:
         out += maintenance(cfg, log, view, repo)
     return "\n".join(out) + "\n"

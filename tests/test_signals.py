@@ -630,6 +630,18 @@ def test_digest_copies_state_md_lines_a_start_raises(tmp_path):
     assert "Intro" not in text and "paged" not in text
 
 
+def test_digest_keeps_planner_habits_apart_from_pending_fixes(tmp_path):
+    from conductor import session
+    assert session.planner_habits(tmp_path) == []
+    (tmp_path / "state.md").write_text(
+        "# p\n\n## Pending fixes\n\n- due: a parked edit\n\n## Planner habits\n\n"
+        "- stage receipts before quoting them (due: always)\n\n## Paged\n\n- x\n", encoding="utf-8")
+    fixes = "\n".join(session.from_state(tmp_path))
+    assert "a parked edit" in fixes and "receipts" not in fixes
+    assert session.planner_habits(tmp_path) == ["## Planner habits", "", session.HABITS_NOTE, "",
+                                                "- stage receipts before quoting them (due: always)"]
+
+
 @pytest.mark.slow
 def test_digest_hides_reviewed_items_and_a_closed_session_and_closeout_moves_the_mark(env):
     from conductor import inbox, state

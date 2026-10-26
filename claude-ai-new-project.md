@@ -61,4 +61,4 @@ A project's runnable thing (a dev server, the game) is a `[run.<name>]` table in
 
 ## Picks
 
-When work produces candidates (art variants, layouts), Matt picks in his browser, one row per thing, then **Save**. The preamble gives the executor the manifest schema and the `pick:` report line, so a prompt need not repeat either. The inbox's **Picks** lists every picker still waiting for Matt; Matt can also open one from the app's **Pick…**. A refused manifest (`invalid`, or `pick_failed`) gets reported with its reason. Mechanics, including a restart losing an open tab: `docs/picks.md`.
+When work produces candidates (art variants, layouts), Matt picks in his browser, one row per thing, then **Save**. The preamble gives the executor the manifest schema and the `pick:` report line when the prompt says picker, candidates or alternatives (or uses an `art:` command), so a prompt need not repeat either. The inbox's **Picks** lists every picker still waiting for Matt; Matt can also open one from the app's **Pick…**. A refused manifest (`invalid`, or `pick_failed`) gets reported with its reason. Mechanics, including a restart losing an open tab: `docs/picks.md`.

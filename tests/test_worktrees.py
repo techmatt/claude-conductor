@@ -371,7 +371,7 @@ def test_readonly_item_runs_beside_others_with_its_own_port(env):
     assert env.finished("code/002_ro").detail["status"] == "done"
     assert f"CONDUCTOR_PORT={ports['code/002_ro']}" in report(env, "002_ro")
     text = (env.control / "reports" / "code__002_ro.prompt.md").read_text(encoding="utf-8")
-    assert f"uses port {ports['code/002_ro']}, also in your environment as `CONDUCTOR_PORT`" in text
+    assert f"uses port {ports['code/002_ro']} (`CONDUCTOR_PORT`)" in text      # a short item: the light text
 
 
 @pytest.mark.slow

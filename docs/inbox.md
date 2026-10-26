@@ -51,6 +51,10 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      its indented lines) of that section saying the word `due`, any case. Sections match
      by `## ` heading, ignoring a `(…)` after the name; a missing one says so, as does a
      missing `state.md`;
+   - **Planner habits**: `state.md`'s *Planner habits* section whole (rules for the
+     planner itself, which it follows and never lists to Matt), under its own heading
+     and a one-line note saying so; left out when the section is absent or empty. Habit
+     lines filed under *Pending fixes* were relayed as fixes every start;
    - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of

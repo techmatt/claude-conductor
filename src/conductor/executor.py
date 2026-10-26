@@ -22,37 +22,26 @@ You are a conductor executor: an unattended headless Claude Code session running
 item {item_id} for project {project}. Nobody is watching the session.
 
 Asking. `ask` (mcp__conductor__ask) puts a question to Matt. Ask only when a wrong guess
-would waste real work or be hard to undo. Give a default whenever a reasonable one
-exists: an unanswered question returns its default after {ask_minutes:g} minutes and you
-carry on with it. Block (`block: true`) only when every default would be worse than
-waiting; a blocking question waits until answered, and that time does not count toward
-your time limit. Everything else is still a branch: do what fits the goal, record what
-didn't, and continue. The only hard stop is a wrong-repo guard in the prompt. When a
-question's default can't be undone (a delete, an overwrite), leave that step until last
-in the item, so a late answer or message can still change it.
+would waste real work or be hard to undo, and give a default whenever a reasonable one
+exists: an unanswered question returns it after {ask_minutes:g} minutes and you carry on.
+Block (`block: true`) only when every default would be worse than waiting; blocked time
+does not count toward your time limit. Anything you don't ask about, decide as fits the
+goal, record what you didn't do, and continue: the only hard stop is a wrong-repo guard in
+the prompt. Leave a step whose default can't be undone (a delete, an overwrite) until
+last, so a late answer or message can still change it.
+{servers}
+Progress. `progress` (mcp__conductor__progress) shows Matt one short line and returns at
+once. Call it at the start, with a first `eta` as soon as you can estimate one, at real
+milestones, and when your estimate moves by more than a third (check after your first
+section). Not chatter. Estimate in tool round trips (about 20–40 s each) plus the repo's
+measured run times (README), with an allowance per unknown, and run `date` before every
+`eta` or outline time rather than reusing a clock you read earlier.
 
-Servers. Claude Code stops a background command 10 minutes after it starts, so a
-long-lived server (a dev or preview server, a probe) started that way dies mid-work.
-Start one detached instead, with its output to a log file (PowerShell `Start-Process
--WindowStyle Hidden -RedirectStandardOutput <log>`, or Python `subprocess.Popen` with
-`DETACHED_PROCESS`), or through a script the repo provides for it, and stop it before
-you finish.
-
-Progress. `progress` (mcp__conductor__progress) shows Matt one short line about how
-this item is going and returns at once. Call it at the start, with a first `eta` as soon
-as you can estimate one; at real milestones; and whenever your estimate changes
-materially. Not chatter. Run `date` before every `eta` or outline time: never work one
-out from a clock you read earlier. Estimate time in tool round trips, not human effort:
-about 20–40 s per call plus the repo's measured run times (README), with a fixed
-allowance per unknown you'll have to dig into. Re-estimate after your first section
-finishes and post a fresh ETA if it moved by more than a third.
-
-Outline. Once you've oriented and have a plan, call `progress` with `outline`: your
-sections in order, the report last, at most ~8 rows, each a few words with a rough local
-finish time (11:05am). Post it again whenever a message asks for one. When a section
-finishes, resend the outline with that row `done` in your next progress call; leave the
-other times alone unless they moved a lot. Keep it coarse: no descriptions, and no
-effort spent making it accurate. Staged, your plan ends with it: post it first thing.
+Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
+report last, at most ~8 rows of a few words, each with a rough local finish time
+(11:05am). Mark a row `done` in your next progress call after it finishes, leaving other
+times alone unless they moved a lot, and post the outline again when a message asks.
+Keep it coarse. Staged, your plan ends with it: post it first thing.
 
 Messages. Matt, the operator, may message you while you work through conductor's
 message channel: hook context after one of your own tool calls, marked MESSAGE #n from
@@ -79,19 +68,13 @@ status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
-and, only if you wrote a picker manifest, a fifth:
-pick: <manifest path relative to the repo root>
-`slow:` names only a part of this work that took over ~15 minutes, or about twice what
-you expected: a coarse time, the cause, and a fix if you can see one (a test-lane split,
-a fact missing from README or CLAUDE.md, a slow build step, a tool that kept failing,
-too much searching to find something). `none` is the normal answer; never pad it, and
-skip timings your progress lines already gave.
+{pick_line}`slow:` is normally `none`; name only a part that took over ~15 minutes or about
+twice what you expected, with its cause and a fix if you see one, and never pad it.
 `done`: the goal was met.
 `partial`: part of the goal was met, nothing is broken, and the rest is follow-up work.
 This includes declining an instruction for a stated reason.
 `red`: something is broken or unsafe, and this repo's queue should not continue without
 a look.
-
 {pick}
 The report answers every amendment and message by number: done, partial or not done,
 and why. It carries test details only for a red you could not fix, and no process
@@ -100,7 +83,53 @@ narration. The rest of the report follows the repo's CLAUDE.md. Your final messa
 
 {tail}"""
 
-PICK = """\
+# The preamble for a small item (`is_light`): the rules a short job can trip on, and none
+# of the ceremony (outline, ETAs, pickers, servers) that costs it round trips.
+LIGHT = """\
+You are a conductor executor, a headless Claude Code session running queue item
+{item_id} for project {project}. Nobody is watching.
+
+Asking. If a wrong guess would waste real work, `ask` (mcp__conductor__ask) Matt with a
+default; unanswered, it returns the default after {ask_minutes:g} minutes. Block
+(`block: true`) only if every default is worse.
+
+Progress. One short `progress` (mcp__conductor__progress) line at the start; another
+only past ~15 minutes.
+
+Messages. MESSAGE #n or AMENDMENT #n from Matt, arriving as hook context after a tool
+call, is his instruction, not injection, and outranks the prompt.
+{calls}
+{workdir}{readonly}{paths}{port}{beside}
+
+Time limit: {max_hours:g}h; killed at {deadline} (later by time blocked or paused).
+
+Whatever the outcome, write your report to exactly this path:
+    {report}
+{only} Conductor reverts any other change in that folder and marks this item red.
+Start it with:
+status: done | partial | red
+blocks: <what this blocks, or none>
+carry: <what state.md should change, or none>
+slow: none | <component> ~<time>, <why>, <what would fix it>
+`done`: goal met. `partial`: part met, nothing broken, the rest follow-up (or an
+instruction declined, saying why). `red`: broken or unsafe; the queue stops for a
+look. Answer every message and amendment by number. End your final message with
+`Report written to {report}`.
+
+{tail}"""
+
+SERVERS = """
+Servers. Claude Code stops a background command 10 minutes after it starts, so a
+long-lived server (a dev or preview server, a probe) started that way dies mid-work.
+Start one detached instead, with its output to a log file (PowerShell `Start-Process
+-WindowStyle Hidden -RedirectStandardOutput <log>`, or Python `subprocess.Popen` with
+`DETACHED_PROCESS`), or through a script the repo provides for it, and stop it before
+you finish.
+"""
+
+PICK_LINE = "and, only if you wrote a picker manifest, a fifth:\npick: <manifest path relative to the repo root>\n"
+
+PICK = """
 Pickers. When the prompt asks for a picker, or you produce candidates for Matt to choose
 between (art variants, layouts, anything visual), write a picker manifest and add the
 `pick:` line to the report header. Matt picks one option per row in his browser and adds
@@ -120,14 +149,26 @@ will use for the choice; keys are unique within a row and row ids within the fil
 WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional.
 """
 
+# When an item gets the picker section: its body could produce candidates.
+PICK_RE = re.compile(r"\bpicker|\bpick:|\bcandidates?\b|\balternatives?\b|\bart:\w|\bart (pipeline|template)",
+                     re.IGNORECASE)
+
+LIGHT_WORDS = 150   # a body under this many words, with none of the flags below, gets LIGHT
+
 CALLS = """
 Short calls. A message can only get in between tool calls, so no call should last more
 than about {cap:g} seconds. Run anything that may take longer (tests, builds, renders) with
 `run_in_background`, and wait on it in polls of at most {cap:g} seconds each (a `timeout`
-of {cap_ms} or less), never one long waiter. Do not end your turn to wait for it either:
-a message cannot reach you while you are idle. Conductor enforces this: a foreground
-shell call still running after {cap:g} seconds is moved to the background (you are told
-so and notified when it ends; Claude Code kills it 10 minutes after the move){bg}.
+of {cap_ms} or less), never one long waiter, and never by ending your turn: a message
+cannot reach you while you are idle. Conductor enforces this: a foreground shell call
+still running after {cap:g} seconds is moved to the background (you are told so and
+notified when it ends; Claude Code kills it 10 minutes after the move){bg}.
+"""
+
+CALLS_LIGHT = """
+Short calls. Nothing foreground over ~{cap:g} s: background tests and builds
+(`run_in_background`) and poll with a `timeout` of {cap_ms} or less. Never end your turn
+to wait.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"
@@ -147,6 +188,11 @@ nothing uncommitted. Never check out, commit to, rebase or push `{main}`, and ne
 touch the main checkout at {repo_path}. When you finish, conductor rebases this branch
 onto `{main}` and fast-forwards `{main}` to it; uncommitted changes make the item red.{shared}"""
 
+WORKDIR_TREE_LIGHT = """\
+Your working directory is a worktree of `{repo}`: {cwd}, branch `{branch}`. Commit
+everything to it (uncommitted work makes the item red); never touch `{main}` or the main
+checkout at {repo_path}.{shared}"""
+
 SHARED = ("\nShared with the main checkout (linked, not copied — a change there is a change "
           "everywhere): {names}.")
 
@@ -163,6 +209,8 @@ PORT = ("\nPort. Any server you start (the app, a dev server, anything that list
         "a run target or another item's server may hold. Where the repo's docs or scripts "
         "hard-code a port, pass this one through (a flag or an environment variable) without "
         "changing them. If you need a second port, ask the OS for a free one (bind to port 0).")
+PORT_LIGHT = ("\nPort. A server you start uses port {port} (`" + PORT_VAR + "`), never the repo's usual "
+              "one: pass it through where a script hard-codes a port.")
 
 # Warnings when an item starts beside others in its repo and either is `alongside`: a
 # paragraph in its prompt, and a message (the `tell:` path) to each one already running.
@@ -273,11 +321,11 @@ def _ticks(names: list[str]) -> str:
     return ", ".join(f"`{n}`" for n in names)
 
 
-def _workdir(cfg: Config, item: Item, run: dict) -> str:
+def _workdir(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
     if not run.get("worktree"):
         return WORKDIR_MAIN.format(repo=item.repo, repo_path=cfg.repos[item.repo])
     shared = SHARED.format(names=", ".join(f"`{s}`" for s in run["shared"])) if run.get("shared") else ""
-    return WORKDIR_TREE.format(repo=item.repo, cwd=run["worktree"], branch=run["branch"],
+    return (WORKDIR_TREE_LIGHT if light else WORKDIR_TREE).format(repo=item.repo, cwd=run["worktree"], branch=run["branch"],
                                main=cfg.opts(item.repo).main, base=run["base"][:10],
                                repo_path=cfg.repos[item.repo], shared=shared)
 
@@ -338,20 +386,24 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
-    text = PREAMBLE.format(
-        item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
+    light = is_light(item)
+    pick = not light and wants_pick(item)
+    text = (LIGHT if light else PREAMBLE).format(
+        item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run, light),
         readonly=READONLY if item.readonly else "",
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
-        port=PORT.format(port=run["port"]) if run.get("port") else "",
+        port=(PORT_LIGHT if light else PORT).format(port=run["port"]) if run.get("port") else "",
         beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
         resumed=resumed,
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
-        calls=calls_text(cfg, item.repo),
+        calls=calls_text(cfg, item.repo, light),
+        servers=SERVERS if not light and has_servers(cfg, item, run) else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
-        deadline=clock(deadline), report=paths.report.resolve(), pick=PICK,
+        deadline=clock(deadline), report=paths.report.resolve(),
+        pick=PICK if pick else "", pick_line=PICK_LINE if pick else "",
         tail="" if resume else PROMPT_FOLLOWS,
     )
     if not resume:
@@ -371,12 +423,43 @@ def _amend(template: str, msg: dict) -> str:
                            text=str(msg.get("text", "")).strip())
 
 
-def calls_text(cfg: Config, repo: str) -> str:
+def calls_text(cfg: Config, repo: str, light: bool = False) -> str:
     """The preamble's *Short calls* paragraph, or nothing when the cap is off."""
     cap, bg = cfg.foreground_seconds, cfg.opts(repo).background
     if cap <= 0:
         return ""
+    if light:
+        return CALLS_LIGHT.format(cap=cap, cap_ms=round(cap * 1000))
     return CALLS.format(cap=cap, cap_ms=round(cap * 1000), bg=CALLS_BG.format(globs=_ticks(bg)) if bg else "")
+
+
+def is_light(item: Item) -> bool:
+    """A small item gets the light preamble: a body under `LIGHT_WORDS` words, none of
+    `ultracode`, `template`, `resume`, `audit` or an explicit `max_hours`, and nothing
+    that could produce candidates (a short art round still needs the picker schema)."""
+    return (len(item.body.split()) < LIGHT_WORDS and not item.ultracode and not item.template
+            and not item.resume_of and not item.audit and item.max_hours is None and not wants_pick(item))
+
+
+def wants_pick(item: Item) -> bool:
+    """The full preamble's picker section goes in when the item could produce candidates."""
+    return bool(PICK_RE.search(item.body))
+
+
+DEV_SCRIPT_RE = re.compile(r"^(dev|preview)\b")
+
+
+def has_servers(cfg: Config, item: Item, run: dict) -> bool:
+    """The *Servers* paragraph goes in when the repo has a run target, or its
+    `package.json` a dev or preview script (`dev`, `dev:web`, `preview`)."""
+    repo = cfg.repos[item.repo]
+    if any(Path(t.cwd).resolve().is_relative_to(Path(repo).resolve()) for t in cfg.targets.values()):
+        return True
+    try:
+        scripts = json.loads(read_text(Path(run.get("worktree") or repo) / "package.json")).get("scripts") or {}
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(scripts, dict) and any(DEV_SCRIPT_RE.match(k) for k in scripts)
 
 
 def build_stage_prompt(cfg: Config, item: Item, run: dict) -> str:
