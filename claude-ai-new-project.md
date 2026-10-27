@@ -32,7 +32,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
    - steps over ~30 seconds backgrounded, with a completion waiter on the real process, never on a launcher wrapper;
    - LF line endings (`.gitattributes` `* text=auto eol=lf`);
    - operational facts learned while working promoted into the repo's README, never left only in a report.
-5. Matt starts conductor for the project: the app's **Start daemon**, or `uv run conductor run C:\Code\<project>-control` in a plain terminal. Never as a Claude Code background command, which takes the daemon and every executor down with it (`docs/restart.md`). From then on, work flows through the queue, and each session starts with **start a new <project> session**.
+5. Matt starts conductor for the project: the app's **Start daemon**, `uv run conductor run --detach C:\Code\<project>-control` (from anywhere, Claude Code included; then `uv run conductor app C:\Code\<project>-control` adds it to the app), or `uv run conductor run C:\Code\<project>-control` in a plain terminal. Never plain `run` as a Claude Code background command, which takes the daemon and every executor down with it (`docs/restart.md`). From then on, work flows through the queue, and each session starts with **start a new <project> session**.
 
 Matt can watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`).
 

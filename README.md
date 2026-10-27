@@ -19,6 +19,7 @@ with every file's size budget (`uv run python tools/sizes.py`).
 ```
 uv sync
 uv run conductor run    <control folder>   # the daemon, foreground; Ctrl+C stops it
+uv run conductor run --detach <control folder>   # detached, as the app's Start daemon; safe from Claude Code
 uv run conductor status [<control folder>]
 uv run conductor inbox  [<control folder>]
 uv run conductor events [<control folder>] [--since X] [--item Y] [--repo R] [--kind K] [--paths]

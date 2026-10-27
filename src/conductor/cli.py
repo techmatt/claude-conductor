@@ -40,9 +40,34 @@ def wait_exit(pid: int, timeout: float) -> bool:
     return True
 
 
+DETACH_WAIT_SECONDS = 60
+
+
+def run_detached(cfg: config_mod.Config) -> int:
+    """Start the daemon as the app's *Start daemon* does (`procs.spawn_daemon`): it
+    outlives this shell and any Claude Code session that ran it. A live daemon is left alone."""
+    import time
+    from .procs import spawn_daemon
+    if (d := state.daemon_info(cfg)).alive:
+        print(f"conductor: {cfg.project} daemon already running (pid {d.pid})")
+        return 0
+    log = cfg.state_dir / "daemon.out.log"
+    spawn_daemon(cfg.control, log)
+    end = time.monotonic() + DETACH_WAIT_SECONDS     # the pid spawned is a shim; daemon.json has the daemon's
+    while not (d := state.daemon_info(cfg)).alive:
+        if time.monotonic() >= end:
+            print(f"conductor: no daemon after {DETACH_WAIT_SECONDS}s; see {log}", file=sys.stderr)
+            return 1
+        time.sleep(0.5)
+    print(f"conductor: {cfg.project} daemon started (pid {d.pid}); output in {log}")
+    return 0
+
+
 def cmd_run(args) -> int:
     from .daemon import Daemon, DaemonError
     cfg = config_mod.load(_control(args.control))
+    if args.detach:
+        return run_detached(cfg)
     if args.after:
         # The handshake: the daemon restarting itself hands over only once this file shows
         # the config loads and the code imports; the new daemon removes it under the lock.
@@ -447,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
         if name == "run":
             sp.add_argument("--after", type=int, metavar="PID", help="wait (up to 60s) for this process to exit "
                                                                     "first: a daemon restarting itself")
+            sp.add_argument("--detach", action="store_true", help="start it detached, as the app's Start daemon "
+                                                                  "does, and return once it is up")
         if name == "events":
             sp.add_argument("--since", help="#id, 30m / 2h / 1d, 5:25pm, an ISO time, "
                                             "'checkpoint' (the latest) or 'checkpoint N'")

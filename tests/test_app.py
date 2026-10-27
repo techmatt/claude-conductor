@@ -245,6 +245,22 @@ def test_start_daemon_detached(tmp_path):
         procs.kill_tree(p.pid)
 
 
+def test_run_detach_starts_once(tmp_path, monkeypatch, capsys):
+    # `conductor run --detach` spawns as the app's button does, waits for daemon.json,
+    # and leaves a live daemon alone.
+    from conductor import cli, procs, state
+    control = bare_control(tmp_path)
+    spawned, live = [], []
+    monkeypatch.setattr(procs, "spawn_daemon", lambda c, log: spawned.append((c, log)) or live.append(1))
+    monkeypatch.setattr(state, "daemon_info", lambda cfg: state.DaemonInfo(pid=4242, alive=bool(live)) if live
+                        else state.DaemonInfo(alive=False))
+    assert cli.main(["run", "--detach", str(control)]) == 0
+    assert spawned == [(control, control / ".conductor" / "daemon.out.log")]
+    assert "daemon started (pid 4242)" in capsys.readouterr().out
+    assert cli.main(["run", "--detach", str(control)]) == 0
+    assert len(spawned) == 1 and "already running (pid 4242)" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------- review fixes
 def test_signal_names_sort_in_click_order(tmp_path):
     paths = [actions.clear(tmp_path, "code") for _ in range(12)]
