@@ -14,5 +14,7 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **postmortem Y** | Y's events, prompt and report: where it went wrong. |
 | **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap, listed in their **new** order; the current order is a no-op): numbers swap, each renamed item is a new id. Fix old names in `state.md`. |
 | **content cleanup R** [extras] | Queues `template: content_cleanup` (body: Matt's extras); never a maintenance default. |
+| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
+| **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
 | **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |

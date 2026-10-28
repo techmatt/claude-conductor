@@ -28,7 +28,7 @@ Steps 4 and 5 go out in the same turn (the re-stage covers a digest that lags). 
 
 ## The bridge
 
-- Linking, the device tools and folder access: *Start*, steps 1–2.
+- Linking, the device tools and folder access: *Start*, steps 1–2. One missing path fails a whole access request ("can't be granted"): a path that may not exist yet, check first (a names-only listing of its parent).
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Each upload goes once to a fresh workspace path, never edited after.
 - Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
@@ -86,7 +86,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Staging is automatic**: a queue head waiting on a busy lock or a running dependency gets a read-only head start; `stage: false` when wasted or its plan needs the running item's result.
 - **Approval.** Auto-approve (Matt, 2026-10-22): every prompt Matt asks for, discusses or has the planner write goes straight to `queue\`; Matt stops what he doesn't want (**cancel X**). `proposed\` only for what Matt himself says to hold (**approve X** releases it). Never move, rename or delete an item: approve, cancel and reorder are signals.
 - **Rewrite, amend, or new item.** **queue status** first. Rewrite a queued, staging or staged item for a changed plan (its stage is redone); never a running one (red `invalid`). **Amend** adds to a plan that still stands, until merging; a correction to finished work is a new item.
-- **Short, goal-first.** Length scales with risk; trust the executor on mechanics; never restate the repo's `CLAUDE.md`. **Done when**: a feature prompt's goal ends with one or two checks Matt can observe himself (a spec that plays it, a checker kind at 0, a picker saved). End with "Commit when done." unless the prompt says why not.
+- **Short, goal-first.** Length scales with risk; trust the executor on mechanics; never restate the repo's `CLAUDE.md`; from a design doc, quote only the sections the prompt implements. **Done when**: a feature prompt's goal ends with one or two checks Matt can observe himself (a spec that plays it, a checker kind at 0, a picker saved). End with "Commit when done." unless the prompt says why not.
 - **The goal is the authority.** When the planned route runs out, the executor advances the goal another way and says what it chose; idling to a deadline or re-running an exhausted step is a failure.
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. The preamble covers `ask`; a prompt names a question in advance only when Matt must decide it.
 - **Every premise is a claim**, verified from source before acting on it, with what happens if it fails; a count that decides a plan is read live.
@@ -135,7 +135,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content cleanup, park / resume project) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content cleanup, post-audit, art round, park / resume project) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
 
 **Session and inbox**
 
@@ -188,11 +188,9 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
 | **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report (X must have finished). |
-| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing its red's hold. Only after its report is read with Matt. |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |
-| **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
 
 **Closeout**
 

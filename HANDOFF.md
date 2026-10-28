@@ -35,7 +35,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 Last cleanup: 2026-10-23, after prompt 50
 
-Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`) and Word Warriors (`C:\Code\wordwarriors-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
+Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`) and aicomplete (`C:\Code\aicomplete-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
 What is live, by area (each prompt's report says when it came; the doc named holds how it works now):
 
@@ -49,12 +49,13 @@ The planner docs: `planner.md` (its *Start*, then read whole at step 5 with `ses
 
 A next prompt should know:
 - A behaviour change updates `planner.md` (and `claude-ai-new-project.md` where it covers the topic) and the matching `docs/` file, not README's body.
-- Every doc and code file has a size budget (`CLEANUP.md`, *Size budgets*; `uv run python tools/sizes.py`): files read every session (`planner.md` 25.0 of 25 KB after 55, with nothing left to give: the next addition moves a row to `planner-vocab.md`; since 52 folded in the start and a normal session's vocab, `CLAUDE.md`) hold theirs, on-demand docs have ~20% headroom. `tools/sandbox_proof.py` marks every unreviewed sandbox item reviewed at the end of a run. `Daemon` is `daemon.py` plus one `daemon_*` mixin per concern; the app's tabs are one `app/*_panel.py` each, an item's detail `app/trail.py`.
+- Every doc and code file has a size budget (`CLEANUP.md`, *Size budgets*; `uv run python tools/sizes.py`): files read every session (`planner.md` 24.8 of 25 KB after 56, which moved **post-audit** and **art round** to `planner-vocab.md`: the next addition moves another rare row there; since 52 folded in the start and a normal session's vocab, `CLAUDE.md`) hold theirs, on-demand docs have ~20% headroom. `tools/sandbox_proof.py` marks every unreviewed sandbox item reviewed at the end of a run. `Daemon` is `daemon.py` plus one `daemon_*` mixin per concern; the app's tabs are one `app/*_panel.py` each, an item's detail `app/trail.py`.
 
 ## Open
 
 - The light preamble (55) drops outline, ETAs, pickers and servers for a body under 150 words. Watch the first few: did a small item still ask with a default, background long calls and answer messages by number? If one turned out big and ran blind (no outline on *Now*), lower `LIGHT_WORDS` or add a signal word.
-- Planner habits (55): `state.md`'s new *Planner habits* section is copied into `session.md` under its own heading, never with *Pending fixes*. Word Warriors' and Corelight's habit lines still sit under *Pending fixes* (conductor never edits a real control folder): `planner.md` tells the planner to move them at its next `state.md` write. Check the next session start no longer lists them to Matt.
+- Planner habits (55): `state.md`'s new *Planner habits* section is copied into `session.md` under its own heading, never with *Pending fixes*. Word Warriors' moved (2026-10-26, request 20261026-0751-164); Corelight's still sit under *Pending fixes* (conductor never edits a real control folder), and `planner.md` tells its planner to move them at its next `state.md` write. Check Corelight's next session start no longer lists them to Matt.
+- A Claude Docs tab exported into a prompt costs double tokens (aicomplete): the export returns base64 inline and the planner re-emits it into a shell command (~2 × 16 KB for its v0 ruleset). Outside conductor's code; `planner.md` now says to quote only the sections a prompt implements. A docs export saved straight to a file the bridge can commit would be the cheaper path.
 - Tamper is attributed (30) only to an item whose hook saw it name a changed control path; a change made by a script that never names the path, or by a stage or merge executor (no hook), still ends every active item red.
 - Messages and amendments reach an executor only after one of the lead's own tool calls ends (`agent_id` absent in the hook input, Claude Code 2.1.305; if that field ever disappears, every call counts as the lead's): not during a blocking `ask`, a subagent or Workflow call, an idle wait, or after the last call (logged undelivered). The fallback: stream user messages into `-p --input-format stream-json` stdin (changes launch, `--resume` staging, the restart rule; it would also allow switching a running executor into ultracode, `docs/executors.md`).
 - `alongside` is proven in the sandbox with real executors (one pair, one tell during a helper); its first real use is worth a look: did both reports say whether they touched the other's area?
