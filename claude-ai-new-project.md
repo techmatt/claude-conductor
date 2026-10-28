@@ -51,6 +51,8 @@ Parking puts a project away whole (to free the box, or to move its folders), wit
 
 The control folder and the code repos may then move, as a set, keeping their relative layout: `conductor.toml` names the repos and `worktree_root` by relative path. To resume: move them back (or keep the same layout elsewhere), start the daemon (`uv run conductor run <control folder>` in `C:\Code\claude-conductor`, or the app's Start), **Add project…** in the app, then **start a new <project> session**.
 
+A repo that changes name or folder alone (not the set) is one command with the daemon stopped and nothing of it queued or running: `uv run conductor rename-repo <old> <new> [--path <new folder>] --control <control folder>` (**rename repo**, `planner-vocab.md`; `docs/control-folder.md`, *Renaming a repo*).
+
 **park project** runs steps 1–4 itself, then tells Matt which worktree folders are left to clear and to use **Remove project**. **resume project** tells Matt to start the daemon and **Add project…**, then does **start a new <project> session**.
 
 ## Memory

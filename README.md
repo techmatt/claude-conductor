@@ -36,6 +36,7 @@ uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [ru
 uv run conductor pick <repo>/<manifest path> [--control <folder>]  # open a picker in the browser (docs/picks.md)
 uv run conductor open-path <folder|reveal|file|text|url> <target…> [--control <folder>]  # the open: verbs (docs/open.md)
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
+uv run conductor rename-repo <old> <new> [--path P] [--control <folder>]   # daemon stopped (docs/control-folder.md)
 uv run conductor app [<control folder> …]                  # the desktop app (docs/app.md)
 ```
 
@@ -58,7 +59,7 @@ never as a Claude Code background command (`docs/restart.md`).
 
 | File | What it covers |
 |---|---|
-| `docs/control-folder.md` | The control folder's layout and `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
+| `docs/control-folder.md` | The control folder's layout and `.gitignore`, `conductor.toml`, `conductor init`, renaming a repo, the tamper guard, requests |
 | `docs/runtime.md` | The `.conductor/` folder: the daemon's lock, heartbeat, journals and scratch state |
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |

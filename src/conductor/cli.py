@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | rename-repo | app`."""
 
 from __future__ import annotations
 
@@ -392,6 +392,19 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_rename_repo(args) -> int:
+    from .rename import RenameError, rename
+    try:
+        lines = rename(_control(args.control), args.old, args.new, args.path)
+    except RenameError as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+    for line in lines:
+        print(line)
+    print(f"{args.old} is now {args.new}; start the daemon when ready")
+    return 0
+
+
 def cmd_inbox(args) -> int:
     cfg, log = _open(args.control)
     sys.stdout.write(render(cfg, log, state.scan(cfg, log)))
@@ -540,6 +553,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--project", required=True)
     sp.add_argument("--repo", action="append", metavar="NAME=PATH", help="repeatable")
     sp.set_defaults(fn=cmd_init)
+    sp = sub.add_parser("rename-repo", help="rename a repo key everywhere (daemon stopped), optionally moving its checkout")
+    sp.add_argument("old")
+    sp.add_argument("new")
+    sp.add_argument("--path", help="the checkout's new folder; moved there if it is still at the old one")
+    sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_rename_repo)
     sp = sub.add_parser("app", help="the desktop app (tray icon, one tab per control folder)")
     sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
     sp.set_defaults(fn=cmd_app)

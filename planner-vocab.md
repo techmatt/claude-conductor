@@ -18,3 +18,4 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
 | **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
+| **rename repo R to S** [at P] | Only when nothing of R is queued, staged or running: **stop conductor**, then tells Matt to run `uv run conductor rename-repo R S [--path P] --control <control>` in `C:\Code\claude-conductor` and start the daemon. History, reports and the watch series carry over; `state.md`'s own prose about R is the planner's to fix by request. |

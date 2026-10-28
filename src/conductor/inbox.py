@@ -317,6 +317,9 @@ def describe(ev: Event) -> str:
             text = f"{who} approved from {d.get('from')}"
         case "cancel":
             text = f"{who} cancelled from {d.get('from')}; file kept at {d.get('kept')}"
+        case "repo_renamed":
+            text = f"repo `{d.get('old')}` renamed `{d.get('new')}`" + (f"; checkout moved to {d.get('path')}"
+                                                                         if d.get("moved") else "")
         case "reorder":
             text = f"{ev.repo} reordered: {', '.join(d.get('before', []))} → {', '.join(d.get('after', []))}"
         case "drift":
