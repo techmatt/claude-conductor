@@ -131,6 +131,20 @@ a picker never drops out unpicked (saving it, even unchanged, lets it settle). T
 inbox's *Picks* (`inbox.md`) and the app's **Pick…** buttons both read it; the app keeps an unsaved
 one among the current finished rows, however old.
 
+**Retiring.** Executors never delete a picker's files (the preamble says so: 029 deleted
+round 1's while Matt still wanted it); conductor does, by retiring it. A picker's
+**series** is its name minus a trailing `_r<N>` (`art_alts_r2` → `art_alts`, round 2).
+Once a choices file is saved for a round, every live picker of that series with a lower
+round is retired: after each `pick_saved` and at daemon start (a save made by `conductor
+pick` with no daemon). A name with no round is retired only by the signal `retire:
+<name>` (planner or app). Retiring deletes the manifest and its option images from the
+main checkout, but keeps a file git tracks (deleting it would dirty `main`) and an image
+another live picker still shows (a round's "current" tile is often the last round's
+pick); the choices file stays. It logs `pick_retired` (name, manifest, `deleted`, `kept`,
+and `later` or `by`), drops the name from the server (its URLs 404) and from *Pending*,
+and the inbox's *Picks* lists it for a day. A name is retired once; `retire:` on an
+unknown or retired name is refused.
+
 **CLI.** `conductor pick <repo>/<path>` validates first (`conductor: <reason>`, exit 1,
 and a red `pick_failed` event with the reason, as the signal's `invalid` would be).
 With the daemon alive it writes `signals/cli-….signal` (`by: cli`), and the daemon opens

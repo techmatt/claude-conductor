@@ -593,6 +593,75 @@ def test_a_settled_item_still_waits_until_saved(env):
     assert picks.pending(env.cfg, state.scan(env.cfg, log), log) == []
 
 
+# ---------------------------------------------------------------- retiring
+def round_manifest(repo, n: int, shared: str = "picks/a.png") -> str:
+    """`art_r<n>` at `picks/r<n>.json`: its own image, plus one every round shows."""
+    (repo / "picks").mkdir(exist_ok=True)
+    (repo / shared).write_bytes(b"\x89PNG-a")
+    (repo / "picks" / f"own{n}.png").write_bytes(b"\x89PNG-own")
+    rel = f"picks/r{n}.json"
+    (repo / rel).write_text(json.dumps({"name": f"art_r{n}", "title": f"round {n}", "rows": [
+        {"id": "hero", "label": "Hero", "options": [{"key": "current", "image": shared.split("/", 1)[1]},
+                                                    {"key": "1", "image": f"own{n}.png"}]}]}), encoding="utf-8")
+    return f"code/{rel}"
+
+
+def test_a_saved_later_round_retires_the_earlier_one(env, monkeypatch):
+    from conftest import git
+    monkeypatch.setattr(picker.webbrowser, "open", lambda url: True)
+    r1, r2 = round_manifest(env.repo, 1), round_manifest(env.repo, 2)
+    (env.repo / "picks" / "kept.png").write_bytes(b"\x89PNG-k")         # committed: never deleted
+    git(env.repo, "add", "picks/kept.png")
+    git(env.repo, "commit", "-qm", "a tracked picker image")
+    data = json.loads((env.repo / "picks" / "r1.json").read_text(encoding="utf-8"))
+    data["rows"][0]["options"].append({"key": "2", "image": "kept.png"})
+    (env.repo / "picks" / "r1.json").write_text(json.dumps(data), encoding="utf-8")
+    log = env.d.log
+    log.append("finish", item="code/001_art", repo="code", status="done", pick=r1)
+    log.append("finish", item="code/002_art", repo="code", status="done", pick=r2)
+    send(env, f"pick: {r2}")
+    assert env.events("pick_retired") == []                             # opened is not saved
+    assert post_save(env.d.picker, [{"id": "hero", "key": "1"}], name="art_r2")[0] == 200
+    env.tick_until(lambda: env.events("pick_retired"))
+    [ev] = env.events("pick_retired")
+    assert (ev.detail["name"], ev.detail["manifest"], ev.detail["by"], ev.detail["later"]) == \
+        ("art_r1", r1, "series", "art_r2")
+    assert ev.detail["deleted"] == ["picks/r1.json", "picks/own1.png"]
+    assert ev.detail["kept"] == ["picks/a.png", "picks/kept.png"]       # round 2 shows it; git tracks it
+    assert not (env.repo / "picks" / "r1.json").exists() and (env.repo / "picks" / "r2.json").exists()
+    assert [p.item for p in picks.pending(env.cfg, state.scan(env.cfg, log), log)] == ["code/002_art"]
+    lines = picks_section(env)
+    assert any(ln.startswith("- `art_r1` retired ") and ln.endswith(
+        ": round `art_r2` saved; 2 files deleted, 2 kept (tracked or still shown)") for ln in lines), lines
+    # Once only: a restart or another save does not retire it again.
+    env.d.retire_pickers()
+    assert len(env.events("pick_retired")) == 1
+    # A round written over an earlier one's manifest path never loses its files to it.
+    picks.save_choices(env.cfg.control, picks.load_manifest(env.cfg, r2), {"rows": [{"id": "hero", "key": "1"}]})
+    data = json.loads((env.repo / "picks" / "r2.json").read_text(encoding="utf-8"))
+    (env.repo / "picks" / "r2.json").write_text(json.dumps({**data, "name": "art_r3"}), encoding="utf-8")
+    picks.save_choices(env.cfg.control, picks.load_manifest(env.cfg, r2), {"rows": [{"id": "hero", "key": "1"}]})
+    env.d.retire_pickers()
+    [_, ev] = env.events("pick_retired")
+    assert ev.detail["name"] == "art_r2" and ev.detail["deleted"] == [] and (env.repo / "picks" / "r2.json").exists()
+
+
+def test_retire_signal_for_a_picker_with_no_series(env, monkeypatch):
+    monkeypatch.setattr(picker.webbrowser, "open", lambda url: True)
+    write_manifest(env.repo)
+    env.d.log.append("finish", item="code/001_art", repo="code", status="done", pick=REF)
+    send(env, "retire: nobody", "a.signal")
+    assert "retire: no picker named 'nobody'" in env.events("invalid")[-1].detail["error"]
+    send(env, "by: planner\nretire: art_alts", "b.signal")
+    [ev] = env.events("pick_retired")
+    assert ev.detail["by"] == "planner" and ev.paths == ["signals/b.signal"] and "later" not in ev.detail
+    assert not (env.repo / "picks" / "m.json").exists() and not (env.repo / "art" / "d.png").exists()
+    assert picks.pending(env.cfg, state.scan(env.cfg, env.d.log), env.d.log) == []
+    send(env, "retire: art_alts", "c.signal")
+    assert "already retired" in env.events("invalid")[-1].detail["error"]
+    assert picks.series("art_alts") is None and picks.series("hero_alts_r12") == ("hero_alts", 12)
+
+
 @pytest.mark.slow
 def test_end_to_end_report_pick_to_saved(env, monkeypatch):
     urls: list[str] = []

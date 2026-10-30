@@ -20,6 +20,8 @@ REQUEST_WAIT_SECONDS = 60.0  # how long after request.md appears its missing tar
 SAME_WAIT_SECONDS = 10.0
 FRESH_SECONDS = 2.0       # a request.md this young that does not parse may still be being written
 FAILED_SUFFIX = ".failed"
+STALE_SECONDS = 3600.0    # a request folder with no request.md, untouched this long, moves to requests/stale/
+STALE_DIR = "stale"
 
 
 def is_closeout(message: str) -> bool:
@@ -72,6 +74,34 @@ def pending(cfg: Config) -> list[Path]:
     found = [d for d in root.iterdir()
              if d.is_dir() and not d.name.endswith(FAILED_SUFFIX) and (d / "request.md").is_file()]
     return sorted(found, key=lambda d: (_written(d), d.name))
+
+
+def move_stale(cfg: Config) -> list[tuple[str, Path, list[str]]]:
+    """Move each request folder that has no request.md and nothing in it touched for
+    STALE_SECONDS to `requests/stale/` (the planner can't delete over the bridge); for
+    each, (its name, where it went, its files)."""
+    root = cfg.path("requests")
+    if not root.is_dir():
+        return []
+    out = []
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d.name == STALE_DIR or d.name.endswith(FAILED_SUFFIX) or (d / "request.md").exists():
+            continue
+        try:
+            files = [p for p in d.rglob("*") if p.is_file()]
+            if time.time() - max(p.stat().st_mtime for p in [d, *files]) < STALE_SECONDS:
+                continue
+            dest = root / STALE_DIR / d.name
+            n = 1
+            while dest.exists():
+                n += 1
+                dest = root / STALE_DIR / f"{d.name}-{n}"
+            dest.parent.mkdir(exist_ok=True)
+            d.rename(dest)
+        except OSError:
+            continue                    # held open: the next tick tries again
+        out.append((d.name, dest, sorted(p.relative_to(d).as_posix() for p in files)))
+    return out
 
 
 def readable(d: Path, names: list[str]) -> bool:

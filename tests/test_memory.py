@@ -84,7 +84,7 @@ def test_samples_record_each_items_tree_and_the_heartbeat(env):
         mb = (rec or {}).get("items", {}).get(item, {}).get("kinds", {}).get("python", [0, 0])[1]
         return mb >= 200
 
-    env.tick_until(hog_seen, timeout=60)
+    env.tick_until(hog_seen)
     lock = json.loads((env.cfg.state_dir / "daemon.json").read_text(encoding="utf-8"))
     assert lock["beat"] and lock["pid"] == os.getpid()
     info = state.daemon_info(env.d.cfg)
@@ -112,7 +112,7 @@ def test_samples_count_what_an_item_detached_in_its_worktree(env):
         rec = memory.latest(env.cfg.state_dir)
         return (rec or {}).get("items", {}).get(item, {}).get("kinds", {}).get("python", [0, 0])[1] >= 150
 
-    env.tick_until(hog_seen, timeout=60)
+    env.tick_until(hog_seen)
     env.release()
     env.tick_until(lambda: env.finished(item))
     assert env.events("reaped")

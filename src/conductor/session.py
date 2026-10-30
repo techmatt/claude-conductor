@@ -277,9 +277,12 @@ def planner_habits(control: Path) -> list[str]:
 def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int,
            root: Path | None = None) -> str:
     """The digest: the inbox since the previous read mark, headed by the session's
-    checkpoint, then `state.md`'s due lines and the maintenance facts."""
+    checkpoint, then `state.md`'s due lines and the maintenance facts. The project's
+    `[links]` come first, above everything else."""
+    links = "".join(f"- {name}: {url}\n" for name, url in cfg.links.items())
     head = (f"# Session start — {cfg.project}\n\n"
-            f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
+            + (f"## Links\n\n{links}\n" if links else "")
+            + f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
             f"The read mark moves to #{top} as this is written; no `read:` is needed.")
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
     habits = planner_habits(cfg.control)

@@ -10,6 +10,10 @@ import pytest
 from conductor import config, daemon, daemon_signals, request
 
 FAKE = Path(__file__).with_name("fake_claude.py")
+# How long a test waits for the daemon to get somewhere. Generous on purpose: a passing
+# test never waits it out, and a box held at 100% by a project's executor (58, 59) slows
+# every daemon tick and fake executor several times over (docs/development.md).
+WAIT_SECONDS = 180.0
 
 CONTROL_GITIGNORE = """\
 queue/
@@ -105,7 +109,7 @@ class Env:
     def hold(self) -> str:
         """A FAKE line that keeps an executor running until `release()`: a test holds an
         item exactly as long as it needs, not a fixed sleep that races a loaded machine."""
-        return f"FAKE wait-for {(self.root / 'go').as_posix()} 60"
+        return f"FAKE wait-for {(self.root / 'go').as_posix()} {WAIT_SECONDS:.0f}"
 
     def release(self) -> None:
         (self.root / "go").touch()
@@ -113,7 +117,7 @@ class Env:
     def signal(self, name: str, text: str) -> None:
         (self.control / "signals" / name).write_text(text, encoding="utf-8")
 
-    def tick_until(self, cond, timeout: float = 30) -> None:
+    def tick_until(self, cond, timeout: float = WAIT_SECONDS) -> None:
         end = time.time() + timeout
         while time.time() < end:
             self.d.tick()

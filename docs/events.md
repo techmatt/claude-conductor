@@ -36,6 +36,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `drift` | control folder changed with no executor running, or by conductor's own git | changes; own |
 | `repo_renamed` | `conductor rename-repo` gave a repo a new key; every earlier row now names the new one (`control-folder.md`, *Renaming a repo*) | old, new, path, moved, sha, by |
 | `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing), identical (every target matched HEAD after the wait) / error |
+| `request_stale` | a request folder with no `request.md`, untouched an hour, moved to `requests/stale/`; paths: from, to | request, files |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals, or a `closeout:` request | through; session (a `session:` signal's checkpoint id); closeout (the request's name) / repo; note (a `land:`) |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by; hashes (`report`, `audit`: sha256 or null) |
@@ -53,6 +54,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `pick_open` | a `pick:` signal (or `conductor pick`) served a manifest and opened its page; item: the latest finish that named it, if any | name, manifest, url, opened (false: the browser reported it did not open); by |
 | `pick_saved` | Matt saved a picker; paths: its choices file; no `by` (the page has no identity) | name, manifest, changed, notes, rows |
 | `pick_failed` | the browser raised, `conductor pick` refused the manifest, or its server could not start (red; holds no queue) | manifest, name, url, error; by |
+| `pick_retired` | a picker's files were deleted: a later round of its series was saved, or a `retire:` signal (`picks.md`, *Retiring*) | name, manifest, deleted, kept (tracked, or another live picker's image); later (the round saved) or by |
 | `opened` | an `open:` signal (or `conductor open-path`) launched its action | verb, path or url; by |
 | `open_refused` | an `open:` target failed its check (not red; the signal file goes on) | verb, target (as given), reason; by |
 | `notify` | a `notify:` signal or a watch's action raised a toast | text, by; item (a watch's) |

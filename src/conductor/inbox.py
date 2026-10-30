@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 from . import audits, memory, nightshift, parked, picks, questions, talk
@@ -128,6 +129,8 @@ def describe(ev: Event) -> str:
                     f"{_count(d.get('notes'), 'note')}")
         case "pick_failed":
             text = f"picker {d.get('manifest')} failed: {d.get('error')}"
+        case "pick_retired":
+            text = f"picker `{d.get('name')}` retired: {retired_why(d)}"
         case "progress":
             text = f"{who} progress{reply_to(ev)}: {progress_line(ev)}"
             if d.get("note") and d.get("outline"):
@@ -263,6 +266,10 @@ def describe(ev: Event) -> str:
                 text += " (no change)"
         case "request_failed":
             text = f"request {d.get('request')} failed: {d.get('error')}"
+        case "request_stale":
+            text = (f"request folder `requests/{d.get('request')}` had no `request.md` for an hour: "
+                    f"moved to `{ev.paths[-1] if ev.paths else 'requests/stale/'}` "
+                    f"({', '.join(d.get('files') or []) or 'empty'})")
         case "invalid":
             text = f"{who or d.get('path')} invalid: {d.get('error')}"
         case "ack":
@@ -390,8 +397,9 @@ def saved_line(c: dict) -> str:
 
 def pick_lines(cfg: Config, log: EventLog, view: View) -> list[str]:
     """The Picks section: each pending picker (saved, opened or waiting for Matt), then
-    pickers saved since the checkpoint (any time without one) that no pending item names."""
-    out, shown = [], set()
+    pickers saved since the checkpoint (any time without one) that no pending item names,
+    then pickers retired in the last day."""
+    out, shown, gone = [], set(), picks.retired(log)
     for p in picks.pending(cfg, view, log):
         shown.add(p.ref)
         if p.state == "saved":
@@ -403,7 +411,7 @@ def pick_lines(cfg: Config, log: EventLog, view: View) -> list[str]:
             out.append(f"- {p.item} waiting for Matt — signal `pick: {p.ref}`")
     cp = view.checkpoint
     for ref, c in sorted(picks.scan_choices(cfg.control).items(), key=lambda kv: str(kv[1].get("saved_at"))):
-        if ref in shown or not c.get("saved_at"):
+        if ref in shown or not c.get("saved_at") or c.get("name") in gone:      # a retired one is listed below
             continue
         try:
             if cp and parse_stamp(c["saved_at"]) < parse_stamp(cp.ts):
@@ -411,7 +419,18 @@ def pick_lines(cfg: Config, log: EventLog, view: View) -> list[str]:
         except ValueError:
             continue
         out.append(f"- {saved_line(c)}")
+    since = now() - timedelta(hours=picks.RETIRED_SHOWN_HOURS)
+    for name, ev in sorted(gone.items(), key=lambda kv: kv[1].id):
+        if parse_stamp(ev.ts) >= since:
+            out.append(f"- `{name}` retired {clock(ev.ts)}: {retired_why(ev.detail)}")
     return out
+
+
+def retired_why(d: dict) -> str:
+    """Why a picker was retired and what went: `round art_r2 saved; 5 files deleted, 1 kept`."""
+    why = f"round `{d['later']}` saved" if d.get("later") else f"signal by {d.get('by', 'unknown')}"
+    kept = f", {len(d['kept'])} kept (tracked or still shown)" if d.get("kept") else ""
+    return f"{why}; {_count(len(d.get('deleted') or []), 'file')} deleted{kept}"
 
 
 def _line(ev: Event, commit: Event | None = None) -> str:

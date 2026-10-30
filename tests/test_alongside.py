@@ -122,7 +122,7 @@ def test_alongside_item_starts_beside_a_running_one_and_both_are_warned(env):
     env.queue("001_voice", '# Voice lines\nFAKE until-message 30\nFAKE commit b.txt b', stage="false")
     env.tick_until(lambda: env.events("start"))
     env.queue("002_recorder", "FAKE commit a.txt a", alongside="the recorder's save path only")
-    env.tick_until(lambda: env.finished("code/001_voice") and env.finished("code/002_recorder"), timeout=60)
+    env.tick_until(lambda: env.finished("code/001_voice") and env.finished("code/002_recorder"))
     start = env.d.log.last("start", item="code/002_recorder")
     assert start.detail["alongside"] == "the recorder's save path only"
     assert start.detail["beside"] == ["code/001_voice"]
@@ -161,7 +161,7 @@ def test_a_neighbour_joining_later_is_recorded_and_never_told_twice(env):
     assert "003_a (alongside, beside code/001_c, code/002_b)" in inbox.render(
         env.cfg, env.d.log, state.scan(env.cfg, env.d.log))
     go2.touch()
-    env.tick_until(lambda: env.finished("code/003_a") and env.finished("code/002_b"), timeout=60)
+    env.tick_until(lambda: env.finished("code/003_a") and env.finished("code/002_b"))
 
 
 @pytest.mark.slow

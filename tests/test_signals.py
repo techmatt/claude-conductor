@@ -618,6 +618,19 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     assert "code/004_last finished" not in text and '"again"' in text
 
 
+def test_session_md_starts_with_the_project_links(env):
+    env.configure('[links]\n"design doc" = "https://claude.ai/artifact/abc"\nboard = " https://x/b "\n\n'
+                  '[repos]\ncode = "../code"\n')
+    assert env.d.cfg.links == {"design doc": "https://claude.ai/artifact/abc", "board": "https://x/b"}
+    send(env, "session: start", "planner-1.signal")
+    text = (env.control / "session.md").read_text(encoding="utf-8")
+    assert text.split("\n\n")[1:3] == ["## Links", "- design doc: https://claude.ai/artifact/abc\n- board: https://x/b"]
+    (env.control / "conductor.toml").write_text('project = "t"\n[links]\nx = 3\n[repos]\ncode = "../code"\n',
+                                               encoding="utf-8")
+    with pytest.raises(config.ConfigError, match=r"`\[links\]` must be name = URL strings"):
+        config.load(env.control)
+
+
 def test_digest_copies_state_md_lines_a_start_raises(tmp_path):
     from conductor import session
     assert session.from_state(tmp_path)[-1] == "No `state.md` readable."

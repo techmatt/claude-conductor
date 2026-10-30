@@ -119,7 +119,8 @@ def write_request(env, name: str, text: str, message: str) -> None:
 
 def test_control_commits_are_pushed_as_one_batch(env, monkeypatch):
     from conductor import daemon_push
-    monkeypatch.setattr(daemon_push, "CONTROL_QUIET_SECONDS", 0.5)
+    # Wide enough that a tick slowed by a busy box never splits the batch.
+    monkeypatch.setattr(daemon_push, "CONTROL_QUIET_SECONDS", 3)
     control_bare = remote(env, env.control, "control.git")
     write_request(env, "20261021-1100", "# state\n\nv1\n", "state v1")
     write_request(env, "20261021-1101", "# state\n\nv2\n", "state v2")

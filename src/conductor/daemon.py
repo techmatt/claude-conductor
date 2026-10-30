@@ -254,6 +254,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._recover_signal()
         self.recover()
         self._recover_landings()
+        self.retire_pickers()           # a round saved while no daemon ran (`conductor pick`)
         self._retry_leftovers("daemon start")
         self.push_ahead()
         self._compact_logs(sorted(state.scan(self.cfg, self.log).done))
@@ -338,7 +339,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_questions()
         self.process_talk()
         self.runner.poll()
-        self.picker.drain()
+        if any(ev.kind == "pick_saved" for ev in self.picker.drain()):
+            self.retire_pickers()       # daemon_signals
         self.check_stages()
         self.check_runs()
         self.process_merges()
@@ -492,6 +494,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         landed after the tick began (the bridge writes it after the call's queue files) is
         not left behind a worktree's creation. A config change waits for the next tick."""
         waiting: set[str] = set()   # targets of earlier requests still waiting: stamp order holds for them
+        for name, dest, files in ([] if between else request.move_stale(self.cfg)):
+            self.log.append("request_stale", paths=[f"requests/{name}", self.cfg.rel(dest)], request=name, files=files)
         for d in request.pending(self.cfg):
             if between and "conductor.toml" in request.listed_targets(d):
                 return                      # it and those after it: the next tick, in order

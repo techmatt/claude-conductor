@@ -8,6 +8,9 @@ A manifest is named by its ref, `<repo>/<path relative to the repo root>`: the `
 signal's value and the finish event's `detail.pick`. Choices files and `pick_open`
 events carry the same ref as `manifest`, so nothing here needs the manifest itself to
 say what is saved or opened.
+
+Conductor retires a picker (deletes its manifest and images, never its choices) once a
+later round of its series is saved, or on a `retire:` signal; executors never delete one.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from . import git
 from .config import Config
 from .events import Event, EventLog
 from .state import View
@@ -356,6 +360,7 @@ def pending(cfg: Config, view: View, log: EventLog) -> list[PickInfo]:
     save or open counts only when it came after that finish, so a manifest path reused by
     a later item starts again at `waiting`."""
     choices = scan_choices(cfg.control)
+    gone = {ev.detail.get("manifest"): ev.id for ev in retired(log).values()}
     opens: dict[str, Event] = {}
     for ev in log.query(kinds=["pick_open"]):
         if isinstance(ev.detail.get("manifest"), str):
@@ -367,8 +372,8 @@ def pending(cfg: Config, view: View, log: EventLog) -> list[PickInfo]:
     out = []
     for item_id, fin in sorted(view.finishes.items(), key=lambda kv: kv[1].id):
         ref = fin.detail.get("pick")
-        if not ref:
-            continue
+        if not ref or gone.get(ref, 0) > fin.id:
+            continue                            # retired: its files are gone
         settled = view.settled(item_id)
         if settled and latest[ref] != fin.id:
             continue
@@ -393,6 +398,100 @@ def saved_at(cfg: Config, view: View) -> dict[str, str]:
     choices = scan_choices(cfg.control)
     return {item_id: c["saved_at"] for item_id, fin in view.finishes.items()
             if (ref := fin.detail.get("pick")) and (c := choices.get(ref)) and _after(c.get("saved_at"), fin.ts)}
+
+
+# ---------------------------------------------------------------- retiring
+SERIES_RE = re.compile(r"(.+)_r(\d+)")
+RETIRED_SHOWN_HOURS = 24.0     # the inbox's *Picks* lists a retired picker this long
+
+
+def series(name: str) -> tuple[str, int] | None:
+    """`art_alts_r2` → (`art_alts`, 2): the name minus a trailing `_r<N>`, and N. None
+    for a name with no round: only a `retire:` signal retires it."""
+    m = SERIES_RE.fullmatch(name)
+    return (m[1], int(m[2])) if m else None
+
+
+def retired(log: EventLog) -> dict[str, Event]:
+    """name → its `pick_retired` event."""
+    return {ev.detail["name"]: ev for ev in log.query(kinds=["pick_retired"]) if isinstance(ev.detail.get("name"), str)}
+
+
+def known(cfg: Config, log: EventLog) -> dict[str, str]:
+    """name → manifest ref for every picker conductor has seen: choices files, `pick_open`
+    events, and finishes' `pick:` manifests that still load. The newest ref wins."""
+    out: dict[str, str] = {}
+    for ev in log.query(kinds=["finish"]):
+        if (ref := ev.detail.get("pick")) and ref not in out.values():
+            try:
+                out[load_manifest(cfg, ref).name] = ref
+            except ValueError:
+                pass
+    for ev in log.query(kinds=["pick_open"]):
+        if isinstance(ev.detail.get("name"), str) and isinstance(ev.detail.get("manifest"), str):
+            out[ev.detail["name"]] = ev.detail["manifest"]
+    for c in sorted(scan_choices(cfg.control).values(), key=lambda c: str(c.get("saved_at"))):
+        if isinstance(c.get("name"), str):
+            out[c["name"]] = c["manifest"]
+    return out
+
+
+def superseded(cfg: Config, log: EventLog) -> list[tuple[str, str, str]]:
+    """(name, ref, later name) for each live picker a later round of its series has
+    saved choices for: `art_r1` once `art_r2` (or r3) is saved."""
+    saved: dict[str, tuple[int, str]] = {}       # series → its highest saved round, and that name
+    for c in scan_choices(cfg.control).values():
+        if isinstance(c.get("name"), str) and (s := series(c["name"])) and s[1] > saved.get(s[0], (-1, ""))[0]:
+            saved[s[0]] = (s[1], c["name"])
+    if not saved:
+        return []
+    gone = retired(log)
+    out = []
+    for name, ref in sorted(known(cfg, log).items()):
+        s = series(name)
+        if name not in gone and s and s[0] in saved and s[1] < saved[s[0]][0]:
+            out.append((name, ref, saved[s[0]][1]))
+    return out
+
+
+def retire(cfg: Config, log: EventLog, name: str, ref: str) -> tuple[list[str], list[str]]:
+    """Delete a picker's manifest and images: (deleted, kept), repo-relative. Kept: a
+    file git tracks (deleting it would leave the main checkout dirty) and an image another
+    live picker still shows. A manifest already gone, or one its path now holds under
+    another name (a later round written over it), deletes nothing."""
+    try:
+        manifest = load_manifest(cfg, ref)
+    except ValueError:
+        return [], []
+    if manifest.name != name:
+        return [], []
+    repo = ref.partition("/")[0]
+    root = _absolute(cfg.repos[repo])
+    gone = retired(log)
+    in_use: set[Path] = set()
+    for other, other_ref in known(cfg, log).items():
+        if other != name and other not in gone and other_ref != ref:
+            try:
+                in_use |= {o.image for r in load_manifest(cfg, other_ref).rows for o in r.options}
+            except ValueError:
+                pass
+    files = list(dict.fromkeys([manifest.path, *(o.image for r in manifest.rows for o in r.options)]))
+    try:
+        tracked = {_absolute(root / p) for p in git.ls_files(root)}
+    except (OSError, RuntimeError):
+        tracked = set(files)                    # unknown: delete nothing
+    deleted, kept = [], []
+    for f in files:
+        rel = f.relative_to(root).as_posix()
+        if f in tracked or f in in_use:
+            kept.append(rel)
+            continue
+        try:
+            f.unlink(missing_ok=True)
+            deleted.append(rel)
+        except OSError:
+            kept.append(rel)
+    return deleted, kept
 
 
 def _after(saved_at, ts: str) -> bool:

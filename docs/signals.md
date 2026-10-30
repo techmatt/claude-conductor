@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, audit, checkpoint, session, run, pick, open, notify, stop, watch, push, autopilot, ack,
+outline, audit, checkpoint, session, run, pick, retire, open, notify, stop, watch, push, autopilot, ack,
 pause, resume.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
@@ -25,6 +25,7 @@ checkpoint: mid-session      # a session boundary (see inbox.md)
 session: start               # a checkpoint, then session.md, then the read mark moved (see inbox.md)
 run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
 pick: code/picks/art_alts_009.json   # serve that picker manifest and open it in the browser
+retire: art_alts_009         # delete that picker's manifest and images (picks.md, Retiring)
 open: reveal C:\Code\x\out.png   # a desktop action on a checked path (below)
 notify: ready when you are   # a desktop toast
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
@@ -122,6 +123,8 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   manifest path with a space, or ` #`, cannot be named) and its repo must be configured,
   or the file is rejected at parse time; a manifest that fails validation rejects it
   when applied, with the reason.
+- **retire** — `retire: <picker name>`: deletes that picker's manifest and images; see
+  `picks.md`, *Retiring*. An unknown or already retired name is refused.
 - **open** — `open: <verb> <path or URL>`: one named desktop action on a checked path
   (`folder`, `reveal`, `file`, `text`, `url`); see `open.md`.
 - **notify** — `notify: <text>`: a desktop toast; see `open.md`.

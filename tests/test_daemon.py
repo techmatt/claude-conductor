@@ -256,6 +256,27 @@ def test_malformed_request_fails_at_once(env):
     assert (env.control / "requests" / "broken.failed").is_dir()
 
 
+def test_a_request_folder_with_no_request_md_moves_to_stale_after_an_hour(env):
+    from conductor import inbox, state
+    reqs = env.control / "requests"
+    for name in ("old", "young"):
+        (reqs / name).mkdir(parents=True)
+        (reqs / name / "state.md").write_text("# state\n", encoding="utf-8")
+    (reqs / "stale" / "old").mkdir(parents=True)                       # an earlier one by that name
+    hour_ago = time.time() - 3601
+    for p in (reqs / "old" / "state.md", reqs / "old"):
+        os.utime(p, (hour_ago, hour_ago))
+    env.d.tick()
+    [ev] = env.events("request_stale")
+    assert ev.paths == ["requests/old", "requests/stale/old-2"] and ev.detail["files"] == ["state.md"]
+    assert (reqs / "stale" / "old-2" / "state.md").is_file() and not (reqs / "old").exists()
+    assert (reqs / "young" / "state.md").is_file()
+    env.d.tick()
+    assert len(env.events("request_stale")) == 1
+    text = inbox.render(env.d.cfg, env.d.log, state.scan(env.d.cfg, env.d.log))
+    assert "request folder `requests/old` had no `request.md` for an hour: moved to `requests/stale/old-2` (state.md)" in text
+
+
 def test_extra_file_fails_once_targets_present(env):
     req = env.control / "requests" / "extra"
     req.mkdir(parents=True)

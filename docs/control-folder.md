@@ -90,6 +90,9 @@ memory_critical_free_gb = 1.5
 memory_calm_seconds = 300     # a level falls only after the box stays clear this long (a rise is at once)
 # the night shift's keys: night-shift.md, Settings; run targets ([run.<name>]): run-targets.md
 
+[links]                       # name = URL; session.md lists them first, above everything else
+"design doc" = "https://claude.ai/artifact/…"
+
 [repos]                       # name = path; relative paths resolve from the control folder
 sandbox = "../conductor-sandbox"
 
@@ -158,13 +161,11 @@ repaired and pruned. Then:
   `repo_renamed` (old, new, path, moved, sha) after.
 - **Committed:** `conductor.toml` (the table and `repo =` references; `path` when it
   moved) and `state.md` (the same spellings), as `rename repo <old> -> <new>`, with the
-  guard re-snapshotted so the next start sees no drift. `state.md`'s own wording about
-  the repo stays the planner's, by request.
+  guard re-snapshotted so the next start sees no drift.
 
 Executors' own files (reports, logs, prompts) and item bodies are history and keep
-their text. Claude Code's transcripts are found by session id, so `open` and `resume:`
-are unaffected; its per-folder history for the checkout
-(`~/.claude/projects/C--Code-<old>`) is Claude Code's, renamed by hand if wanted.
+their text. Transcripts are found by session id, so `open` and `resume:` are
+unaffected; Claude Code's `~/.claude/projects/C--Code-<old>` is renamed by hand if wanted.
 
 ## Control-folder guard
 
@@ -196,12 +197,10 @@ tamper or reverted.
 - Untracked files are not guarded (the report itself is one).
 - Tamper is the first entry of the inbox's Red section.
 
-The guard is the backstop, not the first line: the preamble forbids touching the
-control folder, and in the sandbox executors refused even when the item body told
-them to edit `state.md`, told them to run a script that does, or committed through a
-hook that does (the executor bypassed the hook). Tamper by an executor itself is
-therefore exercised in the fake-executor tests; end to end it was proven with a
-change made from outside during a live executor's window.
+The guard is the backstop: the preamble forbids touching the control folder, and in
+the sandbox executors refused even when told to (edit `state.md`, run a script that
+does, commit through a hook that does). So executor tamper is exercised in the
+fake-executor tests; end to end, with a change from outside during a live run.
 
 ## Requests
 
@@ -243,7 +242,9 @@ order where their targets overlap: a later one naming a target of an earlier, wa
 one waits too. A bad request is logged `request_failed` (red)
 and renamed `requests/<stamp>.failed/`. A request that changes nothing is logged with
 `no_change` and removed. Requests apply in write order (`request.md`'s mtime, then
-folder name), never stamp order: a stamp is its writer's guess at the clock, and 57's
-hand-written `1035-reponame`, stamped 8 minutes ahead, would otherwise have applied after
-(and over) a later planner request. The planner names them `YYYYMMDD-HHMM-<tag>`. One whose message starts `closeout:` also moves the read mark
+folder name), never stamp order: a stamp is its writer's guess at the clock (57's hand-written one ran
+8 minutes ahead). The planner names them `YYYYMMDD-HHMM-<tag>`. A folder with no
+`request.md` whose files are all an hour old (`STALE_SECONDS`) moves to
+`requests/stale/<stamp>/` (`-2`, … if taken), logged `request_stale` with its files, so
+a stray copy the planner can't delete never waits forever. One whose message starts `closeout:` also moves the read mark
 (`inbox.md`). Applied or failed, a request's outcome is `receipts/requests/<stamp>.md` (`receipts.md`).

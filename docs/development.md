@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~55-65s; 263 tests; 2026-10-23)
+uv run pytest            # the fast lane, after every change (~60-77s; 289 tests; 2026-10-30)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~160s; 372 tests); run this before committing
+uv run pytest -m ""      # everything (~180s; 401 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -17,7 +17,11 @@ merge or prose conflict, a stage, a restart, or a real wait on a clock. The time
 real git and process spawns (~30ms each on Windows), not sleeps, so parallelism is the
 lever. Keep new tests deterministic under load: hold an executor open with `env.hold()`
 (a `FAKE wait-for` line) and let it go with `env.release()` rather than a fixed `FAKE
-sleep`, which races a loaded machine. Every `Env` copies a code repo and control folder
+sleep`, which races a loaded machine. `env.tick_until` and `env.hold()` give up only after
+`WAIT_SECONDS` (180s, `conftest.py`): a passing test never waits it out, and a project's
+executor holding the CPU no longer fails the full lane (58 and 59 committed red from it).
+Under 12 burning cores plus a second suite run (2026-10-30) the full lane took 25 min and
+398 of 401 passed: two still timed out and one push-batching test was widened. Every `Env` copies a code repo and control folder
 built once per worker. The fake runs the real message hook only when a message is
 waiting; `FAKE subagent <tool>` is a helper subagent's call, its hook input carrying the
 `agent_id` / `agent_type` Claude Code adds (`executors.md`, *Delivery*), and `FAKE

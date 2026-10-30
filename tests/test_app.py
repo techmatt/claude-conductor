@@ -33,7 +33,6 @@ def test_missing_events_db_stays_missing(tmp_path):
     assert p.trail("code/001_x").events == []
     assert p.log.read_mark() == 0 and p.log.max_id() == 0
     p.close()
-    assert not (control / "events.db").exists()
     assert not list(control.glob("events.db*"))
 
 

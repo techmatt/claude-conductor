@@ -156,7 +156,9 @@ WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional. To ask 
 a row's options go forward (keep or drop each), give the row `"kind": "many"` and
 optionally `"default": [keys kept to start with]`; Matt toggles each tile, and his choice
 comes back as the list of kept keys. Generated picker images go in a shared folder when
-the repo has one; commit build output for a picker only if the prompt says to.
+the repo has one; commit build output for a picker only if the prompt says to. Never
+delete a picker's manifest or images, an earlier round's included: conductor retires
+them once a later round (`<name>_r<N>`) is saved. Name a new round of a picker that way.
 """
 
 # When an item gets the picker section: its body could produce candidates.

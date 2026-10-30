@@ -41,8 +41,9 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    (the unreviewed-report warnings included);
 2. `session.md` in the control folder (runtime, git-ignored), overwritten: its header
    names the signal file it answers and the checkpoint (number, label, time), so a
-   planner that staged it too early sees it is the previous one and stages again. The
-   body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
+   planner that staged it too early sees it is the previous one and stages again. Under
+   the title, `conductor.toml`'s `[links]` (`## Links`, `- name: URL`) when it has any
+   (`control-folder.md`). The body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
    reports with conductor's own among them, picks, every unsettled event since the
    previous read mark, *Now*), then:
    - **From state.md**: the control folder's `state.md` lines a start raises, copied as
@@ -134,7 +135,8 @@ after the item finished), until a new `reviewed:`. A file that can't be read (he
 mid-save) is looked at again next scan, never taken as a change. Then **Picks**, also
 standing (see `picks.md`, *Pending*): each pending picker, then any picker saved since the
 checkpoint (any time without one) that no pending item names, as the saved line
-without the item:
+without the item, then each picker retired in the last day (`` `art_r1` retired 4:52pm:
+round `art_r2` saved; 2 files deleted ``):
 
 ```
 - art_alts_009 saved 4:52pm: 6 changed, 2 notes; `picks/art_alts_009.choices.json` (code/012_art_alts)

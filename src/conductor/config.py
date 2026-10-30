@@ -106,6 +106,7 @@ class Config:
     args: list[str] = field(default_factory=list)
     targets: dict[str, RunTarget] = field(default_factory=dict)
     open_roots: list[Path] = field(default_factory=list)   # more folders `open:` may act in
+    links: dict[str, str] = field(default_factory=dict)    # `[links]` name = URL, first in session.md
 
     # Layout ---------------------------------------------------------------
     def path(self, *parts: str) -> Path:
@@ -268,6 +269,10 @@ def load(control: Path) -> Config:
     if not isinstance(open_roots, list) or not all(isinstance(x, str) and x for x in open_roots):
         raise ConfigError(f"{CONFIG_NAME}: `open_roots` must be a list of folder paths")
 
+    links = data.get("links", {})
+    if not isinstance(links, dict) or not all(isinstance(v, str) and v.strip() for v in links.values()):
+        raise ConfigError(f"{CONFIG_NAME}: `[links]` must be name = URL strings")
+
     defaults = data.get("defaults", {})
     executor = data.get("executor", {})
     command = executor.get("command", ["claude"])
@@ -293,4 +298,5 @@ def load(control: Path) -> Config:
         args=[str(x) for x in executor.get("args", [])],
         targets=_targets(control, repos, data.get("run")),
         open_roots=[_resolve(control, x) for x in open_roots],
+        links={str(k): v.strip() for k, v in links.items()},
     )

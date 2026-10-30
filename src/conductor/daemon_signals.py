@@ -12,7 +12,7 @@ from pathlib import Path
 
 from typing import TYPE_CHECKING
 
-from . import audits, desktop, executor, items, nightshift, procs, state, talk
+from . import audits, desktop, executor, items, nightshift, picks, procs, state, talk
 from .daemon_push import CONTROL
 from . import review as review_mod
 from . import session as session_mod
@@ -197,6 +197,9 @@ class SignalsMixin:
                 repo, sep, path = value.partition("/")
                 if len(value.split()) != 1 or not sep or not path or repo not in self.cfg.repos:
                     raise ValueError(f"line {n}: pick: expects `<repo>/<manifest path>`, got {value!r}")
+            elif key == "retire":
+                if not picks.NAME_RE.fullmatch(value):
+                    raise ValueError(f"line {n}: retire: expects a picker's name, got {value!r}")
             elif key == "open":
                 if len(value.split(None, 1)) != 2 or value.split()[0].lower() not in desktop.VERBS:
                     raise ValueError(f"line {n}: open: expects `<{'|'.join(desktop.VERBS)}> <path or URL>`, "
@@ -271,6 +274,12 @@ class SignalsMixin:
             self._reorder(where, refs, rel)
         elif key == "pick":
             self.picker.open(value, self._by, rel)
+        elif key == "retire":
+            if value in picks.retired(self.log):
+                raise ValueError(f"retire: picker {value!r} is already retired")
+            if (ref := picks.known(self.cfg, self.log).get(value)) is None:
+                raise ValueError(f"retire: no picker named {value!r}")
+            self._retire_picker(value, ref, [rel], by=self._by or "unknown")
         elif key == "open":
             # A refusal is an `open_refused` event, not a rejected file: later lines still apply.
             verb, target = value.split(None, 1)
@@ -458,6 +467,17 @@ class SignalsMixin:
             raise ValueError(f"ack: {', '.join(f'#{i}' for i in stale)}: not a rejected signal still unacknowledged "
                              "since the latest checkpoint")
         self.log.append("ack", paths=[rel], what="invalid", events=sorted(ids or live), by=self._by or "unknown")
+
+    def retire_pickers(self) -> None:
+        """Retire every picker a later round of its series has saved choices for
+        (docs/picks.md, *Retiring*). Run after each save and at start."""
+        for name, ref, later in picks.superseded(self.cfg, self.log):
+            self._retire_picker(name, ref, [], by="series", later=later)
+
+    def _retire_picker(self, name: str, ref: str, paths: list[str], **extra) -> None:
+        deleted, kept = picks.retire(self.cfg, self.log, name, ref)
+        self.picker.entries.pop(name, None)         # its page and images 404 from now on
+        self.log.append("pick_retired", paths=paths, name=name, manifest=ref, deleted=deleted, kept=kept, **extra)
 
     def _session(self, label: str, rel: str) -> None:
         """A planner session's start in one signal: a checkpoint with the label, then
