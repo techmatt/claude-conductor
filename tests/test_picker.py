@@ -358,6 +358,41 @@ def test_save_refusals(served):
     assert not picks.choices_path(cfg.control, "art_alts").exists() and srv.drain() == []
 
 
+def test_a_many_row_keeps_any_number_of_options(bare):
+    # aicomplete 026: "carry this frame forward or not", per option, in one row.
+    cfg, log = bare
+    data = manifest_data()
+    data["rows"][0] |= {"kind": "many", "default": ["1"]}
+    write_manifest(cfg.repos["code"], data)
+    m = picks.load_manifest(cfg, REF)
+    assert m.rows[0].many and m.rows[0].default == ("1",) and not m.rows[1].many
+    srv = picker.Server(cfg, log, opener=lambda url: True)
+    try:
+        srv.open(REF, by="test")
+        page = json.loads(request(srv, "GET", f"/{srv.token}/art_alts/manifest.json")[2])
+        assert page["rows"][0]["many"] and page["rows"][0]["default"] == ["1"] and "many" not in page["rows"][1]
+        logo = {"id": "logo", "key": "current", "note": ""}
+        status, _, body = post_save(srv, [{"id": "hero", "keys": ["1", "current"], "note": ""}, logo])
+        assert status == 200 and json.loads(body)["changed"] == 1
+        rows = json.loads(picks.choices_path(cfg.control, "art_alts").read_text(encoding="utf-8"))["rows"]
+        assert rows[0] == {"id": "hero", "keys": ["current", "1"], "changed": True, "note": ""}      # option order
+        assert post_save(srv, [{"id": "hero", "keys": ["1"], "note": ""}, logo])[0] == 200       # the default: unchanged
+        saved = json.loads(request(srv, "GET", f"/{srv.token}/art_alts/manifest.json")[2])["saved"]
+        assert saved["rows"][0] == {"id": "hero", "keys": ["1"], "changed": False, "note": ""}
+        for rows, reason in (([{"id": "hero", "key": "1"}, logo], "needs `keys`"),
+                             ([{"id": "hero", "keys": ["9"]}, logo], "['9'] are not among its options")):
+            status, _, body = post_save(srv, rows)
+            assert status == 400 and reason in json.loads(body)["error"], reason
+    finally:
+        srv.close()
+    for bad, reason in (({"kind": "some"}, "must be \"one\""), ({"kind": "many", "default": ["x"]}, "own option keys")):
+        data = manifest_data()
+        data["rows"][0] |= bad
+        write_manifest(cfg.repos["code"], data)
+        with pytest.raises(ValueError, match=re.escape(reason)):
+            picks.load_manifest(cfg, REF)
+
+
 def test_saved_choices_apply_to_a_changed_manifest(served):
     srv, _, _, cfg, _ = served
     assert post_save(srv, [{"id": "hero", "key": "1", "note": "keep"}, {"id": "logo", "key": "2", "note": ""}])[0] == 200

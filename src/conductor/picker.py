@@ -4,7 +4,7 @@ pickers (`picks`), started on the first `pick:` signal.
     GET  /<token>/<name>/                 the page (web/picker.html)
     GET  /<token>/<name>/manifest.json    the manifest as the page reads it, with `saved`
     GET  /<token>/<name>/img/<r>/<o>      the image of row r, option o (indexes)
-    POST /<token>/<name>/save             {"rows": [{"id", "key", "note"}]} → choices file
+    POST /<token>/<name>/save             {"rows": [{"id", "key" | "keys", "note"}]} → choices file
 
 Everything else is a 404: another token, name or index, an extra path part, a method
 other than these, a `Host` that is not this server. No part of a URL is ever joined to
@@ -133,6 +133,7 @@ class Server:
         return {
             "name": manifest.name, "title": manifest.title, "intro": manifest.intro, "ref": manifest.ref,
             "rows": [{"id": row.id, "label": row.label, "note": row.note,
+                      **({"many": True, "default": list(row.default)} if row.many else {}),
                       "options": [{"key": o.key, "label": o.label, "src": f"img/{r}/{i}"}
                                   for i, o in enumerate(row.options)]}
                      for r, row in enumerate(manifest.rows)],

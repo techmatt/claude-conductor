@@ -1,4 +1,6 @@
+import os
 import subprocess
+import time
 from datetime import timedelta
 
 import pytest
@@ -145,7 +147,7 @@ def test_request_missing_target_fails_after_wait(env, monkeypatch):
     assert req.is_dir() and not env.events("request_failed")
     env.tick_until(lambda: env.events("request_failed"))
     err = env.events("request_failed")[0].detail["error"]
-    assert "['state.md']" in err and "after waiting" in err
+    assert err.startswith("targets missing: state.md (waited ") and "nothing was applied" in err
     assert (env.control / "requests" / "late.failed").is_dir()
 
 
@@ -168,7 +170,7 @@ def test_an_unreadable_target_or_half_written_request_waits_without_a_receipt(en
     monkeypatch.setattr(request, "FRESH_SECONDS", 2.0)
     req = env.control / "requests" / "20261015-1410"
     req.mkdir(parents=True)
-    (req / "state.md").write_text("# state\n", encoding="utf-8")
+    (req / "state.md").write_text("# state\n\nheld\n", encoding="utf-8")     # not HEAD's: no wait for a changed copy
     (req / "request.md").write_text("---\ntargets: [state.md", encoding="utf-8")     # still being written
     env.d.tick()
     assert req.is_dir() and not env.events("request_failed")
@@ -204,6 +206,45 @@ def test_waiting_request_is_not_overtaken(env):
     assert not early.exists() and not late.exists()
     assert [e.detail["request"] for e in env.events("request")] == [early.name, late.name]
     assert (env.control / "state.md").read_text(encoding="utf-8") == "# state\n\nnewer\n"
+
+
+def test_requests_apply_in_write_order_not_stamp_order(env):
+    # A stamp ahead of the clock (aicomplete's 1035-reponame, written 10:27) must not jump a
+    # request written after it: request.md's mtime orders them.
+    ahead, now_ = env.control / "requests" / "20261028-1035-ahead", env.control / "requests" / "20261028-1031-later"
+    for d, text, age in ((ahead, "# state\n\nfirst\n", 20), (now_, "# state\n\nsecond\n", 10)):
+        d.mkdir(parents=True)
+        (d / "state.md").write_text(text, encoding="utf-8")
+        (d / "request.md").write_text("---\ntargets: [state.md]\n---\nx\n", encoding="utf-8")
+        old = time.time() - age
+        for p in (d / "state.md", d / "request.md"):
+            os.utime(p, (old, old))
+    env.d.tick()
+    assert [e.detail["request"] for e in env.events("request")] == [ahead.name, now_.name]
+    assert (env.control / "state.md").read_text(encoding="utf-8") == "# state\n\nsecond\n"
+
+
+def test_a_request_identical_to_head_waits_for_a_changed_copy(env, monkeypatch):
+    # The bridge can land a target's content after its call returned: a copy matching HEAD is
+    # given SAME_WAIT_SECONDS to change before it is applied as identical.
+    from conductor import request
+    monkeypatch.setattr(request, "SAME_WAIT_SECONDS", 30.0)
+    req = env.control / "requests" / "20261030-0811-p026"
+    req.mkdir(parents=True)
+    head = (env.control / "state.md").read_bytes()
+    (req / "state.md").write_bytes(head)
+    (req / "request.md").write_text("---\ntargets: [state.md]\n---\np026\n", encoding="utf-8")
+    old = time.time() - 5
+    os.utime(req / "request.md", (old, old))
+    env.d.tick()
+    assert req.is_dir() and not env.events("request")
+    receipt = (env.control / "receipts" / "requests" / f"{req.name}.md").read_text(encoding="utf-8")
+    assert "outcome: \"pending\"" in receipt and "identical to HEAD so far (state.md)" in receipt
+    (req / "state.md").write_text("# state\n\nlanded\n", encoding="utf-8")
+    env.d.tick()
+    [ev] = env.events("request")
+    assert not ev.detail["no_change"] and "identical" not in ev.detail
+    assert (env.control / "state.md").read_text(encoding="utf-8") == "# state\n\nlanded\n"
 
 
 def test_malformed_request_fails_at_once(env):

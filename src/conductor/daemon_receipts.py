@@ -49,8 +49,11 @@ def _settles(path: str) -> bool:
 
 def tell_result(ev: Event) -> str:
     """Where a tell went: never a bare `applied` (`delivered #N` or `not delivered` follows)."""
-    if q := ev.detail.get("answers"):
+    if q := ev.detail.get("answers"):         # before 58 a tell could answer a question
         return f"delivered as the answer to {q}"
+    if q := ev.detail.get("waiting_on"):
+        return (f"message #{ev.id} to {ev.item}: it waits on question {q}, whose call hands back for "
+                f"the message; {q} stays open (only an answer file answers it)")
     return f"message #{ev.id} to {ev.item}: delivered after its next tool call"
 
 
@@ -91,6 +94,8 @@ class ReceiptsMixin:
                 request = next((e for e in got if e.kind == "request"), None)
                 tells = [e for e in got if e.kind == "tell"]
                 result = (f"committed {commit.detail.get('sha', '')[:8]}" if commit else
+                          "nothing to commit: every target is identical to HEAD (was the edited copy sent?)"
+                          if request and request.detail.get("identical") else
                           "applied; nothing changed" if request else
                           "; ".join(map(tell_result, tells)) if tells else "applied")
                 self._write_receipt(rel, got, result=result)
@@ -105,12 +110,14 @@ class ReceiptsMixin:
         match ev.kind:
             case "enqueue":
                 shared = d.get("shares_number")
-                self._write_receipt(rel, [ev], result=f"queued as {ev.item}" + (
+                starts = f"; {d['starts']}" if d.get("starts") else ""
+                self._write_receipt(rel, [ev], result=f"queued as {ev.item}{starts}" + (
                     f"; its number is also {', '.join(shared)}'s: name it in full, never by number"
                     if shared else ""), warning=d.get("warning"))
             case "edited":
                 how = "the launch it raced was undone; " if d.get("launching") else ""
                 how += "its stage is redone" if d.get("staged") else "it runs the new text"
+                how += f"; now {d['starts']}" if d.get("starts") else ""     # only when the start moved
                 self._write_receipt(rel, [ev], result=f"rewritten: {how}", warning=d.get("warning"))
             case "invalid" if ev.item and rel.startswith("queue/"):
                 self._write_receipt(rel, [ev], reason=self._reason(ev))

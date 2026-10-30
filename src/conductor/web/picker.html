@@ -157,14 +157,20 @@
     try { window.localStorage.setItem(SIZE_KEY, String(px)); } catch (e) { /* storage blocked */ }
   });
 
+  // A many row ("kind": "many") keeps any number of its options: `kept[i]` per option.
+  function keptKeys(r) {
+    return r.options.filter(function (o, i) { return r.kept[i]; }).map(function (o) { return o.key; });
+  }
   function payload() {
     return rows.map(function (r) {
-      return { id: r.id, key: r.options[r.pick].key, note: r.text };
+      return r.many ? { id: r.id, keys: keptKeys(r), note: r.text }
+                    : { id: r.id, key: r.options[r.pick].key, note: r.text };
     });
   }
   function serialized() { return JSON.stringify(payload()); }
   function dirty() { return rows.length > 0 && serialized() !== savedState; }
-  function isChanged(r) { return r.pick !== 0; }
+  function isChanged(r) { return r.many ? keptKeys(r).join(" ") !== r.dflt.join(" ") : r.pick !== 0; }
+  function isSel(r, i) { return r.many ? r.kept[i] : r.pick === i; }
 
   function setStatus(text, kind) {
     var s = $("status");
@@ -192,8 +198,10 @@
   }
 
   function select(r, index) {
-    r.pick = index;
-    r.el.tiles.forEach(function (t, i) { t.classList.toggle("sel", i === index); });
+    if (r.many) r.kept[index] = !r.kept[index];     // a many row toggles keep / drop
+    else r.pick = index;
+    r.el.tiles.forEach(function (t, i) { t.classList.toggle("sel", isSel(r, i)); });
+    if (r.many) r.el.count.textContent = keptKeys(r).length + " of " + r.options.length + " kept";
     if ($("status").textContent.indexOf("Saved") === 0) setStatus("", "");
     refresh();
   }
@@ -204,15 +212,15 @@
     var img = $("ov-img");
     img.src = o.src;
     img.alt = o.label || o.key;
-    img.classList.toggle("sel", view.index === r.pick);
+    img.classList.toggle("sel", isSel(r, view.index));
     var cap = $("ov-cap");
     cap.textContent = "";
     cap.appendChild(el("span", null, r.label + " — "));
     cap.appendChild(el("b", null, o.key));
     if (o.label) cap.appendChild(el("span", null, " · " + o.label));
     cap.appendChild(el("span", null, "  (" + (view.index + 1) + "/" + r.options.length + ")" +
-      (view.index === r.pick ? " ✓ picked" : "")));
-    cap.appendChild(el("span", "hint", "←/→ step · Enter picks · Esc closes"));
+      (r.many ? (isSel(r, view.index) ? " ✓ kept" : " dropped") : view.index === r.pick ? " ✓ picked" : "")));
+    cap.appendChild(el("span", "hint", "←/→ step · Enter " + (r.many ? "keeps / drops" : "picks") + " · Esc closes"));
   }
   function openView(r, index) {
     view = { row: r, index: index };
@@ -250,7 +258,11 @@
       }
       if (e.key === "ArrowLeft") { step(-1); e.preventDefault(); }
       else if (e.key === "ArrowRight") { step(1); e.preventDefault(); }
-      else if (e.key === "Enter") { select(view.row, view.index); closeView(); e.preventDefault(); }
+      else if (e.key === "Enter") {
+        select(view.row, view.index);
+        if (view.row.many) showView(); else closeView();     // keep / drop several without leaving
+        e.preventDefault();
+      }
       else if (e.key === "Escape") { closeView(); e.preventDefault(); }
       return;
     }
@@ -264,7 +276,10 @@
     if (r.label && r.label !== r.id) head.appendChild(el("span", "row-id", r.id));
     var badge = el("span", "badge", "changed");
     head.appendChild(badge);
+    var count = el("span", "row-id", r.many ? keptKeys(r).length + " of " + r.options.length + " kept" : "");
+    if (r.many) head.appendChild(count);
     row.appendChild(head);
+    if (r.many) row.appendChild(el("p", "row-note", "Keep any number: click a tile to keep or drop it."));
     if (r.note) row.appendChild(el("p", "row-note", r.note));
 
     var line = el("div", "tiles");
@@ -279,7 +294,7 @@
       img.src = o.src;
       t.appendChild(img);
       var cap = el("figcaption");
-      cap.appendChild(el("span", "check", "✓ "));
+      cap.appendChild(el("span", "check", r.many ? "✓ keep " : "✓ "));
       cap.appendChild(el("span", "key", o.key));
       if (o.label) cap.appendChild(el("span", null, " · " + o.label));
       t.appendChild(cap);
@@ -288,15 +303,15 @@
       mag.title = "Full size";
       mag.addEventListener("click", function (e) { e.stopPropagation(); openView(r, i); });
       t.appendChild(mag);
-      t.addEventListener("click", function () {
-        if (r.pick === i) openView(r, i); else select(r, i);
-      });
+      // A one row: click picks, clicking the pick opens it. A many row: click toggles (⌕ opens).
+      function act() { if (!r.many && r.pick === i) openView(r, i); else select(r, i); }
+      t.addEventListener("click", act);
       t.addEventListener("keydown", function (e) {
         if (e.target !== t || view) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           e.stopPropagation();  // else the document handler sees the new overlay and picks
-          if (r.pick === i) openView(r, i); else select(r, i);
+          act();
         }
       });
       line.appendChild(t);
@@ -314,8 +329,8 @@
     });
     row.appendChild(ta);
 
-    r.el = { row: row, badge: badge, tiles: tiles };
-    tiles[r.pick].classList.add("sel");
+    r.el = { row: row, badge: badge, tiles: tiles, count: count };
+    tiles.forEach(function (t, i) { if (isSel(r, i)) t.classList.add("sel"); });
     return row;
   }
 
@@ -334,22 +349,26 @@
     rows = (m.rows || []).filter(function (r) {
       return r && Array.isArray(r.options) && r.options.length > 0;
     }).map(function (r) {
-      var s = saved[r.id], pick = 0, text = "";
-      if (s) {
+      var s = saved[r.id], pick = 0, text = "", many = !!r.many;
+      var dflt = Array.isArray(r["default"]) ? r["default"] : [];
+      var keep = s && Array.isArray(s.keys) ? s.keys : dflt;
+      if (s && !many) {
         for (var i = 0; i < r.options.length; i++) {
           if (r.options[i].key === s.key) { pick = i; break; }
         }
-        text = typeof s.note === "string" ? s.note : "";
       }
-      return { id: r.id, label: r.label || "", note: r.note || "", options: r.options, pick: pick, text: text };
+      if (s) text = typeof s.note === "string" ? s.note : "";
+      return { id: r.id, label: r.label || "", note: r.note || "", options: r.options, pick: pick, text: text,
+               many: many, dflt: dflt,
+               kept: r.options.map(function (o) { return keep.indexOf(o.key) >= 0; }) };
     });
     // Baseline for the dirty flag, in manifest row order. A saved choice whose
     // key is gone fell back to the first option above, so that row starts dirty;
-    // a row the saved file lacks counts as its first option with no note.
+    // a row the saved file lacks counts as its first option (a many row: its default) with no note.
     savedState = JSON.stringify(rows.map(function (r) {
-      var s = saved[r.id];
-      return s ? { id: r.id, key: s.key, note: typeof s.note === "string" ? s.note : "" }
-               : { id: r.id, key: r.options[0].key, note: "" };
+      var s = saved[r.id], note = s && typeof s.note === "string" ? s.note : "";
+      if (r.many) return { id: r.id, keys: s && Array.isArray(s.keys) ? s.keys : r.dflt, note: note };
+      return s ? { id: r.id, key: s.key, note: note } : { id: r.id, key: r.options[0].key, note: "" };
     }));
     if (!rows.length) main.appendChild(el("p", "empty", "This manifest has no rows."));
     rows.forEach(function (r) { main.appendChild(buildRow(r)); });

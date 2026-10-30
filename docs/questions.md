@@ -4,6 +4,7 @@ An executor reaches Matt with the `ask` tool (`mcp__conductor__ask`):
 
 ```
 ask(question, options?, default?, block?)     # block defaults to false
+ask(resume=<id>)                              # wait on a question a message cut short
 ```
 
 A call writes `questions/<repo>__<NNN_name>__<n>.md` (`n` counts from 1 per item) and
@@ -38,13 +39,18 @@ Options:
   however long. That time does not count toward `max_hours`.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it
   closed by the daemon (`question_closed`).
-- **A message answers it.** A message hook can't reach an executor waiting in `ask`, so a
-  `tell:` (planner, app, cli, a watch; `pause:` / `resume:` text too) to an item with an
-  open question and no answer file yet is written as that question's answer instead:
-  `Message from <the planner | Matt | conductor's watch>: <text>`, with `by:`. The `tell`
-  event carries `answers: <id>`, its receipt says `delivered as the answer to <id>`, and
-  the executor reads it as both (its preamble says so). A question within 30s of its
-  default (`ANSWER_MARGIN_SECONDS`) is left to it: the tell waits in the mailbox.
+- **A message never answers it** (58; before, a tell became the answer, and aicomplete's
+  #619 overrode 016's own defaults that way). Only an answer file answers a question. A
+  message hook can't reach an executor waiting in `ask`, so the ask server watches the
+  item's mailbox: a `tell:` (planner, app, cli, a watch; `pause:` / `resume:` text too)
+  arriving while the call waits hands it back early, saying the question is still open
+  and to call `ask` with `resume: "<id>"` once the message is dealt with. The hook after
+  the call delivers the message as usual. The `tell` event carries `waiting_on: <id>`,
+  and its receipt says the question stays open. While the call is out, the server keeps
+  `<id>.away`: the item is working, not blocked (stall checks apply as usual), and
+  its `away_seconds` (in the result) don't count as blocked time. A default whose
+  deadline passed meanwhile is taken at `resume`. Each mailbox file cuts a wait short
+  once, so a helper's `ask` (the hook never delivers to one) can't spin.
 - **The watch answers.** A watch's `answer:` action (`night-shift.md`) writes an answer
   only from one Matt or the planner already gave, naming its source; `watch_answer` logs it.
 

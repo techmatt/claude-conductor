@@ -32,7 +32,7 @@ Steps 4 and 5 go out in the same turn (the re-stage covers a digest that lags). 
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. LF line endings always.
 - Each upload goes once to a fresh workspace path, never edited after.
 - Before writing a conductor prompt or saying one started, read `prompts\ledger.md`'s tail: `start` with no `done` is running: never edit its file; give Matt a message to paste into its session. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
-- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (a signal: `receipts\signals\planner-<stamp>.md`, never `.signal.md`; a request: `receipts\requests\<stamp>.md`): `accepted` with `result` (a queue item's maybe with `warning`: a `depends_on` that will hold; fix it now), `pending` (a request held by an earlier one: which), or `refused` with `reason`. Missing: not handled yet (every kind lands within about a second of the write, a request's of `request.md`; re-stage once). `written_ms` older than a rewrite: the old version's.
+- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (a signal: `receipts\signals\planner-<stamp>.md`, never `.signal.md`; a request: `receipts\requests\<stamp>.md`): `accepted` with `result` (a queue item's names when it starts, maybe with `warning`: a `depends_on` that will hold; fix it now), `pending` (a request held by an earlier one, missing targets, or a copy identical to HEAD: which), or `refused` with `reason`. Missing: not handled yet (every kind lands within about a second of the write, a request's of `request.md`; re-stage once). `written_ms` older than a rewrite: the old version's.
 - **Never list a control folder recursively**: every file is named below.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (in a code repo), or a command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.
 
@@ -66,7 +66,7 @@ message: "state: v0.2"
 ---
 ```
 
-Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target and every target present; quote a `message:` holding a colon. Refusals (`.failed`), the tamper guard: `docs/control-folder.md`; a startup `not git-ignored` warning needs a `.gitignore` request.
+Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target; quote a `message:` holding a colon. Conductor waits for targets that land late; `nothing to commit: … identical to HEAD` means the copy sent was unedited: resend it. Refusals (`.failed`), the tamper guard: `docs/control-folder.md`; a startup `not git-ignored` warning needs a `.gitignore` request.
 
 ## Every session
 
@@ -92,19 +92,20 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Every premise is a claim**, verified from source before acting on it, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes.
 - **Heavy work** (long Playwright sweeps, ultracode): one browser, one test worker. Tests or builds over ten minutes need the repo's `background` globs (by request).
-- **Small parked edits ride the next prompt to that repo.** Matt never edits config or docs by hand.
+- **Small parked edits ride the next serial item** to that repo, never one that could run `alongside`, a readonly one or a template; none coming: amend the earliest queued serial item. Matt never edits config or docs by hand.
+- **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why, first); its receipt's start confirms.
 - **Never mention git push, remotes, commit state or tests.**
 
 ## While items run
 
 - **Questions** land in `questions\`, raised as *Open questions first* says. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on the inbox's *Now*. A small item (under 150 words; no `ultracode`, `template`, `resume`, `audit`, `max_hours`, picker) posts one line only.
-- **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; to an item blocked on its own question, at once as its answer (receipt: `delivered as the answer to <id>`). Longer, or not started: **amend**.
+- **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; an item waiting on its own question gets one at once, the question left open (a tell never answers: **answer Q**). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box ("pause the runs"): **pause R**, never a tell asking the item to wait (it asks itself a question and sits idle); it shows on *Now* until **resume R**, across sessions.
 - **Night shift** (`docs/night-shift.md`): a readonly **watch** item (`W<n>_watch`, its own series: never a queue number; never in a planner session) while items run; it judges stalls and drift, may tell, answer (only with an answer you or Matt already gave, its source named), toast or draw, and recommends the rest; an empty queue draws its next `backlog\<repo>\` item (never two full-length ones without Matt between; a nightly budget). **Autopilot** (off / night / always) gates only draws; a watch's repairs (tell, answer) run at any setting. All on the inbox's *Night shift*.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it (**memory?**); raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) carries its log's end: say what broke.
-- **Picks.** A prompt producing candidates says "picker" (that brings the preamble's schema), under a new name (`docs/picks.md`). *picks saved <time>*: read the choices, never ask Matt.
+- **Picks.** A prompt producing candidates says "picker" (that brings the preamble's schema), under a new name (`docs/picks.md`), and where its images live: a `shared` folder (checked in `conductor.toml` before queuing), never committed build output. "Which go forward": a `kind: many` row (keep / drop each). *picks saved <time>*: read the choices, never ask Matt.
 
 ## Reading a report
 
@@ -135,7 +136,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content cleanup, post-audit, art round, park / resume project, rename repo) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, post-audit, art round, park / resume project, rename repo) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
 
 **Session and inbox**
 
@@ -147,7 +148,6 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **check questions** | Open asks with their items, blocking first, others with default and when it's taken. |
 | **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short: `012__1`); if the default was taken, says it will be `late`. |
 | **queue status** | Per repo: the running item (elapsed, progress, outline), the queue; then proposed. |
-| **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
 | **read the workflow** / **remind me the vocab** | Re-reads this file / prints these tables and `planner-vocab.md`'s. |
 
 **Queueing and maintenance** (when each is due: *Maintenance*)
@@ -157,12 +157,10 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **enqueue** / **propose** | Writes a prompt to `queue\<repo>\` (*Approval*); to `proposed\` only when Matt says to hold it. |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` (a held item, to the queue) / `cancel: <item>` (proposed or queued, never running). |
 | **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item or a queued X; a running X: signal `audit: <repo>/<NNN_name>` (conductor sends its audit text, never a hand-written `tell`) / lists unused notes per repo, reading one if asked. |
-| **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
 | **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency* allows; else why not. |
 | **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras); with none (it would hold its queue), says so. |
 | **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`. |
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
-| **test cleanup R** / **claude.md cleanup R** / **disk space cleanup R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_cleanup` (body: Matt's extras). |
 
 **Running items**
 
@@ -188,7 +186,6 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
 | **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report (X must have finished). |
-| **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing its red's hold. Only after its report is read with Matt. |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |
 

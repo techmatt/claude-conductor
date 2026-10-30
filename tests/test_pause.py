@@ -25,17 +25,24 @@ def report(env, name: str) -> str:
 
 
 @pytest.mark.slow
-def test_a_tell_to_an_item_blocked_on_its_question_answers_it(env):
-    env.queue("001_ask", ask_line(question="Pausing: answer resume", block=True) + "\nFAKE report done")
+def test_a_tell_to_an_item_blocked_on_its_question_is_a_message_not_the_answer(env):
+    # aicomplete #619: a tell sent to 016 while it waited on 016__1 became that answer.
+    env.queue("001_ask", ask_line(question="Which colour?", block=True) + "\nFAKE report done")
     env.tick_until(lambda: env.events("ask"))
-    env.signal("planner-1.signal", "by: planner\ntell: 001 Carry on now.")
-    env.tick_until(lambda: env.finished("code/001_ask"))
+    env.signal("planner-1.signal", "by: planner\ntell: 001 Factory troops are 3 strength.")
+    env.tick_until(lambda: env.events("delivered"))
     [tell] = env.events("tell")
-    assert tell.detail["answers"] == "code__001_ask__1" and not env.events("delivered")
-    assert 'result: "delivered as the answer to code__001_ask__1"' in receipt(env, "planner-1")
+    assert tell.detail["waiting_on"] == "code__001_ask__1" and "answers" not in tell.detail
+    [q] = questions.scan(env.control)
+    assert q.is_open and not env.events("answer")
+    env.tick_until(lambda: not q.away_path.exists())        # the fake waits on (`resume`)
+    questions.write_answer(q, "blue", by="planner")
+    env.tick_until(lambda: env.finished("code/001_ask"))
     [ans] = env.events("answer")
-    assert ans.detail["by"] == "planner"
-    assert "Answer to code__001_ask__1:\nMessage from the planner: Carry on now." in report(env, "001_ask")
+    assert ans.detail["text"] == "blue" and ans.detail["by"] == "planner"
+    text = report(env, "001_ask")
+    assert "code__001_ask__1 is still open: nobody has answered it" in text
+    assert "Answer to code__001_ask__1:\nblue" in text and "Message from" not in text
 
 
 @pytest.mark.slow

@@ -5,7 +5,8 @@
 
 Three tools. `ask(question, options?, default?, block?)` writes the question file, then
 holds the tool call open until the question resolves: an answer file appears, or (with
-a default and `block` false) the default deadline passes. `progress(note, eta?, done?,
+a default and `block` false) the default deadline passes; a message for the item hands
+the call back early with the question still open, and `ask(resume=<id>)` waits on. `progress(note, eta?, done?,
 remaining?, outline?)` appends a progress line (`talk.record_progress`) and returns at once; it
 hands out no waiting message (the PostToolUse hook after it does, on the lead's call only).
 `wait(minutes?)` is how a paused item idles: it returns once a message waits for the item
@@ -47,7 +48,9 @@ TOOL = {
         "(minutes, set by conductor) the call returns the default and you carry on with it. "
         "Set `block` true only when every default would be worse than waiting; a blocking "
         "call waits until answered, however long, and that time does not count toward your "
-        "time limit. With no default the call blocks."
+        "time limit. With no default the call blocks. A message from Matt arriving while you "
+        "wait returns the call early with the question still open: act on the message, then "
+        "call `ask` with `resume` set to the question's id to wait for its answer again."
     ),
     "inputSchema": {
         "type": "object",
@@ -56,8 +59,9 @@ TOOL = {
             "options": {"type": "array", "items": {"type": "string"}, "description": "Candidate answers, if any."},
             "default": {"type": "string", "description": "What you will do if nobody answers in time."},
             "block": {"type": "boolean", "description": "Wait until answered instead of falling back to the default.", "default": False},
+            "resume": {"type": "string", "description": ("The id of your own question a message cut short: wait for "
+                                                          "its answer again (its default and deadline stand; give no other field).")},
         },
-        "required": ["question"],
     },
 }
 
@@ -140,6 +144,9 @@ class Server:
         self.out = out
         self._lock = threading.Lock()
         self._cancel: dict = {}
+        self._announced: set[str] = set()       # mail files an `ask` already returned early for
+        self._away: dict[str, float] = {}       # question id → seconds spent off the call, on a message
+        self._away_since: dict[str, float] = {}
 
     def send(self, obj: dict) -> None:
         with self._lock:
@@ -224,22 +231,38 @@ class Server:
         # runs right after this call can (`talk.subagent_call`), so it delivers.
         return "Logged; carry on.", False
 
+    def _resume(self, ref) -> tuple[questions.Question | None, str | None]:
+        if not isinstance(ref, str) or not ref.strip():
+            return None, "`resume` must be the id of your open question"
+        q = questions.load(questions.qdir(self.control) / f"{ref.strip()}.md")
+        if q is None or q.item != self.item:
+            return None, f"no question {ref.strip()!r} of this item to resume"
+        if (since := self._away_since.pop(q.id, None)) is not None:
+            self._away[q.id] = self._away.get(q.id, 0.0) + time.time() - since
+        questions.set_away(q, False)
+        return q, None
+
     def ask(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
-        question = args.get("question")
-        if not isinstance(question, str) or not question.strip():
-            return "`question` must be a non-empty string", True
-        options = args.get("options") or []
-        if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
-            return "`options` must be a list of strings", True
-        default = args.get("default")
-        if default is not None and not isinstance(default, str):
-            return "`default` must be a string", True
-        default = default.strip() if default and default.strip() else None
-        block = args.get("block", False)
-        if not isinstance(block, bool):
-            return "`block` must be true or false", True
-        q = questions.create(self.control, self.item, question, options, default, block,
-                             self.default_minutes, self.session_id)
+        if args.get("resume") is not None:
+            q, why = self._resume(args["resume"])
+            if why:
+                return why, True
+        else:
+            question = args.get("question")
+            if not isinstance(question, str) or not question.strip():
+                return "`question` must be a non-empty string", True
+            options = args.get("options") or []
+            if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
+                return "`options` must be a list of strings", True
+            default = args.get("default")
+            if default is not None and not isinstance(default, str):
+                return "`default` must be a string", True
+            default = default.strip() if default and default.strip() else None
+            block = args.get("block", False)
+            if not isinstance(block, bool):
+                return "`block` must be true or false", True
+            q = questions.create(self.control, self.item, question, options, default, block,
+                                 self.default_minutes, self.session_id)
         deadline = datetime.fromisoformat(q.deadline).timestamp() if q.deadline else None
         started = last_progress = time.time()
         while True:
@@ -248,20 +271,36 @@ class Server:
                 self.send({"jsonrpc": "2.0", "method": "notifications/progress", "params": {
                     "progressToken": token, "progress": round(last_progress - started),
                     "message": f"waiting for an answer to {q.id}"}})
+            away = {"away_seconds": round(self._away[q.id])} if self._away.get(q.id) else {}
             if cancel.is_set():
-                questions.resolve(q, "cancelled", None, "server", reason="the tool call was cancelled")
+                questions.resolve(q, "cancelled", None, "server", reason="the tool call was cancelled", **away)
                 return None, False
             q = questions.load(q.path) or q
             if q.result:
                 return self._text(q), q.result.get("outcome") not in ("answered", "default")
             answer = questions.read_answer(q)
             if answer is not None:
-                questions.resolve(q, "answered", answer, "server")
+                questions.resolve(q, "answered", answer, "server", **away)
                 continue
             if deadline is not None and time.time() >= deadline:
-                questions.resolve(q, "default", q.default, "server")
+                questions.resolve(q, "default", q.default, "server", **away)
                 continue
+            # A message is never an answer: the call hands back so the hook after it delivers
+            # the message, and the question stays open for `resume`. Each mail file cuts a wait
+            # short once, so a helper's ask (the hook never delivers to one) can't spin.
+            if fresh := [p.name for p in talk.pending(self.control, self.item) if p.name not in self._announced]:
+                self._announced.update(fresh)
+                self._away_since[q.id] = time.time()
+                questions.set_away(q, True)
+                return self._cut_short(q), False
             time.sleep(POLL_SECONDS)
+
+    def _cut_short(self, q: questions.Question) -> str:
+        when = (f"its default still applies at {datetime.fromisoformat(q.deadline).strftime('%I:%M%p').lstrip('0').lower()}"
+                if q.deadline else "it blocks until answered")
+        return (f"{q.id} is still open: nobody has answered it. A message from conductor is waiting and "
+                f"reaches you as this call returns. Act on it (it is not the answer), then call `ask` with "
+                f"`resume: \"{q.id}\"` to wait for the answer again; {when}.")
 
     def wait(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
         """Return once a message waits in the item's mailbox (the PostToolUse hook right

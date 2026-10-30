@@ -46,6 +46,17 @@ class Row:
     label: str
     note: str
     options: tuple[Option, ...]
+    many: bool = False                  # `"kind": "many"`: each option kept or dropped, any number kept
+    default: tuple[str, ...] = ()       # a many row's keys kept to start with (`default`); none by default
+
+    @property
+    def keys(self) -> list[str]:
+        return [o.key for o in self.options]
+
+    def kept(self, keys) -> list[str]:
+        """A many row's keys in option order, dropping any it doesn't offer."""
+        got = set(keys)
+        return [k for k in self.keys if k in got]
 
 
 @dataclass(frozen=True)
@@ -184,7 +195,15 @@ def _manifest(data, ref: str, path: Path, root: Path) -> Manifest:
                 raise ValueError(f"{at}key: {key!r} is used by an earlier option in this row")
             keys.add(key)
             options.append(Option(key, _text(opt, "label", at, False), _image(opt, at, path, root)))
-        rows.append(Row(row_id, label, note, tuple(options)))
+        kind = raw.get("kind", "one")
+        if kind not in ("one", "many"):
+            raise ValueError(f"{where}kind: {kind!r} must be \"one\" (pick one option) or \"many\" (keep any)")
+        default = raw.get("default", [])
+        if kind == "many" and (not isinstance(default, list)
+                               or not all(isinstance(k, str) and k in keys for k in default)):
+            raise ValueError(f"{where}default: a many row's default is a list of its own option keys")
+        rows.append(Row(row_id, label, note, tuple(options), kind == "many",
+                        tuple(k for k in (o.key for o in options) if kind == "many" and k in default)))
     return Manifest(ref, path, name, title, intro, tuple(rows))
 
 
@@ -261,25 +280,36 @@ def applied(manifest: Manifest, saved: dict | None) -> dict | None:
         old = by_id.get(row.id)
         if old is None:
             continue
-        keys = [o.key for o in row.options]
-        key = old.get("key") if old.get("key") in keys else keys[0]
         note = old.get("note") if isinstance(old.get("note"), str) else ""
+        if row.many:
+            kept = row.kept(k for k in old.get("keys", []) if isinstance(k, str)) \
+                if isinstance(old.get("keys"), list) else list(row.default)
+            rows.append({"id": row.id, "keys": kept, "changed": kept != list(row.default), "note": note})
+            continue
+        keys = row.keys
+        key = old.get("key") if old.get("key") in keys else keys[0]
         rows.append({"id": row.id, "key": key, "changed": key != keys[0], "note": note})
     return {**saved, "rows": rows}
 
 
 def check_body(manifest: Manifest, body) -> list[dict]:
-    """The page's save body `{"rows": [{"id", "key", "note"}]}` as choices rows, in
-    manifest order. Every row exactly once, every key one of its row's options; `changed`
-    is worked out here, never taken from the page."""
+    """The page's save body `{"rows": [{"id", "key" | "keys", "note"}]}` as choices rows, in
+    manifest order. Every row exactly once; a one row's `key` is one of its options, a many
+    row's `keys` a list of them (any number, kept in option order); `changed` is worked out
+    here, never taken from the page."""
     if not isinstance(body, dict) or not isinstance(body.get("rows"), list):
         raise ValueError('expected {"rows": [{"id", "key", "note"}, ...]}')
     got: dict[str, dict] = {}
     for i, r in enumerate(body["rows"]):
-        if not isinstance(r, dict) or not isinstance(r.get("id"), str) or not isinstance(r.get("key"), str):
-            raise ValueError(f"rows[{i}]: needs string `id` and `key`")
-        if manifest.row(r["id"]) is None:
+        if not isinstance(r, dict) or not isinstance(r.get("id"), str):
+            raise ValueError(f"rows[{i}]: needs a string `id`")
+        row = manifest.row(r["id"])
+        if row is None:
             raise ValueError(f"rows[{i}]: no row {r['id']!r} in the manifest")
+        if row.many and not (isinstance(r.get("keys"), list) and all(isinstance(k, str) for k in r["keys"])):
+            raise ValueError(f"rows[{i}]: row {r['id']!r} keeps any number: needs `keys`, a list of strings")
+        if not row.many and not isinstance(r.get("key"), str):
+            raise ValueError(f"rows[{i}]: needs string `id` and `key`")
         if r["id"] in got:
             raise ValueError(f"rows[{i}]: row {r['id']!r} given twice")
         note = r.get("note", "")
@@ -293,7 +323,13 @@ def check_body(manifest: Manifest, body) -> list[dict]:
         r = got.get(row.id)
         if r is None:
             raise ValueError(f"row {row.id!r} is missing")
-        keys = [o.key for o in row.options]
+        keys = row.keys
+        if row.many:
+            if bad := [k for k in r["keys"] if k not in keys]:
+                raise ValueError(f"row {row.id!r}: {bad} are not among its options {keys}")
+            kept = row.kept(r["keys"])
+            out.append({"id": row.id, "keys": kept, "changed": kept != list(row.default), "note": r["note"]})
+            continue
         if r["key"] not in keys:
             raise ValueError(f"row {row.id!r}: {r['key']!r} is not one of its options {keys}")
         out.append({"id": row.id, "key": r["key"], "changed": r["key"] != keys[0], "note": r["note"]})

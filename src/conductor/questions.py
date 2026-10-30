@@ -7,6 +7,8 @@ Three files per question, each with one writer:
 - `<id>.result.json`  whoever resolves it first: the ask server (answered, default,
                       cancelled) or the daemon (closed, when the item finishes first).
                       Created exclusively, so a question resolves exactly once.
+- `<id>.away`         the ask server, while a message has handed its call back early
+                      (the question still open, the executor working until `resume`).
 
 The daemon only observes these files and logs `ask`, `answer`, `default`, `late` and
 `question_closed`; the executor gets its answer even while the daemon is down.
@@ -47,6 +49,11 @@ class Question:
     @property
     def result_path(self) -> Path:
         return self.path.with_name(f"{self.id}.result.json")
+
+    @property
+    def away_path(self) -> Path:
+        """Present while a message has cut the `ask` call short: the executor is working, not waiting."""
+        return self.path.with_name(f"{self.id}.away")
 
     @property
     def is_open(self) -> bool:
@@ -193,6 +200,14 @@ def answer_by(q: Question) -> str | None:
     return str(by) if by else None
 
 
+def set_away(q: Question, away: bool) -> None:
+    """The ask server's mark that its call handed back for a message (`away_path`)."""
+    if away:
+        _write(q.away_path, stamp() + "\n")
+    else:
+        q.away_path.unlink(missing_ok=True)
+
+
 def resolve(q: Question, outcome: str, text: str | None, by: str, **extra) -> bool:
     """Record the resolution exactly once. False when something resolved it first."""
     tmp = q.path.with_name(f"{q.id}.result.{os.getpid()}.tmp")
@@ -202,6 +217,7 @@ def resolve(q: Question, outcome: str, text: str | None, by: str, **extra) -> bo
     try:
         os.link(tmp, q.result_path)        # atomic, and fails if the result exists
         q.result = data
+        q.away_path.unlink(missing_ok=True)
         return True
     except FileExistsError:
         return False

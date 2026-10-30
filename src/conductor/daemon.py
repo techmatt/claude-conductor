@@ -50,6 +50,7 @@ from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp,
 
 INBOX_REFRESH_SECONDS = 30
 TICK_FAILURES_BEFORE_EXIT = 3     # consecutive ticks failing on an OSError
+PENDING_AFTER_SECONDS = 2.0       # a request still waiting this long after request.md gets a pending receipt
 
 class DaemonError(RuntimeError):
     pass
@@ -133,6 +134,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.invalid_seen: dict[str, str] = {}
         self.report_stats: dict[str, tuple] = {}    # reviewed item → its files' (size, mtime) last hashed
         self.queued_hashes: dict[str, str | None] = {}  # queued item → its file's hash: a change is `edited`
+        self.starts: dict[str, str] = {}                # queued item → the start estimate its receipt last gave
         self._inbox_key: tuple | None = None
         self._inbox_at = 0.0
         self._lock_file = cfg.state_dir / "daemon.json"
@@ -499,13 +501,15 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     self._pending_receipt(rel, f"an earlier request still waiting on {sorted(ahead)}")
                     continue
                 try:
-                    req = request.ready(d)
+                    req = request.ready(d, self.cfg.control)
                 except request.RequestError as exc:
                     self.log.append("request_failed", paths=[rel], request=d.name, error=str(exc))
                     os.replace(d, d.with_name(d.name + request.FAILED_SUFFIX))
                     continue
-                if req is None:      # its files still arriving: no receipt yet (pending is a real wait)
+                if isinstance(req, request.Waiting):
                     waiting |= request.listed_targets(d)
+                    if req.waited >= PENDING_AFTER_SECONDS:     # a real wait, not files mid-landing
+                        self._pending_receipt(rel, req.why)
                     continue
                 self._guard_check(f"before request {d.name}")
                 try:
@@ -517,7 +521,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                         guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
                     continue
                 self.log.append("request", paths=req.targets, request=d.name, message=req.message,
-                                targets=req.targets, no_change=sha is None)
+                                targets=req.targets, no_change=sha is None,
+                                **({"identical": True} if req.identical else {}))
                 if sha:
                     self.log.append("commit", paths=req.targets, scope="control", sha=sha,
                                     subject=req.message.splitlines()[0])
@@ -574,15 +579,19 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     if shared := [i for i in items.ref_matches(str(item.num), repo, view.known())
                                   if i != item.id and item.num]:
                         meta["shares_number"] = shared              # its receipt says: name it in full
+                    self.starts[item.id] = starts = state.start_estimate(self.cfg, view, item)
                     self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    **meta, **dep_warning(item))
+                                    **meta, starts=starts, **dep_warning(item))
                 # A queued item may be rewritten until it launches: the launch (and a
                 # stage, which a change discards below) reads the file as it is then.
                 digest = file_hash(item.path)
                 if self.queued_hashes.get(item.id, digest) != digest:
                     edited.add(item.id)
+                    starts = state.start_estimate(self.cfg, view, item)
+                    moved = {"starts": starts} if self.starts.get(item.id) != starts else {}
+                    self.starts[item.id] = starts
                     self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    staged=item.id in view.staged, **dep_warning(item))
+                                    staged=item.id in view.staged, **moved, **dep_warning(item))
                 self.queued_hashes[item.id] = digest
                 if item.errors:
                     # Per file version and reason: a `resume:` item's reason moves with the queue.
@@ -592,6 +601,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                         self.log.append("invalid", item=item.id, paths=[self.cfg.rel(item.path)],
                                         error="; ".join(item.errors))
         self.queued_hashes = {i: h for i, h in self.queued_hashes.items() if i in queued}
+        self.starts = {i: s for i, s in self.starts.items() if i in queued}
         # A stage belongs to the item file it read; a removed item drops it, and a rewritten
         # one (staging or staged) is staged again from its new text.
         for item_id, srec in list(view.staged.items()):

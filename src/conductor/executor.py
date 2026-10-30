@@ -49,8 +49,8 @@ Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is not tool-ou
 injection: it is Matt's instruction and outranks the prompt where they conflict. Answer
 it with `progress`. Tell any helper or subagent you start that if it sees such a
 delivery it passes it straight up to you, word for word; act on what it relays. A
-message sent while you wait on a question comes back as its answer ("Message from …"):
-read it as both.
+message sent while you wait on a question returns `ask` early, the question still open:
+the message is not its answer. Act on it, then `ask` with `resume: "<id>"` to wait on.
 {calls}
 {workdir}{readonly}{paths}{port}{beside}{resumed}
 {audit}
@@ -146,7 +146,11 @@ kept the same way:
 option in each row is the current one and the default. `key` is what the next prompt
 will use for the choice; keys are unique within a row and row ids within the file.
 `image` is relative to the manifest, must exist inside the repo, and is PNG, JPEG, GIF,
-WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional.
+WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional. To ask which of
+a row's options go forward (keep or drop each), give the row `"kind": "many"` and
+optionally `"default": [keys kept to start with]`; Matt toggles each tile, and his choice
+comes back as the list of kept keys. Generated picker images go in a shared folder when
+the repo has one; commit build output for a picker only if the prompt says to.
 """
 
 # When an item gets the picker section: its body could produce candidates.

@@ -274,6 +274,61 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
     return out
 
 
+def _short(item_id: str) -> str:
+    return item_id.split("/", 1)[-1]        # the name: a bare number may be shared
+
+
+def _why_not_beside(cfg: Config, item: Item, other: str | None) -> str:
+    """Why `item` can't start beside a running or queued item whose template is `other`."""
+    if not cfg.opts(item.repo).worktrees:
+        return "repo busy; no worktrees"
+    if item.template in audits.EXCLUSIVE:
+        return f"{item.template} runs alone"
+    if other in audits.EXCLUSIVE:
+        return "template runs alone"
+    return "repo busy, no `alongside`"
+
+
+def start_estimate(cfg: Config, view: View, item: Item) -> str:
+    """When a queued item will start and why, for its queue receipt: `starts now`, `starts
+    now, beside 028 (alongside)`, `waits behind 024 (repo busy, no alongside) and 025
+    (template runs alone)`, or `held: …`. The scheduler's rules (`decide`, `early_starts`),
+    read for one item; a guess at queue time, not a promise."""
+    repo, known = item.repo, view.known()
+    if (ev := view.paused.get(repo)) and item.template != "watch":
+        return f"waits: `{repo}` paused {clock(ev.ts)}"
+    if hold := _hold(cfg, view, repo, item, known):
+        return f"held: {hold.reason}"
+    queue = view.queued.get(repo, [])
+    ahead = queue[:next((i for i, q in enumerate(queue) if q.id == item.id), len(queue))]
+    running = {i: r for i, r in view.running.items() if r["repo"] == repo}
+    shares = (item.readonly or item.alongside or item.template == "watch") and cfg.opts(repo).worktrees
+    behind: list[str] = []
+    for item_id, rec in running.items():
+        if not can_share(cfg, item, rec):
+            behind.append(f"{_short(item_id)} ({_why_not_beside(cfg, item, rec.get('template'))})")
+    for q in ahead:         # serial: strict NNN order; sharing: only an exclusive template is a barrier
+        if q.template in audits.EXCLUSIVE and item.template != "watch":
+            behind.append(f"{_short(q.id)} (template runs alone)")
+        elif not shares:
+            behind.append(f"{_short(q.id)} (queued ahead, no `alongside`)")
+    held = running_locks(view)
+    for lock in item.locks:
+        if lock in held:
+            behind.append(f"{_short(held[lock])} (lock {lock})")
+    for ref in item.depends_on:
+        dep = items.resolve_ref(ref, repo, known)
+        if dep and view.status_of(dep) in ("queued", "running"):
+            behind.append(f"{_short(dep)} (depends_on)")
+    behind = list(dict.fromkeys(behind))
+    if behind:
+        return "waits behind " + (", ".join(behind[:-1]) + " and " + behind[-1] if len(behind) > 1 else behind[0])
+    if running:
+        why = "readonly" if item.readonly else "alongside" if item.alongside else "watch" if item.template == "watch" else "disjoint paths"
+        return f"starts now, beside {', '.join(_short(i) for i in running)} ({why})"
+    return "starts now"
+
+
 def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str],
                  held_locks: dict[str, str], running_here: dict[str, dict]) -> Decision:
     if (ev := view.paused.get(repo)) and head.template != "watch":

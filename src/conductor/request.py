@@ -15,6 +15,9 @@ from .config import RUNTIME, Config
 from .util import FrontMatterError, read_text, split_front_matter
 
 REQUEST_WAIT_SECONDS = 60.0  # how long after request.md appears its missing targets are waited for
+# A request whose every target is identical to HEAD waits this long after request.md for a
+# changed copy: the bridge can land a target's content after the call that wrote it returned.
+SAME_WAIT_SECONDS = 10.0
 FRESH_SECONDS = 2.0       # a request.md this young that does not parse may still be being written
 FAILED_SUFFIX = ".failed"
 
@@ -33,8 +36,8 @@ class MissingTargets(RequestError):
 
     def __init__(self, missing: list[str], waited: float | None = None):
         self.missing = missing
-        after = f" after waiting {waited:.0f}s" if waited is not None else ""
-        super().__init__(f"targets listed but not in the request folder{after}: {missing}")
+        after = f" (waited {waited:.0f}s)" if waited is not None else ""
+        super().__init__(f"targets missing: {', '.join(missing)}{after}; nothing was applied")
 
 
 @dataclass
@@ -42,14 +45,33 @@ class Request:
     dir: Path
     message: str
     targets: list[str]
+    identical: bool = False     # every target matched HEAD when it was applied
+
+
+@dataclass
+class Waiting:
+    """A request not ready yet: what it waits for (a pending receipt says it) and how long
+    `request.md` has waited."""
+    why: str
+    waited: float
+
+
+def _written(d: Path) -> float:
+    try:
+        return (d / "request.md").stat().st_mtime
+    except OSError:
+        return float("inf")
 
 
 def pending(cfg: Config) -> list[Path]:
+    """Waiting requests in write order (`request.md`'s mtime, then name): a stamp is the
+    writer's guess at the clock, and one written ahead of it must not jump a later one."""
     root = cfg.path("requests")
     if not root.is_dir():
         return []
-    return sorted(d for d in root.iterdir()
-                  if d.is_dir() and not d.name.endswith(FAILED_SUFFIX) and (d / "request.md").is_file())
+    found = [d for d in root.iterdir()
+             if d.is_dir() and not d.name.endswith(FAILED_SUFFIX) and (d / "request.md").is_file()]
+    return sorted(found, key=lambda d: (_written(d), d.name))
 
 
 def readable(d: Path, names: list[str]) -> bool:
@@ -107,28 +129,47 @@ def parse(d: Path) -> Request:
     return Request(d, message, targets)
 
 
-def ready(d: Path) -> Request | None:
-    """The request once request.md and every target it lists are present and readable; None
-    while its files are still arriving. No settle timer: the planner writes request.md last.
+def ready(d: Path, control: Path | None = None) -> Request | Waiting:
+    """The request once request.md and every target it lists are present and readable, else
+    what it still waits for. No settle timer: the planner writes request.md last.
 
     Missing targets are waited for until REQUEST_WAIT_SECONDS after request.md's mtime (so the
-    wait survives a restart), then fail. A request.md that does not parse is waited for while it
-    is younger than FRESH_SECONDS (half written); any other parse error fails at once.
+    wait survives a restart), then fail (`targets missing: …`). With `control`, a request whose
+    every target is identical to HEAD there waits until SAME_WAIT_SECONDS for a changed copy
+    to land, then is ready with `identical` set. A request.md that does not parse is waited
+    for while it is younger than FRESH_SECONDS (half written); any other parse error fails at once.
     """
+    waited = time.time() - _written(d)
     try:
         if not readable(d, ["request.md"]):
-            return None
+            return Waiting("request.md to be readable", waited)
         req = parse(d)
     except MissingTargets as exc:
-        waited = time.time() - (d / "request.md").stat().st_mtime
         if waited < REQUEST_WAIT_SECONDS:
-            return None
+            return Waiting(f"targets missing: {', '.join(exc.missing)}", waited)
         raise MissingTargets(exc.missing, waited) from None
     except RequestError:
-        if time.time() - (d / "request.md").stat().st_mtime < FRESH_SECONDS:
-            return None
+        if waited < FRESH_SECONDS:
+            return Waiting("request.md to be complete", waited)
         raise
-    return req if readable(d, req.targets) else None
+    if not readable(d, req.targets):
+        return Waiting("its targets to be readable", waited)
+    if control is not None and identical(control, req):
+        if waited < SAME_WAIT_SECONDS:
+            return Waiting(f"a changed copy: every target is identical to HEAD so far ({', '.join(req.targets)})", waited)
+        req.identical = True
+    return req
+
+
+def identical(control: Path, req: Request) -> bool:
+    """Every target, as `apply` would write it, matches the control folder's copy: HEAD's,
+    since the tamper guard keeps tracked files level with it. No git call: this runs on
+    every waiting request each tick."""
+    try:
+        return all(_normalize((req.dir / t).read_bytes()) == _normalize((control / t).read_bytes())
+                   for t in req.targets)
+    except OSError:
+        return False            # a new file, or one unreadable: not identical
 
 
 def _normalize(data: bytes) -> bytes:

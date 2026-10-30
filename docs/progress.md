@@ -40,7 +40,8 @@ the app joins a multi-line message with ` / `. It applies only to an executing i
 (`running/`, phase `exec`, process not exited): a queued, staged or in-setup item is
 refused as not started, a merging or finished one as exited, an unknown one as no running item.
 The daemon logs `tell` (text, by) and writes `.conductor/mail/<repo>__<NNN_name>/<tell
-id>.json`.
+id>.json`. An item waiting in `ask` gets it too: the call hands back early, the question
+left open (`questions.md`, *A message never answers it*).
 
 Delivery is a Claude Code **PostToolUse hook**. The executor's `--settings` file
 (`reports/<repo>__NNN_name.settings.json`) names one hook on every tool (`matcher: ""`):

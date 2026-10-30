@@ -44,7 +44,10 @@ def test_signal_receipts_accepted_refused_and_cut_short(env):
     assert meta["outcome"] == "accepted" and meta["events"] == []
 
 
-def test_request_receipts_applied_unchanged_and_failed(env):
+def test_request_receipts_applied_unchanged_and_failed(env, monkeypatch):
+    from conductor import request
+    monkeypatch.setattr(request, "SAME_WAIT_SECONDS", 0.0)
+
     def write(stamp: str, files: dict[str, str]) -> None:
         d = env.control / "requests" / stamp
         d.mkdir(parents=True)
@@ -62,12 +65,14 @@ def test_request_receipts_applied_unchanged_and_failed(env):
     [commit] = [e for e in env.events("commit") if e.detail["subject"] == "state: v2"]
     assert meta["outcome"] == "accepted" and meta["result"] == f"committed {commit.detail['sha'][:8]}"
     assert commit.id in meta["events"] and "request" in body
-    assert receipt(env, "requests/20261021-1001-same")[0]["result"] == "applied; nothing changed"
+    assert receipt(env, "requests/20261021-1001-same")[0]["result"].startswith(
+        "nothing to commit: every target is identical to HEAD")
+    assert env.events("request")[-1].detail["identical"] is True
     meta, _ = receipt(env, "requests/20261021-1002-bad")
     assert meta["outcome"] == "refused" and "not listed as targets: ['stray.md']" in meta["reason"]
 
 
-def test_only_a_request_held_by_an_earlier_one_has_a_pending_receipt(env):
+def test_a_waiting_request_has_a_pending_receipt_saying_what_it_waits_for(env):
     d = env.control / "requests" / "20261021-1100-two"
     d.mkdir(parents=True)
     (d / "request.md").write_text("---\ntargets: [state.md, notes.md]\nmessage: two\n---\n", encoding="utf-8")
@@ -80,8 +85,9 @@ def test_only_a_request_held_by_an_earlier_one_has_a_pending_receipt(env):
     for p in [*d.iterdir(), *later.iterdir(), d, later]:
         os.utime(p, (old, old))
     env.d.tick()
-    # Only waiting for its own files: no receipt yet (missing = not handled yet).
-    assert not (env.control / "receipts" / "requests" / "20261021-1100-two.md").exists()
+    # Waiting 2s or more for its own files: pending, naming them.
+    meta, _ = receipt(env, "requests/20261021-1100-two")
+    assert meta["outcome"] == "pending" and meta["result"] == "waiting for targets missing: notes.md"
     meta, _ = receipt(env, "requests/20261021-1101-after")
     assert meta["outcome"] == "pending" and "an earlier request still waiting on ['state.md']" in meta["result"]
     (d / "notes.md").write_text("notes\n", encoding="utf-8")
@@ -99,8 +105,8 @@ def test_a_shared_number_is_named_in_the_receipt_and_never_guessed(env):
     env.queue("081_next", "do it", depends_on="080")
     env.d.tick()
     meta, _ = receipt(env, "queue/code/080_feature.md")
-    assert meta["result"] == ("queued as code/080_feature; its number is also code/080_watch's: name it "
-                              "in full, never by number")
+    assert meta["result"] == ("queued as code/080_feature; starts now; "      # 080_feature sorts first
+                              "its number is also code/080_watch's: name it in full, never by number")
     from conductor import items, state
     known = state.scan(env.d.cfg, env.d.log).known()
     assert items.resolve_ref("080", "code", known) is None
@@ -113,7 +119,7 @@ def test_queue_item_rewrite_and_amendment_receipts(env):
     bad = env.queue("003_bad", "do it", nope="x")
     env.d.tick()
     meta, _ = receipt(env, "queue/code/002_waits.md")
-    assert meta["outcome"] == "accepted" and meta["result"] == "queued as code/002_waits"
+    assert meta["outcome"] == "accepted" and meta["result"] == "queued as code/002_waits; held: unknown dependency 001_first"
     assert meta["written_ms"] == item.stat().st_mtime_ns // 1_000_000
     meta, _ = receipt(env, "queue/code/003_bad.md")
     assert meta["outcome"] == "refused" and "unknown front-matter fields: ['nope']" in meta["reason"]
@@ -284,7 +290,7 @@ def test_an_impossible_dependency_is_warned_of_at_write_time(env):
     env.queue("013_d", "do it", depends_on="010")           # earlier in its queue: fine
     env.d.tick()
     meta, _ = receipt(env, "queue/code/010_a.md")
-    assert meta["outcome"] == "accepted" and meta["result"] == "queued as code/010_a"
+    assert meta["outcome"] == "accepted" and meta["result"].startswith("queued as code/010_a; held: depends on code/011_b")
     assert "`011_b` names code/011_b, later in its own queue" in meta["warning"]
     assert "warning" not in receipt(env, "queue/code/011_b.md")[0]
     assert "warning" not in receipt(env, "queue/code/013_d.md")[0]

@@ -52,6 +52,7 @@ each `REMEMBER ...` line the original was sent; it never reruns the original's F
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -189,6 +190,11 @@ for ln in lines:
             from mcp_client import call_ask
             text, _ = call_ask(Path(args[args.index("--mcp-config") + 1]), json.loads(ln.split(" ", 2)[2]))
             answers.append(text)
+            # A message cut the wait short: take it through the hook, then wait on, as told.
+            while (cut := re.search(r'`resume: "([^"]+)"`', text)):
+                post_tool_use("mcp__conductor__ask")
+                text, _ = call_ask(Path(args[args.index("--mcp-config") + 1]), {"resume": cut.group(1)})
+                answers.append(text)
         case "sleep":
             time.sleep(float(parts[2]))
         case "wait-for":

@@ -11,8 +11,8 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `daemon_died` | at start: the previous daemon never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
-| `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any |
-| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone) |
+| `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any; starts (when it will start and why: `receipts.md`) |
+| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start) |
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
@@ -35,7 +35,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
 | `drift` | control folder changed with no executor running, or by conductor's own git | changes; own |
 | `repo_renamed` | `conductor rename-repo` gave a repo a new key; every earlier row now names the new one (`control-folder.md`, *Renaming a repo*) | old, new, path, moved, sha, by |
-| `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing) / error |
+| `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing), identical (every target matched HEAD after the wait) / error |
 | `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
 | `read` / `clear` | signals, or a `closeout:` request | through; session (a `session:` signal's checkpoint id); closeout (the request's name) / repo; note (a `land:`) |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by; hashes (`report`, `audit`: sha256 or null) |
@@ -44,7 +44,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `review` | a `review:` signal wrote `review.md`; paths: the signal, `review.md`; item: the ref's (none for `all`) | which (`all` or the item id), items (inlined, oldest first), conductor (conductor reports inlined), by |
 | `checkpoint` | a `checkpoint:` (or `session:`) signal started a new session view (its id is its number) | label, by; session (`session.md`, from a `session:` signal) |
 | `progress` | the executor called `progress` | seq, at, note (absent on an outline-only line), eta, done, remaining, outline ([{title, eta, done}]); reply_to (the tell or running amendment it answers) |
-| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (event id = message id); `by: conductor` for a memory or started-beside message | text, by; outline_request (an `outline:` signal's fixed request); beside; answers (the question it answered: `questions.md`); pause, resume |
+| `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (event id = message id); `by: conductor` for a memory or started-beside message | text, by; outline_request (an `outline:` signal's fixed request); beside; waiting_on (the open question its `ask` hands back for: `questions.md`; before 58, answers: the question it answered); pause, resume |
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`; an amendment also `prompt`/`resume`; `progress` in older logs), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |

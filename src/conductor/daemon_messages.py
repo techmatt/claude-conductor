@@ -24,9 +24,6 @@ AMEND_DELIVERY = {
     "running": "delivered after its next tool call",
 }
 REPLY_VIAS = ("hook", "progress")       # deliveries into a running session, which replies with `progress`
-# A tell to an item waiting on its own question answers it, signed by who sent it.
-SENDERS = {"planner": "the planner", "app": "Matt (the app)", "cli": "Matt", "watch": "conductor's watch"}
-ANSWER_MARGIN_SECONDS = 30      # a question this close to its default is left to it: the tell waits in the mailbox
 PAUSE_TEXT = ("From conductor: PAUSE. Matt has paused work in `{repo}`. Commit what you have now, stop every "
               "browser, test worker and server you started, then call `wait` (mcp__conductor__wait) again and "
               "again, doing nothing else, until a message from conductor says RESUME. Don't ask a question to "
@@ -47,13 +44,14 @@ class MessagesMixin:
                 self._q_log("ask", q, [rel], text=q.summary(), block=q.block, default=q.default,
                             deadline=q.deadline, deadline_clock=clock(q.deadline) if q.deadline else None)
             if q.is_open:
-                if q.block:
+                if q.block and not q.away_path.exists():     # away: working on a message, not waiting
                     blocked.add(q.item)
                 continue
             outcome = q.result.get("outcome")
             kind = OUTCOME_KINDS.get(outcome, "question_closed")
             if (kind, q.id) not in self.q_seen:
                 waited = (parse_stamp(q.result["at"]) - parse_stamp(q.asked)).total_seconds()
+                waited = max(0.0, waited - float(q.result.get("away_seconds") or 0))
                 extra = {}
                 if q.block and (run := self.runs.get(q.item)):
                     extra["deadline"] = self._extend_deadline(run, waited)
@@ -126,21 +124,15 @@ class MessagesMixin:
         return out
 
     def _message(self, run: Run, text: str, rel: str, **extra) -> Event:
-        """A tell into `run`'s mailbox, delivered after its next tool call; or, while it
-        waits on a question of its own (a hook can't reach it there), that question's
-        answer, signed by the sender, so the executor reads it as both (`answers`)."""
+        """A tell into `run`'s mailbox, delivered after its next tool call. Never a
+        question's answer: while the item waits on one, its `ask` call hands back early for
+        the message and the question stays open (`waiting_on`); only an answer file answers."""
         by = self._by or "unknown"
-        at = now()
         q = next((q for q in questions.scan(self.cfg.control)
-                  if q.item == run.item_id and q.is_open and not q.answer_path.exists()
-                  and (q.deadline is None or (parse_stamp(q.deadline) - at).total_seconds() > ANSWER_MARGIN_SECONDS)),
-                 None)
-        if q is not None:
-            ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=by, answers=q.id, **extra)
-            questions.write_answer(q, f"Message from {SENDERS.get(by, by)}: {text}", by=by)
-        else:
-            ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=by, **extra)
-            talk.post(self.cfg.control, run.item_id, ev.id, text, self._by)
+                  if q.item == run.item_id and q.is_open and not q.answer_path.exists()), None)
+        ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=by,
+                             **({"waiting_on": q.id} if q else {}), **extra)
+        talk.post(self.cfg.control, run.item_id, ev.id, text, self._by)
         return ev
 
     # ---------------------------------------------------------------- pause

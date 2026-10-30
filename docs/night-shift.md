@@ -94,7 +94,7 @@ header shows it beside the mode, and the inbox's *Night shift* opens with the mo
 `pause: <repo>` (**pause R**; the app's **Pause**) is for when Matt needs the box (playing
 the game, say). The daemon logs `pause` (repo, items, by), stamps each item executing or
 setting up there (watches aside) `paused_at` in its run record, and sends each conductor's
-pause text as a tell (`pause: true`; to an item blocked on a question, as its answer):
+pause text as a tell (`pause: true`; an item waiting on a question gets it when its `ask` hands back, `questions.md`):
 commit, stop every browser, test worker and server it started, then call `wait`
 (`mcp__conductor__wait`, which returns when a message waits for it or after up to 20
 minutes) again and again, never asking a question. Nothing in the repo launches or stages

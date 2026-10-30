@@ -27,6 +27,24 @@ def decide(env, running: list[dict]) -> tuple[state.Decision, list[str]]:
     return decisions["code"], [i.id for i in state.early_starts(env.cfg, view, decisions)]
 
 
+def test_start_estimate_says_when_and_why(env):
+    # aicomplete 026: "queued" alone hid that it waited behind 024 and a cleanup template.
+    running = rec(env, "024_rules")
+    env.queue("025_clean", "", template="general_cleanup")
+    env.queue("026_frames", "x")
+    env.queue("027_side", "x", alongside="card art only")
+    view = state.scan(env.cfg, env.d.log)
+    view.running = {running["item"]: running}
+    est = {i.name: state.start_estimate(env.cfg, view, i) for i in view.queued["code"]}
+    assert est["025_clean"] == "waits behind 024_rules (general_cleanup runs alone)"
+    assert est["026_frames"] == "waits behind 024_rules (repo busy, no `alongside`) and 025_clean (template runs alone)"
+    assert est["027_side"] == "waits behind 025_clean (template runs alone)"
+    view.queued["code"] = [i for i in view.queued["code"] if i.name == "027_side"]
+    assert state.start_estimate(env.cfg, view, view.queued["code"][0]) == "starts now, beside 024_rules (alongside)"
+    view.running = {}
+    assert state.start_estimate(env.cfg, view, view.queued["code"][0]) == "starts now"
+
+
 # ---------------------------------------------------------------- the rules
 def test_alongside_is_one_line_and_refused_on_a_template(env):
     good = items.parse(env.queue("001_a", "# Recorder fix\nbody", alongside="the recorder only"), "code")

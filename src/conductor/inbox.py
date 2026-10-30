@@ -250,7 +250,9 @@ def describe(ev: Event) -> str:
             text = f"{d.get('scope')} commit {d.get('sha', '')[:10]} {d.get('subject', '')}".strip()
         case "request":
             text = f"request {d.get('request')} applied: {d.get('message', '').splitlines()[0] if d.get('message') else ''}"
-            if d.get("no_change"):
+            if d.get("identical"):
+                text += " (nothing to commit: every target identical to HEAD)"
+            elif d.get("no_change"):
                 text += " (no change)"
         case "request_failed":
             text = f"request {d.get('request')} failed: {d.get('error')}"

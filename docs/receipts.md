@@ -40,9 +40,11 @@ events: [812, 813]
   `depends_on` that can never be met in order, so it will hold (`items.md`); fix it now.
   A signal refused part-way also has `applied`: the lines that applied before the one
   that failed (they stay applied). A request held by an earlier one on the same targets
-  is `pending`, its `result` what it waits for, replaced by the final receipt. A request
-  waiting only for its own files (a target not there or not readable yet) has no receipt
-  yet: missing means not handled yet, never a settle delay.
+  is `pending`, its `result` what it waits for, replaced by the final receipt; so is one
+  still waiting on its own files 2s after `request.md` (`PENDING_AFTER_SECONDS`):
+  `waiting for targets missing: state.md`, or `waiting for a changed copy: every target is
+  identical to HEAD so far (…)` (`control-folder.md`, *Requests*). Younger, it has no
+  receipt yet: missing means not handled yet.
 - `events`: the ids of every event its handling logged, one line each below: a
   signal's, side effects included; a request's `request`, `commit` (and a `closeout:`
   request's `read`). Past eight (`LINES`; a `session:` warns once per unreviewed
@@ -54,14 +56,21 @@ events: [812, 813]
 | write | written when | result | refused when |
 |---|---|---|---|
 | signal | its lines applied or it was rejected | `applied`; with tells (`tell:`, `outline:`, `pause:`, `resume:`) where each went, `; `-joined | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line |
-| request | applied or failed (within a second of `request.md`); `pending` while an earlier request holds it | `committed <sha>`, `applied; nothing changed` | `request_failed` (it is `.failed`) |
-| queue item | `enqueue`, `edited` | `queued as <id>` (plus, if a watch or draw took its number meanwhile, `its number is also <id>'s: name it in full`); `rewritten: it runs the new text` / `its stage is redone` | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
+| request | applied or failed (within a second of `request.md`); `pending` while an earlier request or its own files hold it | `committed <sha>`, `nothing to commit: every target is identical to HEAD (was the edited copy sent?)`, `applied; nothing changed` | `request_failed` (it is `.failed`; `targets missing: …`) |
+| queue item | `enqueue`, `edited` | `queued as <id>; <start>` (plus, if a watch or draw took its number meanwhile, `its number is also <id>'s: name it in full`); `rewritten: it runs the new text` / `its stage is redone`, plus `; now <start>` when the rewrite moved it | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` | `late` (the question had resolved) |
 | proposed item | readable, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |
 
-A tell's receipt is never a bare `applied`: `delivered as the answer to <question>` (the
-item waits on its own question: `questions.md`), or `message #N to <item>: delivered after
+`<start>` is when the item will start and why, read from the scheduler's rules at queue
+time (`state.start_estimate`; a guess, not a promise): `starts now`, `starts now, beside
+028_x (alongside)`, `waits behind 024_x (repo busy, no `alongside`) and 025_y (template runs
+alone)`, a lock, a `depends_on`, a pause, or `held: <reason>`. It is also the `starts`
+field of the `enqueue` event (and of an `edited` one whose start moved).
+
+A tell's receipt is never a bare `applied`: `message #N to <item>: it waits on question
+<id>, …; <id> stays open` (its `ask` hands back for the message: `questions.md`; before 58,
+`delivered as the answer to <question>`), or `message #N to <item>: delivered after
 its next tool call`, whose `result` later becomes `delivered #N (<via>, after Ns)` when it
 reaches the executor, or `not delivered: message #N: the executor exited first`. A queue
 item rewritten while the daemon was down gets no new receipt.

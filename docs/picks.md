@@ -44,7 +44,18 @@ checkout**, never a worktree. Validation, on every `pick:`; the error names the 
 By convention the first option of a row is the current one, and it is the default; a
 row whose choice differs from it is *changed*.
 
-**Surviving the merge.** The manifest and its images must be on `main` by the time the
+**Many rows** (58): `"kind": "many"` on a row (`"one"`, the default, is pick one) asks
+"which of these go forward": each option is kept or dropped, any number kept, so an
+executor need not ask Matt to "select the bare tile to carry it" (aicomplete 026).
+`"default": [keys]`, optional, is what is kept to start with (none if absent); a
+default naming a key the row lacks, or any other `kind`, refuses the manifest. Its saved
+row has `keys` (kept, in option order) instead of `key`, and is *changed* when they
+differ from the default.
+
+**Surviving the merge.** Generated images belong in a `shared` folder, never committed
+build output (aicomplete 026 committed 20 previews to `main` because its repo had none;
+the preamble says so, and a planner checks `conductor.toml` before queuing a picker
+prompt). The manifest and its images must be on `main` by the time the
 `finish` event is logged, which is what the `pick:` line points at: commit them, or put
 them in a `shared` folder (linked into every worktree, so present in the main checkout
 already). An item with `paths:` must cover where it writes them. A `readonly` item is
@@ -87,7 +98,9 @@ page never alters how an image looks**: no opacity, filter, tint or overlay on a
 image, selected or not, in the tiles or the overlay; nothing is drawn over one but the
 magnifier button. The selection shows only outside the image: a strong accent outline
 around the tile and a caption in the accent colour with a check and bold key. Each
-row starts on its saved choice, else its first option; a changed row is badged. A note
+row starts on its saved choice, else its first option; a changed row is badged. In a
+many row a click toggles a tile (captioned `✓ keep` when kept; the magnifier opens the
+overlay, where Enter toggles and stays open), and the row head counts `N of M kept`. A note
 field per row. A sticky bar: "N of M changed · K notes", *show changed only*, and
 **Save** (Ctrl+S), which shows "Saved 4:52pm". Leaving with unsaved changes warns.
 Light or dark by system setting.
@@ -101,7 +114,8 @@ runtime, like `questions/`), overwriting any earlier save:
  "rows": [{"id": "hero", "key": "2", "changed": true, "note": "hair still too orange"}]}
 ```
 
-Every manifest row appears once, in manifest order, with a key from its own options;
+Every manifest row appears once, in manifest order, with a key from its own options
+(a many row: `"keys": [...]`, saved by the page as `keys` too);
 `changed` is worked out by the server, never taken from the page; notes are stripped,
 at most 4000 characters, possibly empty. Reopening loads the save (the page shows "last
 saved 4:52pm"): rows match by `id`, and a key no longer offered falls back to the first

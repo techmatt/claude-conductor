@@ -223,18 +223,26 @@ There is no settle timer: as soon as `request.md` and every target it lists are 
 and readable (a file its writer still holds open is not), conductor checks the guard,
 copies the files in (UTF-8 text is written with LF endings; anything else byte for byte),
 stages and commits exactly the targets, logs `request` and `commit`, removes the request
-folder and re-snapshots. A nap wakes within 0.25s of any planner write (`receipts.md`, *When*). A request waiting only
-for its own files gets no receipt yet. Targets not there yet are waited for, with no event, until 60s
-(`REQUEST_WAIT_SECONDS`) after `request.md`'s mtime (so the wait survives a restart;
-rewriting `request.md` starts it again); then the request fails (`targets listed but
-not in the request folder after waiting 60s: [...]`). Every other error fails, at once
+folder and re-snapshots. A nap wakes within 0.25s of any planner write (`receipts.md`, *When*).
+The bridge writes asynchronously: a target can land after `request.md`, even one written
+in an earlier call, so nothing is applied until every target is there. Targets not there
+yet are waited for, with no event, until 60s (`REQUEST_WAIT_SECONDS`) after `request.md`'s
+mtime (so the wait survives a restart; rewriting `request.md` starts it again); then the
+request fails (`targets missing: state.md (waited 60s); nothing was applied`). A request
+whose every target is byte for byte the control folder's copy (HEAD's) waits up to 10s
+(`SAME_WAIT_SECONDS`) for a changed copy to land, then applies as `identical` (the
+`request` event's field; receipt `nothing to commit: every target is identical to HEAD`),
+distinct from missing. Aicomplete lost three applies to this as "nothing changed". Either
+wait past 2s gets a `pending` receipt saying which. Every other error fails, at once
 when `request.md` is 2s old (`FRESH_SECONDS`; younger, it may be half written and is
 looked at again): bad front-matter, no `targets:`, a target that is absolute, uses `..`
 or points into the runtime paths or `.git`, no commit message. Every file in the folder
-must be a target, checked once nothing is missing. Requests keep stamp
+must be a target, checked once nothing is missing. Requests keep their
 order where their targets overlap: a later one naming a target of an earlier, waiting
 one waits too. A bad request is logged `request_failed` (red)
 and renamed `requests/<stamp>.failed/`. A request that changes nothing is logged with
-`no_change` and removed. Requests apply in folder-name order; the planner names them
-`YYYYMMDD-HHMM-<tag>`. One whose message starts `closeout:` also moves the read mark
+`no_change` and removed. Requests apply in write order (`request.md`'s mtime, then
+folder name), never stamp order: a stamp is its writer's guess at the clock, and 57's
+hand-written `1035-reponame`, stamped 8 minutes ahead, would otherwise have applied after
+(and over) a later planner request. The planner names them `YYYYMMDD-HHMM-<tag>`. One whose message starts `closeout:` also moves the read mark
 (`inbox.md`). Applied or failed, a request's outcome is `receipts/requests/<stamp>.md` (`receipts.md`).
