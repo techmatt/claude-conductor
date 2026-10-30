@@ -588,8 +588,9 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     monkeypatch.setattr(session, "CONDUCTOR_ROOT", root)
     env.queue("001_feat", "FAKE slow tests ~20m, full lane each time, split it\nFAKE report done")
     env.queue("002_perf", "FAKE report done", template="test_perf")
-    env.queue("003_more", "FAKE slow tests ~25m, again; build ~16m, cold cache, warm it\nFAKE report done")
-    env.queue("004_last", "FAKE report done")
+    env.queue("003_more", "FAKE slow tests ~25m, again; build ~16m, cold cache, warm it\n"
+                          "FAKE friction stale test command, retried\nFAKE report done")
+    env.queue("004_last", "FAKE friction stale test command; no port in the README\nFAKE report done")
     env.tick_until(lambda: env.finished("code/004_last"))
     (env.repo / "CLAUDE.md").write_text("one\ntwo\n", encoding="utf-8", newline="\n")
     send(env, "by: planner\nsession: start", "planner-1.signal")
@@ -608,6 +609,9 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     assert "- bug hunt: never · 3 non-template item(s) finished" in facts
     assert "- `CLAUDE.md`: 0.0 KB, 2 lines" in facts and "- unused audit notes: 0" in facts
     assert "repeated in the last 4 report(s): tests (001, 003)" in facts
+    assert "- `friction:` repeated in the last 4 report(s): stale test command (003, 004)" in facts
+    assert "- workflow retro: never · 3 non-template item(s) finished since\n" in facts      # due at 6
+    assert "- parked edits waiting: 0" in facts and "friction: stale test command; no port" in text
     # The next session's digest starts after this one's read mark.
     send(env, "session: again", "planner-2.signal")
     text = (env.control / "session.md").read_text(encoding="utf-8")

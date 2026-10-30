@@ -111,6 +111,7 @@ class ReceiptsMixin:
             case "enqueue":
                 shared = d.get("shares_number")
                 starts = f"; {d['starts']}" if d.get("starts") else ""
+                starts += f"; {d['parked']}" if d.get("parked") else ""
                 self._write_receipt(rel, [ev], result=f"queued as {ev.item}{starts}" + (
                     f"; its number is also {', '.join(shared)}'s: name it in full, never by number"
                     if shared else ""), warning=d.get("warning"))

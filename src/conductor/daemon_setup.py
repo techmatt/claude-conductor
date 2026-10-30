@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import executor, git, items, procs, talk, worktrees
+from . import executor, git, items, parked, procs, talk, worktrees
 from . import resume as resume_items           # `resume` here is a staged item's move record
 from .util import file_hash, now, parse_stamp, retry_io, stamp, write_text
 
@@ -201,11 +201,15 @@ class SetupMixin:
         rec["beside"], warn = self._beside(item)
         rec["warned"] = [i for i, _ in warn]        # named in its paragraph: no tell about them later
         resumed = resume_items.paragraph(cfg, self.log, rec, paths.original) if rec.get("resume_of") else ""
+        # Parked edits a serial item carries (`parked.py`): out of the list now, back if it fails.
+        if "parked" not in rec:
+            rec["parked"] = [{"n": n, "text": e.text}
+                             for n, e in enumerate(parked.take(cfg.control, item), 1)]
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, item.max_hours or cfg.max_hours,
                                                        parse_stamp(rec["deadline"]), rec, resume,
                                                        notes=self._notes_text(rec), usage=self._template_usage(rec),
                                                        amends=[m for m in amends if talk.is_amend(m)], beside=warn,
-                                                       resumed=resumed))
+                                                       resumed=resumed, parked=rec["parked"]))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
@@ -235,6 +239,8 @@ class SetupMixin:
             extra |= {"resume_of": rec["resume_of"], "resume_session": rec["resume_session"]}
         if rec["beside"]:
             extra["beside"] = rec["beside"]
+        if rec["parked"]:
+            extra["parked"] = [e["text"] for e in rec["parked"]]
         extra |= self._setup_seconds(rec)
         self.log.append("start", item=item.id,
                         paths=[cfg.rel(md_path), cfg.rel(paths.report), cfg.rel(paths.log)],

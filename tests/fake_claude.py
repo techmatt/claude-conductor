@@ -178,7 +178,7 @@ def progress(arguments: dict) -> str:
     return text
 
 
-status, is_error, pick, slow = "done", False, None, None
+status, is_error, pick, slow, friction = "done", False, None, None, None
 answers = []
 hogs = []
 for ln in lines:
@@ -278,6 +278,8 @@ for ln in lines:
             pick = parts[2]
         case "slow":
             slow = ln.split(" ", 2)[2]
+        case "friction":
+            friction = ln.split(" ", 2)[2]
         case "subagent":
             if parts[2] == "progress":          # a helper's progress call: the tool, then its hook
                 progress(json.loads(parts[3]))
@@ -292,7 +294,8 @@ for ln in lines:
         post_tool_use(parts[1])
 if status != "none":
     report.write_text(f"status: {status}\nblocks: none\ncarry: none\n"
-                      + (f"slow: {slow}\n" if slow else "") + (f"pick: {pick}\n" if pick else "") + "\nFake report.\n" + memory
+                      + (f"slow: {slow}\n" if slow else "") + (f"friction: {friction}\n" if friction else "")
+                      + (f"pick: {pick}\n" if pick else "") + "\nFake report.\n" + memory
                       + "".join(f"\nASK RESULT: {a}\n" for a in answers)
                       + "".join(f"\nCONTEXT: {c}\n" for c in contexts), encoding="utf-8")
 result(is_error=is_error)

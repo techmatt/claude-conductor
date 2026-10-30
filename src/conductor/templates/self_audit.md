@@ -11,7 +11,9 @@ would have saved time) and three more:
   the step).
 - What misled you: anything in the prompt, template, preamble, repo docs or CLAUDE.md
   that pointed the wrong way or was missing. Quote it, and give the wording that would
-  have worked.
+  have worked. Then name the concrete workflow changes this run argues for: the prompt's
+  shape, a doc line, a tool or script, conductor's behaviour. Give each with what it
+  would have saved (turns, minutes, a retry, a wrong turn).
 - Where the time went: the largest blocks of wall-clock time and what would have cut
   each.
 Be concrete and candid: name files, times and quotes, not impressions. The next cleanup
@@ -20,8 +22,9 @@ of `{{repo}}` acts on these notes.
 The report, after its header, has:
 - **Summary**: the main points of the three new headings, a few lines.
 - **About conductor**: findings about conductor itself (the template, the preamble, the
-  planner's prompt, conductor's tools), each with the change you would make, for the
-  planner to carry to conductor's `planner-notes.md`; `none` if there are none.
+  planner's prompt and how it was scoped, conductor's tools and receipts), each as a
+  concrete change with what it would have saved this run, for the planner to carry to
+  conductor's `planner-notes.md`; `none` if there are none.
 
 The status is `done` when the notes are written, `partial` when part of the record could
 not be read, and `red` only when something is broken.

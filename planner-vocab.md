@@ -14,6 +14,8 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **postmortem Y** | Y's events, prompt and report: where it went wrong. |
 | **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap, listed in their **new** order; the current order is a no-op): numbers swap, each renamed item is a new id. Fix old names in `state.md`. |
 | **test cleanup R** / **claude.md cleanup R** / **disk space cleanup R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_cleanup` (body: Matt's extras). |
+| **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal. **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls raised as for a cleanup); then rewrite the marker in `planner-notes.md`. |
+| **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
 | **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing its red's hold. Only after its report is read with Matt. |

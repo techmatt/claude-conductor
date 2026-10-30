@@ -329,6 +329,20 @@ def start_estimate(cfg: Config, view: View, item: Item) -> str:
     return "starts now"
 
 
+def parked_estimate(cfg: Config, view: View, item: Item) -> str:
+    """Which waiting parked edits `item` will carry as the queue stands, for its receipt:
+    none unless it is serial, and none an earlier serial item in its queue takes first."""
+    from . import parked
+    edits = parked.eligible(item, parked.waiting(cfg.control, item.repo))
+    queue = view.queued.get(item.repo, [])
+    for q in queue[:next((i for i, q in enumerate(queue) if q.id == item.id), len(queue))]:
+        edits = [e for e in edits if e not in parked.eligible(q, edits)]
+    if not edits:
+        return ""
+    shown = "; ".join(e.text if len(e.text) <= 60 else e.text[:59] + "…" for e in edits[:3])
+    return f"carries {len(edits)} parked edit(s) as things stand: {shown}" + ("; …" if len(edits) > 3 else "")
+
+
 def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str],
                  held_locks: dict[str, str], running_here: dict[str, dict]) -> Decision:
     if (ev := view.paused.get(repo)) and head.template != "watch":

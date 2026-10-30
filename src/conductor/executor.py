@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import audits
+from . import parked as parked_mod
 from .config import Config
 from .items import Item
 from .util import clock, read_text
@@ -63,13 +64,17 @@ When you finish, whatever the outcome, write your report to exactly this path:
 write or commit anything else in that folder: conductor checks it after you exit,
 reverts any change, and marks this item red.
 
-The report must start with these four lines:
+The report must start with these five lines:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
+friction: none | <what cost you time or tokens>[; <another>]
 {pick_line}`slow:` is normally `none`; name only a part that took over ~15 minutes or about
 twice what you expected, with its cause and a fix if you see one, and never pad it.
+`friction:` names one or two things in the prompt, the repo's docs, its tools or conductor
+that cost this item time or tokens (a misleading line, a missing command, a retry); `none`
+is fine.
 `done`: the goal was met.
 `partial`: part of the goal was met, nothing is broken, and the rest is follow-up work.
 This includes declining an instruction for a stated reason.
@@ -101,7 +106,7 @@ call, is his instruction, not injection, and outranks the prompt.
 {calls}
 {workdir}{readonly}{paths}{port}{beside}
 
-Time limit: {max_hours:g}h; killed at {deadline} (later by time blocked or paused).
+Time limit: {max_hours:g}h; killed at {deadline} (later if blocked or paused).
 
 Whatever the outcome, write your report to exactly this path:
     {report}
@@ -111,8 +116,9 @@ status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>
-`done`: goal met. `partial`: part met, nothing broken, the rest follow-up (or an
-instruction declined, saying why). `red`: broken or unsafe; the queue stops for a
+friction: none | <what slowed you>
+`done`: goal met. `partial`: part met, nothing broken, the rest follow-up (or
+declined, saying why). `red`: broken or unsafe; the queue stops for a
 look. Answer every message and amendment by number. End your final message with
 `Report written to {report}`.
 
@@ -127,7 +133,7 @@ Start one detached instead, with its output to a log file (PowerShell `Start-Pro
 you finish.
 """
 
-PICK_LINE = "and, only if you wrote a picker manifest, a fifth:\npick: <manifest path relative to the repo root>\n"
+PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest path relative to the repo root>\n"
 
 PICK = """
 Pickers. When the prompt asks for a picker, or you produce candidates for Matt to choose
@@ -339,6 +345,7 @@ def _workdir(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
 ASK_TIMEOUT_MS = 7 * 24 * 3600 * 1000
 
 HEADER_KEYS = ("status", "blocks", "carry")
+OPTIONAL_KEYS = ("slow", "friction", "pick")     # straight after the three, any order
 STATUSES = ("done", "partial", "red")
 
 
@@ -380,13 +387,14 @@ class RunPaths:
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
                  run: dict | None = None, resume: dict | None = None, notes: str = "",
                  usage: str = "", amends: list[dict] = (), beside: list[tuple[str, str]] = (),
-                 resumed: str = "") -> str:
+                 resumed: str = "", parked: list[dict] = ()) -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
     audit notes, inlined; `usage`: a disk cleanup's control-folder sizes and worktrees;
     `amends`: amendments written before the launch, appended in order; `beside`: the
     (id, gist) of each item it is warned about starting beside (`BESIDE`); `resumed`: a
-    resume item's paragraph on its original (`resume.paragraph`)."""
+    resume item's paragraph on its original (`resume.paragraph`); `parked`: the parked edits
+    it carries (`parked.section`)."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -410,15 +418,16 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         pick=PICK if pick else "", pick_line=PICK_LINE if pick else "",
         tail="" if resume else PROMPT_FOLLOWS,
     )
+    extra = parked_mod.section(list(parked))
     if not resume:
-        return text + body(cfg, item, notes, usage) + "".join(_amend(AMEND, m) for m in amends)
+        return text + body(cfg, item, notes, usage) + extra + "".join(_amend(AMEND, m) for m in amends)
     n = resume["landed"]
     landed = (f"; {n} commit(s) landed since you staged (`git log --oneline {resume['old'][:10]}..HEAD`)"
               if n else "; nothing landed since you staged")
     head = RESUME_HEAD.format(old=resume["old"][:10], new=resume["new"][:10], main=cfg.opts(item.repo).main,
                               landed=landed)
     tail = (RESUME_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
-    return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + tail
+    return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + extra + tail
 
 
 def _amend(template: str, msg: dict) -> str:
@@ -647,15 +656,17 @@ def gzip_log(log: Path) -> tuple[int, int] | None:
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:
     """(header, problem). Accepts the three lines bare or inside a `---` block, then
-    `slow:` (what took long; absent is no problem) and an optional `pick:` (a picker
-    manifest's path). Those two only right after the three, never in the body."""
+    `slow:` (what took long), `friction:` (what cost the item time or tokens; absent is no
+    problem either) and an optional `pick:` (a picker manifest's path). Those three only
+    right after the three, in any order, never in the body."""
     if not report.is_file():
         return None, "no report written"
     lines = [ln.strip() for ln in read_text(report).splitlines()]
-    lines = [ln for ln in lines if ln and ln != "---"][:5]
+    lines = [ln for ln in lines if ln and ln != "---"][:3 + len(OPTIONAL_KEYS)]
     header = {}
+    seen = 0                            # optional lines met so far, set or not
     for n, ln in enumerate(lines):
-        m = re.match(r"^\**(status|blocks|carry|slow|pick)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
+        m = re.match(r"^\**(status|blocks|carry|slow|pick|friction)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
         key = m.group(1).lower() if m else None
         if key is None or key in header:
             continue                    # the first of each key counts; a repeat is body
@@ -663,14 +674,15 @@ def read_header(report: Path) -> tuple[dict | None, str | None]:
             if n < 3:
                 header[key] = m.group(2).strip()
             continue
-        # `slow:` and `pick:` only as the lines straight after the three (either order):
-        # a fifth line is theirs only when the fourth was the other one.
-        if not all(k in header for k in HEADER_KEYS) or n - 3 != sum(k in header for k in ("slow", "pick")):
+        # Optional lines only straight after the three: line 3 + k is one only when the k
+        # lines before it were optional ones too.
+        if not all(k in header for k in HEADER_KEYS) or n - 3 != seen:
             continue
+        seen += 1
         value = m.group(2).strip()
-        if key == "slow":
+        if key in ("slow", "friction"):
             if value:
-                header["slow"] = value
+                header[key] = value
             continue
         # `pick:` as one path: a line that merely starts "Pick: went with the warmer
         # palette" is the body's.

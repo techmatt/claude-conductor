@@ -79,7 +79,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## Writing a prompt
 
-- **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume` (`docs/items.md`).
+- **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules` (`docs/items.md`).
 - **Ultracode** (`ultracode: true`, at launch only): subagent workflows, for every item that would benefit (multi-part, sweeps, redesigns, new systems). A feature one also gets a multi-agent adversarial review of its diff, with verifiers, unless the prompt says not (templates review themselves).
 - **Audits and templates are conductor's texts**; never retype them. `audit: true`: the executor keeps notes for a later cleanup (Matt asks, or the planner adds it, saying so, to a big pass over much-changed code). `template: <name>`: conductor's text is the prompt, any body appended (`docs/templates.md`). Matt saying a template's phrase queues it.
 - **Concurrency.** Each item runs in its own worktree; `done` and `partial` merge into `main`, one at a time per repo. **`alongside: <one line on what it touches>`** lets it start beside whatever runs or is staged in its repo (locks, `depends_on`, holds apply): only for a clearly separate code area, writing nothing shared outside git; else it waits its turn. Prefer it for art, voice and readonly prototypes. All templates but bug hunt, self audit and watch run alone: nothing, readonly included, starts beside or early behind one. A dependent item starts after its dependency merged. Use `depends_on` only where queue order doesn't already serialize (another repo, `alongside`, `readonly`): a dependency that ends `partial` (a bug hunt stopped early usually does) holds the dependent. A `readonly` item never merges and starts once queued, beside anything, seeing `main` as then (locks and `depends_on` apply).
@@ -92,7 +92,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Every premise is a claim**, verified from source before acting on it, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes.
 - **Heavy work** (long Playwright sweeps, ultracode): one browser, one test worker. Tests or builds over ten minutes need the repo's `background` globs (by request).
-- **Small parked edits ride the next serial item** to that repo, never one that could run `alongside`, a readonly one or a template; none coming: amend the earliest queued serial item. Matt never edits config or docs by hand.
+- **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never typed into prompts: conductor hands them to the next serial item, and skipped ones come back (`docs/parked.md`). Matt never edits config or docs by hand.
 - **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why, first); its receipt's start confirms.
 - **Never mention git push, remotes, commit state or tests.**
 
@@ -113,7 +113,7 @@ A report opens with `status: done | partial | red`, `blocks:` (what it blocks), 
 
 - `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
 - A `conductor:` line under the header is conductor's outcome and overrides `status:`: `NOT on main` (red after a `done` report; branch kept) or `landed on main … despite …` (a red of conductor's own making; no hold). Kept work Matt wants lands with **land X**, never a hand-written merge item.
-- A non-`none` `slow:`: mention it in a line only if it points at a fix; it counts toward *Maintenance*.
+- A non-`none` `slow:` or `friction:`: mention it in a line only if it points at a fix; it counts toward *Maintenance*.
 - `pick:`: tell Matt the picker is ready (**pick X**); the next prompt waits for his choices unless he says otherwise.
 
 Don't summarize a report back: say what it changes, what the planner got wrong and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right; flag only decisions that block upcoming work.
@@ -129,14 +129,14 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 - **Handoff docs are the active wavefront, not a history**: a line stays only if it would change a future decision and can't live in code; mechanics live in the repo's docs, one home each.
 - **state.md is status, plan and flags**: what is queued, running, open and ruled. Past ~25 KB, recommend **trim state**.
 - **Waiting on Matt / Open questions / Paged**: each item for Matt sits in one. *Waiting on Matt*: what work is blocked on, raised every session start. *Open questions*: decisions for upcoming work, asked once, then *Paged* with the planner's default. *Paged*: raised only by Matt, or when a prompt touches that code.
-- **Maintenance.** `state.md` keeps per repo when each template last ran (item and date, or "never") and the project's triggers. Defaults: **bug hunt** after a wave of big features or a new surface; **general cleanup** after ~10 feature items or a large rework; **cleanup** when audit notes pile up; **test cleanup** when a full run has grown ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space cleanup** after much generated media; a `slow:` cause in 2-3 reports (slow tests → test cleanup; much searching → claude.md cleanup; a slow build or failing tool → general cleanup). The digest counts. At start, recommend what looks due, a line each with its reason; never queue one unasked, or repeat a declined one until its reason grows.
+- **Maintenance.** `state.md` keeps per repo when each template last ran (item and date, or "never") and the project's triggers. Defaults: **bug hunt** after a wave of big features or a new surface; **general cleanup** after ~10 feature items or a large rework; **cleanup** when audit notes pile up; **test cleanup** when a full run has grown ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space cleanup** after much generated media; a `slow:` cause in 2-3 reports (slow tests → test cleanup; much searching → claude.md cleanup; a slow build or failing tool → general cleanup). **Workflow retro**: the digest marks it due (~6 non-template items since the last) and names the item with most friction; yes → **post-audit** it, no → skip until the count grows; record when one ran as for templates. Its findings go where a pipeline review's do. The digest counts. At start, recommend what looks due, a line each with its reason; never queue one unasked, or repeat a declined one until its reason grows.
 - **Conductor's own upkeep.** Recommend "cleanup conductor" when HANDOFF's *How work flows* says it is due.
 - **Closeout**: the final `state.md` (and any doc the session changed) as one request. **Prepare for closeout** lists open questions, items still expecting a report and parked edits, then a short **pipeline review** (the full one only when Matt asks).
 - **Planner habits** (`state.md` section): rules for the planner, never *Pending fixes* (one found there moves at the next `state.md` write). A repeated mistake becomes one; a one-off is said in chat.
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, post-audit, art round, park / resume project, rename repo) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, process all, defaults all, post-audit, art round, park / resume project, rename repo) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
 
 **Session and inbox**
 
@@ -182,9 +182,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **check reports** [verbose] | Unreviewed reports (item, status, finish time), oldest first, then running or staged ones as "not in yet"; verbose: a few lines each. |
 | **process X** | *Reading a report* for X, the carry by request, then `reviewed: <repo>/<NNN_name>`. If `slow:` causes now repeat, recommends the matching template. |
 | **process next** | **process X** for the first unreviewed report (dependencies first, then finish order); with none, conductor's first. |
-| **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal. **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls raised as for a cleanup); then rewrite the marker in `planner-notes.md`. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
-| **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's own session, forked, answers as a readonly report (X must have finished). |
 | **pick X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one). |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |

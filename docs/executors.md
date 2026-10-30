@@ -172,13 +172,14 @@ status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
+friction: none | <what cost the item time or tokens>[; <another>]
 pick: <manifest path relative to the repo root>     # optional: only after writing a picker manifest
 ```
 
-(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first five
+(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first six
 non-blank lines are read: `status`, `blocks` and `carry` count only in the first three
-(the first of each); `slow:` and `pick:` only straight after them (fourth, or fifth when
-the fourth was the other), `pick:` with a one-word value; so a body that opens with
+(the first of each); `slow:`, `friction:` and `pick:` only straight after them, in any
+order, each counted only when every line before it was a header line; `pick:` with a one-word value; so a body that opens with
 "Status: …" or "Pick: went with …" stays body. Backticks around a pick are dropped, `\`
 becomes `/`, and `pick: none` is no pick. The `finish` event carries it as
 `pick: <repo>/<path>`, the ref the `pick:` signal takes.
@@ -193,6 +194,12 @@ no red, no warning). The `finish` event carries it as written; the inbox's *Unre
 reports* line, `conductor events`, the app's Activity line and the Repos tab's note
 (whole in its tooltip) show it unless it is `none` or absent. The planner reads these
 lines as a maintenance trigger (`planner.md`, *Maintenance*).
+
+`friction:` (59) is a free signal on every report: one or two things in the prompt, the
+repo's docs, its tools or conductor that cost the item time or tokens (`none` is fine).
+It is carried, shown and counted like `slow:`, and it feeds the digest's workflow-retro
+line (`inbox.md`, *Maintenance facts*). Parked edits an item carries are answered just
+after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 
 **Outcome.** The item's final status is the report's status unless something makes it
 red: no report or a bad header, no `result` line in the log, `is_error` in the result,

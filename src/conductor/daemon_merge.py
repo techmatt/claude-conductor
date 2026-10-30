@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import audits, executor, git, items, procs, state, talk, worktrees
+from . import audits, executor, git, items, parked, procs, state, talk, worktrees
 from .util import file_hash, now, parse_stamp, read_text, stamp, write_text
 
 if TYPE_CHECKING:
@@ -236,6 +236,23 @@ class MergeMixin:
                 return f"conflict markers remain in {f}"
         return None
 
+    def _settle_parked(self, run: Run) -> dict:
+        """The parked edits it carried: what its report answered `done` (its work landed)
+        stays in the done file; the rest goes back to `parked/<repo>.md`. Once per item,
+        saved first, so a restart before the finish never puts them back twice."""
+        rec = run.rec
+        if "parked_settled" not in rec:
+            try:
+                text = read_text(Path(rec["report"]))
+            except (OSError, UnicodeDecodeError):
+                text = ""
+            done, back = parked.settle(rec["parked"], text, landed=rec["outcome"]["status"] != "red")
+            rec["parked_settled"] = {"done": [e["text"] for e in done], "back": [e["text"] for e in back]}
+            self._save(run)
+            parked.put_back(self.cfg.control, rec["repo"], rec["parked_settled"]["back"])
+        s = rec["parked_settled"]
+        return {"parked_done": s["done"], "parked_back": s["back"]}
+
     def _conclude(self, run: Run) -> None:
         cfg, rec = self.cfg, run.rec
         item_id, repo, out = rec["item"], rec["repo"], rec["outcome"]
@@ -280,10 +297,13 @@ class MergeMixin:
                             reasons=out["reasons"], after_red=rec.get("after_red", "stop"))
         if out.get("conductor"):
             extra["conductor"] = out["conductor"]       # a red of conductor's making, landed anyway
+        if rec.get("parked"):
+            extra |= self._settle_parked(run)
         self.log.append(
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
             blocks=out["blocks"], carry=out["carry"], slow=out.get("slow"), pick=out.get("pick"),
+            friction=out.get("friction"),
             session_id=rec["session_id"], exit_code=out["exit_code"],
             cost_usd=out["cost_usd"], turns=out["turns"],
             needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,

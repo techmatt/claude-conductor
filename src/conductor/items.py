@@ -13,7 +13,7 @@ from .util import FrontMatterError, read_text, split_front_matter
 NAME_RE = re.compile(r"^(\d{3,}|W\d+)_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 WATCH_RE = re.compile(r"^W(\d+)_")     # a watch's own series (`W12_watch`): never a queue number
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume"}
+          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules"}
 GIST_CHARS = 160
 
 
@@ -33,6 +33,7 @@ class Item:
     stage: bool | None = None                           # None: the repo's `stage` setting
     ultracode: bool = False                             # launch with Claude Code's ultracode on
     audit: bool = False                                 # keep audit notes beside the report
+    rules: bool = False                                 # bumps the rules revision: carries `[rules]` parked edits
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     alongside: str | None = None                        # what it touches: may start beside running items
     resume_of: str | None = None                        # `resume:` the finished item whose session it forks
@@ -48,7 +49,7 @@ class Item:
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
                 "ultracode": self.ultracode, "audit": self.audit, "template": self.template,
-                "alongside": self.alongside, "resume_of": self.resume_of}
+                "alongside": self.alongside, "resume_of": self.resume_of, "rules": self.rules}
 
     def gist(self) -> str:
         """One line on what the item does, for the items started beside it: its `alongside`
@@ -99,7 +100,7 @@ def parse(path: Path, repo: str) -> Item:
     item.after_red = str(meta.get("after_red", "stop"))
     if item.after_red not in ("stop", "continue"):
         item.errors.append("`after_red` must be stop or continue")
-    for flag in ("needs_planner", "readonly", "ultracode", "audit"):
+    for flag in ("needs_planner", "readonly", "ultracode", "audit", "rules"):
         value = meta.get(flag, False)
         if not isinstance(value, bool):
             item.errors.append(f"`{flag}` must be true or false")

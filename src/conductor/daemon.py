@@ -29,7 +29,7 @@ from pathlib import Path
 
 import psutil
 
-from . import (audits, desktop, executor, git, globs, guard, inbox, items, memory, notify, picker, picks, procs, request, state,
+from . import (audits, desktop, executor, git, globs, guard, inbox, items, memory, notify, parked, picker, picks, procs, request, state,
                talk, targets, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
@@ -238,6 +238,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             self.cfg.path("queue", repo).mkdir(exist_ok=True)
         self._prepare_receipts()
         self._prepare_backlog()
+        parked.prepare(self.cfg.control)
         self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control))
         self._read_code()
         if self._died:
@@ -580,8 +581,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                                   if i != item.id and item.num]:
                         meta["shares_number"] = shared              # its receipt says: name it in full
                     self.starts[item.id] = starts = state.start_estimate(self.cfg, view, item)
+                    carries = {"parked": p} if (p := state.parked_estimate(self.cfg, view, item)) else {}
                     self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    **meta, starts=starts, **dep_warning(item))
+                                    **meta, starts=starts, **carries, **dep_warning(item))
                 # A queued item may be rewritten until it launches: the launch (and a
                 # stage, which a change discards below) reads the file as it is then.
                 digest = file_hash(item.path)
@@ -993,6 +995,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "conductor": own,
             "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
             "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
+            "friction": (header or {}).get("friction"),
             "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }

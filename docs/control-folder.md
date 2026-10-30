@@ -24,6 +24,7 @@ requests/<stamp>/              planner → conductor: replacement files + reques
 signals/                       planner/app → conductor: the verbs in signals.md
 receipts/                      conductor → planner: what became of each write (see receipts.md)
 backlog/<repo>/<name>.md       pre-approved items, drawn into an empty queue (see night-shift.md); ignores itself
+parked/<repo>[.done].md        parked edits for the next serial item (parked.md); ignores itself
 questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
 picks/                         Matt's saved picker choices: <name>.choices.json (see picks.md)
 inbox.md                       generated digest since the read mark
@@ -232,7 +233,7 @@ request fails (`targets missing: state.md (waited 60s); nothing was applied`). A
 whose every target is byte for byte the control folder's copy (HEAD's) waits up to 10s
 (`SAME_WAIT_SECONDS`) for a changed copy to land, then applies as `identical` (the
 `request` event's field; receipt `nothing to commit: every target is identical to HEAD`),
-distinct from missing. Aicomplete lost three applies to this as "nothing changed". Either
+distinct from missing. Either
 wait past 2s gets a `pending` receipt saying which. Every other error fails, at once
 when `request.md` is 2s old (`FRESH_SECONDS`; younger, it may be half written and is
 looked at again): bad front-matter, no `targets:`, a target that is absolute, uses `..`

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import audits, memory, nightshift, picks, questions, talk
+from . import audits, memory, nightshift, parked, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog, live_invalids, signal_invalid
 from .request import is_closeout
@@ -112,8 +112,13 @@ def describe(ev: Event) -> str:
                 text += f" · carry: {d['carry']}"
             if slow := slow_text(d):
                 text += f" · slow: {slow}"
+            if (friction := (d.get("friction") or "").strip()) and friction.lower().rstrip(".") != "none":
+                text += f" · friction: {friction}"
             if d.get("pick"):
                 text += f" · pick: {d['pick']}"
+            if d.get("parked_done") or d.get("parked_back"):
+                text += (f" · parked edits: {len(d.get('parked_done') or [])} done, "
+                         f"{len(d.get('parked_back') or [])} back to `parked/{(ev.item or '').split('/', 1)[0]}.md`")
         case "pick_open":
             text = f"opened picker `{d.get('name')}` ({d.get('manifest')}) at {d.get('url')}"
             if d.get("opened") is False:
@@ -205,6 +210,8 @@ def describe(ev: Event) -> str:
                 text += f", {resumed} (forking session {d.get('resume_session')})"
             if d.get("beside"):
                 text += f"; beside {', '.join(d['beside'])}"
+            if d.get("parked"):
+                text += f"; carries {len(d['parked'])} parked edit(s)"
             if d.get("error"):
                 text += f"; launch failed: {d['error']}"
         case "setup":
@@ -593,6 +600,8 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
             parts.append(f"held after red {ev.item} (#{ev.id}); signal `clear: {repo}` to release")
         if notes := view.unused_notes(cfg, repo):
             parts.append(audits.pending(len(notes), [n.item for n in notes]))
+        if (waiting := parked.counts(cfg.control, repo))[0]:
+            parts.append(f"{waiting[0]} parked edit(s) waiting" + (f" ({waiting[1]} `[rules]`)" if waiting[1] else ""))
         nxt = nightshift.queue_name(cfg, view, repo, "x").split("_", 1)[0]
         out.append(f"- `{repo}`: {'; '.join(parts) or 'idle'} · next item {nxt}")
     for d in view.stray:

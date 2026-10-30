@@ -419,3 +419,10 @@ def test_header_slow_line(tmp_path):
     assert problem is None and "slow" not in header
     r.write_text("status: done\nblocks: none\ncarry: none\nNotes.\npick: picks/m.json\n", encoding="utf-8")
     assert "pick" not in executor.read_header(r)[0]
+    # `friction:` (59) takes any of the three optional places; `none` is kept as said.
+    r.write_text(f"status: done\nblocks: none\ncarry: none\nslow: {slow}\nfriction: the README's test command is "
+                 "stale; retried twice\npick: picks/m.json\n\nbody\n", encoding="utf-8")
+    header, problem = executor.read_header(r)
+    assert problem is None and header["friction"].startswith("the README's") and header["pick"] == "picks/m.json"
+    r.write_text("status: done\nblocks: none\ncarry: none\nNotes.\nfriction: x\n", encoding="utf-8")
+    assert "friction" not in executor.read_header(r)[0]

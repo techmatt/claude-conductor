@@ -77,6 +77,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
+| `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory sampling, pressure levels and the launch guard, the leftover reaper, a daemon's death made visible |
 | `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed |

@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from . import inbox
+from . import inbox, parked
 from .audits import canonical
 from .config import Config
 from .events import Event, EventLog
@@ -26,7 +26,8 @@ LEDGER = Path("prompts") / "ledger.md"     # the run ledger: the order conductor
 MAINTENANCE = (("bug_hunt", "bug hunt"), ("general_cleanup", "general cleanup"), ("cleanup", "cleanup"),
                ("test_cleanup", "test cleanup"), ("claude_md_cleanup", "claude.md cleanup"),
                ("disk_cleanup", "disk space cleanup"))
-SLOW_WINDOW = 5     # a `slow:` component named in two or more of a repo's last five reports
+SLOW_WINDOW = 5     # a `slow:` (or `friction:`) part named in two or more of a repo's last five reports
+RETRO_EVERY = 6     # non-template items finished since the last workflow retro before one is due
 
 
 def _report_key(name: str) -> tuple[int, str] | None:
@@ -152,7 +153,60 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
             named.setdefault(comp, []).append(ev.item.split("/", 1)[1].split("_", 1)[0])
     repeats = [f"{c} ({', '.join(ids)})" for c, ids in named.items() if len(ids) >= 2]
     out.append(f"- `slow:` repeated in the last {len(recent)} report(s): {'; '.join(repeats) or 'none'}")
+    named = {}
+    for ev in recent:
+        for comp in dict.fromkeys(slow_components(friction_text(ev.detail))):
+            named.setdefault(comp, []).append(ev.item.split("/", 1)[1].split("_", 1)[0])
+    repeats = [f"{c} ({', '.join(ids)})" for c, ids in named.items() if len(ids) >= 2]
+    out.append(f"- `friction:` repeated in the last {len(recent)} report(s): {'; '.join(repeats) or 'none'}")
+    out.append(workflow_retro(log, view, repo))
+    waiting, rules = parked.counts(cfg.control, repo)
+    out.append(f"- parked edits waiting: {waiting}" + (f" ({rules} `[rules]`)" if rules else ""))
     return out
+
+
+def friction_text(detail: dict) -> str | None:
+    """A finish's `friction:` worth counting, or None when absent or `none`."""
+    text = (detail.get("friction") or "").strip()
+    return text if text and text.lower().rstrip(".") != "none" else None
+
+
+def friction_score(log: EventLog, fin: Event) -> tuple[int, list[str]]:
+    """How much an item's run cost beyond its work, and why: its `friction:` parts, watch
+    tells to it, questions that timed out to their default, watch `eta` flags (it overran
+    its own estimate) and a red outcome."""
+    item = fin.item
+    parts = []
+    if n := len(slow_components(friction_text(fin.detail))):
+        parts.append(f"{n} friction")
+    counts = {
+        "watch tell": sum(1 for e in log.query(kinds=["tell"], item=item) if e.detail.get("by") == "watch"),
+        "timed-out question": len(log.query(kinds=["default"], item=item)),
+        "overrun": sum(1 for e in log.query(kinds=["watch_flag"], item=item) if e.detail.get("flag") == "eta"),
+    }
+    parts += [f"{v} {k}{'s' if v > 1 else ''}" for k, v in counts.items() if v]
+    if fin.detail.get("status") == "red":
+        parts.append("red")
+    score = n + sum(counts.values()) + (2 if fin.detail.get("status") == "red" else 0)
+    return score, parts
+
+
+def workflow_retro(log: EventLog, view: View, repo: str) -> str:
+    """When a workflow retro (`post-audit`, a self-audit) last ran, how many non-template
+    items finished since, and once RETRO_EVERY have, that it is due, naming the item with
+    the most friction among them."""
+    fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo), key=lambda e: e.id)
+    last = next((ev for ev in reversed(fins) if canonical(ev.detail.get("template")) == "self_audit"), None)
+    since = [ev for ev in fins if not ev.detail.get("template") and not ev.detail.get("resume_of")
+             and (last is None or ev.id > last.id)]
+    text = (f"{last.item.split('/', 1)[1]}, {clock(last.ts)}" if last else "never") + \
+        f" · {len(since)} non-template item(s) finished since"
+    if len(since) >= RETRO_EVERY:
+        scored = [(friction_score(log, ev), ev) for ev in since]
+        (score, why), worst = max(scored, key=lambda s: (s[0][0], s[1].id))
+        text += (f" · **due**: post-audit {worst.item.split('/', 1)[1]} ("
+                 + (", ".join(why) if score else "no friction recorded; the latest") + ")")
+    return f"- workflow retro: {text}"
 
 
 def state_sections(text: str) -> dict[str, list[str]]:

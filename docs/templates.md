@@ -105,8 +105,10 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   and changes nothing. It behaves as `audit: true`: its notes, at the resume item's own
   `.audit.md` path, start `Self-audit of <orig>.` and use the four headings plus
   *What happened vs. what was asked* (each divergence and when it started), *What
-  misled you* (quoted, with the wording that would have worked) and *Where the time
-  went*. They count as unused notes for the repo's next cleanup, whose inlined heading
+  misled you* (quoted, with the wording that would have worked, then concrete workflow
+  changes, each with what it would have saved: 59) and *Where the time went*. As the
+  digest's **workflow retro** (`inbox.md`), it runs routinely: due after 6 non-template
+  items, on the item with the most friction. They count as unused notes for the repo's next cleanup, whose inlined heading
   names the original (`… : a self-audit of <orig>, written by its own session`). The
   report has **Summary** and **About conductor** (findings about the template,
   preamble, planner or tools, for the planner to carry to conductor's `planner-notes.md`). Not

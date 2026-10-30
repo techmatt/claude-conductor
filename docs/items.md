@@ -21,6 +21,7 @@ ultracode: true          # launch with Claude Code's ultracode on (see executors
 audit: true              # keep audit notes beside the report (see templates.md)
 template: cleanup        # a conductor-owned prompt (templates.md): cleanup, general_cleanup, test_cleanup, …
 resume: sandbox/001_x    # ask a finished item's own session, forked; always readonly (resume.md)
+rules: true              # it bumps the rules revision: it also carries `[rules]` parked edits (parked.md)
 ---
 Prompt body.
 ```
