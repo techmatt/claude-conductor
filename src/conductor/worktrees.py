@@ -9,7 +9,9 @@ interrupted by a daemon restart is simply run again.
 
 from __future__ import annotations
 
+import re
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,6 +20,10 @@ from .config import Config
 
 BRANCH_PREFIX = "conductor/"
 SQUASH_LISTED = 100              # branch commit subjects listed in a squash commit's body
+FF_TRIES = 4                     # fast-forward attempts when git cannot write the index or a lock
+FF_BACKOFF = 0.5                 # seconds before the second attempt, doubling after
+# A fast-forward failure worth trying again at once: Windows holding the index or a lock.
+FF_TRANSIENT = re.compile(r"index file|\.lock\b|permission denied|unable to unlink|resource busy", re.IGNORECASE)
 
 
 class WorktreeError(RuntimeError):
@@ -133,21 +139,70 @@ def move_to(cfg: Config, repo: str, path: Path) -> str:
 
 @dataclass
 class Merge:
-    outcome: str                 # merged | hold | conflict | resolve
+    outcome: str                 # merged | hold | conflict | resolve (ready: `_main_ready` only)
     sha: str | None = None       # main after the merge
     reason: str = ""
     files: list[str] = field(default_factory=list)
     squashed: int = 0            # the branch's commits folded into the one that lands (0: done earlier)
+    restored: list[str] = field(default_factory=list)   # main checkout paths put back to its HEAD
+    dirty: list[str] = field(default_factory=list)      # left dirty by a failed fast-forward, not the branch's
 
 
-def _main_ready(repo_path: Path, main: str) -> Merge | None:
-    """A hold while the main checkout cannot be fast-forwarded."""
+@dataclass
+class Restore:
+    restored: list[str] = field(default_factory=list)
+    foreign: list[str] = field(default_factory=list)
+    error: str = ""
+
+
+def _names(out: str) -> list[str]:
+    return [p for p in out.split("\0") if p]
+
+
+def restore_main(repo_path: Path, branch: str) -> Restore:
+    """Undo a fast-forward of the main checkout that stopped part-way (git could not write
+    its index, or the daemon died mid-merge). Only when every dirty path is the branch's
+    own, holding exactly the branch's version (or gone where the branch has none), is the
+    checkout reset to its HEAD and the branch's files left untracked removed; otherwise
+    nothing is touched and `foreign` names what is not the branch's."""
+    tracked = sorted(set(_names(git.run(repo_path, "diff", "HEAD", "--name-only", "--no-renames", "-z")))
+                     | set(_names(git.run(repo_path, "diff", "--cached", "HEAD", "--name-only", "--no-renames", "-z"))))
+    loose = _names(git.run(repo_path, "ls-files", "--others", "--exclude-standard", "-z"))
+    if not tracked and not loose:
+        return Restore()
+    want: dict[str, str] = {}
+    for entry in _names(git.run(repo_path, "ls-tree", "-z", "--full-tree", branch, "--", *tracked, *loose)):
+        meta, _, path = entry.partition("\t")
+        if meta.split()[1] == "blob":
+            want[path] = meta.split()[2]
+    present = [p for p in [*tracked, *loose] if (repo_path / p).is_file()]
+    have = dict(zip(present, git.run(repo_path, "hash-object", "--", *present).split())) if present else {}
+    foreign = [p for p in tracked if have.get(p) != want.get(p)]
+    own_loose = [p for p in loose if p in want and have.get(p) == want[p]]
+    if foreign:
+        return Restore(foreign=foreign)
+    try:
+        if tracked:
+            git.run(repo_path, "reset", "-q", "--hard", "HEAD")
+        for p in own_loose:
+            (repo_path / p).unlink()
+    except (git.GitError, OSError) as exc:
+        return Restore(foreign=tracked or own_loose, error=str(exc).strip()[:300])
+    return Restore(restored=sorted(tracked + own_loose))
+
+
+def _main_ready(repo_path: Path, main: str, branch: str) -> Merge:
+    """`ready`, or a hold while the main checkout cannot be fast-forwarded. A checkout left
+    dirty by a part-way fast-forward of `branch` is first put back (`restored`)."""
     if git.symbolic_head(repo_path) != f"refs/heads/{main}":
         return Merge("hold", reason=f"the main checkout is on {git.symbolic_head(repo_path) or 'a detached HEAD'}, "
                                     f"not {main}")
+    restored = []
     if git.tracked_status(repo_path):
-        return Merge("hold", reason="the main checkout has uncommitted changes")
-    return None
+        restored = restore_main(repo_path, branch).restored
+        if git.tracked_status(repo_path):
+            return Merge("hold", reason="the main checkout has uncommitted changes")
+    return Merge("ready", restored=restored)
 
 
 def merge(cfg: Config, repo: str, path: Path, branch: str, subject: str) -> Merge:
@@ -160,8 +215,15 @@ def merge(cfg: Config, repo: str, path: Path, branch: str, subject: str) -> Merg
         return Merge("merged", git.rev(repo_path, main), "branch already gone (merged before a restart)")
     if git.is_ancestor(repo_path, tip, main):
         return Merge("merged", git.rev(repo_path, main))
-    if hold := _main_ready(repo_path, main):
-        return hold
+    if (ready := _main_ready(repo_path, main, branch)).outcome == "hold":
+        return ready
+    m = _merge_ready(cfg, repo, path, branch, subject)
+    m.restored = ready.restored + m.restored
+    return m
+
+
+def _merge_ready(cfg: Config, repo: str, path: Path, branch: str, subject: str) -> Merge:
+    repo_path, main = cfg.repos[repo], cfg.opts(repo).main
     if not path.is_dir():
         git.run(repo_path, "worktree", "prune", check=False)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -210,15 +272,18 @@ def continue_rebase(cfg: Config, repo: str, path: Path, branch: str, files: list
     """Stage the resolved prose `files` and carry the stopped rebase on (it may stop
     again: `resolve` once more, or `conflict`)."""
     repo_path, main = cfg.repos[repo], cfg.opts(repo).main
-    if hold := _main_ready(repo_path, main):
-        return hold
+    if (ready := _main_ready(repo_path, main, branch)).outcome == "hold":
+        return ready
     if not git.rebase_in_progress(path):
         # Conductor's machinery, not the item: the landing starts over next tick.
-        return Merge("hold", reason="the stopped rebase is gone; landing again from the branch")
+        return Merge("hold", reason="the stopped rebase is gone; landing again from the branch",
+                     restored=ready.restored)
     git.run(path, "add", "--", *files)
     staged = git.run(path, "diff", "--cached", "--name-only", check=False).strip()
     # A resolution identical to main leaves the replayed commit empty: skip it.
-    return _rebase(cfg, repo, path, branch, ["rebase", "--continue"] if staged else ["rebase", "--skip"])
+    m = _rebase(cfg, repo, path, branch, ["rebase", "--continue"] if staged else ["rebase", "--skip"])
+    m.restored = ready.restored + m.restored
+    return m
 
 
 def abort_rebase(path: Path) -> None:
@@ -246,11 +311,30 @@ def _rebase(cfg: Config, repo: str, path: Path, branch: str, args: list[str]) ->
             # held open): try again next tick.
             return Merge("hold", reason=f"rebase failed: {reason}")
         return Merge("conflict", reason=reason.splitlines()[0], files=files)
-    main = opts.main
-    try:
-        git.run(repo_path, "merge", "-q", "--ff-only", branch)
-    except git.GitError as exc:
-        # main moved between the rebase and the fast-forward, or an untracked file is in
-        # the way: try again next tick.
-        return Merge("hold", reason=f"fast-forward failed: {str(exc).strip()[:300]}")
-    return Merge("merged", git.rev(repo_path, main))
+    return _fast_forward(repo_path, opts.main, branch)
+
+
+def _fast_forward(repo_path: Path, main: str, branch: str) -> Merge:
+    """Fast-forward the main checkout to `branch`. A failure may leave it part-updated, so
+    each is followed by `restore_main`; one on the index or a lock (Windows holding a
+    file) is tried again at once, with a backoff. Anything else (main moved since the
+    rebase, an untracked file in the way) holds for the next tick; so does a checkout
+    still dirty after the restore, with `dirty` naming it."""
+    restored: list[str] = []
+    for attempt in range(FF_TRIES):
+        if attempt:
+            time.sleep(FF_BACKOFF * 2 ** (attempt - 1))
+        try:
+            git.run(repo_path, "merge", "-q", "--ff-only", branch)
+            return Merge("merged", git.rev(repo_path, main), restored=restored)
+        except git.GitError as exc:
+            error = str(exc).strip()[:300]
+        back = restore_main(repo_path, branch)
+        restored = sorted(set(restored) | set(back.restored))
+        if back.foreign:
+            why = f"; restoring it failed: {back.error}" if back.error else ""
+            return Merge("hold", reason=f"fast-forward failed: {error}{why}", restored=restored, dirty=back.foreign)
+        if not FF_TRANSIENT.search(error):
+            break
+    tries = f" ({attempt + 1} tries)" if attempt else ""
+    return Merge("hold", reason=f"fast-forward failed{tries}: {error}", restored=restored)

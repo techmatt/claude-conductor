@@ -63,6 +63,16 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
     logged once as a `hold` (with `merge: true`), and proceeds once it is. Merges
     behind it in the same repo wait too. Untracked files never hold a merge unless the
     fast-forward would overwrite one.
+  - *Fast-forward stopped part-way* (Windows holding the index or a lock: "unable to
+    write new index file", aicomplete 035): the checkout is put back to its HEAD, but
+    only when every dirty path is the branch's own, holding exactly the branch's version
+    (or gone where the branch deletes it); the branch's files left untracked are removed
+    with it, and a `warning` names them. A failure on the index or a lock is then tried
+    again at once (`FF_TRIES` 4, backoff from 0.5s, doubling); any other failure holds
+    to the next tick. A checkout still dirty after that, with changes that are not the
+    branch's, is `checkout_dirty` (red, toasted) and the merge holds until someone
+    cleans it. The same restore runs when a merge finds the checkout dirty (a daemon
+    killed mid-fast-forward), so that case no longer needs a person either.
   - *Uncommitted changes* left in the worktree make the item red (they would be lost).
   - *Red item:* never merged; branch and worktree kept for inspection (links removed).
     A report saying `done`/`partial` gets a `conductor:` line under its header (`red

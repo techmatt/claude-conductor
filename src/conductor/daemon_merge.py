@@ -91,6 +91,13 @@ class MergeMixin:
                 m = worktrees.merge(self.cfg, rec["repo"], wt, rec["branch"], self._squash_subject(run))
         except git.GitError as exc:
             m = worktrees.Merge("hold", reason=f"git failed: {str(exc)[:300]}")
+        if m.restored:
+            self.log.append("warning", item=run.item_id, branch=rec["branch"], files=m.restored,
+                            note=f"main checkout restored to its HEAD: a fast-forward of {rec['branch']} stopped "
+                                 f"part-way ({len(m.restored)} of its paths put back)")
+        if m.dirty:
+            self.log.append("checkout_dirty", item=run.item_id, branch=rec["branch"], files=m.dirty, error=m.reason,
+                            note="the merge waits until the main checkout is clean; these paths are not the branch's")
         if m.outcome == "resolve":
             return self._start_resolver(run, m)
         if m.outcome == "hold":

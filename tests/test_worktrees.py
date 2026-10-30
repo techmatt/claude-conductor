@@ -285,6 +285,58 @@ def test_dirty_main_holds_merge_until_clean(env):
     assert (env.repo / "a.txt").is_file()
 
 
+def part_way_ff(env, monkeypatch, failures: int, extra: dict[str, str] | None = None) -> list[int]:
+    """The main checkout's first `failures` fast-forwards stop part-way as on Windows: the
+    branch's files written into the checkout, then "unable to write new index file";
+    `extra` writes files that are not the branch's too. Returns the attempt count."""
+    from conductor import git as gitmod, worktrees
+    monkeypatch.setattr(worktrees, "FF_BACKOFF", 0)
+    real, calls = gitmod.run, [0]
+
+    def run(repo, *args, **kw):
+        if Path(repo) == env.repo and args[:3] == ("merge", "-q", "--ff-only"):
+            calls[0] += 1
+            if calls[0] <= failures:
+                for f in real(repo, "diff", "--name-only", "HEAD", args[3]).split():
+                    (env.repo / f).write_bytes(real(repo, "show", f"{args[3]}:{f}").encode("utf-8"))
+                for f, text in (extra or {}).items():
+                    (env.repo / f).write_text(text, encoding="utf-8", newline="\n")
+                raise gitmod.GitError(f"git {' '.join(args)}: error: unable to write new index file")
+        return real(repo, *args, **kw)
+    monkeypatch.setattr(gitmod, "run", run)
+    return calls
+
+
+def test_part_way_fast_forward_is_restored_and_retried(env, monkeypatch):
+    calls = part_way_ff(env, monkeypatch, failures=2)
+    env.queue("001_a", "FAKE commit README.md new\nFAKE commit a.txt a")
+    env.tick_until(lambda: env.finished("code/001_a"))
+    assert env.finished("code/001_a").detail["status"] == "done" and calls[0] == 3
+    assert (env.repo / "README.md").read_text(encoding="utf-8") == "new\n" and (env.repo / "a.txt").is_file()
+    restored = [e for e in env.events("warning") if "restored to its HEAD" in e.detail["note"]]
+    assert restored and restored[0].detail["files"] == ["README.md", "a.txt"]
+    assert not env.events("checkout_dirty") and not env.events("hold")
+
+
+def test_part_way_fast_forward_with_foreign_changes_is_red_and_holds(env, monkeypatch):
+    (env.repo / "other.txt").write_text("mine\n", encoding="utf-8", newline="\n")
+    git(env.repo, "add", "other.txt")
+    git(env.repo, "commit", "-qm", "other")
+    part_way_ff(env, monkeypatch, failures=1, extra={"other.txt": "edited by hand\n"})
+    env.queue("001_a", "FAKE commit README.md new")
+    env.tick_until(lambda: env.events("checkout_dirty"))
+    [dirty] = env.events("checkout_dirty")
+    assert dirty.item == "code/001_a" and dirty.detail["files"] == ["other.txt"]
+    assert "unable to write new index file" in dirty.detail["error"]
+    assert (env.repo / "README.md").read_text(encoding="utf-8") == "new\n"        # nothing touched
+    assert not env.finished("code/001_a") and env.events("hold")
+    # Put right by hand: the branch's own leftover goes back by itself, the merge lands.
+    git(env.repo, "checkout", "other.txt")
+    env.tick_until(lambda: env.finished("code/001_a"))
+    assert env.finished("code/001_a").detail["status"] == "done"
+    assert any("restored to its HEAD" in e.detail["note"] for e in env.events("warning"))
+
+
 def test_merge_resumes_after_restart(env):
     env.queue("001_a", "FAKE commit a.txt a")
     (env.repo / "README.md").write_text("editing\n", encoding="utf-8")

@@ -246,6 +246,9 @@ def describe(ev: Event) -> str:
                     "main untouched")
             if d.get("resolver"):
                 text += f"; merge executor failed: {d.get('error')}"
+        case "checkout_dirty":
+            text = (f"{who} merge of `{d.get('branch')}` stopped part-way and left the main checkout dirty in "
+                    f"{', '.join(d.get('files', [])[:5])} (not the branch's); the merge waits until it is clean")
         case "paths_violation":
             files = d.get("files", [])
             text = (f"{who} changed {len(files)} file(s) outside its paths "

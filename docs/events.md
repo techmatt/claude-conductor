@@ -24,6 +24,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `land` | a `land:` began, then landed | state, branch; sha, commits, squashed, hashes |
 | `resolve` | the rebase stopped on prose files only; a merge executor resolves them | files, step, commit (the one being replayed), session_id, pid, deadline |
 | `conflict` | the rebase onto main conflicted, or a merge executor failed (red) | branch, files, error, note; resolver (the merge executor's log); land (a `land:`) |
+| `checkout_dirty` | a fast-forward of the main checkout failed part-way and left changes that are not the branch's, so nothing was put back (red; the merge holds: `worktrees.md`) | branch, files (the paths not the branch's), error, note |
 | `paths_violation` | the branch changed files outside `paths` (red) | files, paths_declared |
 | `adopt` | restart found the executor (or stage: `stage: true`) alive | pid, session_id |
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |

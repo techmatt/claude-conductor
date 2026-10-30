@@ -45,6 +45,9 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
                     "Reverted. " + "; ".join(detail.get("changes", []))[:200])
         case "hold":
             return f"{project}: {who} held", str(detail.get("reason", ""))[:250]
+        case "checkout_dirty":
+            return (f"{project}: {who}'s merge left the main checkout dirty",
+                    f"Not the branch's: {', '.join(detail.get('files', [])[:5])}. {detail.get('error', '')}"[:250])
         case "run_failed":
             return f"{project}: `{detail.get('target')}` did not come up", str(detail.get("error", ""))[:250]
         case "pick_failed":

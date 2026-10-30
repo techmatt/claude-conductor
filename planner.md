@@ -109,6 +109,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`, never a queue number or a planner session's) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
+- **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.
 - **Picks.** A prompt producing candidates says "picker" (brings the schema), under a new name, images in a `shared` folder (checked in `conductor.toml` first), never committed build output. "Which go forward": a `kind: many` row. Rounds are `<name>_r<N>`: a saved round retires the earlier ones' files; any other picker Matt is done with: **retire X** (`docs/picks.md`). *picks saved <time>*: read the choices, never ask Matt.
 
 ## Reading a report
