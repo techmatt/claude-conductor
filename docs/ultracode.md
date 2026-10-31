@@ -26,3 +26,9 @@ the Workflow tool is present in every `-p` session; only the opt-in differs.
 
 **Fan-out.** The preamble's subagent rule wins over Workflow's and Ultracode's own notes: at most
 2 heavy subagents at once, light reviewers batched, about 10 in all (`executors.md`, *Load budget*).
+
+**No `isolation: worktree`.** Claude Code puts an Agent or Workflow helper's worktree in
+the main checkout's `.claude/worktrees`, even from an item's worktree (aicomplete 040),
+and the preamble forbids touching the main checkout. So the full preamble says to leave
+it off and split helpers by file; there is no setting for the folder, only a `WorktreeCreate`
+hook that would take over creating the worktree.

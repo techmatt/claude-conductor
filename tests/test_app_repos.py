@@ -48,6 +48,24 @@ def test_note_takes_the_spare_width_and_buttons_line_up(qapp, tmp_path):
     assert old.buttons["Terminal"].x() == new.buttons["Terminal"].x() > 0
 
 
+def test_a_narrow_window_elides_the_name_before_the_buttons_leave(qapp, tmp_path):
+    panel = _panel(tmp_path)
+    snap = _snap(tmp_path)
+    snap.repos[0].queued[0].name = "002_" + "a_very_long_item_name_" * 3
+    panel.update_snapshot(snap)
+    h, tree = panel.tree.header(), panel.tree
+    wide = h.sectionSize(0)
+    others = sum(h.sectionSize(c) for c in (1, 2, 4))
+    panel.resize(0, 600)                            # settled below by its own width
+    tree.setFixedWidth(others + panel.NAME_MIN + panel.NOTE_MIN + 40)
+    panel._fit()
+    assert panel.NAME_MIN <= h.sectionSize(0) < wide and h.sectionSize(3) >= panel.NOTE_MIN
+    assert sum(h.sectionSize(c) for c in range(5)) <= tree.viewport().width()   # nothing off the edge
+    h.resizeSection(0, wide)                        # a dragged width stays: the tree scrolls instead
+    panel._fit()
+    assert h.sectionSize(0) == wide
+
+
 def test_a_dragged_width_is_kept_across_refreshes_and_restarts(qapp, tmp_path):
     settings = _settings(tmp_path)
     panel = _panel(tmp_path, settings)

@@ -176,9 +176,16 @@ def test_eta_drift(env):
     assert inbox.eta_drift(log, item) == f"ETA {at(120)} is earlier than the outline's finish {at(180)}"
     assert "**ETA " in inbox.now_progress(log, item)
     progress(env, outline=rows(at(30), at(180), done=2))
-    assert inbox.eta_drift(log, item) is None               # every row done: nothing left to drift
+    assert inbox.eta_drift(log, item) == f"ETA {at(120)} is still ahead with every outline row done"
     progress(env, outline=rows(at(30), at(121)))
     assert inbox.eta_drift(log, item) is None               # within the slack
+    progress(env, outline=rows(at(30), at(60)))
+    assert inbox.eta_drift(log, item) == f"ETA {at(120)} is well past the outline's finish {at(60)}"
+    progress(env, outline=rows(at(30), at(100)))
+    assert inbox.eta_drift(log, item) is None               # past it, but not by much
+    progress(env, note="nearly", eta=at(10))
+    progress(env, outline=rows(at(5), at(8), done=2))
+    assert inbox.eta_drift(log, item) is None               # every row done, finishing about now
     # Already past while rows remain. A duration from a posting long gone reads as past.
     log.append("progress", item="code/002_y", note="x", eta="0m")
     log.append("progress", item="code/002_y", outline=rows(at(60), at(90), done=1))
@@ -290,7 +297,8 @@ def test_templates_carry_the_leftover_line_but_a_watch(env):
 def test_the_mcp_config_names_the_workdir(env):
     from conductor import executor
     item = Item("code", "001_a", env.control / "x.md", num=1, body="")
-    assert '"--workdir"' in executor.mcp_config(env.d.cfg, item, "sid", env.root / "wt")
+    text = executor.mcp_config(env.d.cfg, item, "sid", env.root / "wt")
+    assert '"--workdir"' in text and '"alwaysLoad": true' in text
 
 
 def test_create_time_of_a_gone_process():

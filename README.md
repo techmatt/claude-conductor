@@ -43,8 +43,7 @@ uv run conductor app [<control folder> …]                  # the desktop app (
 The control folder argument defaults to `$CONDUCTOR_CONTROL`, then the current folder.
 `conductor app` with no folder adds `$CONDUCTOR_CONTROL` if set, else the current folder
 only when it holds a `conductor.toml`; it always opens its remembered projects too.
-One daemon per control folder: a second `run` refuses while the first is alive
-(`.conductor/daemon.json` holds its pid and process creation time).
+One daemon per control folder: a second `run` refuses while the first is alive.
 
 `--since` takes an event id (`#12` or `12`, exclusive), a relative age (`30m`, `2h`,
 `1d`), a clock time today (`5:25pm`), an ISO time, `checkpoint` (from the latest
@@ -65,7 +64,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/push.md` | Pushing main to a remote after each merge, the control folder after its commits, on `push:` and at closeout; failures and rejections |
-| `docs/executors.md` | How an executor is launched: the preamble (light for a small item, full otherwise), its port, MCP and settings files, `wait_for`, the rules on scope, scratch and load, long tool calls, setup, the report header, the outcome |
+| `docs/executors.md` | How an executor is launched: the preamble (full, light or watch), its port, MCP and settings files, `wait_for`, the rules on scope, scratch and load, long tool calls, setup, the report header, the outcome |
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk cleanup, claude.md cleanup, content cleanup, bug hunt, self audit, watch) |
@@ -86,3 +85,4 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/restart.md` | The restart rule, the self-restart on a code change; platform notes (process groups, detached launches) |
 | `docs/development.md` | The test suite, its lanes and the fake executor |
+| `docs/known-limits.md` | Accepted gaps, by area |

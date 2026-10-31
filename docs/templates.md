@@ -10,8 +10,8 @@ carries `template` and `template_version` (the text's sha256, first 12 hex digit
 `git log` on the file finds the exact text sent. Executors never see the control
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
 `.prompt.md`). The texts use `{{name}}` placeholders (`repo`, `project`, `notes`, `usage`,
-`original`; `audit.md`'s `notes_path`). A template item always gets the full preamble
-(`executors.md`, *Two preambles*), and the template's text follows it unchanged.
+`original`; `audit.md`'s `notes_path`). A template item gets the full preamble, a watch its own
+(`executors.md`, *Three preambles*), and the template's text follows it unchanged.
 
 **Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
 `self_audit`); one that edits, deletes or moves anything is a *cleanup*. So `general_audit` became
@@ -110,7 +110,7 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   misled you* (quoted, with the wording that would have worked, then concrete workflow
   changes, each with what it would have saved: 59) and *Where the time went*. As the
   digest's **workflow retro** (`inbox.md`), it runs on events: a `partial` or `red` item, a
-  run past ~1.5× its first ETA, or 12 non-template items at the latest. They count as unused notes for the repo's next cleanup, whose inlined heading
+  run past ~1.5× its first ETA and 10 minutes over, or 12 non-template items at the latest. They count as unused notes for the repo's next cleanup, whose inlined heading
   names the original (`… : a self-audit of <orig>, written by its own session`). The
   report has **Summary** and **About conductor** (findings about the template,
   preamble, planner or tools, for the planner to carry to conductor's `planner-notes.md`). Not

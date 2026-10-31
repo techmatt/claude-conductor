@@ -28,9 +28,3 @@ dev = [
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]
 build-backend = "uv_build"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-# The fast lane by default, in parallel. Everything: `uv run pytest -m ""`. One test: add `-n0`.
-addopts = "-n auto --maxprocesses 8 --dist worksteal -m 'not slow'"
-markers = ["slow: runs several executors, merges, stages or restarts (the full lane: -m \"\")"]

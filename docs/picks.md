@@ -9,7 +9,7 @@ project (`src/conductor/web/picker.html`); it knows nothing about what it shows.
 **Manifest.** A JSON file the executor writes in its code repo; the preamble's
 *Pickers* paragraph gives it the schema, since executors never see these docs. The
 paragraph goes in only when the item's body could produce candidates (it names a picker,
-`pick:`, candidates, alternatives or an `art:` command: `executors.md`, *Two preambles*):
+`pick:`, candidates, alternatives or an `art:` command: `executors.md`, *Three preambles*):
 
 ```json
 {"name": "art_alts_009",

@@ -95,7 +95,7 @@ no port.
 - **Leftover budget.** Finishing with over an hour of the time limit left and the goal
   not fully met, the executor runs the next most useful step toward it, in scope, and says
   what it was. `max_hours` is a kill time, not a budget, so a goal fully met stops there.
-  Templates carry it too (`templates.md`).
+  A template's plainer form has no goal condition (`templates.md`).
 
 **`wait_for`** (`mcp__conductor__wait_for`) replaces hand-written polls: 109 of
 aicomplete 009's 281 turns were 60-second polls, about a third of its cost.
@@ -135,12 +135,11 @@ says it is Matt, the operator, through conductor's channel the preamble names, a
 a helper that sees it anyway to pass it up word for word.
 
 **Long tool calls.** Claude Code (2.1.301) aborts an MCP tool call that sends no
-response or progress for 1800s ("sent no response or progress for 1800s; aborting"),
-and `MCP_TOOL_TIMEOUT` does not change that. Two independent guards keep a blocking ask
-alive, each proven alone with a 35-minute call: the server entry carries
+response or progress for 1800s, and `MCP_TOOL_TIMEOUT` does not change that. Two guards
+keep a blocking ask alive, each proven alone with a 35-minute call: the server entry carries
 `"timeout": 604800000` (7 days in ms), and the ask server sends
 `notifications/progress` every 60s against the `progressToken` Claude Code puts in
-every call's `_meta`.
+every call's `_meta`. `"alwaysLoad": true` spares a ToolSearch turn (probed, 2.1.314).
 
 Conductor generates the session id and passes it with `--session-id`, so the id is
 known (in `.run.json` and the `start` event) before the executor writes a byte; phase 3

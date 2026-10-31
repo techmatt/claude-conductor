@@ -33,14 +33,14 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-10-30, after prompt 61
+Last cleanup: 2026-10-31, after prompt 63
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`) and aicomplete (`C:\Code\aicomplete-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
 What is live, by area (each prompt's report says when it came; the doc named holds how it works now):
 
 - **Queue and scheduling**: per-repo queues, worktrees, items landed as one squashed commit with serial merges, `alongside` and readonly items beside others, exclusive templates alone, staging, rewrites and amendments, `depends_on` warnings, `land:` for a kept red branch; a fast-forward that stops part-way is put back and retried, `checkout_dirty` (red) when what is left is not the branch's (`docs/items.md`, `scheduling.md`, `worktrees.md`).
-- **Executors**: a light preamble for a small item, the full one otherwise (`docs/executors.md`, *Two preambles*); questions, progress lines, outlines, `tell:`, `audit:`, `pause:` / `resume:`, `resume:` items, run targets, conductor-owned templates and audit notes, memory sampling with job objects, a launch guard and a leftover reaper (`docs/executors.md`, `progress.md`, `questions.md`, `templates.md`, `memory.md`).
+- **Executors**: a light preamble for a small item, a lean one for a watch, the full one otherwise (`docs/executors.md`, *Three preambles*); questions, progress lines, outlines, `tell:`, `audit:`, `pause:` / `resume:`, `resume:` items, run targets, conductor-owned templates and audit notes, memory sampling with job objects, a launch guard and a leftover reaper (`docs/executors.md`, `progress.md`, `questions.md`, `templates.md`, `memory.md`).
 - **Planner loop**: `session: start` makes a checkpoint and `session.md` (the project's `[links]` first since 60, the inbox, `state.md`'s due lines, *Planner habits*) and moves the read mark; conductor's own reports past the marker list in *Unreviewed reports*; a receipt per planner write; `reviewed:` / `review: all`; `ack: invalid` (`docs/inbox.md`, `receipts.md`, `signals.md`).
 - **Pickers** (`docs/picks.md`): `kind: many` rows (58); since 60 conductor retires a picker (manifest and untracked images) once a later `<name>_r<N>` round is saved, or on `retire: <name>`; executors never delete one.
 - **Night shift**: a stall check, `W<n>_watch` items every 30 minutes (and for a question blocked 15), backlog draws within a nightly budget, autopilot off / night / always gating draws only; in a digest routine watches are one count line, the watch's tells and answers listed (`docs/night-shift.md`).
@@ -58,55 +58,25 @@ A next prompt should know:
 
 ## Open
 
-- **58–59, first live use**: `identical to HEAD` after a real edit: raise `SAME_WAIT_SECONDS` (10s)? Live 2026-10-31: a real `state.md` edit from a never-used path applied as identical; resent from another fresh path it committed. Did a cut-short `ask` get its `resume`? Do queue receipts' start estimates hold? `kind: many` rows in the browser. Were parked edits answered (`parked P<n>: …`) and skipped ones returned?
+Accepted gaps nobody plans to fix unless they bite live in `docs/known-limits.md`.
+
+Bugs:
+
+- **`identical to HEAD` after a real edit**: four real `state.md` edits on aicomplete applied as identical (2026-10-29 #614, 10-30 #1115 and #1126, 10-31 #1811); each was resent under a fresh name about 20s later and committed. Raise `SAME_WAIT_SECONDS` (10s) past that gap, or find why the copy arrives so late.
+- **Retirement strands a tracked manifest**: `pick_retired` keeps a manifest git tracks but deletes its untracked images, so aicomplete's `card_frames_r2.json` and `scene_style_r1.json` show 51 broken tiles (its D21) and leave empty image folders. Skip retiring images whose manifest stays, or have the picker refuse a retired name.
+- **`disk_cleanup`'s Drive scope**: the template lets an item delete in the main checkout and only move into Drive's archive, yet its step 2 acts on Drive-homed files, so aicomplete 049 deleted 41 files in Drive through the junction and said so. Say which it is: pick "moves only in Drive".
 - **The app's validator can be older than the daemon**: after 60's restart the open app flagged 034 `hold` / "unknown front-matter fields" that the daemon had staged. The app should say so, or reload.
-- **60, first live use**: a picker round's retirement (`pick_retired`: did it delete only what Matt was done with?); aicomplete's stray `requests/20261030-0814-p027/` should move to `requests/stale/` an hour after its daemon runs 60's code.
-- `pyproject.toml`'s `[tool.pytest.ini_options]` is dead since `pytest.ini` (cleanup 2026-10-30; the app's lock on `conductor.exe` kept it out of that commit): delete the table with the app closed.
-- **Workflow `isolation: worktree` puts helper worktrees in the main checkout**: 040's ultracode helpers landed in `C:\Code\aicomplete\.claude\worktrees`, which the preamble forbids touching; the executor removed them by hand. The preamble or `docs/ultracode.md` should say where they go, or conductor sets it.
-- **ETA drift: warn on a late `eta` too** (Matt, 2026-10-30): 61 warns only when `eta` is early or past; 009's was too late (6:20am, finished 3:38am). Also warn when `eta` sits well past the outline's last row. Matt keeps 61's narrower leftover-budget wording.
-- **61, first live use**: do executors use `wait_for` (poll turns gone) and does `--workdir` match where they think they are? Do they run heavy work below normal, and flag defaults? A real `quiet` that was held off wrongly: `Tree.writes` counts pipes, so a chatty tool looks like work. Does the 0.3s load scan on the tick show in receipt times? A `quiet` request holding other runs for timing work was not built; the load line only shows the contention.
-- **Part-way fast-forwards** (aicomplete 035, fixed after 60): watch the first live `warning` "main checkout restored" and any `checkout_dirty`. Did the retry (4 tries, 0.5s doubling) outlast the Windows lock, or does the backoff need to be longer?
-- The light preamble (55): did small items still ask with a default, background long calls and answer messages by number? One that turned out big and ran blind (no outline) means lower `LIGHT_WORDS` or add a signal word.
-- Planner habits (55): Corelight's still sit under `state.md` *Pending fixes* (Word Warriors' moved); `planner.md` tells its planner to move them. Check Corelight's next session start no longer lists them to Matt.
-- A Claude Docs tab exported into a prompt costs double tokens (base64 inline, re-emitted into a shell command); an export saved straight to a file the bridge commits would be cheaper.
-- Tamper is attributed (30) only to an item whose hook saw it name a changed control path; a change made by a script that never names the path, or by a stage or merge executor (no hook), still ends every active item red.
-- Messages reach an executor only after one of the lead's own tool calls ends (an `ask` hands back for one, 58); during a subagent or Workflow call, an idle wait or at the run's end they are logged undelivered. Fallback: stream them into `-p --input-format stream-json` stdin (`docs/executors.md`).
-- `alongside` is proven in the sandbox with real executors (one pair, one tell during a helper); its first real use is worth a look: did both reports say whether they touched the other's area?
-- Each code repo's `CLAUDE.md` must say "commit to the branch you are on", not "commit to `main`". The sandbox's was changed; a real repo's first prompt carries it.
-- Clicking a toast does not open the app. Toasts use Command Prompt's app id; a registered `conductor-app:` URI plus `launch_action` would likely work but needs a human click to prove.
-- Reports finished before `reviewed:` existed have no `reviewed` event: on Corelight they list as unreviewed until marked (**process all**).
-- A command the cap moves to the background is stopped by Claude Code after 10 minutes. The preamble's *Servers* paragraph (54) says to start long-lived servers detached; did the next item with a preview server keep it past 10 minutes?
-- Receipts: a heavy tick delays one 2.5–3.2s. Live: on 2026-10-30 the planner's first stage missed it at least six times (once over a minute under load); on 2026-10-31 never. If it recurs: stage once after a short wait, or a write returns when its receipt exists.
-- `planner.md` *Start* step 3 assumes a workspace shell and `TZ=America/Los_Angeles`; Matt's saved preference must carry steps 1–5 (the file is first read at step 5).
-- Job objects (53), not yet live: at the next bug hunt, does the memory line's biggest item match Task Manager, little `chrome.exe`/`node.exe` "outside"? A child refused under a job shows as a failed launch or dead browser.
-- Pause (48) is proven with the fake executor only: at first real use, did the item commit, stop its servers and keep calling `wait` (not end its session, not ask)? A watch's `answer:` source is not checked by conductor; read the first few `watch_answer` events.
-- A red the planner never saw but wrote `state.md` after is hidden from the digest (46); *Now* and the app still show its effect.
-- The app's refresh probes run targets on the UI thread (0.3s timeout each) and re-reads every `finish`, `red`, `clear` and `reviewed` event: move to a worker if it gets sluggish.
-- Only the latest checkpoint shapes the views. The Repos tab's earlier group shows the 10 newest settled items per repo; older ones via Events (*since checkpoint* off), `conductor events --since checkpoint N` or `conductor open`.
-- A leftover worktree is retried only at daemon start, before a `disk_cleanup` launches, and when its repo's queue empties (never for the item that just emptied it). Add a periodic retry if a stray dev server keeps one around.
-- The merge executor's checks are structural (markers gone, nothing else touched); whether it kept both sides' *intent* shows only by reading (in the sandbox it joined two rewrites of one sentence with a semicolon). A real project's first `resolve` events are worth a look.
-- A Drive-homed folder's main-checkout junction (*Storage*) is made by an executor whose preamble forbids touching the main checkout, so that item's prompt overrides it; if executors balk, conductor could make the junction from a `shared` entry.
-- A cleanup template inlines every unused audit note into its prompt, uncapped. If a repo collects dozens, cap the count per cleanup (oldest first).
-- A cleanup's deferred design calls live only in its report's **Deferred** and, once raised, `state.md`'s *Paged*; conductor tracks none (a standing inbox section, if they get lost).
-- **Proven with the fake executor only**, worth a look at first real use: a readonly item beside others (`CONDUCTOR_PORT` passed through?), `bug_hunt`, `disk_cleanup` (junctions removed as links), `claude_md_cleanup`, and `memory_critical` with its tell.
-- **ask X** needs the original's transcript, which Claude Code prunes after `cleanupPeriodDays` (30 by default): then it fails red at launch. `report_changed` checks only reports reviewed since 32 (no hashes before).
-- From the first self-audit (sandbox 069): every executor spends a turn on ToolSearch loading the deferred `progress` tool; a repo asking for one-line commits conflicts with Claude Code's `Co-Authored-By` trailer.
-- Night shift (36) and autopilot (40): fake executor only. First real nights: are a watch's tells useful, does fitting a whole `max_hours` in the budget leave enough drawn?
-- Repos tab (33), 1250px window: Note ~140px; three buttons push Terminal off the edge.
-- Window focus needs a human look: an `open:` window, a forwarded app launch or a picker from an app-started daemon may come up behind others.
-- Corelight's `.gitignore` still lacks `picks/`, `session.md` and `review.md`, so it logs a startup `warning` until its planner's request adds them.
-- Self-restart: a second commit during a blocked wait is not re-checked (the new daemon runs what is on disk); the handshake wait (up to 20s) holds the old daemon's loop.
-- A daemon restart loses the picker server's port and token, so an open picker tab can't save until `pick:` is resent; a fixed port and a token in `.conductor/` would fix it.
-- `uv run conductor app` runs `.venv\Scripts\conductor.exe`, locked while the app is open, so any `pyproject.toml` change makes every `uv run` fail until the app closes; `uv run python -m conductor app` would avoid it.
-- A staged item sees amendments only in its resume message (worded as overriding the plan); a stage started after an amendment was written still doesn't see it.
-- Corelight's control folder (`C:\Code\corelight-control`) has no remote, so it is not pushed; adding `origin` is all auto-push needs.
-- Requests trust the planner to write `request.md` last: a target still being written by a writer that allows shared reads could be read half-done (the readable check catches only a writer holding it locked).
-- `OCControl.Service` (Alienware OC Controls) swings free RAM by ~10 GiB every ~3 minutes on this box, so the default `memory_pressure_free_gb` (3) trips at its peaks under real work; the fix is outside conductor (stop the service or update AWCC).
-- What Claude Code's reaper counts as "critically low" is unknown; after the next reap, compare the `daemon_died` event's memory with `memory.jsonl` around it.
-- Executors are still the daemon's own children (exit codes kept), so a tree kill of the daemon takes them; only an app-started daemon is detached.
-- The reaper matches an orphan by its executor's job (53), else by working folder or command line inside the item's run window: a leftover started while staging is matched only from the launch on, and `worktrees = false` items are never reaped, job or not.
-- A reply is the first `progress` line after a delivery, by position, so a milestone posted first shows as the reply; if that misfires, the preamble could ask for `re #N`.
-- Run logs are compacted, then gzipped (54); nothing is dropped. If the gzipped total grows too fast, drop logs of items reviewed long ago.
-- The preamble (54) says to leave a step whose question default can't be undone until last in the item (wordwarriors 152 lost shots a tell asked to keep). Worth a look at the next delete-with-default.
-- Daemon restarts and stage chatter in a digest's *Other* still pile up after the last `state.md` request.
-- 31's planner action rules (signals only from Matt's words, `reviewed:` only inside processing) are rules, not checks: worth a look in Word Warriors' next sessions.
+
+Chores:
+
+- Corelight's `.gitignore` lacks `picks/`, `session.md` and `review.md` (a startup `warning` until its planner's request adds them), and its control folder has no remote (adding `origin` is all auto-push needs): its planner's and Matt's.
+- **Needs a human**: a toast click doesn't open the app (it uses Command Prompt's app id; a registered `conductor-app:` URI plus `launch_action` would likely work), and an `open:` window, a forwarded app launch or a picker from an app-started daemon may come up behind others.
+
+Still not live:
+
+- **Cut-short `ask`** (58): no message has landed during an `ask` since 58, so its `resume` is unseen. Parked edits skipped by an item and returned: 050 carries 14, the first big test.
+- **Part-way fast-forwards** (after 60): watch the first `warning` "main checkout restored" and any `checkout_dirty`. Does the retry (4 tries, 0.5s doubling) outlast the Windows lock?
+- **The light preamble** (55): no retained aicomplete or Word Warriors run has drawn it. Do small items still ask with a default, background long calls and answer by number? One that ran big and blind means lower `LIGHT_WORDS`.
+- **Flagged defaults and the load scan** (61): no question has opened `default overrides prompt` yet; does the 0.3s scan on the tick show in receipt times?
+- **`pause:`** (48): no `pause:` signal in either project (Word Warriors' 125 paused by `tell:`). Does the item commit, stop its servers and keep calling `wait`? A watch's `answer:` source is unchecked: read the first `watch_answer` events; none yet.
+- **Long-lived servers** (54): a command the cap moves to the background is stopped after 10 minutes, so the preamble says to start servers detached. Did one last?

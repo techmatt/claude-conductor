@@ -14,6 +14,7 @@ from .state import View, decide
 from .util import clock, now, parse_stamp
 
 ETA_SLACK = timedelta(minutes=5)    # an `eta` this close to the outline's finish is not drift
+ETA_LATE = timedelta(minutes=30)    # an `eta` past the outline's finish by this much is
 NIGHT_KINDS = ("backlog_draw", "backlog_sleep", "watch_flag", "watch", "autopilot")      # the *Night shift* section's (`nightshift.lines`)
 
 def progress_line(ev: Event) -> str:
@@ -55,19 +56,24 @@ def latest_outline(log: EventLog, item_id: str) -> Event | None:
 
 
 def eta_drift(log: EventLog, item_id: str) -> str | None:
-    """A warning when the item's `eta` can't be right: earlier than its outline's last row,
-    or already past with rows still undone. None with no `eta`, no outline or all rows done."""
+    """A warning when the item's `eta` can't be right: earlier than its outline's last row or
+    well past it, already past with rows still undone, or far ahead with every row done.
+    None with no `eta` or no outline."""
     e, o = log.last("progress", item=item_id, has="eta"), latest_outline(log, item_id)
     rows = outline_rows(o)
     left = sum(1 for r in rows if not r.get("done"))
     due = nightshift.parse_eta(e.detail.get("eta"), parse_stamp(e.ts)) if e else None
-    if due is None or not left:
+    if due is None or not rows:
         return None
+    if not left:
+        return f"ETA {e.detail['eta']} is still ahead with every outline row done" if due > now() + ETA_LATE else None
     if now() > due:
         return f"ETA {e.detail['eta']} has passed with {left} outline row(s) left"
     finish = nightshift.parse_eta(rows[-1].get("eta"), parse_stamp(o.ts))
     if finish is not None and due + ETA_SLACK < finish:
         return f"ETA {e.detail['eta']} is earlier than the outline's finish {rows[-1]['eta']}"
+    if finish is not None and due > finish + ETA_LATE:
+        return f"ETA {e.detail['eta']} is well past the outline's finish {rows[-1]['eta']}"
     return None
 
 

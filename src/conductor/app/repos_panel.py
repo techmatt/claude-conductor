@@ -28,6 +28,7 @@ class ReposPanel(Panel):
     COLS = ["Repo / item", "State", "Elapsed", "Note", ""]
     FITTED = (0, 1, 2)      # sized to their contents until Matt drags one
     NOTE_MIN = 140          # Note's least width: readable, the tree scrolls instead
+    NAME_MIN = 180          # Repo / item elides down to this before anything scrolls
     SPLIT_KEY = "repos/split"
     WIDTHS_KEY = "repos/widths"
     # A finished row's buttons by kind, each in its own slot so they line up across rows.
@@ -246,7 +247,9 @@ class ReposPanel(Panel):
 
     def _fit(self) -> None:
         """Repo / item, State and Elapsed fit their contents, unless Matt dragged one. Note
-        stretches into the rest, but never below NOTE_MIN: short of that, the tree scrolls."""
+        stretches into the rest, but never below NOTE_MIN: short of that an unpinned Repo /
+        item gives way down to NAME_MIN (it elides, tooltip whole), so the buttons stay in
+        view, and only then the tree scrolls."""
         h = self.tree.header()
         self._fitting = True
         try:
@@ -257,6 +260,11 @@ class ReposPanel(Panel):
                 if h.sectionSize(col) != want:
                     h.resizeSection(col, want)
             others = sum(h.sectionSize(c) for c in range(len(self.COLS)) if c != 3 and not self.tree.isColumnHidden(c))
+            short = self.NOTE_MIN - (self.tree.viewport().width() - others)
+            if short > 0 and not self._widths.get(0):
+                give = min(short, max(h.sectionSize(0) - self.NAME_MIN, 0))
+                h.resizeSection(0, h.sectionSize(0) - give)
+                others -= give
             roomy = self.tree.viewport().width() - others >= self.NOTE_MIN
             mode = QHeaderView.ResizeMode.Stretch if roomy else QHeaderView.ResizeMode.Fixed
             if h.sectionResizeMode(3) != mode:

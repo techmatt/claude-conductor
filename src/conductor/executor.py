@@ -59,7 +59,8 @@ subagent fan-out) runs at below-normal priority (PowerShell: `(Start-Process ...
 heavy subagents (builds, sims, browsers) at once, and that wins over any Workflow size or
 Ultracode cost note; light read-only reviewers and verifiers don't count, but run in
 batches per dimension, about 10 in all; halve thread counts while another item runs
-alongside.
+alongside. Never pass `isolation: worktree` to a subagent or Workflow: it lands in the main
+checkout; split helpers by file instead.
 
 Messages. Matt, the operator, reaches you through conductor's message channel: hook context
 after your own tool call, marked MESSAGE #n, or AMENDMENT #n for an addition to the prompt.
@@ -585,7 +586,7 @@ def mcp_config(cfg: Config, item: Item, session_id: str, workdir: Path | str) ->
     """The executor's --mcp-config: the ask server, run by the daemon's own interpreter."""
     from .ask_server import SERVER_NAME
     return json.dumps({"mcpServers": {SERVER_NAME: {
-        "type": "stdio", "command": sys.executable, "timeout": ASK_TIMEOUT_MS,
+        "type": "stdio", "command": sys.executable, "timeout": ASK_TIMEOUT_MS, "alwaysLoad": True,
         "args": ["-m", "conductor.ask_server", "--control", str(cfg.control), "--item", item.id,
                  "--default-minutes", f"{cfg.ask_default_minutes:g}", "--session-id", session_id,
                  "--workdir", str(workdir)],

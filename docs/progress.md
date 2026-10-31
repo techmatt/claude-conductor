@@ -7,7 +7,7 @@ progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm, 25
                                                     # outline: [{title, eta, done}], see Outline
 ```
 
-It returns at once (`Logged; carry on.`). The ask server appends a line (`seq`, `at`,
+It returns at once (`Logged; carry on.`, plus *Running beside you now* when that changed). The ask server appends a line (`seq`, `at`,
 `note` — whitespace collapsed, 500 chars — and the rest) to
 `.conductor/progress/<repo>__<NNN_name>.jsonl`; the daemon logs one `progress` event
 per new line (`seq` dedupes across restarts). The latest line of a running item shows
@@ -34,11 +34,13 @@ now: …"), logged with `outline_request: true`, refused exactly as a tell is, a
 delivered like one, so its reply tag pairs it with the outline it produced.
 
 **ETA drift** (61). A running item's `eta` can stop meaning anything: aicomplete 009's
-stayed 6:20am until 3:11am. `inbox.eta_drift` warns when the newest `eta` is over 5
-minutes earlier than the current outline's last row (`ETA 5:40pm is earlier than the
-outline's finish 7:10pm`), or already past with rows undone (`ETA 5:40pm has passed with
-2 outline row(s) left`). With no `eta`, no outline or every row done it says nothing. The
-warning ends the item's *Now* line (bold) and the app's progress line. It is a display
+stayed 6:20am until 3:11am, and it finished 3:38am. `inbox.eta_drift` warns when the
+newest `eta` is over 5 minutes earlier than the current outline's last row (`ETA 5:40pm is
+earlier than the outline's finish 7:10pm`), over 30 minutes later than it (`ETA 6:20am is
+well past the outline's finish 3:40am`), already past with rows undone (`ETA 5:40pm has
+passed with 2 outline row(s) left`), or over 30 minutes off with every row done (`ETA
+6:20am is still ahead with every outline row done`). With no `eta` or no outline it says
+nothing. The warning ends the item's *Now* line (bold) and the app's progress line. It is a display
 only: the watch's `eta` flag (`night-shift.md`) is separate and may launch a watch.
 
 **Messages.** `tell: <item> <message>` is a signal verb (the app's **Tell…**, `conductor
