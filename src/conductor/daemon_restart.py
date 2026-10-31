@@ -218,6 +218,7 @@ class RestartMixin:
             out.append(f"a reorder of {where} is not finished")
         out += [f"picker {name}: open, not saved yet" for name in self._pickers_waiting()]
         out += [f"run target {name}: starting, not ready yet" for name in sorted(self.runner.pending)]
+        out += [f"tool {name}: starting, not ready yet" for name in sorted(self.tools.pending)]
         return out
 
     def _pickers_waiting(self) -> list[str]:

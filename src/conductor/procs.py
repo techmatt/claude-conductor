@@ -229,8 +229,10 @@ class Detached:
 # app ran as a Claude Code background command, and when that session reaped it at
 # 2:16am the daemon and its executor died with it, logging nothing.
 _LAUNCHER = """\
-import json, subprocess, sys
+import json, os, subprocess, sys
 a = json.loads(sys.argv[1])
+if a["nice"]:
+    os.nice(a["nice"])
 with open(a["log"], "ab") as out:
     for i, flags in enumerate(a["flags"]):
         try:
@@ -245,19 +247,22 @@ print(p.pid, flush=True)
 """
 
 
-def spawn_detached(cmd: list[str] | str, cwd: Path, log: Path) -> Detached:
+def spawn_detached(cmd: list[str] | str, cwd: Path, log: Path, below_normal: bool = False) -> Detached:
     """Start a long-running process detached from the caller: through a launcher that
     exits at once (so the process has no live parent), no console window, its own
     process group, out of the caller's job object when that is allowed, stdin closed,
-    stdout and stderr appended to `log`. A string runs through the platform shell."""
+    stdout and stderr appended to `log`. A string runs through the platform shell.
+    `below_normal`: it and everything it starts run below normal priority."""
     log.parent.mkdir(parents=True, exist_ok=True)
     if WINDOWS:
         base = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        if below_normal:
+            base |= subprocess.BELOW_NORMAL_PRIORITY_CLASS
         flags = [base | subprocess.CREATE_BREAKAWAY_FROM_JOB, base]   # a job may refuse breakaway
     else:
         flags = [0]
     spec = json.dumps({"cmd": cmd, "cwd": str(cwd), "log": str(log), "shell": isinstance(cmd, str),
-                       "flags": flags, "posix": not WINDOWS})
+                       "flags": flags, "posix": not WINDOWS, "nice": 10 if below_normal and not WINDOWS else 0})
     out = subprocess.run([sys.executable, "-c", _LAUNCHER, spec], stdin=subprocess.DEVNULL,
                          capture_output=True, text=True, env=child_env(),
                          **({"creationflags": subprocess.CREATE_NO_WINDOW} if WINDOWS else {}))

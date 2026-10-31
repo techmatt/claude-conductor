@@ -54,9 +54,11 @@ class RunTarget:
     url: str
     ready: str                   # the URL that must answer before `url` opens (default: url)
     ready_seconds: float = 60.0
+    label: str = ""              # a tool's button text
 
 
 RUN_KEYS = {"repo", "cwd", "command", "url", "ready", "ready_seconds"}
+TOOL_KEYS = {"label", "run", "cwd", "url"}
 
 MEMORY_KEYS = ("memory_sample_seconds", "memory_keep_hours", "memory_pressure_percent",
                "memory_pressure_free_gb", "memory_critical_percent", "memory_critical_free_gb",
@@ -105,6 +107,7 @@ class Config:
     command: list[str] = field(default_factory=lambda: ["claude"])
     args: list[str] = field(default_factory=list)
     targets: dict[str, RunTarget] = field(default_factory=dict)
+    tools: dict[str, RunTarget] = field(default_factory=dict)   # `[tools.<name>]` (`targets.ToolRunner`)
     open_roots: list[Path] = field(default_factory=list)   # more folders `open:` may act in
     links: dict[str, str] = field(default_factory=dict)    # `[links]` name = URL, first in session.md
 
@@ -179,6 +182,51 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
     return opts
 
 
+def _is_command(value) -> bool:
+    return (isinstance(value, str) and bool(value.strip())) or (
+        isinstance(value, list) and bool(value) and all(isinstance(x, str) and x for x in value))
+
+
+def _tool_cwd(where: str, repos: dict[str, Path], value) -> Path:
+    """`<repo>` or `<repo>/<subfolder>`; left out, the project's only repo."""
+    if value is None:
+        if len(repos) > 1:
+            raise ConfigError(f"{where}: `cwd` (a repo name) is required with several repos")
+        value = next(iter(repos))
+    if not isinstance(value, str) or not value:
+        raise ConfigError(f"{where}.cwd must be a repo name, with an optional subfolder")
+    repo, _, sub = value.replace("\\", "/").partition("/")
+    if repo not in repos:
+        raise ConfigError(f"{where}.cwd: {repo!r} is not in [repos]")
+    if Path(sub).is_absolute() or ".." in Path(sub).parts:
+        raise ConfigError(f"{where}.cwd: {sub!r} must be a folder inside the repo")
+    return repos[repo] / sub
+
+
+def _tools(repos: dict[str, Path], raw) -> dict[str, RunTarget]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or not all(isinstance(t, dict) for t in raw.values()):
+        raise ConfigError(f"{CONFIG_NAME}: `tools` must be tables `[tools.<name>]`")
+    out = {}
+    for name, table in raw.items():
+        where = f"{CONFIG_NAME}: tools.{name}"
+        if not name or any(c in name for c in " /\\:"):
+            raise ConfigError(f"{where}: a tool name may not be empty or hold spaces, slashes or colons")
+        if unknown := set(table) - TOOL_KEYS:
+            raise ConfigError(f"{where}: unknown keys {sorted(unknown)}")
+        if not _is_command(table.get("run")):
+            raise ConfigError(f"{where}.run must be a shell command string or a list of strings")
+        url = table.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            raise ConfigError(f"{where}.url must be an http(s) URL")
+        label = table.get("label", name)
+        if not isinstance(label, str) or not label.strip():
+            raise ConfigError(f"{where}.label must be a string")
+        out[name] = RunTarget(name, _tool_cwd(where, repos, table.get("cwd")), table["run"], url, url, label=label)
+    return out
+
+
 def _targets(control: Path, repos: dict[str, Path], raw) -> dict[str, RunTarget]:
     if raw is None:
         return {}
@@ -202,8 +250,7 @@ def _targets(control: Path, repos: dict[str, Path], raw) -> dict[str, RunTarget]
         else:
             raise ConfigError(f"{where}.cwd must be a path string")
         command = table.get("command")
-        if not (isinstance(command, str) and command.strip()) and not (
-                isinstance(command, list) and command and all(isinstance(x, str) and x for x in command)):
+        if not _is_command(command):
             raise ConfigError(f"{where}.command must be a shell command string or a list of strings")
         urls = {}
         for key in ("url", "ready"):
@@ -297,6 +344,7 @@ def load(control: Path) -> Config:
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],
         targets=_targets(control, repos, data.get("run")),
+        tools=_tools(repos, data.get("tools")),
         open_roots=[_resolve(control, x) for x in open_roots],
         links={str(k): v.strip() for k, v in links.items()},
     )

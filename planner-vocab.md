@@ -22,6 +22,7 @@ The rest of `planner.md`'s **Vocab**: read this file only when Matt uses one of 
 | **content cleanup R** [extras] | Queues `template: content_cleanup` (body: Matt's extras); never a maintenance default. |
 | **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
+| **review cards** / **tool X** | Signal `tool: <name>`: starts that `[tools.<name>]` if needed and opens it (`docs/app.md`, *Project tools*). |
 | **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
 | **rename repo R to S** [at P] | Only when nothing of R is queued, staged or running: **stop conductor**, then tells Matt to run `uv run conductor rename-repo R S [--path P] --control <control>` in `C:\Code\claude-conductor` and start the daemon. History, reports and the watch series carry over; `state.md`'s own prose about R is the planner's to fix by request. |

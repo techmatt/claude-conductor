@@ -128,6 +128,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.amend_waiting: dict[str, str | None] = {}  # amend file → hash, for an item not seen yet
         self._progress_sizes: dict[str, int] = {}
         self.runner = targets.Runner(cfg, self.log)
+        self.tools = targets.ToolRunner(cfg, self.log)
         self.picker = picker.Server(cfg, self.log)  # no socket until the first `pick:`
         self.opener = desktop.Opener(cfg, self.log)
         self.blocked: set[str] = set()          # items waiting on a blocking question
@@ -328,6 +329,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.recover()
 
     def _log_stop(self, reason: str, **extra) -> None:
+        """A real stop, never a self-restart: a tool outlives only that."""
+        self.tools.stop_all()
         self.log.append("daemon_stop", reason=reason, running=sorted(self.runs), staging=sorted(self.stages),
                         note="executors keep running; the next start adopts them", **extra)
 
@@ -341,6 +344,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_questions()
         self.process_talk()
         self.runner.poll()
+        self.tools.poll()
         if any(ev.kind == "pick_saved" for ev in self.picker.drain()):
             self.retire_pickers()       # daemon_signals
         self.check_stages()
@@ -546,7 +550,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                         busy |= {p.parent.name for p in self.cfg.path("running").glob("*/*.json")}
                         if gone := sorted(busy - set(new.repos)):
                             raise config_mod.ConfigError(f"repos {gone} still have items in running/")
-                        self.cfg = self.runner.cfg = self.picker.cfg = self.opener.cfg = new
+                        self.cfg = self.runner.cfg = self.tools.cfg = self.picker.cfg = self.opener.cfg = new
                         self.log.append("config_reload", paths=["conductor.toml"])
                     except config_mod.ConfigError as exc:
                         self.log.append("invalid", paths=["conductor.toml"], path="conductor.toml",

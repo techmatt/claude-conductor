@@ -50,7 +50,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`; an amendment also `prompt`/`resume`; `progress` in older logs), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
-| `run_start` / `run_ready` / `run_open` / `run_stop` | a run target started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url, opened / note |
+| `run_start` / `run_ready` / `run_open` / `run_stop` | a run target or tool (`tool: true`) started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd / waited_seconds / url, opened / note |
 | `run_failed` | a run target never came up, or its URL could not be opened (red; holds no queue) | target, error, log_tail |
 | `pick_open` | a `pick:` signal (or `conductor pick`) served a manifest and opened its page; item: the latest finish that named it, if any | name, manifest, url, opened (false: the browser reported it did not open); by |
 | `pick_saved` | Matt saved a picker; paths: its choices file; no `by` (the page has no identity) | name, manifest, changed, notes, rows |

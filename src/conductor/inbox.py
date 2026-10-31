@@ -17,6 +17,11 @@ ETA_SLACK = timedelta(minutes=5)    # an `eta` this close to the outline's finis
 ETA_LATE = timedelta(minutes=30)    # an `eta` past the outline's finish by this much is
 NIGHT_KINDS = ("backlog_draw", "backlog_sleep", "watch_flag", "watch", "autopilot")      # the *Night shift* section's (`nightshift.lines`)
 
+def _runnable(detail: dict) -> str:
+    """What a `run_*` event is about, by name."""
+    return "tool" if detail.get("tool") else "run target"
+
+
 def progress_line(ev: Event) -> str:
     """A `progress` event as one line: `note (ETA 5:40pm, 3 done, 4 to go)`."""
     d = ev.detail
@@ -192,15 +197,15 @@ def describe(ev: Event) -> str:
             text = f"amendment for {who} refused (while {d.get('state')}): {d.get('reason')}; {d.get('path')} left in place"
         case "run_start":
             how = "already starting" if d.get("reused") else "started"
-            text = f"run target `{d.get('target')}` {how} (pid {d.get('pid')})"
+            text = f"{_runnable(d)} `{d.get('target')}` {how} (pid {d.get('pid')})"
         case "run_ready":
-            text = f"run target `{d.get('target')}` ready after {d.get('waited_seconds')}s"
+            text = f"{_runnable(d)} `{d.get('target')}` ready after {d.get('waited_seconds')}s"
         case "run_open":
-            text = f"opened {d.get('url')} (run target `{d.get('target')}`)"
+            text = f"opened {d.get('url')} ({_runnable(d)} `{d.get('target')}`)"
         case "run_stop":
-            text = f"run target `{d.get('target')}` stopped" + (f": {d['note']}" if d.get("note") else "")
+            text = f"{_runnable(d)} `{d.get('target')}` stopped" + (f": {d['note']}" if d.get("note") else "")
         case "run_failed":
-            text = f"run target `{d.get('target')}` failed: {d.get('error')}"
+            text = f"{_runnable(d)} `{d.get('target')}` failed: {d.get('error')}"
             if d.get("log_tail"):
                 text += " — log tail: " + " ⏎ ".join(d["log_tail"].splitlines()[-5:])
         case "opened":

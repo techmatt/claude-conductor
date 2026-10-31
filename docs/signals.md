@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, audit, checkpoint, session, run, pick, retire, open, notify, stop, watch, push, autopilot, ack,
+outline, audit, checkpoint, session, run, tool, pick, retire, open, notify, stop, watch, push, autopilot, ack,
 pause, resume.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
@@ -24,6 +24,7 @@ outline: sandbox/005         # ask running sandbox/005 for an updated outline (a
 checkpoint: mid-session      # a session boundary (see inbox.md)
 session: start               # a checkpoint, then session.md, then the read mark moved (see inbox.md)
 run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
+tool: cards                  # start project tool `cards` if needed, open its URL (app.md, Project tools)
 pick: code/picks/art_alts_009.json   # serve that picker manifest and open it in the browser
 retire: art_alts_009         # delete that picker's manifest and images (picks.md, Retiring)
 open: reveal C:\Code\x\out.png   # a desktop action on a checked path (below)
@@ -119,6 +120,8 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   then `session.md`, then a `read` past it; see `inbox.md`, *Session start digest*.
 - **run** — `run: <target>` or `run: <target> stop`: see `run-targets.md`. An unknown
   target is refused.
+- **tool** — `tool: <name>`: what the Repos tab's button does; see `app.md`, *Project
+  tools*. A running tool only opens. An unknown tool is refused.
 - **pick** — `pick: <repo>/<manifest path>`: see `picks.md`. The value is one word (a
   manifest path with a space, or ` #`, cannot be named) and its repo must be configured,
   or the file is rejected at parse time; a manifest that fails validation rejects it

@@ -50,7 +50,9 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
             return (f"{project}: {who}'s merge left the main checkout dirty",
                     f"Not the branch's: {', '.join(detail.get('files', [])[:5])}. {detail.get('error', '')}"[:250])
         case "run_failed":
-            return f"{project}: `{detail.get('target')}` did not come up", str(detail.get("error", ""))[:250]
+            tail = " ⏎ ".join(str(detail.get("log_tail", "")).splitlines()[-3:])
+            return (f"{project}: `{detail.get('target')}` did not come up",
+                    (str(detail.get("error", "")) + (f" — log tail: {tail}" if tail else ""))[:250])
         case "pick_failed":
             what = f"`{detail['name']}`" if detail.get("name") else str(detail.get("manifest", ""))
             return f"{project}: picker {what} did not open", str(detail.get("error", ""))[:250]

@@ -191,6 +191,7 @@ class Snapshot:
     rejected: list[Event] = field(default_factory=list)        # `events.live_invalids`: the header's "N rejected"
     repo_names: list[str] = field(default_factory=list)        # every configured repo, for Pause/Resume
     paused: dict[str, Event] = field(default_factory=dict)     # repo → its `pause` event (`View.paused`)
+    tools: dict[str, str] = field(default_factory=dict)        # tool → running | down (`targets.tool_status`)
 
     @property
     def to_pick(self) -> int:
@@ -526,7 +527,8 @@ class Project:
         except (OSError, ValueError) as exc:
             pilot = (nightshift.autopilot(self.log), f"could not read the backlog: {exc}")
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
-                        view.checkpoint, pending, mem, pilot, live_invalids(self.log), list(cfg.repos), view.paused)
+                        view.checkpoint, pending, mem, pilot, live_invalids(self.log), list(cfg.repos), view.paused,
+                        {name: targets.tool_status(cfg, name) for name in cfg.tools})
 
     def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
         """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only

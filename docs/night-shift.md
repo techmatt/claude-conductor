@@ -18,7 +18,7 @@ daemon flags:
 | `blocked` | a blocking question unanswered for `watch_blocked_minutes` (15): its item does nothing meanwhile | `blocked:` + question id |
 | `backlog` | a repo is idle (empty queue, nothing running) while its backlog has items that were not drawn; the text says why | repo + why |
 | `memory` | the memory level is not `ok` | the `memory` event that set it |
-| `run_failed` | a run target failed since the last check | that event |
+| `run_failed` | a run target (not a tool) failed since the last check | that event |
 
 Each flag is a `watch_flag` event (flag, key, text; item where there is one). The keys are
 remembered from the log, so a restart flags nothing twice. Watch items are never flagged,

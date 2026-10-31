@@ -5,12 +5,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QHeaderView, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout
+from PySide6.QtWidgets import (QHBoxLayout, QHeaderView, QLabel, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
+                               QVBoxLayout, QWidget)
 
 from .. import audits
 from ..events import Event
 from ..resume import label as resume_label
-from ..util import clock, duration, now
+from ..util import clock, duration, now, parse_stamp
 from . import actions, theme
 from .model import Finished, Project, Snapshot
 from .trail import TrailView
@@ -33,6 +34,7 @@ class ReposPanel(Panel):
     WIDTHS_KEY = "repos/widths"
     # A finished row's buttons by kind, each in its own slot so they line up across rows.
     DONE_SLOTS = ("Mark reviewed", "Pick…", "Terminal")
+    TOOL_FAILURE_HOURS = 1  # older than this, met at the app's first refresh, it stays in Events
 
     def __init__(self, project: Project, notify, settings: QSettings | None = None):
         super().__init__(project, notify)
@@ -80,6 +82,16 @@ class ReposPanel(Panel):
             split.restoreState(state)               # where Matt left the splitter
         split.splitterMoved.connect(lambda *_: self._split_moved())
         self.split = split
+        # A button per `[tools.<name>]`; the bar takes no room in a project with none.
+        self.tool_bar = QWidget()
+        self.tool_row = QHBoxLayout(self.tool_bar)
+        self.tool_row.setContentsMargins(0, 0, 0, 0)
+        self.tool_failure = QLabel()                    # a failed start: the error, its log's last line
+        self.tool_failure.setStyleSheet(f"color: {theme.RED};")
+        self.tool_row.addWidget(self.tool_failure, 1)
+        self.tool_buttons: dict[str, QPushButton] = {}
+        self.tool_bar.hide()
+        lay.addWidget(self.tool_bar)
         lay.addWidget(split, 1)
         self.selected: str | None = None                # the item Matt picked in the tree
         self._actions: dict[str, tuple[bool, bool]] = {}    # item → (Tell allowed, Amend allowed)
@@ -212,7 +224,40 @@ class ReposPanel(Panel):
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
+    def _update_tools(self, snap: Snapshot, new: list[Event]) -> None:
+        if list(snap.tools) != list(self.tool_buttons):
+            for b in self.tool_buttons.values():
+                self.tool_row.removeWidget(b)
+                b.deleteLater()
+            self.tool_buttons = {}
+            for at, name in enumerate(snap.tools):
+                b = QPushButton()
+                b.clicked.connect(lambda _=False, n=name: self._tool(n))
+                self.tool_row.insertWidget(at, b)
+                self.tool_buttons[name] = b
+            self.tool_bar.setVisible(bool(snap.tools))
+        for name, st in snap.tools.items():
+            t = self.project.cfg.tools.get(name)
+            b, text = self.tool_buttons[name], f"{t.label if t else name} ● {st}"
+            if b.text() != text:
+                b.setText(text)
+                b.setStyleSheet(f"QPushButton {{ color: {theme.GREEN if st == 'running' else theme.MUTED}; }}")
+            b.setToolTip(f"{'Open' if st == 'running' else 'Start, then open'} {t.url if t else ''} "
+                         "(a `tool:` signal; the daemon must be running, and stopping it stops the tool)")
+        for e in new:
+            if not e.detail.get("tool"):
+                continue
+            if e.kind == "run_failed" and (now() - parse_stamp(e.ts)).total_seconds() < self.TOOL_FAILURE_HOURS * 3600:
+                tail = str(e.detail.get("log_tail", ""))
+                self.tool_failure.setText(f"{e.detail.get('target')}: {e.detail.get('error')}"
+                                          + (f" — {tail.splitlines()[-1]}" if tail else ""))
+                self.tool_failure.setToolTip(tail or str(e.detail.get("error")))
+            elif e.kind in ("run_start", "run_open"):
+                self.tool_failure.clear()
+                self.tool_failure.setToolTip("")
+
     def update_snapshot(self, snap: Snapshot, new: list[Event] = ()) -> None:
+        self._update_tools(snap, new)
         self._sessions = {f.item: f.session_id for rs in snap.repos for f in (*rs.finished, *rs.earlier)}
         self._picks = {f.item: f.pick for rs in snap.repos for f in (*rs.finished, *rs.earlier) if f.pick}
         plan = self._plan(snap)
@@ -473,6 +518,9 @@ class ReposPanel(Panel):
     def _double(self, w: QTreeWidgetItem, _col: int) -> None:
         if item_id := w.data(0, Qt.ItemDataRole.UserRole):
             self.open_item.emit(item_id)
+
+    def _tool(self, name: str) -> None:
+        self.signal_sent(f"tool {name} (opens in the browser)", actions.tool(self.control, name))
 
     def _clear(self, repo: str) -> None:
         self.signal_sent(f"clear {repo}", actions.clear(self.control, repo))

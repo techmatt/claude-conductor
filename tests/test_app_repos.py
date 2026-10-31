@@ -18,7 +18,7 @@ def _snap(tmp_path, *, staged=False, held=False):
     rs = model.RepoState("code", tmp_path, queued=[head, nxt], finished=fin, finished_total=2,
                          staged=[model.Activity("code/002_b", "002_b", "staged", None)] if staged else [],
                          action="hold" if held else "wait", reason=LONG)
-    return SimpleNamespace(repos=[rs], picks={}, checkpoint=None)
+    return SimpleNamespace(repos=[rs], picks={}, checkpoint=None, tools={})
 
 
 def _panel(tmp_path, settings=None):

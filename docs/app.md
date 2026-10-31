@@ -55,6 +55,8 @@ or `● down` (green, amber, grey; probed each refresh); a click writes `run: <n
 which opens the URL (starting the target first when it is down). While a target is
 up or starting, a **Stop <name>** button beside its Run button writes `run: <name>
 stop` (no confirmation: a click is cheap to undo with Run).
+**Tools** are the same idea for what Matt looks at rather than what he tests, with a button
+each at the top of the Repos tab (*Project tools*, below).
 **Pause** / **Resume** writes `pause: <repo>` / `resume: <repo>` (`night-shift.md`, *Pause*):
 a plain button for a one-repo project, a menu of `Pause <repo>` / `Resume <repo>` for
 several; while any repo is paused an amber **PAUSED <repo> since <time>** sits beside it.
@@ -70,6 +72,37 @@ hint under the box says so (`widgets.SendBox`, `MessageDialog`).
 
 **Panels**: Repos (with each item's Conversation), Questions, Events and Proposed, in
 `docs/app-panels.md`.
+
+**Project tools** are a project's local tools (AI Complete's card viewer), declared in
+`conductor.toml` and set by a request:
+
+```
+[tools.cards]
+label = "Card viewer"          # button text (default: the name)
+run = "python -m http.server 8765"   # a string runs through the shell; or a list
+cwd = "aicomplete/tools/viewer"      # a repo's main checkout, plus an optional subfolder; left out: the only repo
+url = "http://localhost:8765/"       # opened once it answers
+```
+
+Any other key is refused, and `cwd` must name a repo (required with several); `rename-repo`
+rewrites it. A tool's port is never handed to an executor.
+
+Each gets a button on the Repos tab reading `<label> ● running` or `● down`, from its
+record, with no probe. A click writes `tool: <name>`, so the daemon must be running:
+- **Not answering:** `run` starts as a conductor-owned process at below-normal priority,
+  everything it starts included, output in `.conductor/tool-<name>.log`, record in
+  `tool-<name>.json`. When `url` answers (60s at most) it opens in the default browser.
+- **Answering, or still starting:** nothing new starts. It opens, at once or when ready.
+- **Fails** (the process exits, it can't start, or 60s pass, when it is left running):
+  `run_failed` with `tool: true` and the log's last 20 lines. The bar shows the error and
+  the last line in red (tooltip: the tail) until the next start or open; a toast and the
+  inbox's Red section show it too. It flags no watch.
+
+The events are `run_*` with `tool: true`. Stopping the daemon (`stop: daemon`, Ctrl+C, too
+many failed ticks) stops its tools, `run_stop` with `stopped with the daemon`, so "restart
+all" does too. A self-restart on a code change, or a crash, leaves a tool running and the
+next daemon owns it by its record. There is no stop button or verb. Like a run target, a tool
+in a main checkout can hold a file a merge wants to replace (Windows).
 
 Every action is a signal file `signals/app-<YYYYmmdd-HHMMSS>-<nnnnnn>.signal` (written as
 `.tmp`, then renamed) starting `by: app`, so the daemon carries it out, logs it, and

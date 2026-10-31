@@ -108,6 +108,9 @@ def _rewrite_toml(text: str, old: str, new: str, old_value: str | None, new_valu
     text = re.sub(rf"^(\s*)\[repos\.(?:{o}|\"{o}\")\]", rf"\1[repos.{new}]", text, flags=re.MULTILINE)
     text = re.sub(rf"^(\s*)(?:{o}|\"{o}\")(\s*=)", rf"\g<1>{new}\2", text, flags=re.MULTILINE)
     text = re.sub(rf"(\brepo\s*=\s*)\"{o}\"", rf'\1"{new}"', text)
+    # A tool's `cwd` starts with a repo name; a run target's is a folder, left alone.
+    text = re.sub(r"^\s*\[tools\..*\n(?:(?!\s*\[).*\n?)*", lambda m: re.sub(
+        rf"(\bcwd\s*=\s*[\"']){o}(?=[\"'/\\])", lambda c: c[1] + new, m[0]), text, flags=re.MULTILINE)
     if old_value and new_value and old_value != new_value:
         text = re.sub(rf"([\"']){re.escape(old_value)}\1", lambda m: f"{m[1]}{new_value}{m[1]}", text)
     return text

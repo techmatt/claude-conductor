@@ -200,6 +200,8 @@ class WatchMixin:
         if self.mem_level != "ok" and (mev := self.log.last("memory_critical") or self.log.last("memory")):
             flags.append((f"memory:{mev.id}", "memory", None, f"memory {self.mem_level} since {clock(mev.ts)}"))
         for ev in self.log.query(since_id=self._watch_seen, kinds=["run_failed"]):
+            if ev.detail.get("tool"):
+                continue                # a click's failure, seen where it was clicked: no watch
             flags.append((f"run_failed:{ev.id}", "run_failed", None,
                           f"run target `{ev.detail.get('target')}` failed: {ev.detail.get('error')}"))
         self._watch_seen = self.log.max_id()

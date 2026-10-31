@@ -88,7 +88,7 @@ memory_pressure_free_gb = 3   # ... or free RAM at or under this (0 = off)
 memory_critical_percent = 95  # critical: the same, further on
 memory_critical_free_gb = 1.5
 memory_calm_seconds = 300     # a level falls only after the box stays clear this long (a rise is at once)
-# the night shift's keys: night-shift.md, Settings; run targets ([run.<name>]): run-targets.md
+# the night shift's keys: night-shift.md; [run.<name>]: run-targets.md; [tools.<name>]: app.md
 
 [links]                       # name = URL; session.md lists them first, above everything else
 "design doc" = "https://claude.ai/artifact/…"
