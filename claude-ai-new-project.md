@@ -61,7 +61,7 @@ The memory line (*Now*'s first line, the app header, `conductor status`) reads `
 
 ## Run targets
 
-A project's runnable thing (a dev server, the game) is a `[run.<name>]` table in `conductor.toml` (`docs/run-targets.md`), set by request with the command and URL the repo's README gives. A main checkout has no installed dependencies, so a target's `command` installs them first. `run: X stop` is also how to free files a dev server holds before an item that moves them. Matt has the app's **Run X** / **Stop X** buttons and never types the commands.
+A project's runnable thing (a dev server, the game) is a `[run.<name>]` table in `conductor.toml` (`docs/run-targets.md`), set by request with the command and URL the repo's README gives. `run: X stop` is also how to free files a dev server holds before an item that moves them. Matt has the app's **Run X** / **Stop X** buttons and never types the commands.
 
 ## Picks
 

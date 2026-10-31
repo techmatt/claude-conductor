@@ -2,6 +2,7 @@
 
 import json
 import sys
+import time
 
 import pytest
 
@@ -121,6 +122,22 @@ def test_restart_mid_setup_requeues_and_discards_a_setting_up_stage(env):
     env.tick_until(lambda: env.finished("code/002_b"))
     assert [env.finished(i).detail["status"] for i in ("code/001_a", "code/002_b")] == ["done", "done"]
     assert len([e for e in env.events("start") if e.item == "code/001_a"]) == 1    # it never ran before
+
+
+def test_a_process_still_starting_is_looked_at_again(monkeypatch):
+    """Under load a brand-new executor's command line reads as empty, not None, for a moment."""
+    class Starting:
+        pid, info, reads = -1, {"cmdline": [], "create_time": time.time()}, [[], ["claude", "--session-id", "s1"]]
+
+        def cmdline(self):
+            return self.reads.pop(0)
+
+        def parent(self):
+            return None
+
+    p = Starting()
+    monkeypatch.setattr(procs.psutil, "process_iter", lambda attrs: [p])
+    assert procs.find_by_marker("s1") is p
 
 
 @pytest.mark.slow

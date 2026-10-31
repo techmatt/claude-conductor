@@ -99,7 +99,7 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   item's report can be reviewed`, `review: no finished item '009'`); a multi-word
   value fails the syntax check.
 - **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
-  An item waiting on its own question gets it as that question's answer (`questions.md`).
+  It never answers a question the item is waiting on (`questions.md`).
 - **pause** / **resume** — `pause: <repo>`, `resume: <repo>` (refused when already so):
   `night-shift.md`, *Pause*.
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,

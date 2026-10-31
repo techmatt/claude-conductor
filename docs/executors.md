@@ -80,8 +80,7 @@ stage and a merge executor run no servers and get no port.
   runs at below-normal process priority and leaves at least 4 hardware threads free; at
   most 2 heavy subagents at once; thread counts halve while another item runs alongside.
   A rule, not enforced: the planner sees it broken on *Now*'s load line (`memory.md`).
-  Below-normal: PowerShell `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`,
-  Python `psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)`.
+  The full preamble gives the PowerShell form, `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`.
 - **Global Claude config.** Editing `~/.claude` is allowed when it's a good idea; each
   edit is named in the report, with its reason.
 - **Leftover budget.** Finishing with over an hour of the time limit left and the goal

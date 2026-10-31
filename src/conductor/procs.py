@@ -368,13 +368,6 @@ def create_time(pid: int) -> float | None:
         return None
 
 
-def create_time(pid: int) -> float | None:
-    try:
-        return psutil.Process(pid).create_time()
-    except psutil.Error:
-        return None
-
-
 def alive(pid: int | None, created: float | None) -> bool:
     """Is this exact process (pid + creation time, so a reused pid is not mistaken) alive?"""
     if not pid:
@@ -391,24 +384,34 @@ def alive(pid: int | None, created: float | None) -> bool:
 def find_by_marker(marker: str) -> psutil.Process | None:
     """A live process whose command line contains `marker` (the executor's session id).
     A command line unreadable on the first pass (a process still starting, under load,
-    reads as None) gets one second look: restart recovery must not miss a live executor."""
+    reads as None or empty) gets a few more looks: restart recovery must not miss a live
+    executor, which would be finished as interrupted while it runs."""
     me = os.getpid()
     unread = []
     young = time.time() - 30                # protected system processes never read; skip those
     for p in psutil.process_iter(["pid", "cmdline", "create_time"]):
-        if p.pid != me and p.info["cmdline"] is None:
+        if p.pid != me and not p.info["cmdline"]:
             if (p.info["create_time"] or 0) > young:
                 unread.append(p)
         elif p.pid != me and _outermost(p, marker, p.info["cmdline"]):
             return p
-    if unread:
-        time.sleep(0.2)
-    for p in unread:
-        try:
-            if _outermost(p, marker, p.cmdline()):
-                return p
-        except psutil.Error:
-            continue
+    for wait in (0.2, 0.5, 1.0):
+        if not unread:
+            break
+        time.sleep(wait)
+        left = []
+        for p in unread:
+            try:
+                cmdline = p.cmdline()
+                if not cmdline:
+                    left.append(p)
+                elif _outermost(p, marker, cmdline):
+                    return p
+            except psutil.AccessDenied:
+                left.append(p)
+            except psutil.Error:
+                continue
+        unread = left
     return None
 
 

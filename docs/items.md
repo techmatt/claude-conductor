@@ -58,12 +58,9 @@ a `warning` naming each such dependency and why (later in the same queue; alread
 
 **Scheduling** (order, holds, readonly, `alongside` and exclusive items): `scheduling.md`.
 
-**Preamble size** follows from the item, with no field for it: a body under 150 words
-with none of `ultracode`, `template`, `resume`, `audit` or `max_hours`, and no picker,
-candidates, alternatives or `art:` command, gets the light
-preamble (~300 words: no outline, ETAs, pickers or servers); anything else the full one
-(`executors.md`, *Two preambles*). To give a short item the full ceremony, set
-`max_hours`.
+**Preamble size** follows from the item, with no field for it: a short plain item gets the
+light preamble, anything else the full one (`executors.md`, *Two preambles*). To give a
+short item the full ceremony, set `max_hours`.
 
 Items move `queue → running → done` by atomic rename.
 

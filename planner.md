@@ -51,6 +51,7 @@ C:\Code\<project>-control\
   questions\<id>.md                read; the answer is written as <id>.answer.md
   reports\<repo>__NNN_name.md      read: executor reports (.audit.md: audit notes)
   picks\<name>.choices.json        read: Matt's picker choices
+  parked\<repo>.md                 write: parked edits (below)
   backlog\<repo>\<name>.md         write: pre-approved items (**backlog X**)
   events.db, events.db-wal         stage both, query together (alone, events.db is hours stale)
 ```

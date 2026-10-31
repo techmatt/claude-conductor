@@ -175,6 +175,7 @@ def test_cli_questions_and_answer(env, capsys):
     assert cli.main(["answer", "001__1", "again", "--control", str(env.control)]) == 1
 
 
+@pytest.mark.slow
 def test_init_creates_folder_that_runs_an_item(env, tmp_path, capsys):
     control = tmp_path / "fresh-control"
     assert cli.main(["init", str(control), "--project", "fresh", "--repo", f"code={env.repo}"]) == 0

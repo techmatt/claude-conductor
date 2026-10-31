@@ -39,7 +39,7 @@ def git(cwd: Path, *args: str) -> str:
 
 def init_repo(path: Path, files: dict[str, str]) -> None:
     path.mkdir(parents=True)
-    git(path, "init", "-q", "-b", "main")
+    git(path, "init", "-q", "-b", "main", "--template=")    # no sample hooks: every Env copies this
     git(path, "config", "user.name", "test")
     git(path, "config", "user.email", "test@example.com")
     for name, text in files.items():
@@ -84,6 +84,7 @@ class Env:
 
     def new_daemon(self) -> daemon.Daemon:
         d = daemon.Daemon(config.load(self.control), echo=self.lines.append, notifier=self.notifier)
+        d._load.sample = lambda owned: None     # a scan of the box takes ~0.5s; load tests stand in their own
         d.startup()
         return d
 

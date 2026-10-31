@@ -12,7 +12,7 @@ Conductor is a daemon that runs queued Claude Code prompts for a project and mak
 
 ## "Launch the conductor"
 
-When Matt says "launch the conductor" (or "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\wordwarriors-control`). The app also reopens every remembered project, so naming the newest one is enough. It doesn't start the daemon (*Start daemon* or `uv run conductor run <control>` does), and launching it is not a test, so the sandbox-only rule below does not apply.
+When Matt says "launch the conductor" (or "open conductor" and the like), run `uv run conductor app <control>` from this repo, backgrounded, where `<control>` is the most recent control folder: the `C:\Code\*-control` folder holding a `conductor.toml` whose first commit is newest (today `C:\Code\aicomplete-control`). The app also reopens every remembered project, so naming the newest one is enough. It doesn't start the daemon (*Start daemon* or `uv run conductor run <control>` does), and launching it is not a test, so the sandbox-only rule below does not apply.
 
 ## "Restart all"
 

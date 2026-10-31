@@ -64,9 +64,11 @@ def test_item_runs_in_worktree_and_merges(env):
 
 @pytest.mark.slow
 def test_disjoint_paths_run_at_once_overlapping_in_turn(env):
-    env.queue("001_a", "FAKE sleep 2\nFAKE commit a/x.txt a", paths="['a/**']")
+    env.queue("001_a", f"{env.hold()}\nFAKE commit a/x.txt a", paths="['a/**']")
     env.queue("002_b", "FAKE commit b/y.txt b", paths="['b/**']")
     env.queue("003_a2", "FAKE commit a/z.txt z", paths="['a/z.txt']", stage="false")
+    env.tick_until(lambda: env.d.log.last("start", item="code/002_b"))
+    env.release()
     env.tick_until(lambda: env.finished("code/003_a2"))
     start = {e.item: e.id for e in env.events("start")}
     fin = {e.item: e.id for e in env.events("finish")}
@@ -93,12 +95,13 @@ def test_paths_violation_is_red_and_unmerged(env):
 @pytest.mark.slow
 def test_commit_to_main_during_run_conflicts(env):
     before = main_head(env)
-    env.queue("001_c", "FAKE sleep 1.5\nFAKE commit app.txt from the item")
+    env.queue("001_c", f"{env.hold()}\nFAKE commit app.txt from the item")
     env.tick_until(lambda: env.events("start"))
     (env.repo / "app.txt").write_text("from main\n", encoding="utf-8")
     git(env.repo, "add", "app.txt")
     git(env.repo, "commit", "-qm", "direct")
     direct = main_head(env)
+    env.release()
     env.tick_until(lambda: env.finished("code/001_c"))
     fin = env.finished("code/001_c")
     assert fin.detail["status"] == "red" and any("conflicted" in r for r in fin.detail["reasons"])
@@ -307,6 +310,7 @@ def part_way_ff(env, monkeypatch, failures: int, extra: dict[str, str] | None = 
     return calls
 
 
+@pytest.mark.slow
 def test_part_way_fast_forward_is_restored_and_retried(env, monkeypatch):
     calls = part_way_ff(env, monkeypatch, failures=2)
     env.queue("001_a", "FAKE commit README.md new\nFAKE commit a.txt a")
@@ -318,6 +322,7 @@ def test_part_way_fast_forward_is_restored_and_retried(env, monkeypatch):
     assert not env.events("checkout_dirty") and not env.events("hold")
 
 
+@pytest.mark.slow
 def test_part_way_fast_forward_with_foreign_changes_is_red_and_holds(env, monkeypatch):
     (env.repo / "other.txt").write_text("mine\n", encoding="utf-8", newline="\n")
     git(env.repo, "add", "other.txt")
@@ -337,6 +342,7 @@ def test_part_way_fast_forward_with_foreign_changes_is_red_and_holds(env, monkey
     assert any("restored to its HEAD" in e.detail["note"] for e in env.events("warning"))
 
 
+@pytest.mark.slow
 def test_merge_resumes_after_restart(env):
     env.queue("001_a", "FAKE commit a.txt a")
     (env.repo / "README.md").write_text("editing\n", encoding="utf-8")
@@ -514,8 +520,12 @@ def test_held_repo_starts_no_readonly_item(env):
 @pytest.mark.slow
 def test_worktrees_off_runs_in_main_checkout(env):
     env.configure('[repos.code]\npath = "../code"\nworktrees = false\n')
-    env.queue("001_a", "FAKE sleep 1\nFAKE commit a.txt a", paths="['a.txt']")
+    env.queue("001_a", f"{env.hold()}\nFAKE commit a.txt a", paths="['a.txt']")
     env.queue("002_b", "FAKE commit b.txt b", paths="['b.txt']")
+    env.tick_until(lambda: env.events("start"))
+    for _ in range(5):
+        env.d.tick()
+    env.release()
     env.tick_until(lambda: env.finished("code/002_b"))
     assert not env.events("worktree") and not env.events("stage")
     fin = {e.item: e.id for e in env.events("finish")}
@@ -526,7 +536,7 @@ def test_worktrees_off_runs_in_main_checkout(env):
 # ---------------------------------------------------------------- staging
 @pytest.mark.slow
 def test_head_is_staged_then_resumed(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE commit a.txt a")
+    env.queue("001_long", f"{env.hold()}\nFAKE commit a.txt a")
     env.queue("002_next", "FAKE commit b.txt b")
     env.tick_until(lambda: env.events("staged"))
     assert not env.finished("code/001_long")
@@ -534,6 +544,7 @@ def test_head_is_staged_then_resumed(env):
     assert stage.item == "code/002_next"
     status = env.d.log.query(kinds=["staged"])[0].detail
     assert status["plan"].startswith("Plan:")
+    env.release()
     env.tick_until(lambda: env.finished("code/002_next"))
     start = env.d.log.last("start", item="code/002_next")
     assert start.detail["resumed"] and start.detail["session_id"] == stage.detail["session_id"]
@@ -637,10 +648,11 @@ def test_write_after_launch_is_set_aside_not_held(env):
 
 @pytest.mark.slow
 def test_stage_that_writes_is_discarded_and_launched_fresh(env):
-    env.queue("001_long", "FAKE sleep 2\nFAKE report done")
+    env.queue("001_long", f"{env.hold()}\nFAKE report done")
     env.queue("002_bad", "FAKE stage-write scratch.txt oops\nFAKE commit b.txt b")
+    env.tick_until(lambda: any("stage discarded" in e.detail["note"] for e in env.events("warning")))
+    env.release()
     env.tick_until(lambda: env.finished("code/002_bad"))
-    assert any("stage discarded" in e.detail["note"] for e in env.events("warning"))
     assert not env.events("staged")
     start = env.d.log.last("start", item="code/002_bad")
     assert not start.detail.get("resumed")
@@ -649,7 +661,7 @@ def test_stage_that_writes_is_discarded_and_launched_fresh(env):
 
 @pytest.mark.slow
 def test_restart_while_staging_adopts_the_stage(env):
-    env.queue("001_long", "FAKE sleep 4\nFAKE report done")
+    env.queue("001_long", f"{env.hold()}\nFAKE report done")
     env.queue("002_next", "FAKE stage-sleep 2\nFAKE commit b.txt b")
     env.tick_until(lambda: env.events("stage"))
     env.d.runs.clear()
@@ -657,6 +669,7 @@ def test_restart_while_staging_adopts_the_stage(env):
     env.d.log.close()
     env.d = env.new_daemon()
     assert any(e.detail.get("stage") for e in env.events("adopt"))
+    env.release()
     env.tick_until(lambda: env.finished("code/002_next"))
     assert env.d.log.last("start", item="code/002_next").detail["resumed"]
     assert len(env.events("stage")) == 1
@@ -665,7 +678,7 @@ def test_restart_while_staging_adopts_the_stage(env):
 @pytest.mark.slow
 def test_restart_after_stage_died_discards_it(env):
     from conductor import procs
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", f"{env.hold()}\nFAKE report done")
     env.queue("002_next", "FAKE stage-sleep 30\nFAKE commit b.txt b")
     env.tick_until(lambda: env.events("stage"))
     procs.kill_tree(env.events("stage")[0].detail["pid"])
@@ -674,6 +687,7 @@ def test_restart_after_stage_died_discards_it(env):
     env.d.log.close()
     env.d = env.new_daemon()
     assert any("interrupted" in e.detail.get("note", "") for e in env.events("warning"))
+    env.release()
     env.tick_until(lambda: env.finished("code/002_next"))
     assert not env.d.log.last("start", item="code/002_next").detail.get("resumed")
     assert env.finished("code/002_next").detail["status"] == "done"

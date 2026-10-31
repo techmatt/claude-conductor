@@ -336,13 +336,14 @@ def test_unknown_lock_and_invalid_hold(env):
 
 @pytest.mark.slow
 def test_restart_adopts_live_executor(env):
-    env.queue("001_long", "FAKE sleep 3\nFAKE report done")
+    env.queue("001_long", f"{env.hold()}\nFAKE report done")
     env.tick_until(lambda: env.events("start"))
     pid = env.events("start")[0].detail["pid"]
     env.d.runs.clear()          # the daemon "dies"; its executor keeps running
     env.d.log.close()
     env.d = env.new_daemon()
     assert env.events("adopt") and "code/001_long" in env.d.runs
+    env.release()
     env.tick_until(lambda: env.finished("code/001_long"))
     assert env.finished("code/001_long").detail["status"] == "done"
     assert len(env.events("start")) == 1

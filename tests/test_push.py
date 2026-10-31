@@ -117,6 +117,7 @@ def write_request(env, name: str, text: str, message: str) -> None:
     (req / "request.md").write_text(f"---\ntargets: [state.md]\nmessage: {message}\n---\n", encoding="utf-8")
 
 
+@pytest.mark.slow
 def test_control_commits_are_pushed_as_one_batch(env, monkeypatch):
     from conductor import daemon_push
     # Wide enough that a tick slowed by a busy box never splits the batch.

@@ -222,7 +222,7 @@ def test_reorder_renumbered_stage_is_discarded(env):
     env.tick_until(lambda: env.events("stage"))
     pid = env.events("stage")[0].detail["pid"]
     send(env, "reorder: code 003 002")
-    assert not procs.alive(pid, None)
+    env.tick_until(lambda: not procs.alive(pid, None))      # a killed process goes a moment later
     assert any("renumbered" in e.detail.get("note", "") for e in env.events("warning"))
     assert queue_names(env) == ["002_t", "003_s"]
     env.release()

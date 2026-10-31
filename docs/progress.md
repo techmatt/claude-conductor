@@ -161,8 +161,8 @@ what the executor was told and when. One the executor exited before taking is ma
 there as never delivered, with a `warning`. A reorder carries an item's waiting
 amendments to its new name.
 
-**Limits:** a message still arrives only after a tool call ends: not while a blocking
-`ask` waits, not while the executor sits idle at the end of a turn waiting for a
+**Limits:** a message still arrives only after a tool call ends (a blocking `ask` or
+`wait_for` hands back for one): not while the executor sits idle at the end of a turn waiting for a
 background command's notification (the preamble asks it not to), and never once it
 has made its last tool call (then it is undelivered). A non-shell tool that runs long
 (an Agent / Task subagent, a Workflow) is not capped.

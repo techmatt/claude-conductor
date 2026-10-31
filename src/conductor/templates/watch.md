@@ -18,8 +18,8 @@ Judge two things for each running item:
 What you may do, as action lines that conductor carries out after you exit:
 - `tell: <repo>/<NNN_name> <one line>`: a message to a running item ("you have posted no
   progress for 40 minutes: post where you are", "the goal is X; leave Y"). Only when it
-  would help; never to hurry a healthy item. An item waiting on its own question gets the
-  message as that question's answer.
+  would help; never to hurry a healthy item. A tell never answers a question an item
+  is waiting on; `answer:` does.
 - `answer: <question id> <answer> (source: <where it was said>)`: answer an open question,
   but **only** with an answer Matt or the planner already gave: a message to the item (its
   events), a ruling in its prompt, or an amendment. Name that source. A question nobody has

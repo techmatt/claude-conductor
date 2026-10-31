@@ -14,18 +14,18 @@ running/<repo>/NNN_name.stage.json   a staged queue head (the item itself stays 
 done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json; .log.gz once finished, as are
-                               .stage.log and .merge.log, executors.md); also .stderr.log, .prompt.md,
+                               .stage.log and .merge.log, logs.md); also .stderr.log, .prompt.md,
                                .mcp.json, .settings.json, .setup.log, and .stage.log /
                                .stage.prompt.md / .stage.stderr.log for a stage; .merge.log /
                                .merge.prompt.md / .merge.stderr.log for a merge executor;
-                               .audit.md (audit notes);
-                               .amend.md (every amendment delivered, in order, with times)
+                               .audit.md (audit notes); .original.md (resume.md);
+                               .amend.md (each amendment delivered, with times)
 requests/<stamp>/              planner → conductor: replacement files + request.md
 signals/                       planner/app → conductor: the verbs in signals.md
 receipts/                      conductor → planner: what became of each write (see receipts.md)
 backlog/<repo>/<name>.md       pre-approved items, drawn into an empty queue (see night-shift.md); ignores itself
 parked/<repo>[.done].md        parked edits for the next serial item (parked.md); ignores itself
-questions/                     executor asks: <id>.md, <id>.answer.md, <id>.result.json
+questions/                     executor asks: <id>.md, .answer.md, .result.json, .away
 picks/                         Matt's saved picker choices: <name>.choices.json (see picks.md)
 inbox.md                       generated digest since the read mark
 session.md                     the start digest the last `session:` wrote (see inbox.md)

@@ -180,7 +180,7 @@ the Holds section until the item starts, merges, finishes or is cancelled, or a
 reorder renames it (its old id is gone; the renamed item gets its own hold). `enqueue`, `start`,
 `stage` and `worktree` events are left out of the inbox (they are in
 `conductor events`). `conductor status` prints the daemon (running, **not answering**
-with a stale heartbeat, **died**, or not running) and the same memory line, then per repo: running (pid, branch,
+with a stale heartbeat, **died**, or not running) and the same memory and load lines, then per repo: running (pid, branch,
 `readonly` or `resume of <orig>`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
 *audit pending* line when the repo has unused audit notes.
 `conductor inbox` prints the same thing without moving the mark.

@@ -119,7 +119,7 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   at the running items: a real stall or busy, on goal or drifting. Its `{{usage}}` is each
   executing item's prompt (quoted), outline, progress and recent events, the open questions
   and recent flags; its body says why it was launched. Its `## Actions` lines (tell, notify,
-  draw) are carried out when it finishes; it never cancels, kills, amends or answers.
+  draw, answer) are carried out when it finishes; it never cancels, kills or amends.
 
 **Which notes are unused.** A note is a finished item whose `finish` event has
 `audit: true` (an `audit: true`, general cleanup or self-audit item) and whose `.audit.md` exists and is not blank, in any status (a red

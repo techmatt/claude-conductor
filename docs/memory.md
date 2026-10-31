@@ -65,7 +65,7 @@ items (a full scan, so only on a change), the load, and what conductor does now.
 **Guard.** While the level is not `ok`, nothing new starts: no launch, resume or
 stage (the queue keeps its order, and the inbox's *Now* line and `conductor status`
 say *launches and stages paused*). Each running item is sent a `tell` (`by:
-conductor`, `MEMORY_TELLS` in `daemon.py`) when the level changes: at pressure, cut
+conductor`, `MEMORY_TELLS` in `daemon_memory.py`) when the level changes: at pressure, cut
 parallelism (one browser and one test worker, close idle servers, no new parallel
 subagents or workflows); at critical, one process at a time and commit work so far;
 back at ok, it may return to normal. A running executor is **never** killed for

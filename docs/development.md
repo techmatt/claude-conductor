@@ -6,16 +6,19 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~60-77s; 289 tests; 2026-10-30)
+uv run pytest            # the fast lane, after every change (~70s; 303 tests; 2026-10-30)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~180s; 401 tests); run this before committing
+uv run pytest -m ""      # everything (~200s; 423 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
 `@pytest.mark.slow` marks a test that took 2.5s or more serially: several executors, a
 merge or prose conflict, a stage, a restart, or a real wait on a clock. The time is
 real git and process spawns (~30ms each on Windows), not sleeps, so parallelism is the
-lever. Keep new tests deterministic under load: hold an executor open with `env.hold()`
+lever. Pytest's settings live in `pytest.ini`, which wins over `pyproject.toml`'s older
+table. A passing test's folder is deleted at its teardown; left for a later session,
+that cost 12-16s at the end of every run. `Env`'s daemons skip the load scan (~0.5s) and
+its repos have no sample hooks. Keep new tests deterministic under load: hold an executor open with `env.hold()`
 (a `FAKE wait-for` line) and let it go with `env.release()` rather than a fixed `FAKE
 sleep`, which races a loaded machine. `env.tick_until` and `env.hold()` give up only after
 `WAIT_SECONDS` (180s, `conftest.py`): a passing test never waits it out, and a project's
@@ -32,7 +35,7 @@ conductor during a run never restarts a test's daemon; `tests/test_restart.py` s
 `env.hold()`), `tests/test_review.py` the `review:` bundle.
 
 Where things live, beyond the obvious: `Daemon` is `daemon.py` plus `daemon_*` mixins
-(signals, messages, receipts, reap, merge, `daemon_restart` for the self-restart, `daemon_setup`
+(signals, messages, receipts, reap, merge, templates, watch, push, memory, `daemon_restart` for the self-restart, `daemon_setup`
 for setup runners and the second half of a launch or stage); `setup_run.py` is the
 runner; `review.py` renders `review.md`; `state.early_starts` picks readonly and
 `alongside` items that start behind the head (`tests/test_alongside.py`); `session.reports_past_marker` finds conductor's reports

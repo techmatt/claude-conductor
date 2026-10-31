@@ -33,7 +33,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-10-30, in prompt 60
+Last cleanup: 2026-10-30, after prompt 61
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`) and aicomplete (`C:\Code\aicomplete-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
@@ -61,7 +61,10 @@ A next prompt should know:
 - **58–59, first live use**: `identical to HEAD` after a real edit: raise `SAME_WAIT_SECONDS` (10s). Did a cut-short `ask` get its `resume`? Do queue receipts' start estimates hold? `kind: many` rows in the browser. Were parked edits answered (`parked P<n>: …`) and skipped ones returned?
 - **Audit the audit** (59): after the first 3 workflow retros, the planner reviews them with Matt. Which findings became fixes, and which recurred? Did `friction:` lines foresee them? Is the trigger (6 items) too frequent or too rare? Adjust the questions or the trigger, then close this line.
 - **60, first live use**: a picker round's retirement (`pick_retired`: did it delete only what Matt was done with?); aicomplete's stray `requests/20261030-0814-p027/` should move to `requests/stale/` an hour after its daemon runs 60's code.
-- **61, first live use**: do executors use `wait_for` (poll turns gone) and does `--workdir` match where they think they are? Do they run heavy work below normal, and flag defaults? A real `quiet` that was held off wrongly: `Tree.writes` counts pipes, so a chatty tool looks like work. Does the 0.3s load scan on the tick show in receipt times? The ETA warning fires only when `eta` is early or past: 009's was late (6:20am, finished 3:38am), so a late `eta` still goes unwarned. A `quiet` request holding other runs for timing work was not built; the load line only shows the contention.
+- `pyproject.toml`'s `[tool.pytest.ini_options]` is dead since `pytest.ini` (cleanup 2026-10-30; the app's lock on `conductor.exe` kept it out of that commit): delete the table with the app closed.
+- **Workflow `isolation: worktree` puts helper worktrees in the main checkout** (due from aicomplete checkpoint at or after event #1536): 040's ultracode helpers landed in `C:\Code\aicomplete\.claude\worktrees`, which the preamble forbids touching; the executor removed them by hand. The preamble or `docs/ultracode.md` should say where they go, or conductor sets it.
+- **ETA drift: warn on a late `eta` too** (Matt, 2026-10-30; due from aicomplete checkpoint at or after event #1512): 61 warns only when `eta` is early or past; 009's was too late (6:20am, finished 3:38am). Also warn when `eta` sits well past the outline's last row. Matt keeps 61's narrower leftover-budget wording.
+- **61, first live use**: do executors use `wait_for` (poll turns gone) and does `--workdir` match where they think they are? Do they run heavy work below normal, and flag defaults? A real `quiet` that was held off wrongly: `Tree.writes` counts pipes, so a chatty tool looks like work. Does the 0.3s load scan on the tick show in receipt times? A `quiet` request holding other runs for timing work was not built; the load line only shows the contention.
 - **Part-way fast-forwards** (aicomplete 035, fixed after 60): watch the first live `warning` "main checkout restored" and any `checkout_dirty`. Did the retry (4 tries, 0.5s doubling) outlast the Windows lock, or does the backoff need to be longer?
 - The light preamble (55): did small items still ask with a default, background long calls and answer messages by number? One that turned out big and ran blind (no outline) means lower `LIGHT_WORDS` or add a signal word.
 - Planner habits (55): Corelight's still sit under `state.md` *Pending fixes* (Word Warriors' moved); `planner.md` tells its planner to move them. Check Corelight's next session start no longer lists them to Matt.

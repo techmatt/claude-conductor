@@ -60,8 +60,8 @@ drifting. Its report (short: **Items**, **Recommend**, **Actions**) never waits 
 **What it may do on its own**: its report's `## Actions` lines, carried out when it finishes
 (not when red), at most six, attributed `by: watch` (`none` and the closing `Report written
 to …` line, which sits under `## Actions` as the last heading, are not actions):
-- `tell: <repo>/<NNN_name> <line>`: a `tell` (`progress.md`, *Messages*; to an item blocked
-  on its question, that question's answer: `questions.md`);
+- `tell: <repo>/<NNN_name> <line>`: a `tell` (`progress.md`, *Messages*; it never answers a
+  question: `questions.md`);
 - `answer: <question id> <answer> (source: <where>)`: answers an open question **only** with
   an answer Matt or the planner already gave (a message, a ruling in the item's prompt or
   an amendment), naming it; the answer file says so, and `watch_answer` (question, text,
