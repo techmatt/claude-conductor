@@ -105,6 +105,29 @@ def progress_items(control: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------- messages
+def _run_records(control: Path) -> list[dict]:
+    recs = []
+    for p in sorted(control.joinpath("running").glob("*/*.run.json")):
+        try:
+            recs.append(json.loads(p.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            continue                        # gone or being rewritten: it shows next time
+    return recs
+
+
+def running_beside(control: Path, item: str) -> list[str]:
+    """What runs on the box beside `item` in this project, any repo: executing or in setup,
+    not paused. A watch is too small to count."""
+    return sorted(r["item"] for r in _run_records(control)
+                  if r.get("item") != item and r.get("phase", "exec") in ("setup", "exec")
+                  and r.get("template") != "watch" and not r.get("paused_at"))
+
+
+def told_beside(control: Path, item: str) -> list[str] | None:
+    """What `item`'s preamble said runs beside it; None for a watch, which isn't told."""
+    return next((r.get("running_beside") for r in _run_records(control) if r.get("item") == item), None)
+
+
 def post(control: Path, item: str, msg_id: int, text: str, by: str | None, **extra) -> Path:
     """A message waiting for `item`. An amendment carries `kind: amend` and the `state`
     the item was in; it may wait for a queued or staged item until its launch takes it."""

@@ -200,6 +200,8 @@ class SetupMixin:
         amends = talk.take(cfg.control, item.id, "resume" if stage else "prompt")
         rec["beside"], warn = self._beside(item)
         rec["warned"] = [i for i, _ in warn]        # named in its paragraph: no tell about them later
+        if item.template != executor.WATCH_TEMPLATE:   # its preamble's *Running beside you now*
+            rec["running_beside"] = talk.running_beside(cfg.control, item.id)
         resumed = resume_items.paragraph(cfg, self.log, rec, paths.original) if rec.get("resume_of") else ""
         # Parked edits a serial item carries (`parked.py`): out of the list now, back if it fails.
         if "parked" not in rec:

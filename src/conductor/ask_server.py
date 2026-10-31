@@ -178,6 +178,7 @@ class Server:
         self._announced: set[str] = set()       # mail files an `ask` already returned early for
         self._away: dict[str, float] = {}       # question id → seconds spent off the call, on a message
         self._away_since: dict[str, float] = {}
+        self._running: list[str] | None = None  # what it last heard runs beside it
 
     def send(self, obj: dict) -> None:
         with self._lock:
@@ -260,7 +261,19 @@ class Server:
         # Waiting mail is never handed out here: the server can't tell a helper's call from
         # the lead's, and a helper ignores it (Word Warriors 059). The PostToolUse hook that
         # runs right after this call can (`talk.subagent_call`), so it delivers.
-        return "Logged; carry on.", False
+        return "Logged; carry on." + self._running_now(), False
+
+    def _running_now(self) -> str:
+        """The preamble's *Running beside you now* line, when what runs beside it changed."""
+        if self._running is None:
+            self._running = talk.told_beside(self.control, self.item)
+        if self._running is None:                   # a watch, or no run record
+            return ""
+        now = talk.running_beside(self.control, self.item)
+        if now == self._running:
+            return ""
+        self._running = now
+        return f" Running beside you now: {', '.join(now) or 'nothing'}."
 
     def _resume(self, ref) -> tuple[questions.Question | None, str | None]:
         if not isinstance(ref, str) or not ref.strip():

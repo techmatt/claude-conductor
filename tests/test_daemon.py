@@ -347,7 +347,7 @@ def test_restart_adopts_live_executor(env):
     env.tick_until(lambda: env.finished("code/001_long"))
     assert env.finished("code/001_long").detail["status"] == "done"
     assert len(env.events("start")) == 1
-    assert not procs.alive(pid, None)
+    env.tick_until(lambda: not procs.alive(pid, None))      # finished is seen a moment before it is gone
 
 
 @pytest.mark.slow

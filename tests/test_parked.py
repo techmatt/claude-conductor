@@ -39,7 +39,7 @@ def test_answers_and_settle():
     assert parked.settle(edits, report, landed=False) == ([], edits)              # red: nothing landed
 
 
-def test_a_workflow_retro_is_due_after_six_items_naming_the_most_friction(env):
+def test_a_workflow_retro_at_the_floor_names_the_most_friction(env):
     from conductor import session
     log = env.d.log
     (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)
@@ -49,16 +49,15 @@ def test_a_workflow_retro_is_due_after_six_items_naming_the_most_friction(env):
         return log.append("finish", item=f"code/{name}", repo="code", status=detail.pop("status", "done"), **detail)
 
     fin("010_audit", template="self_audit", resume_of="code/009_x")
-    for n in range(11, 16):
+    for n in range(11, 22):
         fin(f"0{n}_w")
     line = session.workflow_retro(log, state.scan(env.d.cfg, log), "code")
-    assert line == "- workflow retro: 010_audit, " + line.split(", ", 1)[1].split(" · ")[0] + \
-        " · 5 non-template item(s) finished since"
+    assert line.endswith(" · 11 non-template item(s) finished since") and "**due**" not in line
     log.append("tell", item="code/013_w", by="watch", text="you seem stuck")
     log.append("default", item="code/013_w", question="code__013_w__1")
-    fin("016_w", friction="stale README command")
+    fin("022_w", friction="stale README command")
     line = session.workflow_retro(log, state.scan(env.d.cfg, log), "code")
-    assert "6 non-template item(s) finished since · **due**: post-audit 013_w (1 watch tell, 1 timed-out question)" in line
+    assert "12 non-template item(s) finished since · **due**: post-audit 013_w (1 watch tell, 1 timed-out question)" in line
 
 
 @pytest.mark.slow

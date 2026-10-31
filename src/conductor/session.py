@@ -8,12 +8,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from . import inbox, parked
+from . import inbox, nightshift, parked
 from .audits import canonical
 from .config import Config
 from .events import Event, EventLog
 from .state import View
-from .util import clock, read_text
+from .util import clock, parse_stamp, read_text
 
 # Conductor's own checkout: `src/conductor/session.py` → the repo root. Its `planner-notes.md`
 # (git-ignored, the planner's own file) holds the marker for conductor's hand-pasted prompts' reports.
@@ -27,7 +27,9 @@ MAINTENANCE = (("bug_hunt", "bug hunt"), ("general_cleanup", "general cleanup"),
                ("test_cleanup", "test cleanup"), ("claude_md_cleanup", "claude.md cleanup"),
                ("disk_cleanup", "disk space cleanup"))
 SLOW_WINDOW = 5     # a `slow:` (or `friction:`) part named in two or more of a repo's last five reports
-RETRO_EVERY = 6     # non-template items finished since the last workflow retro before one is due
+RETRO_FLOOR = 12    # non-template items finished since the last workflow retro before one is due regardless
+RETRO_OVERRUN = 1.5     # a run this many times its first ETA (and `RETRO_OVERRUN_MINUTES` over) makes one due
+RETRO_OVERRUN_MINUTES = 10
 
 
 def _report_key(name: str) -> tuple[int, str] | None:
@@ -191,21 +193,52 @@ def friction_score(log: EventLog, fin: Event) -> tuple[int, list[str]]:
     return score, parts
 
 
+def overrun(log: EventLog, fin: Event) -> float | None:
+    """How many times its first ETA an item ran (from its start), once that is
+    RETRO_OVERRUN or more and over by RETRO_OVERRUN_MINUTES; else None."""
+    start = log.last("start", item=fin.item)
+    first = next((e for e in log.query(kinds=["progress"], item=fin.item, since_id=start.id if start else None)
+                  if e.detail.get("eta") or e.detail.get("outline")), None)
+    if first is None or start is None:
+        return None
+    rows = first.detail.get("outline") or []
+    text = first.detail.get("eta") or (rows[-1].get("eta") if isinstance(rows[-1], dict) else None)
+    due = nightshift.parse_eta(text, parse_stamp(first.ts))
+    if due is None:
+        return None
+    began = parse_stamp(start.ts)
+    planned, ran = (due - began).total_seconds(), (parse_stamp(fin.ts) - began).total_seconds()
+    if planned <= 0 or ran < planned * RETRO_OVERRUN or ran - planned < RETRO_OVERRUN_MINUTES * 60:
+        return None
+    return ran / planned
+
+
+def retro_trigger(log: EventLog, fin: Event) -> str | None:
+    """Why this item alone makes a workflow retro due, or None."""
+    if fin.detail.get("status") in ("partial", "red"):
+        return str(fin.detail["status"])
+    return f"ran {times:.1f}× its first ETA" if (times := overrun(log, fin)) else None
+
+
 def workflow_retro(log: EventLog, view: View, repo: str) -> str:
     """When a workflow retro (`post-audit`, a self-audit) last ran, how many non-template
-    items finished since, and once RETRO_EVERY have, that it is due, naming the item with
-    the most friction among them."""
+    items finished since, and that one is due when any of them went `partial` or `red` or
+    overran (`retro_trigger`), or at RETRO_FLOOR of them. It names the item with the most
+    friction among those that triggered it (all of them, at the floor)."""
     fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo), key=lambda e: e.id)
     last = next((ev for ev in reversed(fins) if canonical(ev.detail.get("template")) == "self_audit"), None)
     since = [ev for ev in fins if not ev.detail.get("template") and not ev.detail.get("resume_of")
              and (last is None or ev.id > last.id)]
     text = (f"{last.item.split('/', 1)[1]}, {clock(last.ts)}" if last else "never") + \
         f" · {len(since)} non-template item(s) finished since"
-    if len(since) >= RETRO_EVERY:
-        scored = [(friction_score(log, ev), ev) for ev in since]
+    triggers = {ev.id: why for ev in since if (why := retro_trigger(log, ev))}
+    if triggers or len(since) >= RETRO_FLOOR:
+        scored = [(friction_score(log, ev), ev) for ev in since if ev.id in triggers or not triggers]
         (score, why), worst = max(scored, key=lambda s: (s[0][0], s[1].id))
-        text += (f" · **due**: post-audit {worst.item.split('/', 1)[1]} ("
-                 + (", ".join(why) if score else "no friction recorded; the latest") + ")")
+        trigger = triggers.get(worst.id)
+        why = [w for w in why if w != trigger]
+        parts = ([trigger] if trigger else []) + why or ["no friction recorded; the latest"]
+        text += f" · **due**: post-audit {worst.item.split('/', 1)[1]} ({', '.join(parts)})"
     return f"- workflow retro: {text}"
 
 

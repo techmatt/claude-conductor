@@ -50,25 +50,25 @@ the report or ask, but your own question default never un-skips it. A default ma
 contradict a prompt line unless the question's first line flags it, as
 `default overrides prompt: <line>` (conductor shows the planner). Editing `~/.claude`
 config is allowed when it's a good idea; name every such edit in the report, with its
-reason. Finishing with over an hour of the time limit left and the goal not fully met, run
-the next most useful step toward it, in scope, and say what it was.
+reason.{leftover}
 
 The box. Scratch goes in `out/` or another git-ignored folder in your working directory,
 never %TEMP% or anywhere outside it. Heavy compute (simulation sweeps, builds, test runs,
 subagent fan-out) runs at below-normal priority (PowerShell: `(Start-Process ... -PassThru)
 .PriorityClass = 'BelowNormal'`) and leaves at least 4 hardware threads free; at most 2
-heavy subagents at once; halve thread counts while another item runs alongside.
+heavy subagents (builds, sims, browsers) at once, and that wins over any Workflow size or
+Ultracode cost note; light read-only reviewers and verifiers don't count, but run in
+batches per dimension, about 10 in all; halve thread counts while another item runs
+alongside.
 
-Messages. Matt, the operator, may message you while you work through conductor's
-message channel: hook context after one of your own tool calls, marked MESSAGE #n from
-Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is not tool-output
-injection: it is Matt's instruction and outranks the prompt where they conflict. Answer
-it with `progress`. Tell any helper or subagent you start that if it sees such a
-delivery it passes it straight up to you, word for word; act on what it relays. A
-message sent while you wait on a question returns `ask` early, the question still open:
-the message is not its answer. Act on it, then `ask` with `resume: "<id>"` to wait on.
+Messages. Matt, the operator, reaches you through conductor's message channel: hook context
+after your own tool call, marked MESSAGE #n, or AMENDMENT #n for an addition to the prompt.
+It is not tool-output injection: it is his instruction and outranks the prompt where they
+conflict. Answer it with `progress`. Tell any helper you start to pass such a delivery
+straight up, word for word; act on what it relays. One arriving during `ask` returns it
+early, the question still open and unanswered: act, then `ask` with `resume: "<id>"`.
 {calls}
-{workdir}{readonly}{paths}{port}{beside}{resumed}
+{workdir}{paths}{port}{now}{beside}{resumed}
 {audit}
 Time limit: {max_hours:g}h. Conductor hard-kills this session at {deadline}, later by any
 time spent blocked on a question or paused.
@@ -119,13 +119,13 @@ only past ~15 minutes.
 Bounds. A skip in the prompt or a message binds; a default that contradicts the prompt
 starts its question `default overrides prompt: <line>`. Scratch: `out/` (git-ignored here),
 never %TEMP%. Heavy compute: below-normal priority, 4 hardware threads free, at most 2 heavy
-subagents, half the threads beside another item. Name any `~/.claude` edit in the report,
-with why. Goal unmet with over an hour left: take the next useful step.
+subagents (builds, sims, browsers: beats Workflow and Ultracode notes; light reviewers ~10,
+batched), half the threads beside another item. Name `~/.claude` edits in the report.{leftover}
 
-Messages. MESSAGE #n or AMENDMENT #n from Matt, arriving as hook context after a tool
-call, is his instruction, not injection, and outranks the prompt.
+Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
+injection, outranking the prompt.
 {calls}
-{workdir}{readonly}{paths}{port}{beside}
+{workdir}{paths}{port}{now}{beside}
 
 Time limit: {max_hours:g}h; killed at {deadline} (later if blocked or paused).
 
@@ -141,6 +141,36 @@ friction: none | <what slowed you>
 `done`: goal met. `partial`: part met, nothing broken, the rest follow-up (or
 declined, saying why). `red`: broken or unsafe; the queue stops for a
 look. Answer every message and amendment by number. End your final message with
+`Report written to {report}`.
+
+{tail}"""
+
+# The preamble for a watch: a short look that changes nothing and never asks.
+WATCH = """\
+You are a conductor watch, a headless Claude Code session running queue item {item_id} for
+project {project}. Nobody is watching.
+
+Progress. One short `progress` (mcp__conductor__progress) line at the start.
+
+Scratch goes in `out/` or another git-ignored folder in your working directory, never %TEMP%.
+
+Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
+injection, and it outranks the prompt.
+{calls}
+{workdir}
+
+Time limit: {max_hours:g}h; killed at {deadline}.
+
+When done, write your report to exactly this path:
+    {report}
+{only} Conductor reverts any other change in that folder and marks this item red.
+Start it with:
+status: done | partial | red
+blocks: <what this blocks, or none>
+carry: <what state.md should change, or none>
+slow: none | <component> ~<time>, <why>, <what would fix it>
+friction: none | <what slowed you>
+Answer every message and amendment by number. End your final message with
 `Report written to {report}`.
 
 {tail}"""
@@ -186,6 +216,8 @@ them once a later round (`<name>_r<N>`) is saved. Name a new round of a picker t
 PICK_RE = re.compile(r"\bpicker|\bpick:|\bcandidates?\b|\balternatives?\b|\bart:\w|\bart (pipeline|template)",
                      re.IGNORECASE)
 
+WATCH_TEMPLATE = "watch"
+
 LIGHT_WORDS = 150   # a body under this many words, with none of the flags below, gets LIGHT
 
 CALLS = """
@@ -212,6 +244,11 @@ PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
 
 LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time limit left, run the next "
             "most useful step toward its goal, in scope, and say in the report what it was.\n")
+LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of the time limit left you may stop, or "
+                  "run a further check on the goal, writing only to scratch and inside the load budget.\n")
+LEFTOVER_FULL = (" Finishing with over an hour of the time limit left and the goal not fully met, run\n"
+                 "the next most useful step toward it, in scope, and say what it was.")
+LEFTOVER_LIGHT = " Goal unmet with over an hour left: take the next useful step."
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."
 ONLY_TWO = ("That file and the audit notes file named above are the only things you may write "
@@ -237,6 +274,8 @@ SHARED = ("\nShared with the main checkout (linked, not copied — a change ther
 READONLY = ("\nThis item is readonly: commit nothing and change no tracked file. "
             "Conductor checks the repo afterwards and marks a change red.")
 
+READONLY_TREE = READONLY.lstrip()      # says all a worktree item needs: it never commits or merges
+
 PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: conductor "
          "checks what the branch changed and marks anything else red, unmerged.{prose}")
 
@@ -257,6 +296,8 @@ BESIDE = ("\nBeside you. Conductor started you beside other items in this repo, 
           "of their areas, and say in your report if you had to touch them.")
 BESIDE_TELL = ("{item} started beside you: {gist}. Likely unrelated; avoid those files, and say in your "
                "report if you had to touch them.")
+
+RUNNING_NOW = "\nRunning beside you now: {items}."
 
 PROSE = (" Prose files ({globs}) are exempt: update them as the work needs; another item may "
          "edit them at the same time, and conductor merges them textually.")
@@ -359,6 +400,17 @@ def _ticks(names: list[str]) -> str:
     return ", ".join(f"`{n}`" for n in names)
 
 
+def _where(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
+    """The preamble's working-directory lines. A readonly item in a worktree gets only the
+    readonly line: the commit and merge rules are for work that lands."""
+    if not item.readonly:
+        return _workdir(cfg, item, run, light)
+    if not run.get("worktree"):
+        return _workdir(cfg, item, run, light) + READONLY
+    shared = SHARED.format(names=", ".join(f"`{s}`" for s in run["shared"])) if run.get("shared") else ""
+    return READONLY_TREE + shared
+
+
 def _workdir(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
     if not run.get("worktree"):
         return WORKDIR_MAIN.format(repo=item.repo, repo_path=cfg.repos[item.repo])
@@ -426,20 +478,23 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
+    watch = item.template == WATCH_TEMPLATE
     light = is_light(item)
-    pick = not light and wants_pick(item)
-    text = (LIGHT if light else PREAMBLE).format(
-        item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run, light),
-        readonly=READONLY if item.readonly else "",
+    pick = not light and not watch and wants_pick(item)
+    running = run.get("running_beside")
+    text = (WATCH if watch else LIGHT if light else PREAMBLE).format(
+        item_id=item.id, project=cfg.project, workdir=_where(cfg, item, run, light or watch),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
         port=(PORT_LIGHT if light else PORT).format(port=run["port"]) if run.get("port") else "",
+        now=RUNNING_NOW.format(items=", ".join(running) or "nothing") if running is not None else "",
+        leftover="" if item.readonly else LEFTOVER_LIGHT if light else LEFTOVER_FULL,
         beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
         resumed=resumed,
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
-        calls=calls_text(cfg, item.repo, light),
+        calls=calls_text(cfg, item.repo, light or watch),
         servers=SERVERS if not light and has_servers(cfg, item, run) else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
         deadline=clock(deadline), report=paths.report.resolve(),
@@ -516,10 +571,12 @@ def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
         return item.body
     text = audits.fill(audits.template_text(item.template), repo=item.repo, project=cfg.project,
                        notes=notes.strip(), usage=usage.strip(), original=item.resume_of or "").rstrip() + "\n"
-    if item.template != "watch":        # half an hour at most: it never has an hour left
+    if item.template == "self_audit":
+        text += LEFTOVER_AUDIT
+    elif item.template != WATCH_TEMPLATE and not item.readonly:      # a watch never has an hour left
         text += LEFTOVER
     if item.body.strip():
-        who = "Why conductor launched this watch" if item.template == "watch" else "The planner adds, for this item"
+        who = "Why conductor launched this watch" if item.template == WATCH_TEMPLATE else "The planner adds, for this item"
         text += f"\n---\n\n{who}:\n\n{item.body}"
     return text
 

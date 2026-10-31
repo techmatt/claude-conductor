@@ -610,7 +610,7 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     assert "- `CLAUDE.md`: 0.0 KB, 2 lines" in facts and "- unused audit notes: 0" in facts
     assert "repeated in the last 4 report(s): tests (001, 003)" in facts
     assert "- `friction:` repeated in the last 4 report(s): stale test command (003, 004)" in facts
-    assert "- workflow retro: never · 3 non-template item(s) finished since\n" in facts      # due at 6
+    assert "- workflow retro: never · 3 non-template item(s) finished since\n" in facts      # no trigger yet
     assert "- parked edits waiting: 0" in facts and "friction: stale test command; no port" in text
     # The next session's digest starts after this one's read mark.
     send(env, "session: again", "planner-2.signal")

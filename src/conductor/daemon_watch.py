@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import items, nightshift, questions, state
@@ -36,6 +37,7 @@ ACTIONS = ("tell", "answer", "notify", "draw")
 ANSWER_RE = re.compile(r"^(\S+)\s+(.+?)\s*\(source:\s*([^)]+)\)\s*$")    # `<question> <answer> (source: <where>)`
 FOOTER_RE = re.compile(r"^`?report written to\b", re.IGNORECASE)     # every report's last line, often under `## Actions`
 MAX_ACTIONS = 6
+QUIET_GRACE = timedelta(minutes=5)      # past a promised time, how long a silent item still has
 WATCH_FRONT = ("---\nrepo: {repo}\nreadonly: true\ntemplate: watch\nmax_hours: {hours:g}\n"
                "after_red: continue\nstage: false\n---\n")
 
@@ -169,7 +171,8 @@ class WatchMixin:
             p = self.log.last("progress", item=item_id)
             since = parse_stamp(p.ts if p else rec["started"])
             # Silent but a process of its own is still writing: a healthy long run (aicomplete 009).
-            if quiet and (at - since).total_seconds() >= quiet and not self.still_writing(item_id):
+            if (quiet and (at - since).total_seconds() >= quiet and not self.still_writing(item_id)
+                    and not self._promised(item_id, at)):
                 flags.append((f"quiet:{item_id}:{p.id if p else 0}", "quiet", item_id,
                               f"{item_id}: no progress line for {duration((at - since).total_seconds())} "
                               f"(last {clock(since)}{'' if p else ', its start'})"))
@@ -218,6 +221,17 @@ class WatchMixin:
             self.watch_keys.add(key)
             extra = {"watch": f"skipped: {why_not}"} if why_not and flag in STALL_FLAGS else {}
             self.log.append("watch_flag", item=item_id, key=key, flag=flag, text=text, **extra)
+
+    def _promised(self, item_id: str, at: datetime) -> bool:
+        """The item said when it would next be heard from, and that is still ahead: its outline's
+        next row or its latest `eta`, with `QUIET_GRACE`. The routine watch still looks in."""
+        e, o = self.log.last("progress", item=item_id, has="eta"), self.log.last("progress", item=item_id, has="outline")
+        rows = [r for r in (o.detail.get("outline") or []) if isinstance(r, dict)] if o else []
+        row = next((r for r in rows if not r.get("done")), None)
+        times = [(row.get("eta"), o)] if row else []
+        times += [(e.detail.get("eta"), e)] if e else []
+        return any((due := nightshift.parse_eta(text, parse_stamp(ev.ts))) and at <= due + QUIET_GRACE
+                   for text, ev in times)
 
     def _eta(self, item_id: str):
         """The item's newest ETA and the progress event that posted it: an `eta`, or its

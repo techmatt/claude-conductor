@@ -12,7 +12,7 @@ daemon flags:
 
 | flag | when | key (one event per key) |
 |---|---|---|
-| `quiet` | an executing item has posted no progress line for `watch_quiet_minutes` (20), since its last line or its start; not while it waits on a blocking question, nor while a process of its own is still writing (`memory.md`, *Writes*: found live, it fired twice on aicomplete 009 as its experiment log advanced; sampling off, it fires as before) | item + its last progress event |
+| `quiet` | an executing item has posted no progress line for `watch_quiet_minutes` (20), since its last line or its start; not while it waits on a blocking question, nor while a process of its own is still writing (`memory.md`, *Writes*: found live, it fired twice on aicomplete 009 as its experiment log advanced; sampling off, it fires as before), nor while its outline's next row or latest `eta` is still ahead, plus 5 minutes (`QUIET_GRACE`; 048 was flagged at 3:43am with a row due 3:50am). A far-off `eta` holds it that long; the routine watch still looks in | item + its last progress event |
 | `eta` | it is past its newest ETA: a progress `eta` or its outline's last row, whichever is newer; a clock time (`5:40pm`, `17:40`; on the day it was posted, the next day if that is over an hour before the posting) or a duration from the posting (`25m`, `1h30m`) | item + the progress event that posted it |
 | `question` | a question open longer than one check interval | question id |
 | `blocked` | a blocking question unanswered for `watch_blocked_minutes` (15): its item does nothing meanwhile | `blocked:` + question id |

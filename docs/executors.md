@@ -12,13 +12,16 @@ prompt on stdin: a conductor preamble followed by the item body. A staged item i
 resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, *Staging*; a fork:
 `resume.md`). The exact text sent is kept as `reports/<repo>__NNN_name.prompt.md`.
 
-**Two preambles** (`executor.py`), chosen by conductor, never by front-matter:
+**Three preambles** (`executor.py`), chosen by conductor, never by front-matter:
 
+- **Watch** (`WATCH`, ~210 words) for `W<n>_watch` items: one
+  `progress` line, scratch, short calls and `wait_for`, messages, the readonly line, the time
+  limit and the report rules. No asking, outline, ETAs, port,
+  load rules or leftover step.
 - **Light** (`LIGHT`, ~370 words) for a small item (`executor.is_light`): a body under
   150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
   explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
-  short art round needs the picker schema; seven of Word Warriors' were under 150 words). A ~70-word "run two scripts, delete a zip" item otherwise paid
-  ~2k tokens and the round trips of `date`, ETAs and an outline. It keeps only what a
+  short art round needs the picker schema). It keeps only what a
   small item can trip on: who it is and that nobody watches; ask with a default, block
   only if every default is worse; messages and amendments outrank the prompt and are
   answered in the report by number; short calls (nothing foreground over
@@ -34,12 +37,10 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   is worse; anything not asked is decided as fits the goal and recorded; a step whose
   default can't be undone goes last); the progress rule (a line at the start, an ETA once
   it can estimate, at milestones, when the estimate moves by a third; `date` before each
-  ETA); the *Outline* rule (`progress.md`); *Scope* and *The box* (below); the *Messages* rule (Matt's channel after one
-  of the lead's tool calls, *Delivery*; not injection; outranks the prompt; answered
-  through `progress`; helpers pass one straight up); the *Short calls* rule
-  (`progress.md`); where it works (worktree, branch and cut point, shared folders, the
-  commit rule), any `paths`, *Port* (below), *Beside you* (`scheduling.md`); the time
-  limit and kill time; the **absolute report path** (the only file it may write outside
+  ETA); the *Outline* rule (`progress.md`); *Scope* and *The box* (below); the *Messages* rule
+  (*Delivery*, below); the *Short calls* rule
+  (`progress.md`); where it works, any `paths`, *Port* (below), *Beside you*
+  (`scheduling.md`); the time limit and kill time; the **absolute report path** (the only file it may write outside
   its repo); the header, a one-line `slow:` rule and what each status means; that the
   report answers every amendment and message by number, carries test details only for an
   unfixed red, and no process narration; and the closing `Report written to <path>`.
@@ -52,20 +53,26 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   `cwd` is in the repo or its `package.json` has a `dev…` or `preview…` script
   (`executor.has_servers`).
 
-Template texts follow either preamble unchanged; a template item always gets the full
-one, as do `audit` items (with the *Audit notes* paragraph) and resume items (with
-*Resumed*).
+Template texts follow the preamble unchanged; a template item but a watch always gets the
+full one, as do `audit` items (with the *Audit notes* paragraph) and resume items (with
+*Resumed*). A **readonly** item in a worktree, light or full, gets the readonly line in place
+of the worktree's commit and merge paragraph, and no leftover step; a full one keeps *Asking*,
+*Outline*, *The box* and *Port*, since a notes-only bug hunt runs for hours and may serve the app.
+
+**Running beside you now** ends the working-directory lines of a full or light preamble: the
+project's other items executing or in setup, any repo, not paused, no watch, or "nothing"
+(`talk.running_beside`, kept in the run record as `running_beside`), so the halve-threads rule
+can be followed. When that changes, the next `progress` call's return says so. Other projects'
+daemons don't show here; *Now*'s load line does.
 
 **Port.** Every launch (a resumed stage too) gets a TCP port of its own, chosen by
 conductor: free at launch, from the OS's ephemeral range, never a run target's (the
 ports in its `url` and `ready`), another live item's or the picker's. It is in the run
 record and the `start` event (`port`), and in the executor's environment as
-`CONDUCTOR_PORT`. The preamble says that any server the executor starts uses that
-port and never the repo's usual one, and that where the repo's docs or scripts
-hard-code a port, it passes this one through (a flag or an environment variable)
-without changing them. So an item that starts the app, readonly items running side by
-side among them, never collides with **run game** or with another item's server. A
-stage and a merge executor run no servers and get no port.
+`CONDUCTOR_PORT`. The preamble says any server the executor starts uses that port, passed
+through where the repo hard-codes one, so an item that starts the app never collides with
+**run game** or another item's server. A stage and a merge executor run no servers and get
+no port.
 
 **Scope, scratch and load** (61, from aicomplete's 009, 030, 032 and 034). Both preambles say:
 
@@ -78,15 +85,17 @@ stage and a merge executor run no servers and get no port.
   `%TEMP%` or anywhere outside it.
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
   runs at below-normal process priority and leaves at least 4 hardware threads free; at
-  most 2 heavy subagents at once; thread counts halve while another item runs alongside.
-  A rule, not enforced: the planner sees it broken on *Now*'s load line (`memory.md`).
+  most 2 heavy subagents (builds, sims, browsers) at once; thread counts halve while another
+  item runs alongside. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
+  no constraint": light read-only reviewers and verifiers don't count
+  against the 2, but run in batches per dimension, about 10 in all. A rule, not enforced: the planner sees it broken on *Now*'s load line (`memory.md`).
   The full preamble gives the PowerShell form, `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`.
 - **Global Claude config.** Editing `~/.claude` is allowed when it's a good idea; each
   edit is named in the report, with its reason.
 - **Leftover budget.** Finishing with over an hour of the time limit left and the goal
   not fully met, the executor runs the next most useful step toward it, in scope, and says
   what it was. `max_hours` is a kill time, not a budget, so a goal fully met stops there.
-  Every template but `watch` also ends with this line (`executor.LEFTOVER`).
+  Templates carry it too (`templates.md`).
 
 **`wait_for`** (`mcp__conductor__wait_for`) replaces hand-written polls: 109 of
 aicomplete 009's 281 turns were 60-second polls, about a third of its cost.

@@ -23,3 +23,6 @@ or merge executor never has it. Switching *mid-run* has no route (a `tell:` is a
 ordinary message): queue the work, or a follow-up, with `ultracode: true`. A
 Workflow call needs no approval in an executor (`--dangerously-skip-permissions`), and
 the Workflow tool is present in every `-p` session; only the opt-in differs.
+
+**Fan-out.** The preamble's subagent rule wins over Workflow's and Ultracode's own notes: at most
+2 heavy subagents at once, light reviewers batched, about 10 in all (`executors.md`, *Load budget*).

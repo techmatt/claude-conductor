@@ -87,10 +87,11 @@ class EventLog:
         self.conn.close()
 
     def append(self, kind: str, item: str | None = None, repo: str | None = None,
-               paths: Iterable[str] = (), **detail) -> Event:
+               paths: Iterable[str] = (), happened: str | None = None, **detail) -> Event:
+        """`happened`: when it took place, for an event logged later than that (a commit)."""
         if repo is None and item and "/" in item:
             repo = item.split("/", 1)[0]
-        ts = stamp()
+        ts = happened or stamp()
         paths = list(paths)
         cur = self.conn.execute(
             "INSERT INTO events (ts, kind, item, repo, paths, detail) VALUES (?, ?, ?, ?, ?, ?)",

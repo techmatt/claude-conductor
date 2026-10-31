@@ -38,7 +38,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `repo_renamed` | `conductor rename-repo` gave a repo a new key; every earlier row now names the new one (`control-folder.md`, *Renaming a repo*) | old, new, path, moved, sha, by |
 | `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing), identical (every target matched HEAD after the wait) / error |
 | `request_stale` | a request folder with no `request.md`, untouched an hour, moved to `requests/stale/`; paths: from, to | request, files |
-| `commit` | conductor committed the control folder, or an item committed in its repo | scope, sha, subject |
+| `commit` | conductor committed the control folder, or an item committed in its repo; an item's is logged as it ends, dated by the commit's own time, so ids, not times, give log order | scope, sha, subject |
 | `read` / `clear` | signals, or a `closeout:` request | through; session (a `session:` signal's checkpoint id); closeout (the request's name) / repo; note (a `land:`) |
 | `reviewed` | a `reviewed:` signal marked a finished item's report as acted on | finish (its event id), status, by; hashes (`report`, `audit`: sha256 or null) |
 | `report_changed` | a reviewed report or its `.audit.md` changed since its `reviewed` (or last `report_changed`): unreviewed again (`inbox.md`) | files (`report`, `audit`: what differs from the review), reviewed (its id), hashes; opened, opened_by (the latest `session_opened` since it finished) |

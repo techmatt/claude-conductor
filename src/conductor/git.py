@@ -84,8 +84,13 @@ def rebase_in_progress(worktree: Path) -> bool:
 
 
 def commits_between(repo: Path, before: str | None, after: str | None) -> list[tuple[str, str]]:
+    return [(sha, subject) for sha, _, subject in commits_dated(repo, before, after)]
+
+
+def commits_dated(repo: Path, before: str | None, after: str | None) -> list[tuple[str, str, str]]:
+    """(sha, committer time in ISO form, subject), newest first, at most 50."""
     if not after or before == after:
         return []
     spec = [f"{before}..{after}"] if before else [after]
-    out = run(repo, "log", "--format=%H %s", "-n", "50", *spec, check=False)
-    return [tuple(line.split(" ", 1)) if " " in line else (line, "") for line in out.splitlines() if line]
+    out = run(repo, "log", "--format=%H %cI %s", "-n", "50", *spec, check=False)
+    return [(*line.split(" ", 2), "")[:3] for line in out.splitlines() if line]

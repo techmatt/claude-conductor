@@ -64,11 +64,12 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      and each `slow:` component (the words before ` ~` or the first comma) named in two
      or more of its last five finished reports, with their numbers, and the same for
      `friction:`. Then the **workflow retro** line: the last self-audit (`post-audit`) and
-     the non-template items finished since. At 6 or more (`RETRO_EVERY`) it reads
-     `**due**: post-audit <item> (why)`, naming the item since then with the most
-     friction: its `friction:` parts, watch tells to it, questions that timed out to
-     their default, watch `eta` flags (it overran its own estimate), and red (counts
-     double). Last comes `parked edits waiting: N` (`parked.md`);
+     the non-template items finished since. It reads `**due**: post-audit <item> (why)` once
+     one of those went `partial` or `red` or ran past 1.5× its first ETA and 10 minutes
+     over (`RETRO_OVERRUN`; measured from its `start`), or at 12 of them (`RETRO_FLOOR`). It
+     names the item with the most friction among those that triggered it (at the floor,
+     all of them): its `friction:` parts, watch tells to it, questions that timed out to
+     their default, watch `eta` flags, and red (counts double). Last comes `parked edits waiting: N` (`parked.md`);
 3. a `read` event through the last event the digest shows (detail `session`: the
    checkpoint's id), so the next inbox and the next digest start after it.
 

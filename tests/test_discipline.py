@@ -210,9 +210,7 @@ def test_quiet_is_not_flagged_while_a_process_of_its_own_writes(env, monkeypatch
     env.queue("001_long", f"{line}\n{env.hold()}")
     item = "code/001_long"
     env.tick_until(lambda: env.d._writes.get(item) and (flagged or env.d.still_writing(item)))
-    time.sleep(0.6 if flagged else 0)                       # the idle child's start is behind it
-    env.d.tick()
-    assert env.d.still_writing(item) is not flagged
+    env.tick_until(lambda: env.d.still_writing(item) is not flagged)        # the idle child's start is behind it
     cfg.watch_quiet_minutes = 0.0001
     env.d._watch_at = None
     env.d.tick()

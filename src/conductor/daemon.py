@@ -980,8 +980,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             elif wt and worktrees.changed(wt):
                 reasons.append("uncommitted changes left in the worktree (not merged)")
             branch = {"branch": rec["branch"]} if wt else {}
-            for sha, subject in reversed(git.commits_between(cwd, rec.get("repo_head"), after_head)):
-                self.log.append("commit", item=item_id, scope=repo, sha=sha, subject=subject, **branch)
+            for sha, made, subject in reversed(git.commits_dated(cwd, rec.get("repo_head"), after_head)):
+                self.log.append("commit", item=item_id, scope=repo, sha=sha, subject=subject, happened=made, **branch)
             if rec.get("paths") and rec.get("repo_head") and after_head != rec["repo_head"]:
                 changed = [f for f in git.changed_files(cwd, rec["repo_head"], after_head)
                            if not cfg.opts(repo).is_prose(f)]          # prose is outside `paths`
