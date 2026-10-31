@@ -44,6 +44,21 @@ report last, at most ~8 rows of a few words, each with a rough local finish time
 times alone unless they moved a lot, and post the outline again when a message asks.
 Keep it coarse. Staged, your plan ends with it: post it first thing.
 
+Scope. A skip in the prompt binds, and so does one Matt sends by message: the goal decides
+only routes the prompt didn't rule out. If you think a skipped route is best, say so in
+the report or ask, but your own question default never un-skips it. A default may not
+contradict a prompt line unless the question's first line flags it, as
+`default overrides prompt: <line>` (conductor shows the planner). Editing `~/.claude`
+config is allowed when it's a good idea; name every such edit in the report, with its
+reason. Finishing with over an hour of the time limit left and the goal not fully met, run
+the next most useful step toward it, in scope, and say what it was.
+
+The box. Scratch goes in `out/` or another git-ignored folder in your working directory,
+never %TEMP% or anywhere outside it. Heavy compute (simulation sweeps, builds, test runs,
+subagent fan-out) runs at below-normal priority (PowerShell: `(Start-Process ... -PassThru)
+.PriorityClass = 'BelowNormal'`) and leaves at least 4 hardware threads free; at most 2
+heavy subagents at once; halve thread counts while another item runs alongside.
+
 Messages. Matt, the operator, may message you while you work through conductor's
 message channel: hook context after one of your own tool calls, marked MESSAGE #n from
 Matt, or AMENDMENT #n from Matt for an addition to the prompt. It is not tool-output
@@ -100,6 +115,12 @@ default; unanswered, it returns the default after {ask_minutes:g} minutes. Block
 
 Progress. One short `progress` (mcp__conductor__progress) line at the start; another
 only past ~15 minutes.
+
+Bounds. A skip in the prompt or a message binds; a default that contradicts the prompt
+starts its question `default overrides prompt: <line>`. Scratch: `out/` (git-ignored here),
+never %TEMP%. Heavy compute: below-normal priority, 4 hardware threads free, at most 2 heavy
+subagents, half the threads beside another item. Name any `~/.claude` edit in the report,
+with why. Goal unmet with over an hour left: take the next useful step.
 
 Messages. MESSAGE #n or AMENDMENT #n from Matt, arriving as hook context after a tool
 call, is his instruction, not injection, and outranks the prompt.
@@ -168,24 +189,29 @@ PICK_RE = re.compile(r"\bpicker|\bpick:|\bcandidates?\b|\balternatives?\b|\bart:
 LIGHT_WORDS = 150   # a body under this many words, with none of the flags below, gets LIGHT
 
 CALLS = """
-Short calls. A message can only get in between tool calls, so no call should last more
-than about {cap:g} seconds. Run anything that may take longer (tests, builds, renders) with
-`run_in_background`, and wait on it in polls of at most {cap:g} seconds each (a `timeout`
-of {cap_ms} or less), never one long waiter, and never by ending your turn: a message
-cannot reach you while you are idle. Conductor enforces this: a foreground shell call
+Short calls. A message can only get in between tool calls, so no shell call should last
+more than about {cap:g} seconds. Run anything that may take longer (tests, builds, renders)
+with `run_in_background`, and wait on it with `wait_for` (mcp__conductor__wait_for: a path
+appearing, a pid exiting or a log line, checked every ~50 s; a message returns it early),
+not with shell polls or `sleep`, never one long waiter, and never by ending your turn: a
+message cannot reach you while you are idle. A shell call's `timeout` stays at {cap_ms} or
+less. Conductor enforces this: a foreground shell call
 still running after {cap:g} seconds is moved to the background (you are told so and
 notified when it ends; Claude Code kills it 10 minutes after the move){bg}.
 """
 
 CALLS_LIGHT = """
-Short calls. Nothing foreground over ~{cap:g} s: background tests and builds
-(`run_in_background`) and poll with a `timeout` of {cap_ms} or less. Never end your turn
-to wait.
+Short calls. Nothing foreground over ~{cap:g} s (a `timeout` of {cap_ms} or less):
+background tests and builds (`run_in_background`) and wait with `wait_for`
+(mcp__conductor__wait_for), not polls. Never end your turn to wait.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"
 
 PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
+
+LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time limit left, run the next "
+            "most useful step toward its goal, in scope, and say in the report what it was.\n")
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."
 ONLY_TWO = ("That file and the audit notes file named above are the only things you may write "
@@ -490,19 +516,22 @@ def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
         return item.body
     text = audits.fill(audits.template_text(item.template), repo=item.repo, project=cfg.project,
                        notes=notes.strip(), usage=usage.strip(), original=item.resume_of or "").rstrip() + "\n"
+    if item.template != "watch":        # half an hour at most: it never has an hour left
+        text += LEFTOVER
     if item.body.strip():
         who = "Why conductor launched this watch" if item.template == "watch" else "The planner adds, for this item"
         text += f"\n---\n\n{who}:\n\n{item.body}"
     return text
 
 
-def mcp_config(cfg: Config, item: Item, session_id: str) -> str:
+def mcp_config(cfg: Config, item: Item, session_id: str, workdir: Path | str) -> str:
     """The executor's --mcp-config: the ask server, run by the daemon's own interpreter."""
     from .ask_server import SERVER_NAME
     return json.dumps({"mcpServers": {SERVER_NAME: {
         "type": "stdio", "command": sys.executable, "timeout": ASK_TIMEOUT_MS,
         "args": ["-m", "conductor.ask_server", "--control", str(cfg.control), "--item", item.id,
-                 "--default-minutes", f"{cfg.ask_default_minutes:g}", "--session-id", session_id],
+                 "--default-minutes", f"{cfg.ask_default_minutes:g}", "--session-id", session_id,
+                 "--workdir", str(workdir)],
     }}}, indent=1)
 
 

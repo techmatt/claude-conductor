@@ -29,7 +29,7 @@ from pathlib import Path
 
 import psutil
 
-from . import (audits, desktop, executor, git, globs, guard, inbox, items, memory, notify, parked, picker, picks, procs, request, state,
+from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, notify, parked, picker, picks, procs, request, state,
                talk, targets, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
@@ -146,6 +146,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.memory_probe = procs.memory_status     # tests stand in a box at a given level
         self.mem_level = "ok"
         self._mem_at: float | None = None           # monotonic time of the last sample
+        self._load = load.Sampler()                 # the box's CPU, beside each sample
+        self._writes: dict[str, tuple[int, float | None]] = {}   # item → its tools' bytes written, when that last moved
         self._mem_clear_since: float | None = None  # below the level since (monotonic), not yet calm
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about
         self._init_restart()
@@ -945,6 +947,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._reap(item_id, rec.get("worktree"), rec.get("started"), "its executor exited",
                    job=(rec.get("pid"), rec.get("create_time")))
         self.mem_told.pop(item_id, None)
+        self._writes.pop(item_id, None)
         reasons: list[str] = []
         if run.tamper:
             reasons.append("tamper: changed the control folder (reverted)")

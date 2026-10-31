@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-from . import audits, memory, nightshift, parked, picks, questions, talk
+from . import audits, load, memory, nightshift, parked, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog, live_invalids, signal_invalid
 from .request import is_closeout
@@ -13,6 +13,7 @@ from .resume import label as resume_label
 from .state import View, decide
 from .util import clock, now, parse_stamp
 
+ETA_SLACK = timedelta(minutes=5)    # an `eta` this close to the outline's finish is not drift
 NIGHT_KINDS = ("backlog_draw", "backlog_sleep", "watch_flag", "watch", "autopilot")      # the *Night shift* section's (`nightshift.lines`)
 
 def progress_line(ev: Event) -> str:
@@ -53,14 +54,34 @@ def latest_outline(log: EventLog, item_id: str) -> Event | None:
     return log.last("progress", item=item_id, has="outline")
 
 
+def eta_drift(log: EventLog, item_id: str) -> str | None:
+    """A warning when the item's `eta` can't be right: earlier than its outline's last row,
+    or already past with rows still undone. None with no `eta`, no outline or all rows done."""
+    e, o = log.last("progress", item=item_id, has="eta"), latest_outline(log, item_id)
+    rows = outline_rows(o)
+    left = sum(1 for r in rows if not r.get("done"))
+    due = nightshift.parse_eta(e.detail.get("eta"), parse_stamp(e.ts)) if e else None
+    if due is None or not left:
+        return None
+    if now() > due:
+        return f"ETA {e.detail['eta']} has passed with {left} outline row(s) left"
+    finish = nightshift.parse_eta(rows[-1].get("eta"), parse_stamp(o.ts))
+    if finish is not None and due + ETA_SLACK < finish:
+        return f"ETA {e.detail['eta']} is earlier than the outline's finish {rows[-1]['eta']}"
+    return None
+
+
 def now_progress(log: EventLog, item_id: str) -> str:
     """A running item's tail on the *Now* line: its latest progress note (unless that
-    line was only an outline) and its current outline, ` — note, at 10:58am; outline …`."""
+    line was only an outline), its current outline and any ETA drift, ` — note, at
+    10:58am; outline …; **ETA …**`."""
     bits = []
     if (p := log.last("progress", item=item_id)) and p.detail.get("note"):
         bits.append(f"{progress_line(p)}, at {clock(p.ts)}")
     if o := latest_outline(log, item_id):
         bits.append(outline_line(o))
+    if drift := eta_drift(log, item_id):
+        bits.append(f"**{drift}**")
     return f" — {'; '.join(bits)}" if bits else ""
 
 
@@ -83,6 +104,11 @@ def changed_text(ev: Event) -> str:
     what = " and ".join("audit notes" if f == "audit" else "report" for f in d.get("files") or ["report"])
     opened = f" (after it was opened by {d.get('opened_by')}, #{d['opened']})" if d.get("opened") else ""
     return f"{what} changed since review {clock(ev.ts)}{opened}"
+
+
+def overrides_note(detail: dict) -> str:
+    """`; **default overrides prompt: <line>**` for a question flagged so."""
+    return f"; **default overrides prompt: {o}**" if (o := detail.get("overrides_prompt")) else ""
 
 
 def slow_text(detail: dict) -> str | None:
@@ -319,6 +345,8 @@ def describe(ev: Event) -> str:
             if d.get("others"):
                 text += "; outside items: " + ", ".join(f"{o['name']}×{o['count']} {o['private_mb']} MiB"
                                                         for o in d["others"])
+            if d.get("load"):
+                text += f"; {load.text(d['load'])}"
             if d.get("action"):
                 text += f" — {d['action']}"
         case "reaped":
@@ -345,11 +373,11 @@ def describe(ev: Event) -> str:
             text = f"control folder changed outside an executor window (accepted): {'; '.join(d.get('changes', []))}"
         case "ask":
             how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
-            text = f"{who} asked `{d.get('question')}` ({how}): {d.get('text')}"
+            text = f"{who} asked `{d.get('question')}` ({how}{overrides_note(d)}): {d.get('text')}"
         case "answer":
             text = f"{who} got an answer to `{d.get('question')}`: {d.get('text')}"
         case "default":
-            text = f"{who} took the default for `{d.get('question')}` (nobody answered): {d.get('text')}"
+            text = f"{who} took the default for `{d.get('question')}` (nobody answered{overrides_note(d)}): {d.get('text')}"
         case "late":
             text = f"late answer to `{d.get('question')}` ignored ({d.get('outcome')} already): {d.get('text')}"
         case "question_closed":
@@ -562,6 +590,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
         for q in open_qs:
             how = ("**blocking**" if q.block else
                    f"default at {clock(q.deadline)}: {q.default}")
+            how += overrides_note({"overrides_prompt": q.overrides})
             out.append(f"- {clock(q.asked)} `{q.id}` from {q.item} — {how}")
             out += [f"  > {ln}" if ln else "  >" for ln in q.body.rstrip().splitlines()]
             out.append(f"  Answer: write `questions/{q.id}.answer.md`.")
@@ -590,6 +619,8 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     out += ["", "## Now"]
     mem, level = memory.line(cfg)
     out.append(f"- {'**' + mem + '**' if level != 'ok' else mem}")
+    if busy := memory.load_line(cfg):
+        out.append(f"- {busy}")
     decisions = decide(cfg, view)
     for repo in cfg.repos:
         d = decisions[repo]

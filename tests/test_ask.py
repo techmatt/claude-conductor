@@ -111,7 +111,7 @@ def test_ask_server_protocol(env, tmp_path):
         encoding="utf-8")
     c = Client(cfg)
     try:
-        tool, prog, wait = c.start()
+        tool, prog, wait, _ = c.start()
         # `question` may be left out with `resume`, so the server checks it, not the schema.
         assert tool["name"] == "ask" and "required" not in tool["inputSchema"] and "resume" in tool["inputSchema"]["properties"]
         # `wait` (a paused item) returns at once when a message waits for the item.

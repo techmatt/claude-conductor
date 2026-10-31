@@ -1,5 +1,7 @@
 # Audits and templates
 
+Every template but `watch` ends with the leftover-budget line (`executor.LEFTOVER`, `executors.md`).
+
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`cleanup.md`, `general_cleanup.md`, `test_cleanup.md`,
 `disk_cleanup.md`, `claude_md_cleanup.md`, `content_cleanup.md`, `bug_hunt.md`, `self_audit.md`, `watch.md`; `audit.md` is the *Audit notes*

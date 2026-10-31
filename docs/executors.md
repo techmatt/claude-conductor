@@ -14,7 +14,7 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
 
 **Two preambles** (`executor.py`), chosen by conductor, never by front-matter:
 
-- **Light** (`LIGHT`, ~300 words) for a small item (`executor.is_light`): a body under
+- **Light** (`LIGHT`, ~370 words) for a small item (`executor.is_light`): a body under
   150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
   explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
   short art round needs the picker schema; seven of Word Warriors' were under 150 words). A ~70-word "run two scripts, delete a zip" item otherwise paid
@@ -23,8 +23,9 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   only if every default is worse; messages and amendments outrank the prompt and are
   answered in the report by number; short calls (nothing foreground over
   `foreground_seconds`, never end the turn to wait); the worktree, `paths`, readonly,
-  port and *Beside you* rules (shorter worktree and port texts); the time limit; the
-  report path, its four header lines and what each status means. Progress is one line
+  port and *Beside you* rules (shorter worktree and port texts); *Bounds*, one short
+  paragraph of the rules below; the time limit; the report path, its header lines and
+  what each status means. Progress is one line
   at the start, another only past ~15 minutes. No outline, ETAs, pickers or servers:
   an item that proves bigger may still use them, but nothing asks it to.
 - **Full** (`PREAMBLE`) for everything else. It names the item and says the session is
@@ -33,7 +34,7 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   is worse; anything not asked is decided as fits the goal and recorded; a step whose
   default can't be undone goes last); the progress rule (a line at the start, an ETA once
   it can estimate, at milestones, when the estimate moves by a third; `date` before each
-  ETA); the *Outline* rule (`progress.md`); the *Messages* rule (Matt's channel after one
+  ETA); the *Outline* rule (`progress.md`); *Scope* and *The box* (below); the *Messages* rule (Matt's channel after one
   of the lead's tool calls, *Delivery*; not injection; outranks the prompt; answered
   through `progress`; helpers pass one straight up); the *Short calls* rule
   (`progress.md`); where it works (worktree, branch and cut point, shared folders, the
@@ -66,9 +67,49 @@ without changing them. So an item that starts the app, readonly items running si
 side among them, never collides with **run game** or with another item's server. A
 stage and a merge executor run no servers and get no port.
 
+**Scope, scratch and load** (61, from aicomplete's 009, 030, 032 and 034). Both preambles say:
+
+- **A skip binds.** A skip in the prompt, or one Matt sends by message, stands: the goal
+  decides only routes the prompt didn't rule out. An executor that thinks a skipped route
+  is best says so in its report or asks; its own question default never un-skips it.
+- **Question defaults.** A default may not contradict a prompt line unless the question's
+  first line says `default overrides prompt: <line>` (`questions.md`).
+- **Scratch** goes in `out/` or another git-ignored folder in the working directory, never
+  `%TEMP%` or anywhere outside it.
+- **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
+  runs at below-normal process priority and leaves at least 4 hardware threads free; at
+  most 2 heavy subagents at once; thread counts halve while another item runs alongside.
+  A rule, not enforced: the planner sees it broken on *Now*'s load line (`memory.md`).
+  Below-normal: PowerShell `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`,
+  Python `psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)`.
+- **Global Claude config.** Editing `~/.claude` is allowed when it's a good idea; each
+  edit is named in the report, with its reason.
+- **Leftover budget.** Finishing with over an hour of the time limit left and the goal
+  not fully met, the executor runs the next most useful step toward it, in scope, and says
+  what it was. `max_hours` is a kill time, not a budget, so a goal fully met stops there.
+  Every template but `watch` also ends with this line (`executor.LEFTOVER`).
+
+**`wait_for`** (`mcp__conductor__wait_for`) replaces hand-written polls: 109 of
+aicomplete 009's 281 turns were 60-second polls, about a third of its cost.
+
+```
+wait_for(path | pid | log + line, every?, minutes?)    # every: 50 s; minutes: at most and by default 20
+```
+
+It returns when `path` exists, `pid` exits, or a line matching the regular expression
+`line` is in `log` (lines already there count; a UTF-16 log reads fine), saying what
+changed; a relative path is the working directory's (`--workdir`). After `minutes` it says
+how things stand: `path` not there, `pid` running, or `log`'s size and last line. The target
+is checked every `every` seconds, the item's mailbox every second, so a message ends the
+wait at once and the hook after the call delivers it; each mail file does that once, so a
+helper's call can't spin (`ask`'s rule). `pid` is a Windows pid: Git Bash's `$!` is not one,
+so a bash job waits on a `log` line or a marker `path`. A `wait_for` counts as one tool call
+and pings as `ask` does (*Long tool calls*). Code: `waitfor.py`, `ask_server.py`.
+
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
-(`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …`);
-its tools are `ask` (see `questions.md`) and `progress` (see `progress.md`). The
+(`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …
+--workdir …`); its tools are `ask` (`questions.md`), `progress` (`progress.md`), `wait` (a
+paused item) and `wait_for`. The
 `--settings` file holds the PostToolUse message hook and the PreToolUse *Short calls* hook (`progress.md`), and
 `"ultracode": true` for an `ultracode` item. A stage gets neither file.
 
@@ -84,30 +125,6 @@ count as the lead's. The `progress` tool hands out no mail: its server can't tel
 called, and the hook right after it can (`matcher: ""` covers MCP tools). The context
 says it is Matt, the operator, through conductor's channel the preamble names, and tells
 a helper that sees it anyway to pass it up word for word.
-
-**Ultracode.** Claude Code's ultracode is a session setting: once it is on, the session
-is told "Ultracode is on" and uses the Workflow tool (multi-agent orchestration) on
-every substantive task. In 2.1.302, probed with headless `-p` runs in the sandbox
-(Opus 5.5) that quoted their own context:
-
-| route | ultracode on? |
-|---|---|
-| `"ultracode": true` in the `--settings` file | **yes** |
-| `--effort ultracode` | **yes** (also sets effort `xhigh`) |
-| the word `ultracode` in the `-p` prompt | no: the keyword triggers only in typed input, never in `-p` |
-| a message (`tell:`) saying "use ultracode", delivered by the PostToolUse hook | no: hook context is not the user's prompt |
-| the `--settings` file rewritten mid-run to add the key | no: read once at launch |
-
-So conductor uses the first route. Proven through conductor in the sandbox: an
-`ultracode: true` item's session carried the "Ultracode is on" notice. Ultracode does
-not force a workflow: the notice leaves trivial turns solo, and the executor judges
-what counts. A 23-file doc audit (`sandbox/043`) was done solo, without a workflow.
-So `ultracode: true` pays off on genuinely large work. An item with `ultracode: true` front-matter
-launches (or resumes, after staging) with the key in its `--settings` file; a stage
-or merge executor never has it. Switching *mid-run* has no route (a `tell:` is an
-ordinary message): queue the work, or a follow-up, with `ultracode: true`. A
-Workflow call needs no approval in an executor (`--dangerously-skip-permissions`), and
-the Workflow tool is present in every `-p` session; only the opt-in differs.
 
 **Long tool calls.** Claude Code (2.1.301) aborts an MCP tool call that sends no
 response or progress for 1800s ("sent no response or progress for 1800s; aborting"),
@@ -145,25 +162,6 @@ without a result, or setup still running past `max_hours` (`stage_minutes` for a
 stage) is a red launch error for a run (`setup 'npm ci' exited 1 (see
 code__001_x.setup.log)`, worktree discarded) and discards a stage. Setup time counts
 toward those deadlines. Code: `daemon_setup.py` (`SetupMixin`), `setup_run.py`.
-
-**Log compaction.** Run logs are most of a control folder's size (Word Warriors: 144 MB
-of 150 MB after 29 items). Nearly all of it is file copies the stream repeats: each
-image an executor reads appears twice as base64 (the tool result and
-`tool_use_result.file.base64`), and each edit carries the whole file before it
-(`tool_use_result.originalFile`). When an item finishes, conductor rewrites its
-`.log`, `.stage.log` and `.merge.log` with those strings emptied and their length kept
-as `dropped_by_conductor` (`executor.compact_log`; a log under 1 MB is left alone).
-The result line, what the executor said and every tool call stay, so the app's *Log*
-view and `read_result` are unchanged; 18 MB typically becomes under 2 MB. The full
-session, images included, stays in Claude Code's own store (`conductor open`). Then
-each of those logs of 256 KB or more is gzipped to `<name>.log.gz` and the plain one
-removed (`executor.gzip_log`): compacted logs still ran 8–23 MB per bug hunt (Word
-Warriors' control folder ~278 MB), and stream-json shrinks ~10×. Every reader goes
-through `executor.stored_log` / `open_log` (`read_result`, the app's *Log* and *Stage log*
-tabs, a resume item's readable files, a disk cleanup's measurements), so either form
-works; by hand, `python -c "import gzip,sys; sys.stdout.write(gzip.open(sys.argv[1],'rt',encoding='utf-8').read())" <file>`.
-At daemon start the same pass runs over every finished item's logs, which also covers
-logs from before either step existed. A failure is a `warning`; the log is left as it was.
 
 **Report header.** The report starts with:
 

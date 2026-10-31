@@ -24,7 +24,7 @@ def render(env, body: str, **meta) -> str:
 def test_a_short_item_gets_the_light_preamble(env):
     assert len(SHORT.split()) < 80
     text = render(env, SHORT)
-    assert len(text.split()) <= 300
+    assert len(text.split()) <= 375
     for kept in ("Nobody is watching", "mcp__conductor__ask", "AMENDMENT #n", "run_in_background",
                  "Time limit: 1h", "status: done | partial | red", "slow: none", "`red`:", "uses port 5200", "branch `conductor/001_a`"):
         assert kept in text

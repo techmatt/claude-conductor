@@ -160,6 +160,7 @@ def test_a_level_rises_at_once_and_falls_only_once_calm(env):
     cfg.memory_sample_seconds, cfg.memory_calm_seconds = 0.01, 0.5
     box = {"s": status(50, 2)}
     env.d.memory_probe = lambda: box["s"]
+    env.d._load.sample = lambda owned: None         # its box scan would eat the clock below
     env.d.sample_memory(force=True)
     assert env.d.mem_level == "pressure"
     box["s"] = status(50, 10)

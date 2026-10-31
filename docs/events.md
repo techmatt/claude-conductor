@@ -9,7 +9,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control; running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on an `OSError`, with error) |
 | `daemon_restart` | the old daemon restarts itself on a code change (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
 | `daemon_died` | at start: the previous daemon never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
-| `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), action |
+| `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item; `memory.md`), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any; starts (when it will start and why: `receipts.md`); parked (the parked edits it will carry as the queue stands) |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start) |
@@ -63,7 +63,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
 | any signal-caused event | a signal file had `by:` | by |
-| `ask` | a question file appeared | question (id), text, block, default, deadline |
+| `ask` | a question file appeared | question (id), text, block, default, deadline; overrides_prompt (its first line's flag, here and on the question's later events: `questions.md`) |
 | `answer` | answered before it resolved | question, text, waited_seconds, deadline (moved, when blocking); by (the answer file's `by:`) |
 | `default` | the default deadline passed unanswered | question, text (the default) |
 | `late` | an answer file after a default or close | question, text, outcome; by |

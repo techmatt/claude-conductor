@@ -19,7 +19,7 @@ from .. import config as config_mod
 from .. import git, items, memory, nightshift, picks, questions, state, talk, targets
 from ..events import RED_KINDS, Event, EventLog, live_invalids
 from ..executor import RunPaths, stored_log
-from ..inbox import checkpoint_name, describe, outline_line, outline_rows, progress_line, reply_to, slow_text
+from ..inbox import checkpoint_name, describe, eta_drift, outline_line, outline_rows, progress_line, reply_to, slow_text
 from ..resume import label as resume_label
 from ..state import DaemonInfo, daemon_info
 from ..util import FrontMatterError, clock, now, parse_stamp, read_text, split_front_matter
@@ -86,8 +86,8 @@ class ReadOnlyLog:
     def query(self, **kwargs) -> list[Event]:
         return self._call(EventLog.query, [], **kwargs)
 
-    def last(self, kind: str, item: str | None = None, repo: str | None = None) -> Event | None:
-        return self._call(EventLog.last, None, kind, item=item, repo=repo)
+    def last(self, kind: str, item: str | None = None, repo: str | None = None, has: str | None = None) -> Event | None:
+        return self._call(EventLog.last, None, kind, item=item, repo=repo, has=has)
 
     def max_id(self) -> int:
         return self._call(EventLog.max_id, 0)
@@ -495,6 +495,8 @@ class Project:
                                  resumed=resume_label(rec))
                     if a.phase == "running" and (p := self.log.last("progress", item=a.item)):
                         a.progress = f"{progress_line(p)} · {clock(p.ts)}"
+                        if drift := eta_drift(self.log, a.item):
+                            a.progress += f" · {drift}"
                     rs.running.append(a)
             for rec in view.staged.values():
                 if rec.get("repo") == repo:

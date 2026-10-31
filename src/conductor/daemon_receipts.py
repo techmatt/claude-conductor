@@ -125,7 +125,8 @@ class ReceiptsMixin:
             case "amended":
                 self._write_receipt(rel, [ev], result=f"amendment #{ev.id}, {d.get('state')}: {d.get('delivery')}")
             case "answer":
-                self._write_receipt(rel, [ev], result="answered: the executor has it")
+                flagged = f"; its default overrode the prompt: {o}" if (o := ev.detail.get("overrides_prompt")) else ""
+                self._write_receipt(rel, [ev], result=f"answered: the executor has it{flagged}")
             case "amend_refused" | "late":
                 self._write_receipt(rel, [ev], reason=self._reason(ev))
             case "delivered":

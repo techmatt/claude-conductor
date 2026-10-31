@@ -35,6 +35,12 @@ Options:
 - **Default.** With a default and `block: false`, an unanswered question returns the
   default at its `deadline`; the tool result says nobody answered and the default was
   taken. An answer file written after that is logged `late` and does nothing else.
+- **A default over the prompt** (61). A default may not contradict a prompt line unless
+  the question's first line says `default overrides prompt: <line>` (aicomplete 009's
+  unanswered 1am ask reversed the prompt's "skip it"). A flagged question with a default
+  is marked: `overrides_prompt` on its `ask` and later events, bold on its inbox line and
+  its `ask` and `default` lines, in its toast, and in an answer's receipt. Conductor can't
+  see an unflagged one: the mark is the executor's to make, and a skip still binds.
 - **Block.** `block: true`, or no default at all: the call waits until answered,
   however long. That time does not count toward `max_hours`.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it

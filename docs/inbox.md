@@ -169,7 +169,7 @@ then the rest in event order: `red`, `conflict`, `paths_violation`, `kill`, `req
 `pick_failed`, `amend_refused`, `memory_critical`, `daemon_died`, `checkout_dirty`),
 **Holds**, **Finished** (status, blocks, carry, pick, report path), **Questions resolved**
 (answers, defaults taken, late answers, closes), **Requests and commits** (merges
-included), **Other**; then **Now**: first the memory line (`memory.line`: commit of
+included), **Other**; then **Now**: a load line after the memory line while the daemon's sample is fresh (`memory.md`, *Load*), an ETA warning on a running item's line (`progress.md`, *ETA drift*); first the memory line (`memory.line`: commit of
 limit, percent, free GiB, the biggest item from the daemon's latest sample, and the
 level, bold with *launches and stages paused* when not ok), then per repo, what is running (or merging), staged
 (`staging`/`staged`), queued, waiting or held, and *audit pending* if notes are unused,

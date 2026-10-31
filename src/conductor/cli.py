@@ -98,6 +98,8 @@ def cmd_status(args) -> int:
         daemon = "not running"
     print(f"{cfg.project} — daemon {daemon}")
     print(memory.line(cfg)[0])
+    if busy := memory.load_line(cfg):
+        print(busy)
     view = state.scan(cfg, log)
     decisions = state.decide(cfg, view)
     open_qs = [q for q in questions.scan(cfg.control) if q.is_open]

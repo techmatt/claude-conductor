@@ -20,6 +20,8 @@
                                              the result text goes into the report
     FAKE progress <json arguments>           call the progress tool; its text goes into the report
     FAKE wait <json arguments>               call the wait tool (a paused item); its text goes into the report
+    FAKE wait-for-tool <json arguments>      call the wait_for tool; its text goes into the report
+    FAKE writer <file> <seconds>             a child appending to <file> several times a second
     FAKE until-message <seconds>             "work" (a tool call every 0.2s) until a message
                                              arrives or the time is up; then answer it with progress
     FAKE reply-with <seconds> <json>         the same, answering with these progress arguments
@@ -209,6 +211,16 @@ for ln in lines:
             from mcp_client import call_tool
             text, _ = call_tool(Path(args[args.index("--mcp-config") + 1]), "wait", json.loads(ln.split(" ", 2)[2]))
             answers.append(text)
+        case "wait-for-tool":
+            from mcp_client import call_tool
+            text, _ = call_tool(Path(args[args.index("--mcp-config") + 1]), "wait_for", json.loads(ln.split(" ", 2)[2]))
+            answers.append(text)
+        case "writer":
+            hogs.append(subprocess.Popen([sys.executable, "-c",
+                                          f"import time\nend = time.time() + {float(parts[3])}\n"
+                                          f"with open({parts[2]!r}, 'a', buffering=1) as fh:\n"
+                                          "    while time.time() < end:\n        fh.write('x' * 500 + '\\n')\n"
+                                          "        time.sleep(0.1)\n"]))
         case "until-message" | "reply-with":
             end = time.time() + float(parts[2])
             # A message may already have come with the previous line's hook.

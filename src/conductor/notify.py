@@ -34,6 +34,7 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
     match kind:
         case "ask":
             how = "blocking" if detail.get("block") else f"default at {detail.get('deadline_clock')}"
+            how += ", default overrides prompt" if detail.get("overrides_prompt") else ""
             return f"{project}: question from {who}", f"({how}) {detail.get('text', '')}"[:250]
         case "red":
             # A red that holds its queue says so: a hold must never sit silently overnight.

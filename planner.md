@@ -91,7 +91,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Replacing a module**: list every job the old one did (win and loss hooks, what returns pieces to supply, …) and what takes each over.
 - **Say what the executor may change**: e.g. may a measurement or tuning prompt patch content?
 - **Room to adapt**: where interactions are hard to foresee, let the executor adapt adjacent pieces (numbers, small rules, content; locked parts intact, no redesigns), each change recorded as a candidate.
-- **The goal is the authority.** When the planned route runs out, the executor advances the goal another way and says how; idling to a deadline or re-running an exhausted step is a failure.
+- **The goal is the authority.** When the planned route runs out, the executor advances the goal another way and says how; idling to a deadline or re-running an exhausted step is a failure. A skip in a prompt binds; write "lower priority" unless Matt meant a skip.
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. A prompt names a question in advance only when Matt must decide it.
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors'; never give one of your own.
@@ -103,10 +103,12 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 ## While items run
 
 - **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
-- **Progress**: the latest line (with ETA) and outline, on *Now*; a small item posts one line only (`docs/executors.md`).
+- **Progress**: the latest line (with ETA) and outline, on *Now*, with a bold warning when the ETA can't be right; a small item posts one line only (`docs/executors.md`).
+- **Questions** marked **default overrides prompt** would reverse a prompt line if unanswered: answer them first.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`, never a queue number or a planner session's) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.
+- **Load.** *Now*'s line after memory: CPU busy and its top consumers, by item or "(outside)". Timing work or a laggy box: check it before blaming an item; items are told to run heavy work below normal, 4 threads free.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.

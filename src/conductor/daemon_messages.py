@@ -254,6 +254,8 @@ class MessagesMixin:
 
     def _q_log(self, kind: str, q: questions.Question, paths: list[str], **detail) -> None:
         self.q_seen.add((kind, q.id))
+        if q.overrides:
+            detail["overrides_prompt"] = q.overrides
         self.log.append(kind, item=q.item, paths=paths, question=q.id, **detail)
 
     def _extend_deadline(self, run: Run, seconds: float, key: str = "blocked_seconds") -> str:

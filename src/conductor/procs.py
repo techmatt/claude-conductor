@@ -368,6 +368,13 @@ def create_time(pid: int) -> float | None:
         return None
 
 
+def create_time(pid: int) -> float | None:
+    try:
+        return psutil.Process(pid).create_time()
+    except psutil.Error:
+        return None
+
+
 def alive(pid: int | None, created: float | None) -> bool:
     """Is this exact process (pid + creation time, so a reused pid is not mistaken) alive?"""
     if not pid:

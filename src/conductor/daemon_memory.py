@@ -22,6 +22,10 @@ MEMORY_TELLS = {
 }
 
 
+WRITING_SECONDS = 90            # a tool that wrote this recently is still at work (`still_writing`)
+WRITING_SAMPLES = 3             # or this many samples, on a box sampling more slowly
+
+
 class MemoryMixin:
     def sample_memory(self, force: bool = False) -> None:
         """Every `memory_sample_seconds`: the box's commit and free RAM, each live item's
@@ -69,7 +73,12 @@ class MemoryMixin:
             self._mem_clear_since = self._mem_clear_since or time.monotonic()
             if time.monotonic() - self._mem_clear_since >= self.cfg.memory_calm_seconds:
                 self.mem_level, self._mem_clear_since = now_level, None
-        rec = memory.sample(status, self.mem_level, trees)
+        moved = time.monotonic()
+        for item_id, t in trees.items():
+            was_written, at = self._writes.get(item_id, (t.writes, None))   # its first sample is the baseline
+            self._writes[item_id] = (t.writes, moved if t.writes != was_written else at)
+        load = self._load.sample({pid: item_id for item_id, t in trees.items() for pid in t.pids})
+        rec = memory.sample(status, self.mem_level, trees, load)
         try:
             memory.store(self.cfg.state_dir, rec, self.cfg.memory_keep_hours)
         except OSError as exc:
@@ -77,6 +86,13 @@ class MemoryMixin:
         self._beat()
         if self.mem_level != was:
             self._memory_changed(was, rec, trees)
+
+    def still_writing(self, item_id: str) -> bool:
+        """Has a tool of this item written anything lately? From the samples, so a box with
+        sampling off never says so."""
+        _, at = self._writes.get(item_id, (0, None))
+        window = max(WRITING_SAMPLES * self.cfg.memory_sample_seconds, WRITING_SECONDS)
+        return at is not None and time.monotonic() - at <= window
 
     def _memory_changed(self, was: str, rec: dict, trees: dict) -> None:
         lv = self.mem_level
@@ -90,7 +106,8 @@ class MemoryMixin:
         pct = round(100 * rec["commit"] / rec["limit"]) if rec["limit"] else 0
         self.log.append("memory_critical" if lv == "critical" else "memory", level=lv, was=was,
                         commit=rec["commit"], limit=rec["limit"], percent=pct, free=rec["free"],
-                        top=memory.top(rec), others=memory.others(skip), action=action)
+                        top=memory.top(rec), others=memory.others(skip), action=action,
+                        **({"load": rec["load"]} if rec.get("load") else {}))
         for item_id, run in self.runs.items():
             if run.rec.get("phase", "exec") != "exec" or run.exited():
                 continue

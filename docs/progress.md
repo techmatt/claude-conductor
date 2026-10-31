@@ -33,6 +33,14 @@ The **request** is `outline: <item>` (the app's **Outline?**, `conductor outline
 now: …"), logged with `outline_request: true`, refused exactly as a tell is, and
 delivered like one, so its reply tag pairs it with the outline it produced.
 
+**ETA drift** (61). A running item's `eta` can stop meaning anything: aicomplete 009's
+stayed 6:20am until 3:11am. `inbox.eta_drift` warns when the newest `eta` is over 5
+minutes earlier than the current outline's last row (`ETA 5:40pm is earlier than the
+outline's finish 7:10pm`), or already past with rows undone (`ETA 5:40pm has passed with
+2 outline row(s) left`). With no `eta`, no outline or every row done it says nothing. The
+warning ends the item's *Now* line (bold) and the app's progress line. It is a display
+only: the watch's `eta` flag (`night-shift.md`) is separate and may launch a watch.
+
 **Messages.** `tell: <item> <message>` is a signal verb (the app's **Tell…**, `conductor
 tell` — which writes `signals/cli-….signal` with `by: cli` — and the planner all use
 it). The message is the rest of the line, ` # ` included (it is not a comment there);
@@ -84,8 +92,9 @@ foreground `timeout 590 bash -c 'until grep -q EXIT …; do sleep 10; done'` cal
 run made 20 such calls of 1–10 minutes, about 113 minutes in all. Two parts:
 
 - The preamble's *Short calls* paragraph: run anything that may take over
-  `foreground_seconds` (default 60) with `run_in_background`, wait on it in polls of at
-  most that long, and don't end the turn to wait (an idle session takes no message).
+  `foreground_seconds` (default 60) with `run_in_background`, wait on it with `wait_for`
+  (`executors.md`; before 61, polls of at most that long), and don't end the turn to wait
+  (an idle session takes no message).
 - A **PreToolUse hook** on `Bash|PowerShell` in the same `--settings` file:
   `<python> -m conductor.talk pre --cap <foreground_seconds> --background=<glob> …`.
   A call already `run_in_background` is left alone. A command matching one of the

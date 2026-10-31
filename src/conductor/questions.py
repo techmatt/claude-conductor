@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +29,7 @@ import yaml
 from .util import FrontMatterError, read_text, split_front_matter, stamp
 
 ANSWER_SETTLE_SECONDS = 1.0       # an answer file is read once it stops changing
+OVERRIDES_RE = re.compile(r"^[\s*_#`]*default overrides prompt:\s*(.+)$", re.IGNORECASE)
 
 
 @dataclass
@@ -58,6 +60,13 @@ class Question:
     @property
     def is_open(self) -> bool:
         return self.result is None
+
+    @property
+    def overrides(self) -> str | None:
+        """The prompt line its default contradicts, when the question's first line flags one
+        (`default overrides prompt: <line>`). Without a default there is nothing to override."""
+        m = OVERRIDES_RE.match(self.body.splitlines()[0]) if self.default is not None and self.body.strip() else None
+        return m.group(1).strip(" *_`") if m else None
 
     def summary(self) -> str:
         return " ".join(self.body.split("\nOptions:")[0].split())

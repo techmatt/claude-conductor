@@ -18,6 +18,21 @@ items biggest first). Past 4 MB the file keeps only the last `memory_keep_hours`
 Each sample also rewrites the heartbeat (`beat` in `daemon.json`). No event is logged
 per sample.
 
+**Load** (61; `load.py`). Each sample also scans the box's processes (~0.3s at 270
+processes) for CPU: busy percent, and the top four consumers since the last sample, as a
+percent of the whole box. A process in an item's tree counts toward that item; any other
+counts under its process name, as outside. It is stored as `load` in the sample
+(`{cpu, top: [{who, cpu, item}]}`; none on the first sample, which has no rate), shown on
+the inbox's *Now* and in `conductor status` while the sample is fresh (`load CPU 63%:
+aicomplete/034 41%, python.exe 20% (outside)`), and carried by the `memory` and
+`memory_critical` events. Found live: aicomplete 030's benchmark lost its timings to a
+`pytest -m ""` from another session, and 034 made the box lag, neither visible anywhere.
+
+**Writes.** Each tree also sums the bytes its tools have written (`Tree.writes`, Windows
+I/O counters, so pipes count), leaving out the executor, shells, browsers and conductor's
+own server and hooks, which tick over while idle. `still_writing` says whether that moved
+in the last 90s (or 3 samples), which holds back a watch's `quiet` flag.
+
 **Jobs.** On Windows, `procs.spawn` starts each executor (and stage, merge executor,
 setup runner) suspended, puts it in a job object named for its pid and creation time,
 then lets it run. Everything it starts is in the job, an orphan whose parent has exited
@@ -45,7 +60,7 @@ the commit limit on demand, so commit sat at 87% through an ordinary test run on
 box (limit 36.6 GiB idle, 40.6 under load), which is why the commit defaults are high. On each change the daemon logs `memory` (into or out of pressure) or
 `memory_critical` (red, toasted). Each names the commit, limit, percent and free GiB,
 the five biggest item × kind rows, the three biggest process names outside conductor's
-items (a full scan, so only on a change), and what conductor does now.
+items (a full scan, so only on a change), the load, and what conductor does now.
 
 **Guard.** While the level is not `ok`, nothing new starts: no launch, resume or
 stage (the queue keeps its order, and the inbox's *Now* line and `conductor status`

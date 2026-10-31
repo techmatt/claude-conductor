@@ -18,6 +18,7 @@ from pathlib import Path
 
 import psutil
 
+from . import load as load_mod
 from . import procs
 from .config import Config
 from .util import now, parse_stamp, stamp, write_text
@@ -27,6 +28,7 @@ LEVELS = ("ok", "pressure", "critical")
 SLACK_PERCENT = 3.0
 SLACK_GB = 0.5
 FILE = "memory.jsonl"
+NOT_WRITERS = ("claude", "shell", "chromium")
 
 
 def gb(n: float) -> float:
@@ -35,10 +37,13 @@ def gb(n: float) -> float:
 
 @dataclass
 class Tree:
-    """One item's processes: totals and, per kind, [count, private bytes]."""
+    """One item's processes: totals, per kind [count, private bytes], their pids, and the
+    bytes its tools have written so far (`writes`, what tells a watch it is still at work)."""
     private: int = 0
     wset: int = 0
     kinds: dict[str, list[int]] = field(default_factory=dict)
+    pids: set[int] = field(default_factory=set)
+    writes: int = 0
 
 
 def tree(*pids: int | None) -> Tree:
@@ -58,14 +63,31 @@ def tree(*pids: int | None) -> Tree:
                 name = p.name()
                 k = procs.kind(name, p.cmdline() if name.lower().startswith("node") else None)
                 private, wset = procs.usage(p)
+                written = _written(p, k)
         except psutil.Error:
             continue
+        t.pids.add(p.pid)
+        t.writes += written
         t.private += private
         t.wset += wset
         row = t.kinds.setdefault(k, [0, 0])
         row[0] += 1
         row[1] += private
     return t
+
+
+def _written(p: psutil.Process, kind: str) -> int:
+    """Bytes `p` has written, if it is one of the item's tools. Not the executor, a shell's
+    waiters or a browser, which tick over idle, nor conductor's own server and hooks: Windows
+    counts pipes too, so a `wait_for` ping would look like work."""
+    if kind in NOT_WRITERS:
+        return 0
+    try:
+        if kind == "python" and any(a.startswith("conductor.") for a in p.cmdline()):
+            return 0
+        return p.io_counters().write_bytes
+    except (psutil.Error, AttributeError):      # AttributeError: no such counter on this platform
+        return 0
 
 
 def level(s: procs.MemoryStatus, cfg: Config, prev: str = "ok") -> str:
@@ -84,14 +106,16 @@ def level(s: procs.MemoryStatus, cfg: Config, prev: str = "ok") -> str:
     return "ok"
 
 
-def sample(s: procs.MemoryStatus, lv: str, trees: dict[str, Tree]) -> dict:
-    """The compact record stored per sample: GiB, items by private bytes, kinds in MiB."""
+def sample(s: procs.MemoryStatus, lv: str, trees: dict[str, Tree], load: dict | None = None) -> dict:
+    """The compact record stored per sample: GiB, items by private bytes, kinds in MiB, the
+    machine's load when there is one (`load.py`)."""
     return {
         "at": stamp(), "level": lv, "commit": gb(s.commit), "limit": gb(s.limit),
         "free": gb(s.available), "total": gb(s.total),
         "items": {i: {"private": gb(t.private), "wset": gb(t.wset),
                       "kinds": {k: [c, round(b / 2 ** 20)] for k, (c, b) in sorted(t.kinds.items())}}
                   for i, t in sorted(trees.items(), key=lambda kv: -kv[1].private)},
+        **({"load": load} if load else {}),
     }
 
 
@@ -170,6 +194,13 @@ def fresh(rec: dict | None, cfg: Config) -> bool:
     except (KeyError, ValueError, TypeError):
         return False
     return age <= max(3 * cfg.memory_sample_seconds, 90)
+
+
+def load_line(cfg: Config) -> str | None:
+    """The *Now* line for the box's load, from the daemon's latest sample while it is fresh:
+    `load CPU 63%: aicomplete/034 41%, python.exe 20% (outside)`."""
+    rec = latest(cfg.state_dir)
+    return f"load {load_mod.text(rec['load'])}" if fresh(rec, cfg) and rec.get("load") else None
 
 
 def line(cfg: Config, rec: dict | None = None) -> tuple[str, str]:

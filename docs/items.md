@@ -17,7 +17,7 @@ max_hours: 1             # hard-kill deadline; default from conductor.toml
 alongside: the recorder's save path only   # one line: may start beside running items (below)
 paths: ['src/ui/**']     # legacy: globs the item may change (see `paths:`)
 stage: false             # override the repo's `stage` setting for this item
-ultracode: true          # launch with Claude Code's ultracode on (see executors.md, *Ultracode*)
+ultracode: true          # launch with Claude Code's ultracode on (see ultracode.md)
 audit: true              # keep audit notes beside the report (see templates.md)
 template: cleanup        # a conductor-owned prompt (templates.md): cleanup, general_cleanup, test_cleanup, …
 resume: sandbox/001_x    # ask a finished item's own session, forked; always readonly (resume.md)

@@ -210,7 +210,7 @@ class SetupMixin:
                                                        notes=self._notes_text(rec), usage=self._template_usage(rec),
                                                        amends=[m for m in amends if talk.is_amend(m)], beside=warn,
                                                        resumed=resumed, parked=rec["parked"]))
-        write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"]))
+        write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"], rec.get("worktree") or cfg.repos[item.repo]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
         try:

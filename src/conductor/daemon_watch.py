@@ -168,7 +168,8 @@ class WatchMixin:
                 continue
             p = self.log.last("progress", item=item_id)
             since = parse_stamp(p.ts if p else rec["started"])
-            if quiet and (at - since).total_seconds() >= quiet:
+            # Silent but a process of its own is still writing: a healthy long run (aicomplete 009).
+            if quiet and (at - since).total_seconds() >= quiet and not self.still_writing(item_id):
                 flags.append((f"quiet:{item_id}:{p.id if p else 0}", "quiet", item_id,
                               f"{item_id}: no progress line for {duration((at - since).total_seconds())} "
                               f"(last {clock(since)}{'' if p else ', its start'})"))
