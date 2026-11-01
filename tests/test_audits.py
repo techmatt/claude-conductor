@@ -119,6 +119,7 @@ def test_claude_md_cleanup_template(env):
     assert "The planner adds" not in text and not env.events("audit_used")
 
 
+@pytest.mark.slow
 def test_content_cleanup_template_is_exclusive_and_its_old_name_runs_it(env):
     from conductor import audits
     assert {"content_cleanup", "content_audit", "disk_cleanup", "disk_audit"} <= set(audits.EXCLUSIVE)
@@ -130,6 +131,7 @@ def test_content_cleanup_template_is_exclusive_and_its_old_name_runs_it(env):
     assert env.finished("code/001_ca").detail["template"] == "content_cleanup"   # recorded under the new name
 
 
+@pytest.mark.slow
 def test_bug_hunt_template_and_its_notes_only_variant(env):
     env.queue("001_bh", "Focus on the shop screen.", template="bug_hunt", max_hours="4")
     env.queue("002_bh", "", template="bug_hunt", readonly="true", stage="false")

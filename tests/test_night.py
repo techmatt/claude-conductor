@@ -68,6 +68,7 @@ def test_a_stall_is_flagged_and_a_watch_tells_the_item(env, monkeypatch):
     assert "watch item's" in items.parse(env.queue("W3_x", "FAKE report done"), "code").errors[-1]
 
 
+@pytest.mark.slow
 def test_no_watch_while_the_planner_is_active_until_asked(env):
     night_cfg(env)
     env.signal("planner-1.signal", "by: planner\ncheckpoint: working")

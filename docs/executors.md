@@ -66,7 +66,7 @@ can be followed. When that changes, the next `progress` call's return says so. O
 daemons don't show here; *Now*'s load line does.
 
 **Port.** Every launch (a resumed stage too) gets a TCP port of its own, chosen by
-conductor: free at launch, from the OS's ephemeral range, never a run target's (the
+conductor: free at launch, from the OS's ephemeral range, never a run target's or tool's (the
 ports in its `url` and `ready`), another live item's or the picker's. It is in the run
 record and the `start` event (`port`), and in the executor's environment as
 `CONDUCTOR_PORT`. The preamble says any server the executor starts uses that port, passed

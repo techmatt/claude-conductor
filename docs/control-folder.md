@@ -159,7 +159,7 @@ repaired and pruned. Then:
   bare word in prose. events.db is append-only; this is the one writer that edits rows
   (its triggers dropped and restored inside one transaction), and it logs
   `repo_renamed` (old, new, path, moved, sha) after.
-- **Committed:** `conductor.toml` (the table and `repo =` references; `path` when it
+- **Committed:** `conductor.toml` (the table, `repo =` lines, a tool's `cwd`; `path` when it
   moved) and `state.md` (the same spellings), as `rename repo <old> -> <new>`, with the
   guard re-snapshotted so the next start sees no drift.
 

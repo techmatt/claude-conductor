@@ -33,7 +33,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-10-31, after prompt 63
+Last cleanup: 2026-10-31, after prompt 64
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`) and aicomplete (`C:\Code\aicomplete-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
@@ -60,13 +60,13 @@ A next prompt should know:
 
 Accepted gaps nobody plans to fix unless they bite live in `docs/known-limits.md`.
 
-Bugs:
+Bugs (the first three carry 63's picks, Matt to confirm):
 
-- **`identical to HEAD` after a real edit**: four real `state.md` edits on aicomplete applied as identical (2026-10-29 #614, 10-30 #1115 and #1126, 10-31 #1811); each was resent under a fresh name about 20s later and committed. Raise `SAME_WAIT_SECONDS` (10s) past that gap, or find why the copy arrives so late.
-- **Retirement strands a tracked manifest**: `pick_retired` keeps a manifest git tracks but deletes its untracked images, so aicomplete's `card_frames_r2.json` and `scene_style_r1.json` show 51 broken tiles (its D21) and leave empty image folders. Skip retiring images whose manifest stays, or have the picker refuse a retired name.
-- **`disk_cleanup`'s Drive scope**: the template lets an item delete in the main checkout and only move into Drive's archive, yet its step 2 acts on Drive-homed files, so aicomplete 049 deleted 41 files in Drive through the junction and said so. Say which it is: pick "moves only in Drive".
+- **`identical to HEAD` after a real edit**: four real `state.md` edits on aicomplete applied as identical (2026-10-29 #614, 10-30 #1115 and #1126, 10-31 #1811); each was resent under a fresh name about 20s later and committed. Pick: raise `SAME_WAIT_SECONDS` (10s) to 30s; the other way is to find why the copy arrives so late.
+- **Retirement strands a tracked manifest**: `pick_retired` keeps a manifest git tracks but deletes its untracked images, so aicomplete's `card_frames_r2.json` and `scene_style_r1.json` show 51 broken tiles (its D21) and leave empty image folders. Pick: the picker refuses a retired name; the other way is to skip retiring images whose manifest stays.
+- **`disk_cleanup`'s Drive scope**: the template lets an item delete in the main checkout and only move into Drive's archive, yet its step 2 acts on Drive-homed files, so aicomplete 049 deleted 41 files in Drive through the junction and said so. Pick: moves only in Drive, never deletes.
 - **The app's validator can be older than the daemon**: after 60's restart the open app flagged 034 `hold` / "unknown front-matter fields" that the daemon had staged. The app should say so, or reload.
-
+- **`ask` holds the executor for its whole timeout** (due from aicomplete checkpoint at or after event #2089; 054): the session waited the full 10 minutes on an unanswered question and a run queued behind it never started; let the executor keep working while a question is open (it already continues with the default after).
 - **Merge subject from item title** (aicomplete 051's post-audit of 046): the squash took 046's title "Rules revision 21" for code at r22, a permanently wrong subject on main. Use the final commit's subject, or strip revision numbers from titles.
 - **`wait_for` misses failures and dead processes** (051): it matched only the success pattern, so a panic went unseen for ~5 min (up to 15–20 min of gate), and waits on an exited script returned "Nothing yet" for 4 and 11 min. Add a `fail_line` (or a preamble line: match `panicked|error` too) and report when the watched process has exited.
 - **Review budget unenforced** (051): 046's review ran 16 agents against "about 10", and `ultracode: true` pushes the other way. Say in the preamble that finders plus verifiers count, or have Workflow cap them.
@@ -77,7 +77,6 @@ Improvements:
 - **`planner.md`: rule deferred design calls at once** (aicomplete, 2026-10-31): Matt took the pick on every deferred call this session (044's eight, 048's fifteen, 049's two, 046's three) with "your take is good", each a round trip and a second `state.md` request. *Deferred design calls* could record the picks as rulings in the same processing request and list them, Matt overriding any he wants.
 - **`planner.md`: one commit call per request** (aicomplete): processing a report took two bridge commits (targets, then `request.md` with the signal) because it says to write `request.md` last. Requests already wait for late targets (58); if write order inside one bridge call is safe, it can say "targets and `request.md` in one call, `request.md` listed last".
 - **`planner.md` *Start* step 1 can return part of the tool set** (2026-10-30 and 10-31): the `select:` search loaded only the folder-access and list tools; stage and commit needed a second search. If it returns only some of the four, load the rest in the same turn before step 2.
-- **63's deferred calls, Matt to confirm** (planner's picks = 63's): raise `SAME_WAIT_SECONDS` to 30s; on retirement the picker refuses a retired name rather than stranding a tracked manifest; `disk_cleanup` may only move files in a Drive home, never delete. These settle the first three Bugs above.
 - **Project tools** (64): the first use is AI Complete's card viewer; its `[tools.cards]` is that planner's request. No stop verb or button yet: a hung tool goes with the daemon. Add `tool: X stop` if that bites.
 
 Chores:

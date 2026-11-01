@@ -186,6 +186,7 @@ def test_reorder_keeps_padding_and_moves_back(env):
     assert [e.item for e in env.events("enqueue")].count("code/010_a") == 2   # retired, then back
 
 
+@pytest.mark.slow
 def test_reorder_refusals(env):
     held(env)
     env.queue("002_a", "FAKE report done")

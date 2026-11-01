@@ -101,6 +101,7 @@ def test_samples_record_each_items_tree_and_the_heartbeat(env):
     assert not state.daemon_info(env.d.cfg).died      # a clean stop leaves no lock
 
 
+@pytest.mark.slow
 def test_samples_count_what_an_item_detached_in_its_worktree(env):
     """Found live in the sandbox proof: a hog started with `( cmd & )` has no live
     parent, so a tree walk misses it; the item's orphans are counted too."""

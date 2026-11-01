@@ -25,10 +25,10 @@ from .widgets import confirm, muted
 COLORS = {"red": theme.RED, "asking": theme.ICON_ASKING, "running": theme.ACCENT, "idle": theme.ICON_IDLE}
 SETTINGS_KEY = "controls"
 AUTOPILOT = {                   # mode → menu label, what it means
-    "off": ("Off", "Nothing starts by itself: no backlog draws, no watch tells or draws (the watch still "
-                   "runs and recommends)"),
-    "night": ("Night only", "Backlog draws and watch actions only at night ([defaults] night hours)"),
-    "always": ("Always", "Backlog draws and watch actions day and night"),
+    "off": ("Off", "Nothing starts by itself: no backlog draws, a watch's included (its tells, answers and "
+                   "toasts still go)"),
+    "night": ("Night only", "Backlog draws, a watch's included, only at night ([defaults] night hours)"),
+    "always": ("Always", "Backlog draws day and night"),
 }
 HUBS = {"need": "red", "running": "gold", "idle": "slate"}     # a project tab's icon, by `status` kind
 TURN_MS = 1000                  # the running title's glyph and the tray's pulse

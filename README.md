@@ -80,7 +80,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory and load sampling, pressure levels, the launch guard, the leftover reaper, a daemon's death |
-| `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, tray |
+| `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/restart.md` | The restart rule, the self-restart on a code change; platform notes (process groups, detached launches) |

@@ -102,7 +102,7 @@ an item's detail in `trail.py`.
 - *Events* — by default the **Activity** view: workflow-level lines only, worded
   plainly — `prompt X started`, `report X written — done/partial/red (carry: …)`,
   `report X reviewed`, `X used N audit note(s)`, `X: <progress line>`, `message #n to X: …` and `message #n
-  reached X`, `amendment #n to X, while <state> (…)` and `amendment #n reached X`, run targets starting / up / opened / stopped, pickers opened / saved,
+  reached X`, `amendment #n to X, while <state> (…)` and `amendment #n reached X`, run targets and tools starting / up / opened / stopped, pickers opened / saved,
   questions asked / answered / default taken (and late answers and
   closes), approved, cancelled, reordered, cleared, a queued item rewritten (`edited`), `doc update committed: <message>`
   (a `request`) or `request failed`, daemon started / stopped, and every red, `warning`

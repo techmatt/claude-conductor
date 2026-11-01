@@ -82,6 +82,7 @@ def test_queued_amendments_are_appended_at_launch(env):
     assert "amendment #" in describe(got[0])
 
 
+@pytest.mark.slow
 def test_an_amendment_written_with_its_item_still_lands(env):
     env.queue("001_new", "FAKE report done")
     amend_file(env, "001_new", "FAKE commit d.txt d")

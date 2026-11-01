@@ -308,7 +308,7 @@ def lines(cfg: Config, log: EventLog, view: View, since: int) -> list[str]:
     out += rows
     if (mode := autopilot(log)) != "always" or out:
         held = autopilot_holds(cfg, log)
-        out.insert(0, f"- autopilot: **{mode}**" + (f" ({held}: no draws, no watch tells)" if held else ""))
+        out.insert(0, f"- autopilot: **{mode}**" + (f" ({held}: no draws)" if held else ""))
     return out
 
 

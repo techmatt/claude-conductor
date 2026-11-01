@@ -69,7 +69,7 @@ conductor.cli, conductor.daemon"`). It restarts only at a safe point. Blockers: 
 checkout itself not settled (uncommitted or untracked changes under `src/` or in
 `pyproject.toml`, or a rebase, merge or cherry-pick in progress: the new daemon runs the
 files on disk), a merge executor resolving (`resolve.state: running`), a setup running
-(above), an unfinished reorder journal, a run target still starting, or a picker opened
+(above), an unfinished reorder journal, a run target or tool still starting, or a picker opened
 in the last hour (`pick_open` with no later `pick_saved`) that it still serves (a
 restart loses the picker's port and token). Blocked past 5 minutes
 (`RESTART_PATIENCE_SECONDS`): one `warning` naming the blockers; it keeps waiting and
