@@ -8,12 +8,13 @@ from pathlib import Path
 
 from . import globs
 from .audits import TEMPLATES, canonical
+from .picks import NAME_RE as PICK_NAME_RE
 from .util import FrontMatterError, read_text, split_front_matter
 
 NAME_RE = re.compile(r"^(\d{3,}|W\d+)_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 WATCH_RE = re.compile(r"^W(\d+)_")     # a watch's own series (`W12_watch`): never a queue number
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules"}
+          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules", "needs_pick"}
 GIST_CHARS = 160
 
 
@@ -37,6 +38,7 @@ class Item:
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     alongside: str | None = None                        # what it touches: may start beside running items
     resume_of: str | None = None                        # `resume:` the finished item whose session it forks
+    needs_pick: str | None = None                       # a picker's name: waits for its choices, then carries them
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -49,7 +51,8 @@ class Item:
                 "needs_planner": self.needs_planner, "readonly": self.readonly,
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
                 "ultracode": self.ultracode, "audit": self.audit, "template": self.template,
-                "alongside": self.alongside, "resume_of": self.resume_of, "rules": self.rules}
+                "alongside": self.alongside, "resume_of": self.resume_of, "rules": self.rules,
+                "needs_pick": self.needs_pick}
 
     def gist(self) -> str:
         """One line on what the item does, for the items started beside it: its `alongside`
@@ -135,6 +138,12 @@ def parse(path: Path, repo: str) -> Item:
             item.errors.append("`alongside` is refused on a template item: templates are repo-wide and wait their turn")
         else:
             item.alongside = value.strip()
+    if meta.get("needs_pick") is not None:
+        value = meta["needs_pick"]
+        if not isinstance(value, str) or not PICK_NAME_RE.fullmatch(value):
+            item.errors.append(f"`needs_pick`: {value!r} must be a picker's name")
+        else:
+            item.needs_pick = value
     if meta.get("resume") is not None:
         _resume(item, meta)
     elif item.template in RESUME_TEMPLATES:

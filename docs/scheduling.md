@@ -14,6 +14,7 @@ runs when all of these hold:
   and so may two with disjoint legacy `paths`; an exclusive template never shares;
 - the repo is not held after a red (below) and no `needs_planner` report is unread;
 - every named lock is declared in `conductor.toml` and free;
+- any `needs_pick` picker's choices are saved (a wait, no stage: `picks.md`);
 - every `depends_on` item finished with status `done` (a dependency still queued
   or running elsewhere means *wait*; one that ended `partial`/`red`, is unknown,
   or sits later in the same queue means *hold*);

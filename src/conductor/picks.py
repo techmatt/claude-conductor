@@ -20,12 +20,15 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
 
 from . import git
 from .config import Config
 from .events import Event, EventLog
-from .state import View
-from .util import parse_stamp, read_text, stamp, write_text
+from .util import clock, parse_stamp, read_text, stamp, write_text
+
+if TYPE_CHECKING:
+    from .state import View
 
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_NOTE_CHARS = 4000
@@ -398,6 +401,59 @@ def saved_at(cfg: Config, view: View) -> dict[str, str]:
     choices = scan_choices(cfg.control)
     return {item_id: c["saved_at"] for item_id, fin in view.finishes.items()
             if (ref := fin.detail.get("pick")) and (c := choices.get(ref)) and _after(c.get("saved_at"), fin.ts)}
+
+
+# ---------------------------------------------------------------- `needs_pick:` items
+def problem(cfg: Config, log: EventLog, name: str) -> str | None:
+    """Why an item's `needs_pick: <name>` can never be met: the picker is retired, or
+    conductor has never seen it (no report named it, no `pick:` opened it, nothing saved)."""
+    if name in retired(log):
+        return f"`needs_pick`: picker {name} is retired"
+    if load_choices(cfg.control, name) is None and name not in known(cfg, log):
+        return f"`needs_pick`: no picker is named {name}; queue the item once a report names it"
+    return None
+
+
+def awaited(cfg: Config, view: View, name: str) -> bool:
+    """Do its choices still have to be saved? As for `pending`: a save from before a later
+    finish that names the same manifest doesn't count."""
+    saved = load_choices(cfg.control, name)
+    return saved is None or any(fin.detail.get("pick") == saved["manifest"] and not _after(saved["saved_at"], fin.ts)
+                                for fin in view.finishes.values())
+
+
+def _chosen(key: str, labels: dict[str, str]) -> str:
+    return f"`{key}` ({labels[key]})" if labels.get(key) else f"`{key}`"
+
+
+def section(cfg: Config, name: str | None) -> str:
+    """What a `needs_pick` item's prompt gains: the saved choices, row by row with notes.
+    The manifest only adds labels, so one no longer on disk loses nothing Matt chose."""
+    saved = load_choices(cfg.control, name) if name else None
+    if saved is None:
+        return ""
+    try:
+        manifest = load_manifest(cfg, saved["manifest"])
+    except ValueError:
+        manifest = None
+    lines = []
+    for r in saved["rows"]:
+        if not isinstance(r, dict):
+            continue
+        row = manifest.row(r.get("id")) if manifest else None
+        labels = {o.key: o.label for o in row.options} if row else {}
+        if "keys" in r:
+            what = "kept " + (", ".join(_chosen(k, labels) for k in r["keys"]) or "none")
+        else:
+            what = _chosen(r.get("key"), labels)
+        line = f"- {row.label + ' ' if row else ''}(`{r.get('id')}`): {what}{', changed' if r.get('changed') else ''}"
+        if r.get("note"):
+            line += "\n  Matt's note: " + str(r["note"]).replace("\n", "\n  ")
+        lines.append(line)
+    title = f" ({saved['title']})" if saved.get("title") else ""
+    return (f"\n---\n\nMatt's choices from picker `{name}`{title}, saved {clock(saved['saved_at'])}. This is all of "
+            f"them: you can't see the control folder. Work from these; a note says what he wants beyond the option.\n\n"
+            + "\n".join(lines) + "\n")
 
 
 # ---------------------------------------------------------------- retiring

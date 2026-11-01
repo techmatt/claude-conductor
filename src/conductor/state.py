@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import audits, git, globs, items, procs, resume
+from . import audits, git, globs, items, picks, procs, resume
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
@@ -170,7 +170,18 @@ def scan(cfg: Config, log: EventLog) -> View:
     for item in (i for q in view.queued.values() for i in q if i.resume_of and not i.errors):
         if why := resume.problem(view, item):
             item.errors.append(why)
+    for item in (i for q in view.queued.values() for i in q if i.needs_pick and not i.errors):
+        if why := picks.problem(cfg, log, item.needs_pick):
+            item.errors.append(why)
     return view
+
+
+def pick_wait(cfg: Config, view: View, item: Item) -> str:
+    """What a `needs_pick` item still waits on, or nothing. A wait, not a hold: the digest's
+    *Picks* already asks Matt, so no `hold` event and no toast."""
+    if item.needs_pick and picks.awaited(cfg, view, item.needs_pick):
+        return f"Matt's choices for picker {item.needs_pick} (`needs_pick`)"
+    return ""
 
 
 def can_share(cfg: Config, head: Item, rec: dict) -> bool:
@@ -265,6 +276,7 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
             if (not (item.readonly or item.alongside) or item.id in view.staged
                     or (item.template in audits.NO_STAGE + audits.EXCLUSIVE and not watch)
                     or set(item.locks) & held or _hold(cfg, view, repo, item, known)
+                    or pick_wait(cfg, view, item)
                     or not all(can_share(cfg, item, rec) for rec in running_here)):
                 continue
             if any(view.status_of(items.resolve_ref(ref, repo, known)) != "done" for ref in item.depends_on):
@@ -299,6 +311,8 @@ def start_estimate(cfg: Config, view: View, item: Item) -> str:
         return f"waits: `{repo}` paused {clock(ev.ts)}"
     if hold := _hold(cfg, view, repo, item, known):
         return f"held: {hold.reason}"
+    if why := pick_wait(cfg, view, item):
+        return f"waits for {why}"
     queue = view.queued.get(repo, [])
     ahead = queue[:next((i for i, q in enumerate(queue) if q.id == item.id), len(queue))]
     running = {i: r for i, r in view.running.items() if r["repo"] == repo}
@@ -353,6 +367,8 @@ def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str
     # What the head waits on; staging is allowed only when every wait is a busy lock or
     # a dependency that is running.
     waits: list[tuple[str, bool]] = []
+    if why := pick_wait(cfg, view, head):
+        waits.append((f"waiting on {why}", False))      # a stage would read a prompt without them
     for item_id, rec in running_here.items():
         if not can_share(cfg, head, rec):
             what = {"merge": "merging", "setup": "setting up"}.get(rec.get("phase"), "running")

@@ -123,7 +123,7 @@ make it invalid in the queue; a draw rewrites it (`drawn into the queue as <id>`
 (red, `needs_planner`) and not mid-reorder, draws its first eligible item: moved to
 `queue/<repo>/NNN_<name>.md`, NNN one past every number queued, running, done or proposed there, with a
 `backlog_draw` event (from, full_length, night, by), then the usual `enqueue`. Day or night.
-Eligible: valid, every `depends_on` done, and:
+Eligible: valid, every `depends_on` done, any `needs_pick` saved, and:
 
 - **Never two full-length items back to back without Matt in between.** Full-length: any
   template run but a watch, or a declared `max_hours` of 2 or more (only a declared one: the

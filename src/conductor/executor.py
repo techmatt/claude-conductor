@@ -471,14 +471,15 @@ class RunPaths:
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
                  run: dict | None = None, resume: dict | None = None, notes: str = "",
                  usage: str = "", amends: list[dict] = (), beside: list[tuple[str, str]] = (),
-                 resumed: str = "", parked: list[dict] = ()) -> str:
+                 resumed: str = "", parked: list[dict] = (), choices: str = "") -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
     audit notes, inlined; `usage`: a disk cleanup's control-folder sizes and worktrees;
     `amends`: amendments written before the launch, appended in order; `beside`: the
     (id, gist) of each item it is warned about starting beside (`BESIDE`); `resumed`: a
     resume item's paragraph on its original (`resume.paragraph`); `parked`: the parked edits
-    it carries (`parked.section`)."""
+    it carries (`parked.section`); `choices`: a `needs_pick` item's saved choices
+    (`picks.section`)."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -505,7 +506,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         pick=PICK if pick else "", pick_line=PICK_LINE if pick else "",
         tail="" if resume else PROMPT_FOLLOWS,
     )
-    extra = parked_mod.section(list(parked))
+    extra = choices + parked_mod.section(list(parked))
     if not resume:
         return text + body(cfg, item, notes, usage) + extra + "".join(_amend(AMEND, m) for m in amends)
     n = resume["landed"]
@@ -562,9 +563,9 @@ def has_servers(cfg: Config, item: Item, run: dict) -> bool:
     return isinstance(scripts, dict) and any(DEV_SCRIPT_RE.match(k) for k in scripts)
 
 
-def build_stage_prompt(cfg: Config, item: Item, run: dict) -> str:
+def build_stage_prompt(cfg: Config, item: Item, run: dict, choices: str = "") -> str:
     return STAGE.format(item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
-                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item)
+                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item) + choices
 
 
 def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:

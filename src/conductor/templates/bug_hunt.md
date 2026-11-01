@@ -78,7 +78,7 @@ After its header:
 - **Checker**: what it covers and how to run it (or, notes only, where it is).
 - **Fixed**: each bug fixed, briefly (notes only: **Found**, each bug with where it shows).
 - **Deferred**: everything left for Matt, most important first, each with the options
-  you see and which you would pick and why.
+  you see and which you would pick and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)`.
 
 The status is `done` when the hunt used its time (or exhausted every lens, shown under
 **Time**) and every clear bug found was fixed or (notes only) recorded; deferred items

@@ -37,7 +37,7 @@ Gaps nobody plans to fix unless they bite. Each says what would change that. A l
 - **A hidden red.** A red the planner never saw but wrote `state.md` after is hidden from the digest (46); *Now* and the app still show its effect.
 - **Digest *Other*** still piles up daemon restarts and stage chatter after the last `state.md` request.
 - **Reports finished before `reviewed:` existed** have no `reviewed` event: on Corelight they list as unreviewed until marked (**process all**).
-- **Deferred design calls** live only in a cleanup report's **Deferred** and, once raised, `state.md`'s *Paged*. Conductor tracks none; a standing inbox section could, if they get lost.
+- **Deferred design calls** live only in a cleanup report's **Deferred** and, once ruled, `state.md`. Conductor tracks none; a standing inbox section could, if they get lost.
 - **Audit notes are uncapped.** A cleanup template inlines every unused audit note into its prompt. If a repo collects dozens, cap the count per cleanup (oldest first).
 - **31's planner action rules** (signals only from Matt's words, `reviewed:` only inside processing) are rules, not checks.
 - **`planner.md` *Start* step 3** assumes a workspace shell and `TZ=America/Los_Angeles`. Matt's saved preference must carry steps 1–5, since the file is first read at step 5.

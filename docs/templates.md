@@ -40,7 +40,8 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   finished <status> <time>`; then, after `---` and "The planner adds, for this item:",
   the item's own body, if any. The executor carries out what is clear and well
   defined and defers every design-level call (its report lists them under
-  **Deferred**, with options and a recommendation). A cleanup never stages.
+  **Deferred**, with options and a recommendation, any that is Matt's own, by taste, scope or a
+  rules term, marked `(Matt's call)`, as in every template with a **Deferred**: `planner.md`). A cleanup never stages.
 - **`template: general_cleanup`** (was `general_audit`). The same, with no notes to go on: it behaves as
   `audit: true` (it writes its own notes file), audits the whole repo, then carries out
   the clear items and defers the design calls.

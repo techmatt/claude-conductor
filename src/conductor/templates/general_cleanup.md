@@ -16,7 +16,7 @@ then act on what you found.
 The report, after its header, has:
 - **Done**: what you changed, briefly.
 - **Deferred**: each design call you did not make — what it is, the options you see,
-  which you would pick and why — and anything else you left, with the reason.
+  which you would pick and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)` — and anything else you left, with the reason.
 
 The status is `done` when everything clear was carried out (deferred design calls do
 not make it partial), `partial` when clear work was left undone, and `red` only when

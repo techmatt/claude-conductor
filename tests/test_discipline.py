@@ -219,9 +219,17 @@ def test_quiet_is_not_flagged_while_a_process_of_its_own_writes(env, monkeypatch
     env.tick_until(lambda: env.d._writes.get(item) and (flagged or env.d.still_writing(item)))
     env.tick_until(lambda: env.d.still_writing(item) is not flagged)        # the idle child's start is behind it
     cfg.watch_quiet_minutes = 0.0001
-    env.d._watch_at = None
-    env.d.tick()
-    assert bool([e for e in env.events("watch_flag") if e.detail["flag"] == "quiet"]) is flagged
+
+    def quiet() -> list:
+        env.d._watch_at = None                              # the next tick checks
+        return [e for e in env.events("watch_flag") if e.detail["flag"] == "quiet"]
+
+    if flagged:                                             # a late sample may reopen the window once
+        env.tick_until(quiet)
+    else:
+        quiet()
+        env.d.tick()
+        assert not quiet()
     env.release()
     env.tick_until(lambda: env.finished(item))
 

@@ -25,7 +25,7 @@ The report is short. After its header, it has:
 - **Cut**: what was removed or replaced by a pointer, one line each.
 - **Fixed**: what was wrong and what it says now.
 - **Deferred**: each change to how executors work you did not make, with what you
-  would do and why.
+  would do and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)`.
 
 The status is `done` when the pass is complete (deferred items do not make it partial),
 and `red` only when something is broken.

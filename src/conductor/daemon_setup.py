@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import executor, git, items, parked, procs, talk, worktrees
+from . import executor, git, items, parked, picks, procs, talk, worktrees
 from . import resume as resume_items           # `resume` here is a staged item's move record
 from .util import file_hash, now, parse_stamp, retry_io, stamp, write_text
 
@@ -207,11 +207,13 @@ class SetupMixin:
         if "parked" not in rec:
             rec["parked"] = [{"n": n, "text": e.text}
                              for n, e in enumerate(parked.take(cfg.control, item), 1)]
+        # Fixed at the first launch, so a restart's new launch or a later round can't change them.
+        rec.setdefault("choices", picks.section(cfg, item.needs_pick))
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, item.max_hours or cfg.max_hours,
                                                        parse_stamp(rec["deadline"]), rec, resume,
                                                        notes=self._notes_text(rec), usage=self._template_usage(rec),
                                                        amends=[m for m in amends if talk.is_amend(m)], beside=warn,
-                                                       resumed=resumed, parked=rec["parked"]))
+                                                       resumed=resumed, parked=rec["parked"], choices=rec["choices"]))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"], rec.get("worktree") or cfg.repos[item.repo]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
@@ -293,7 +295,7 @@ class SetupMixin:
         paths.report.parent.mkdir(parents=True, exist_ok=True)
         for stale in (paths.stage_log, paths.stage_stderr):
             stale.unlink(missing_ok=True)
-        write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec))
+        write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec, picks.section(cfg, item.needs_pick)))
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], None), Path(rec["worktree"]),
                                     paths.stage_prompt, paths.stage_log, paths.stage_stderr)

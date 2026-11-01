@@ -14,7 +14,7 @@ what the repo's CLAUDE.md or README should say. Act on them.
 The report, after its header, has:
 - **Done**: what you changed, grouped by note, briefly.
 - **Deferred**: each design call you did not make — what it is, the options you see,
-  which you would pick and why — and anything else you left, with the reason.
+  which you would pick and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)` — and anything else you left, with the reason.
 - **Notes that were wrong or stale**: one line each.
 
 The status is `done` when everything clear was carried out (deferred design calls do

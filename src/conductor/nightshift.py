@@ -11,7 +11,7 @@ from . import audits, items
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
-from .state import View
+from .state import View, pick_wait
 from .util import clock, now, parse_stamp
 
 FULL_HOURS = 2.0        # an item declaring `max_hours` at least this is full-length
@@ -162,6 +162,9 @@ def pick(cfg: Config, log: EventLog, view: View, repo: str, queue: list[Item]) \
             continue
         if waits := [r for r in item.depends_on if view.status_of(items.resolve_ref(r, repo, known) or "") != "done"]:
             why.append((f"waits on {', '.join(waits)}", f"{item.name} waits on {', '.join(waits)}"))
+            continue
+        if wait := pick_wait(cfg, view, item):
+            why.append((f"waits on picker {item.needs_pick}", f"{item.name} waits on {wait}"))
             continue
         if full_length(item.meta()) and (last := last_full(log, repo)) and not matt_since(cfg, log, last):
             why.append(("back-to-back", f"{item.name} is full-length and nothing came from Matt since "

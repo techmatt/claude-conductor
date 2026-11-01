@@ -56,7 +56,7 @@ The report, after its header, has:
   folder as measured above), with a total row and the amount freed.
 - **Done**: what was deleted or moved, with sizes, and how anything deleted is rebuilt.
 - **Deferred**: each larger saving you did not make, with its size, the options, which
-  you would pick and why.
+  you would pick and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)`.
 
 The status is `done` when everything safe was freed (deferred items do not make it
 partial), `partial` when safe work was left undone, and `red` only when something is

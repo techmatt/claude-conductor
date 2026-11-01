@@ -65,7 +65,7 @@ events: [812, 813]
 `<start>` is when the item will start and why, read from the scheduler's rules at queue
 time (`state.start_estimate`; a guess, not a promise): `starts now`, `starts now, beside
 028_x (alongside)`, `waits behind 024_x (repo busy, no `alongside`) and 025_y (template runs
-alone)`, a lock, a `depends_on`, a pause, or `held: <reason>`. It is also the `starts`
+alone)`, a lock, a `depends_on`, a pause, `needs_pick`'s `waits for Matt's choices for picker <name>`, or `held: <reason>`. It is also the `starts`
 field of the `enqueue` event (and of an `edited` one whose start moved).
 
 A tell's receipt is never a bare `applied`: `message #N to <item>: it waits on question

@@ -80,7 +80,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## Writing a prompt
 
-- **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules` (`docs/items.md`).
+- **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick` (`docs/items.md`).
 - **Ultracode** (`ultracode: true`): subagent workflows for every item that would benefit (multi-part, sweeps, redesigns, new systems); a feature one also gets an adversarial multi-agent review of its diff unless the prompt says not.
 - **Audits and templates are conductor's texts**, never retyped: `audit: true` keeps notes for a later cleanup: on by default for rules and gate items, off for art and small items, and for anything else when Matt asks; `template: <name>` is conductor's prompt, any body appended (`docs/templates.md`); Matt saying a template's phrase queues it.
 - **Concurrency** (`docs/scheduling.md`): a worktree per item; `done` and `partial` merge into `main` one at a time per repo. **`alongside: <what it touches>`** starts one beside its repo's others: a clearly separate code area, nothing shared outside git (art, voice, readonly prototypes). Templates but bug hunt, self audit and watch run alone. `depends_on` only where queue order doesn't serialize (another repo, `alongside`, `readonly`); a `partial` dependency holds it. `readonly` never merges, starts at once, sees `main` as then.
@@ -113,7 +113,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.
-- **Picks.** A prompt producing candidates says "picker" (brings the schema), under a new name, images in a `shared` folder (checked in `conductor.toml` first), never committed build output. "Which go forward": a `kind: many` row. Rounds are `<name>_r<N>`: a saved round retires the earlier ones' files; any other picker Matt is done with: **retire X**; a retired name is refused (`docs/picks.md`). *picks saved <time>*: read the choices, never ask Matt.
+- **Picks.** A prompt producing candidates says "picker" (brings the schema), under a new name, images in a `shared` folder (checked in `conductor.toml` first), never committed build output. "Which go forward": a `kind: many` row. Rounds are `<name>_r<N>`: a saved round retires the earlier ones' files; any other picker Matt is done with: **retire X**; a retired name is refused (`docs/picks.md`). **`needs_pick: <name>`**, queued once a report names the picker, holds an item until it is saved and appends the choices at launch: never relay them by hand. *picks saved <time>*: read the choices, never ask Matt.
 
 ## Reading a report
 
@@ -122,13 +122,13 @@ A report opens with `status: done | partial | red`, `blocks:` (what it blocks), 
 - `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
 - A `conductor:` line under the header overrides `status:`: `NOT on main` (red after a `done` report; branch kept) or `landed on main … despite …` (conductor's own red; no hold). Kept work Matt wants lands with **land X**.
 - A non-`none` `slow:` or `friction:`: mention it in a line only if it points at a fix; it counts toward *Maintenance*.
-- `pick:`: tell Matt the picker is ready (**pick X**); the next prompt waits for his choices unless he says otherwise.
+- `pick:`: tell Matt the picker is ready (**pick X**); the next prompt waits for his choices (`needs_pick`) unless he says otherwise.
 
 Don't summarize a report back: say what it changes, what the planner got wrong and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right; flag only decisions that block upcoming work.
 
 **Unexplained outcomes** (stopped early, part skipped, a surprising call, much slower, an unclear red): recommend **ask X** or **post-audit X** in a line, with its question; queue it only on Matt's word, once per report, never again once declined.
 
-**Deferred design calls** (a cleanup or bug hunt lists them with options and a pick): raise each with Matt once; a decision becomes a new item, one he doesn't take up goes to *Paged* with the executor's pick as default. Never settled in `state.md` or queued unasked.
+**Deferred design calls** (a cleanup or bug hunt lists them with options and a pick): in the request processing the report, record each pick as a ruling in `state.md` and list them for Matt, call and pick, a line each; he overrides any he wants afterwards. A ruling needing work goes to *Paged*, never queued unasked. A call marked `(Matt's call)` (taste, scope, a rules term) is still a question, its pick the default.
 
 **Reviewed.** `reviewed:` only inside **process X / next / all**, after reading that report in full this turn; one noticed in passing gets a line ("061 finished"). A `report_changed` one needs processing again. Conductor's reports past its mark (`Last report reviewed by the planner:` in its `planner-notes.md`) are in *Unreviewed reports*; processing one moves the mark.
 

@@ -23,7 +23,7 @@ The report, after its header, has:
   in a few words (reworded: old → new).
 - **Pools**: each pool's size before and after.
 - **Deferred**: each design call you did not make, with the options, which you would
-  pick and why.
+  pick and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)`.
 
 The status is `done` when every finding was acted on or flagged (deferred design calls
 do not make it partial), `partial` when content was left unchecked, and `red` only when

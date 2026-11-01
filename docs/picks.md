@@ -146,6 +146,27 @@ and the inbox's *Picks* lists it for a day. A name is retired once; `retire:` on
 unknown or retired name is refused, and so is `pick:` or `conductor pick` on a manifest with a
 retired name (65: a tracked manifest stays, its images don't), so a new round takes a new name.
 
+**Items that need a pick** (66). Executors never see the control folder, so a saved
+choice used to reach one only by the planner's hand. `needs_pick: <name>` in an item's
+front-matter waits until that picker's choices are saved, then appends them to the prompt
+at launch, after the body: the title and save time, then a line per row with the chosen
+key (a many row's kept keys), its option label, `changed`, and Matt's note. The text
+is fixed at launch, in the run record; a staged item's stage waits too, since it would
+read a prompt without them, and its resume message repeats them.
+
+- **Waiting** is a wait, not a hold (the digest's *Picks* already asks Matt): no `hold`
+  event or toast. A queue head's wait holds its queue; an `alongside` or readonly item
+  waits behind its head without blocking it. The receipt says `waits for Matt's choices
+  for picker <name> (`needs_pick`)`; so do `conductor status` and the Repos tab. A save
+  older than a later finish that names the same manifest does not count (*Pending*).
+- **Refused**: a retired name, or one conductor has never seen (no choices file, no
+  `pick_open`, no finish naming a manifest of that name), makes the item invalid: `invalid`,
+  a `refused` receipt, its queue held until the file is fixed. So it is queued once a
+  report names the picker, not before. A name retired while it waits (a later round saved)
+  does the same: point it at the later round. A name not shaped like a picker's is refused
+  by the front-matter check, in `proposed/` and the backlog too; a backlog item is
+  drawn only once its choices are saved.
+
 **CLI.** `conductor pick <repo>/<path>` validates first (`conductor: <reason>`, exit 1,
 and a red `pick_failed` event with the reason, as the signal's `invalid` would be).
 With the daemon alive it writes `signals/cli-….signal` (`by: cli`), and the daemon opens

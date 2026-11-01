@@ -61,6 +61,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from conductor.util import retry_io
+
 args = sys.argv[1:]
 # `--resume <orig> --fork-session --session-id <new>` (a resume item) is a new session that
 # remembers the original's; plain `--resume` continues a staged session.
@@ -270,7 +272,7 @@ for ln in lines:
                                           f"open({str(Path.cwd() / '.hog')!r}, 'w').close(); time.sleep({secs})"]))
             while not (Path.cwd() / ".hog").exists():
                 time.sleep(0.05)
-            (Path.cwd() / ".hog").unlink()
+            retry_io((Path.cwd() / ".hog").unlink)     # the child may still have it open
             memory += f"HOG={hogs[-1].pid}\n"
         case "detach-hog":
             # The same, with no live parent: an orphan in cwd, as `( cmd & )` in a shell
@@ -284,7 +286,7 @@ for ln in lines:
                                         Path(tempfile.gettempdir()) / "conductor-fake-hog.log")
             while not (Path.cwd() / ".hog").exists():
                 time.sleep(0.05)
-            (Path.cwd() / ".hog").unlink()
+            retry_io((Path.cwd() / ".hog").unlink)     # the child may still have it open
             memory += f"HOG={left.pid}\n"
         case "pick":
             pick = parts[2]
