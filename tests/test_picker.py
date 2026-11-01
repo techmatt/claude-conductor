@@ -659,6 +659,11 @@ def test_retire_signal_for_a_picker_with_no_series(env, monkeypatch):
     assert picks.pending(env.cfg, state.scan(env.cfg, env.d.log), env.d.log) == []
     send(env, "retire: art_alts", "c.signal")
     assert "already retired" in env.events("invalid")[-1].detail["error"]
+    # A manifest left under a retired name (git tracks it) is refused, never served with broken tiles.
+    write_manifest(env.repo)
+    send(env, f"pick: {REF}", "d.signal")
+    assert "'art_alts' is retired" in env.events("invalid")[-1].detail["error"]
+    assert env.events("pick_open") == []
     assert picks.series("art_alts") is None and picks.series("hero_alts_r12") == ("hero_alts", 12)
 
 

@@ -36,7 +36,7 @@ uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [ru
 uv run conductor pick <repo>/<manifest path> [--control <folder>]  # open a picker in the browser (docs/picks.md)
 uv run conductor open-path <folder|reveal|file|text|url> <target…> [--control <folder>]  # the open: verbs (docs/open.md)
 uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo …]
-uv run conductor rename-repo <old> <new> [--path P] [--control <folder>]   # daemon stopped (docs/control-folder.md)
+uv run conductor rename-repo <old> <new> [--path P] [--control <folder>]   # daemon stopped (docs/rename-repo.md)
 uv run conductor app [<control folder> …]                  # the desktop app (docs/app.md)
 ```
 
@@ -58,13 +58,15 @@ never as a Claude Code background command (`docs/restart.md`).
 
 | File | What it covers |
 |---|---|
-| `docs/control-folder.md` | The control folder's layout and `.gitignore`, `conductor.toml`, `conductor init`, renaming a repo, the tamper guard, requests |
+| `docs/control-folder.md` | Layout, `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
+| `docs/rename-repo.md` | `conductor rename-repo` |
 | `docs/runtime.md` | The `.conductor/` folder: the daemon's lock, heartbeat, journals and scratch state |
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/push.md` | Pushing main to a remote after each merge, the control folder after its commits, on `push:` and at closeout; failures and rejections |
-| `docs/executors.md` | How an executor is launched: the preamble (full, light or watch), its port, MCP and settings files, `wait_for`, the rules on scope, scratch and load, long tool calls, setup, the report header, the outcome |
+| `docs/executors.md` | How an executor is launched: the preamble (full, light or watch), its port, MCP and settings files, `wait_for`, the rules on scope, scratch and load, long tool calls, setup |
+| `docs/reports.md` | The report's header and an item's outcome |
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk cleanup, claude.md cleanup, content cleanup, bug hunt, self audit, watch) |

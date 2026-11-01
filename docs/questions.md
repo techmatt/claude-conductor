@@ -8,7 +8,8 @@ ask(resume=<id>)                              # wait on a question a message cut
 ```
 
 A call writes `questions/<repo>__<NNN_name>__<n>.md` (`n` counts from 1 per item) and
-holds the tool call open until the question resolves:
+holds the tool call open until the question resolves. That holds the whole session (054 sat
+10 minutes with a run queued behind it), so the preamble says to start background work first:
 
 ```
 ---

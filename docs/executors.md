@@ -18,12 +18,12 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   `progress` line, scratch, short calls and `wait_for`, messages, the readonly line, the time
   limit and the report rules. No asking, outline, ETAs, port,
   load rules or leftover step.
-- **Light** (`LIGHT`, ~370 words) for a small item (`executor.is_light`): a body under
+- **Light** (`LIGHT`, ~380 words) for a small item (`executor.is_light`): a body under
   150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
   explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
   short art round needs the picker schema). It keeps only what a
-  small item can trip on: who it is and that nobody watches; ask with a default, block
-  only if every default is worse; messages and amendments outrank the prompt and are
+  small item can trip on: who it is and that nobody watches; ask with a default (it holds
+  the session: background work first), block only if every default is worse; messages and amendments outrank the prompt and are
   answered in the report by number; short calls (nothing foreground over
   `foreground_seconds`, never end the turn to wait); the worktree, `paths`, readonly,
   port and *Beside you* rules (shorter worktree and port texts); *Bounds*, one short
@@ -32,8 +32,8 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   at the start, another only past ~15 minutes. No outline, ETAs, pickers or servers:
   an item that proves bigger may still use them, but nothing asks it to.
 - **Full** (`PREAMBLE`) for everything else. It names the item and says the session is
-  unattended; gives the asking rule (ask only when a wrong guess would waste real work
-  or be hard to undo, with a default whenever one exists; block only when every default
+  unattended; gives the asking rule (ask only when a wrong guess would waste real work,
+  be hard to undo, or the result rests on a reading of a scope line, with a default whenever one exists; a call holds the session, so background work starts first; block only when every default
   is worse; anything not asked is decided as fits the goal and recorded; a step whose
   default can't be undone goes last); the progress rule (a line at the start, an ETA once
   it can estimate, at milestones, when the estimate moves by a third; `date` before each
@@ -42,7 +42,7 @@ resumed with `--resume <session id>` instead of `--session-id` (`worktrees.md`, 
   (`progress.md`); where it works, any `paths`, *Port* (below), *Beside you*
   (`scheduling.md`); the time limit and kill time; the **absolute report path** (the only file it may write outside
   its repo); the header, a one-line `slow:` rule and what each status means; that the
-  report answers every amendment and message by number, carries test details only for an
+  report answers every amendment and message by number, flags a conclusion resting on a comparison that changed two things, carries test details only for an
   unfixed red, and no process narration; and the closing `Report written to <path>`.
   Two blocks go in only where they apply: the *Pickers* paragraph and the header's
   `pick:` line (schema inline, `picks.md`) when the body could produce candidates
@@ -170,46 +170,4 @@ stage) is a red launch error for a run (`setup 'npm ci' exited 1 (see
 code__001_x.setup.log)`, worktree discarded) and discards a stage. Setup time counts
 toward those deadlines. Code: `daemon_setup.py` (`SetupMixin`), `setup_run.py`.
 
-**Report header.** The report starts with:
-
-```
-status: done | partial | red
-blocks: <what this blocks, or none>
-carry: <what state.md should change, or none>
-slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
-friction: none | <what cost the item time or tokens>[; <another>]
-pick: <manifest path relative to the repo root>     # optional: only after writing a picker manifest
-```
-
-(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first six
-non-blank lines are read: `status`, `blocks` and `carry` count only in the first three
-(the first of each); `slow:`, `friction:` and `pick:` only straight after them, in any
-order, each counted only when every line before it was a header line; `pick:` with a one-word value; so a body that opens with
-"Status: …" or "Pick: went with …" stays body. Backticks around a pick are dropped, `\`
-becomes `/`, and `pick: none` is no pick. The `finish` event carries it as
-`pick: <repo>/<path>`, the ref the `pick:` signal takes.
-
-`slow:` is where the executor's time went, the one thing an audit can't reconstruct
-later: a component listed only if it took over ~15 minutes or about twice what was
-expected, with a coarse time, the cause and a fix when one is visible (a test-lane
-split, a fact missing from README or CLAUDE.md, a slow build step, a tool that kept
-failing, too much searching). `none` is the normal answer. The preamble asks for it from
-every item, template items included. A report without it still parses (`slow` is null:
-no red, no warning). The `finish` event carries it as written; the inbox's *Unreviewed
-reports* line, `conductor events`, the app's Activity line and the Repos tab's note
-(whole in its tooltip) show it unless it is `none` or absent. The planner reads these
-lines as a maintenance trigger (`planner.md`, *Maintenance*).
-
-`friction:` (59) is a free signal on every report: one or two things in the prompt, the
-repo's docs, its tools or conductor that cost the item time or tokens (`none` is fine).
-It is carried, shown and counted like `slow:`, and it feeds the digest's workflow-retro
-line (`inbox.md`, *Maintenance facts*). Parked edits an item carries are answered just
-after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
-
-**Outcome.** The item's final status is the report's status unless something makes it
-red: no report or a bad header, no `result` line in the log, `is_error` in the result,
-killed at `max_hours`, interrupted (restart rule), control-folder tamper, a readonly
-item that changed its repo, a launch failure (worktree or setup included), a
-`paths` violation, uncommitted changes left in the worktree, or a rebase conflict
-(including a prose conflict its merge executor failed to resolve).
-The reasons are listed in the `finish` and `red` events.
+The report it ends with, its header and the outcome: `reports.md`.

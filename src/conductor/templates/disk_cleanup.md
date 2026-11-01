@@ -4,7 +4,8 @@ Find where the space goes and free what can safely be freed.
 This item may act outside its working directory, overriding the preamble only as this
 text says: it may delete cheaply rebuilt, untracked files in the main checkout (never a
 tracked file there, never its branch or index), and move files into the project's Drive
-archive. Everything else in the preamble stands.
+archive. A file in a Drive home, reached at its real home or through a junction, may only
+be moved, never deleted, however cheaply it rebuilds. Everything else in the preamble stands.
 
 Links. A Drive-homed folder in the main checkout is a directory junction into Drive, and
 every `shared` folder in a worktree is a link. A recursive delete that follows one
@@ -25,13 +26,14 @@ the same way: count a link's target once, at its real home.
    (the project's folder under the `gdrive-sync` folder beside the code repos, as the
    repo's CLAUDE.md or README names it) or nowhere, for anything a command rebuilds
    cheaply.
-   - Delete what is cheaply rebuilt or clearly obsolete: stale build output, caches,
-     dependency installs nothing uses any more, old scratch output with no other use.
-     Say how each comes back (`npm ci`, `uv sync`, a build command).
+   - Outside a Drive home, delete what is cheaply rebuilt or clearly obsolete: stale build
+     output, caches, dependency installs nothing uses any more, old scratch output with no
+     other use. Say how each comes back (`npm ci`, `uv sync`, a build command).
    - Move what is expensive or irreplaceable but no longer needed day to day into an
      `archive\` folder under the project's Drive home, keeping its relative path.
    - Never delete anything hand-made or irreplaceable (recordings, reference photos,
-     originals, anything no command can rebuild): move it to the archive instead.
+     originals, anything no command can rebuild), nor anything in a Drive home: move it to
+     the archive instead.
    - `git gc` and `git worktree prune` are fine. A file that is in use (a dev server,
      an editor) and will not delete is left; say what held it.
    - Never touch a worktree marked live below, and never delete a worktree folder

@@ -143,7 +143,8 @@ another live picker still shows (a round's "current" tile is often the last roun
 pick); the choices file stays. It logs `pick_retired` (name, manifest, `deleted`, `kept`,
 and `later` or `by`), drops the name from the server (its URLs 404) and from *Pending*,
 and the inbox's *Picks* lists it for a day. A name is retired once; `retire:` on an
-unknown or retired name is refused.
+unknown or retired name is refused, and so is `pick:` or `conductor pick` on a manifest with a
+retired name (65: a tracked manifest stays, its images don't), so a new round takes a new name.
 
 **CLI.** `conductor pick <repo>/<path>` validates first (`conductor: <reason>`, exit 1,
 and a red `pick_failed` event with the reason, as the signal's `invalid` would be).

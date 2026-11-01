@@ -48,6 +48,12 @@ def test_a_landing_item_keeps_them(env):
     assert "over an hour left" in render(env, body="short")
 
 
+def test_the_full_preamble_says_ask_holds_the_session(env):
+    text = render(env)
+    assert "holds this whole session\nuntil it returns, so start any background work first" in text
+    assert "your reading of a\nscope line" in text and "changed two things at once" in text
+
+
 def test_both_preambles_rule_on_subagents(env):
     full, light = " ".join(render(env, max_hours=2.0).split()), " ".join(render(env, body="short").split())
     assert "wins over any Workflow size or Ultracode cost note" in full and "about 10 in all" in full

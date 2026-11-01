@@ -113,7 +113,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.
-- **Picks.** A prompt producing candidates says "picker" (brings the schema), under a new name, images in a `shared` folder (checked in `conductor.toml` first), never committed build output. "Which go forward": a `kind: many` row. Rounds are `<name>_r<N>`: a saved round retires the earlier ones' files; any other picker Matt is done with: **retire X** (`docs/picks.md`). *picks saved <time>*: read the choices, never ask Matt.
+- **Picks.** A prompt producing candidates says "picker" (brings the schema), under a new name, images in a `shared` folder (checked in `conductor.toml` first), never committed build output. "Which go forward": a `kind: many` row. Rounds are `<name>_r<N>`: a saved round retires the earlier ones' files; any other picker Matt is done with: **retire X**; a retired name is refused (`docs/picks.md`). *picks saved <time>*: read the choices, never ask Matt.
 
 ## Reading a report
 

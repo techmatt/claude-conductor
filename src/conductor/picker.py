@@ -88,6 +88,10 @@ class Server:
         """Serve the manifest `ref` names and open its page; the URL. A bad manifest
         raises ValueError, a server that cannot start OSError, before anything is logged."""
         manifest = picks.load_manifest(self.cfg, ref)
+        # Retiring deleted its untracked images, so a manifest that stayed shows broken tiles.
+        if manifest.name in picks.retired(self.log):
+            raise ValueError(f"pick {manifest.ref}: the picker {manifest.name!r} is retired and its images "
+                             "are gone; give a new round a name of its own")
         # A name is a URL and a choices file: two manifests sharing one would swap pages
         # and overwrite each other's choices, so the second is refused.
         served = self.entries.get(manifest.name)

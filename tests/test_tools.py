@@ -120,6 +120,15 @@ def test_a_project_with_no_tools_shows_no_bar(env, qapp):
     assert panel.tool_bar.isHidden() and not panel.tool_buttons
 
 
+def test_a_failing_tool_stop_keeps_the_stop_event(env, monkeypatch):
+    def boom():
+        raise PermissionError("tool-demo.json is held")
+    monkeypatch.setattr(env.d.tools, "stop_all", boom)
+    env.d._log_stop("signal")
+    assert "tool-demo.json is held" in env.events("warning")[-1].detail["note"]
+    assert env.events("daemon_stop")[-1].detail["reason"] == "signal"
+
+
 def test_tool_refusals(env):
     for n, text in enumerate(["tool: nope", "tool: a b", "tool:"]):
         send(env, text, f"t{n}")

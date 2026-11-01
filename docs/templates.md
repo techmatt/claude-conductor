@@ -52,7 +52,7 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   can safely go, under the project's storage policy (`claude-ai-new-project.md`, *Storage*):
   delete what is cheaply rebuilt or clearly obsolete, move what is expensive or
   irreplaceable but not needed day to day into `archive\` under the project's Drive
-  home, never delete anything hand-made; history rewrites and other destructive calls
+  home, never delete anything hand-made, and only move, never delete, anything in a Drive home; history rewrites and other destructive calls
   go under **Deferred**. The text overrides the preamble's main-checkout rule only for
   deleting untracked, cheaply rebuilt files there, and requires links (Drive junctions,
   `shared` links) to be removed as links before any recursive delete. At launch,

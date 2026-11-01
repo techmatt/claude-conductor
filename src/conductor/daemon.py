@@ -330,7 +330,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
 
     def _log_stop(self, reason: str, **extra) -> None:
         """A real stop, never a self-restart: a tool outlives only that."""
-        self.tools.stop_all()
+        try:
+            self.tools.stop_all()
+        except Exception as exc:    # noqa: BLE001 - a tool never costs the stop event
+            self.log.append("warning", note=f"stopping the project's tools failed: {exc!r}")
         self.log.append("daemon_stop", reason=reason, running=sorted(self.runs), staging=sorted(self.stages),
                         note="executors keep running; the next start adopts them", **extra)
 

@@ -17,7 +17,7 @@ from .util import FrontMatterError, read_text, split_front_matter
 REQUEST_WAIT_SECONDS = 60.0  # how long after request.md appears its missing targets are waited for
 # A request whose every target is identical to HEAD waits this long after request.md for a
 # changed copy: the bridge can land a target's content after the call that wrote it returned.
-SAME_WAIT_SECONDS = 10.0
+SAME_WAIT_SECONDS = 30.0
 FRESH_SECONDS = 2.0       # a request.md this young that does not parse may still be being written
 FAILED_SUFFIX = ".failed"
 STALE_SECONDS = 3600.0    # a request folder with no request.md, untouched this long, moves to requests/stale/

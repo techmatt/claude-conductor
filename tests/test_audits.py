@@ -103,6 +103,7 @@ def test_disk_cleanup_is_handed_conductors_measurements(env):
     env.tick_until(lambda: env.finished("code/001_disk"))
     text = prompt(env, "001_disk")
     assert "Disk space cleanup of `code`" in text and "{{" not in text
+    assert "may only\nbe moved, never deleted" in text and "Outside a Drive home, delete" in text
     assert "| Control folder | Size |" in text and "`code__000_old.log` 4.9 KB" in text
     assert f"Worktrees of `code`: `{env.worktree('x').parent}`" in text
     assert "`001_disk`: live (this item's own working directory)" in text

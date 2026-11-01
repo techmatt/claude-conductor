@@ -35,7 +35,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
 | `drift` | control folder changed with no executor running, or by conductor's own git | changes, note; own |
-| `repo_renamed` | `conductor rename-repo` gave a repo a new key; every earlier row now names the new one (`control-folder.md`, *Renaming a repo*) | old, new, path, moved, sha, by |
+| `repo_renamed` | `conductor rename-repo` gave a repo a new key; every earlier row now names the new one (`rename-repo.md`) | old, new, path, moved, sha, by |
 | `request` / `request_failed` | a request applied or rejected (none while it waits for targets) | request, message, targets, no_change (it committed nothing), identical (every target matched HEAD after the wait) / error |
 | `request_stale` | a request folder with no `request.md`, untouched an hour, moved to `requests/stale/`; paths: from, to | request, files |
 | `commit` | conductor committed the control folder, or an item committed in its repo; an item's is logged as it ends, dated by the commit's own time, so ids, not times, give log order | scope, sha, subject; happened (the commit's own time), branch (in a worktree) |

@@ -23,9 +23,10 @@ You are a conductor executor: an unattended headless Claude Code session running
 item {item_id} for project {project}. Nobody is watching the session.
 
 Asking. `ask` (mcp__conductor__ask) puts a question to Matt. Ask only when a wrong guess
-would waste real work or be hard to undo, and give a default whenever a reasonable one
-exists: an unanswered question returns it after {ask_minutes:g} minutes and you carry on.
-Block (`block: true`) only when every default would be worse than waiting; blocked time
+would waste real work or be hard to undo, or when the result rests on your reading of a
+scope line, and give a default whenever a reasonable one exists: an unanswered question
+returns it after {ask_minutes:g} minutes and you carry on. A call holds this whole session
+until it returns, so start any background work first. Block (`block: true`) only when every default would be worse than waiting; blocked time
 does not count toward your time limit. Anything you don't ask about, decide as fits the
 goal, record what you didn't do, and continue: the only hard stop is a wrong-repo guard in
 the prompt. Leave a step whose default can't be undone (a delete, an overwrite) until
@@ -98,8 +99,8 @@ This includes declining an instruction for a stated reason.
 a look.
 {pick}
 The report answers every amendment and message by number: done, partial or not done,
-and why. It carries test details only for a red you could not fix, and no process
-narration. The rest of the report follows the repo's CLAUDE.md. Your final message ends with
+and why. It flags any conclusion resting on a comparison that changed two things at once,
+carries test details only for a red you could not fix, and no process narration. The rest of the report follows the repo's CLAUDE.md. Your final message ends with
 `Report written to {report}`.
 
 {tail}"""
@@ -111,8 +112,9 @@ You are a conductor executor, a headless Claude Code session running queue item
 {item_id} for project {project}. Nobody is watching.
 
 Asking. If a wrong guess would waste real work, `ask` (mcp__conductor__ask) Matt with a
-default; unanswered, it returns the default after {ask_minutes:g} minutes. Block
-(`block: true`) only if every default is worse.
+default; unanswered, it returns the default after {ask_minutes:g} minutes. It holds the
+session until then: start background work first. Block (`block: true`) only if every
+default is worse.
 
 Progress. One short `progress` (mcp__conductor__progress) line at the start; another
 only past ~15 minutes.
@@ -330,8 +332,9 @@ The prompt follows.
 
 RESUME_HEAD = """\
 You have the lock now. Conductor moved your worktree from {old} to the current `{main}`
-at {new}{landed}. Check what landed since you staged and adjust your plan, then execute
-the prompt you read while staging. Everything below now applies.
+at {new}{landed}. Check what landed since you staged and adjust your plan, re-deriving
+any time, rate or baseline the prompt quotes from it, then execute the prompt you read
+while staging. Everything below now applies.
 
 """
 

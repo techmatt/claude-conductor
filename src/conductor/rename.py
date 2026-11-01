@@ -1,6 +1,5 @@
 """`conductor rename-repo`: give a repo a new key everywhere conductor keys by it, and
-optionally move its checkout, in one step with the daemon stopped (docs/control-folder.md,
-*Renaming a repo*).
+optionally move its checkout, in one step with the daemon stopped (docs/rename-repo.md).
 
 Renamed: the `queue/ backlog/ running/ done/` folders and `receipts/` folders named for
 the repo; every file named `<old>__…` or `…__<old>__…` (reports, questions, picks and the

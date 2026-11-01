@@ -46,8 +46,10 @@ WAIT_FOR_EVERY = 50             # seconds between `wait_for`'s checks of its tar
 TOOL = {
     "name": TOOL_NAME,
     "description": (
-        "Ask Matt (via the project's planner) a question and wait for the answer. Ask only "
-        "when a wrong guess would waste real work or be hard to undo. Give `default` "
+        "Ask Matt (via the project's planner) a question and wait for the answer: the call holds "
+        "your session until it returns, so start any background work first. Ask only "
+        "when a wrong guess would waste real work or be hard to undo, or when the result rests "
+        "on your reading of a scope line. Give `default` "
         "whenever a reasonable one exists: if nobody answers within the default window "
         "(minutes, set by conductor) the call returns the default and you carry on with it. "
         "Set `block` true only when every default would be worse than waiting; a blocking "

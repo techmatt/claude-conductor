@@ -1,8 +1,10 @@
-"""The Repos tab's columns: Note takes the spare width, buttons line up by kind, dragged
-widths stay, and a staged head looks staged until it launches."""
+"""The Repos tab: Note takes the spare width, buttons line up by kind, dragged widths stay, a
+staged head looks staged until it launches; reviewed reports, the running row, the header."""
 
+import json
 from types import SimpleNamespace
 
+import pytest
 from conductor.app import model, theme
 from conductor.app.model import Project
 from conductor.items import Item
@@ -114,3 +116,228 @@ def test_a_dropped_stage_says_it_launches_fresh(env, monkeypatch):
     env.d.log.append("stage", item="code/001_x", session_id="s2")    # staged again: no longer dropped
     assert p.snapshot().repos[0].stage_dropped == ""
     p.close()
+
+
+# ---------------------------------------------------------------- reviewed reports, the running row, the header
+def test_finished_items_keep_every_unreviewed_one(env):
+    from conductor import state
+    log = env.d.log
+    for n in range(1, 14):
+        log.append("finish", item=f"code/{n:03d}_x", status="done" if n % 2 else "partial", carry="none")
+    for n in range(3, 14):
+        log.append("reviewed", item=f"code/{n:03d}_x", status="done")
+    got, total = model.finished_items(state.scan(env.cfg, log), "code")
+    # The ten newest (013 … 004), then the older unreviewed ones (002, 001); 003 is reviewed.
+    assert total == 13
+    assert [f.name for f in got] == [f"{n:03d}_x" for n in range(13, 3, -1)] + ["002_x", "001_x"]
+    assert [f.name for f in got if not f.reviewed] == ["002_x", "001_x"]
+    p = Project(env.control)
+    [rs] = p.snapshot().repos
+    assert rs.unreviewed == 2 and rs.finished_total == 13
+    p.close()
+
+
+def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    env.queue("001_x", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/001_x"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    assert view.tabs.tabText(0) == "Repos (1 unreviewed)"
+    panel = view.repos_panel
+    row = panel._rows[("done", "code/001_x")]
+    assert row.text(1) == "done · unreviewed"
+    assert row.foreground(0).color().name() == theme.AMBER          # unreviewed: needs Matt
+    button = panel.tree.itemWidget(row, 4).button
+    button.click()
+    assert not button.isEnabled()
+    env.tick_until(lambda: env.events("reviewed"))
+    assert env.events("reviewed")[0].detail["by"] == "app"
+    win.refresh()
+    assert view.tabs.tabText(0) == "Repos"
+    row = panel._rows[("done", "code/001_x")]
+    assert row.text(1) == "done · reviewed" and set(panel.tree.itemWidget(row, 4).buttons) == {"Terminal"}
+    assert row.foreground(0).color().name() != theme.AMBER          # reviewed: no longer needs Matt
+    # Events: Activity by default; Advanced shows every kind.
+    ev = view.events_panel
+    assert not ev.advanced.isChecked()
+    activity = {e.kind for e in ev.model.rows}
+    assert "worktree" not in activity and {"start", "finish", "reviewed"} <= activity
+    ev.advanced.setChecked(True)
+    assert "worktree" in {e.kind for e in ev.model.rows}
+    win._quitting = True
+    win.close()
+
+
+def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, monkeypatch):
+    from conductor import procs
+    from conductor.app.window import MainWindow
+    from PySide6.QtCore import QUrl
+    from conductor.app.widgets import MessageDialog
+    env.queue("001_x", 'FAKE progress {"note": "reading", "eta": "5m"}\nFAKE until-message 30')
+    env.tick_until(lambda: env.events("progress"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    repos = view.repos_panel
+    row = repos._rows[("run", "code/001_x")]
+    assert row.text(3).startswith("reading (ETA 5m) · ")
+    # Nothing selected: the detail follows the running item, Conversation first.
+    detail, chat = repos.detail, repos.detail.conversation
+    assert detail.item == "code/001_x" and detail.tabs.currentWidget() is chat
+    assert chat.tell_btn.isEnabled() and chat.amend_btn.isEnabled()
+    assert [t.title for t in chat.turns] == ["Started", "Progress"]
+    tell = repos.tree.itemWidget(row, 4).button
+    assert tell.text() == "Tell…"
+    monkeypatch.setattr(MessageDialog, "exec", lambda d: (d.box.setPlainText("finish now\nplease"), 1)[1])
+    chat.tell_btn.click()                                   # the same signal as the row's Tell…
+    env.tick_until(lambda: env.finished("code/001_x"))
+    assert env.events("tell")[0].detail["text"] == "finish now / please"
+    assert env.events("delivered")
+    win.refresh()
+    holder = repos.tree.itemWidget(repos._rows[("done", "code/001_x")], 4)
+    assert set(holder.buttons) == {"Mark reviewed", "Terminal"}
+    # The reply sits under its tell; a finished item takes neither Tell nor Amend.
+    [msg] = [t for t in chat.turns if t.title.startswith("Message")]
+    assert msg.under[-1][0] == "reply" and "got it: finish now / please" in msg.under[-1][2]
+    assert "executor replied" in chat.view.toPlainText() and chat.turns[-1].report
+    assert not chat.tell_btn.isEnabled() and not chat.amend_btn.isEnabled()
+    chat.view.anchorClicked.emit(QUrl("report"))
+    assert detail.tabs.currentWidget() is detail.text["Report"]
+    # A selection survives a rebuild (Mark reviewed changes the row's look).
+    repos.tree.setCurrentItem(repos._rows[("done", "code/001_x")])
+    assert repos.selected == "code/001_x"
+    holder.buttons["Mark reviewed"].click()
+    env.tick_until(lambda: env.events("reviewed"))
+    win.refresh()
+    assert repos.tree.currentItem() is repos._rows[("done", "code/001_x")] and detail.item == "code/001_x"
+    holder = repos.tree.itemWidget(repos._rows[("done", "code/001_x")], 4)
+    opened = []
+    monkeypatch.setattr(procs, "open_console", lambda argv, cwd: opened.append((argv, cwd)))
+    holder.buttons["Terminal"].click()
+    sid = env.finished("code/001_x").detail["session_id"]
+    assert opened and opened[0][0][-2:] == ["--resume", sid]
+    view.open_item("code/001_x")
+    trail = view.events_panel.trail
+    assert trail.open_btn.isEnabled() and trail.session_id() == sid
+    trail.show_event(env.events("daemon_start")[0])         # not an item: nothing to open
+    assert not trail.open_btn.isEnabled()
+    win._quitting = True
+    win.close()
+
+
+def test_outline_pinned_and_requested_from_the_conversation(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    outline = [{"title": "Read", "eta": "10:40am", "done": True}, {"title": "Re-cut images", "eta": "11:05am"},
+               {"title": "Report", "eta": "11:20am"}]
+    env.queue("001_o", f"FAKE progress {json.dumps({'outline': outline})}\n"
+                       f"FAKE reply-with 30 {json.dumps({'outline': outline[:2] + [dict(outline[2], eta='11:30am')]})}")
+    env.tick_until(lambda: env.events("progress"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    chat = view.repos_panel.detail.conversation
+    assert chat.outline_btn.isEnabled() and chat.pin.isVisibleTo(chat)
+    pin = chat.pin.text()
+    assert "1/3 done" in pin and "✓" in pin and "<b>Re-cut images</b>" in pin and "· next" in pin
+    assert pin.index("Re-cut images") < pin.index("Report") and "11:20am" in pin
+    chat.outline_btn.click()
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\noutline: code/001_o\n"
+    env.tick_until(lambda: env.finished("code/001_o"))
+    win.refresh()
+    assert "11:30am" in chat.pin.text() and "11:20am" not in chat.pin.text()
+    assert not chat.outline_btn.isEnabled()
+    [req] = [t for t in chat.turns if t.title.startswith("Outline request")]
+    assert req.under[-1][0] == "reply" and "finish ~11:30am" in req.under[-1][2]
+    win._quitting = True
+    win.close()
+
+
+@pytest.mark.slow
+def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
+    from conductor.app.window import MainWindow
+    env.queue("001_old", "FAKE report done")
+    env.queue("002_new", "FAKE report done")
+    env.tick_until(lambda: env.finished("code/002_new"))
+    env.d.log.append("reviewed", item="code/001_old", status="done")
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    ev = view.events_panel
+    assert ev.current.isChecked() and ev.current.text() == "since checkpoint (none yet)"
+    everything = len(ev.model.rows)
+    view.new_checkpoint("session start")
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\ncheckpoint: session start\n"
+    env.tick_until(lambda: env.events("checkpoint"))
+    [cp] = env.events("checkpoint")
+    win.refresh()
+    # Events: from the checkpoint on by default (its own line and the warning for 002).
+    assert ev.current.text() == f"since checkpoint #{cp.id}"
+    assert [e.kind for e in ev.model.rows] == ["checkpoint", "warning"]
+    assert model.activity_text(ev.model.rows[0]) == f'new checkpoint #{cp.id} "session start" (by app)'
+    ev.current.setChecked(False)
+    assert len(ev.model.rows) == everything + 2
+    # Repos: 002 (unreviewed) is current; 001 sits in the collapsed Earlier group.
+    panel = view.repos_panel
+    group = panel._rows[("group", "code", "earlier")]
+    finished = panel._rows[("group", "code", "finished")]
+    assert ("done", "code/002_new") in panel._rows and ("done", "code/001_old") not in panel._rows
+    assert panel._rows[("old", "code/001_old")].parent() is group and not group.isExpanded()
+    assert panel._rows[("done", "code/002_new")].parent() is finished and finished.isExpanded()
+    assert group.text(0) == "Earlier checkpoints (1)" and group.text(1) == ""
+    assert finished.text(0) == "Finished since checkpoint (1 unreviewed)"
+    group.setExpanded(True)
+    finished.setExpanded(False)
+    env.d.log.append("reviewed", item="code/002_new", status="done")
+    win.refresh()                                      # a rebuild keeps each group as it was left
+    assert panel._rows[("group", "code", "earlier")].isExpanded()
+    assert not panel._rows[("group", "code", "finished")].isExpanded()
+    assert panel._rows[("group", "code", "finished")].text(0) == "Finished since checkpoint (1)"
+    assert f"Current: checkpoint #{cp.id}" in view.checkpoint_btn.toolTip()
+    win._quitting = True
+    win.close()
+
+
+def test_run_buttons_in_the_header(qapp, env, tmp_path, monkeypatch):
+    from conductor.app.window import MainWindow
+    toml = env.control / "conductor.toml"
+    toml.write_text(toml.read_text(encoding="utf-8") + '\n[run.game]\nrepo = "code"\ncommand = "x"\n'
+                    'url = "http://127.0.0.1:9/"\n', encoding="utf-8", newline="\n")
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    b = view.run_buttons["game"]
+    assert b.text() == "Run game ● down" and view.snap.targets == {"game": "down"}
+    assert view.stop_buttons["game"].isHidden()          # Stop shows only while it is up
+    b.click()
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\nrun: game\n"
+    sig.unlink()
+    monkeypatch.setattr(model.targets, "status", lambda *a: "up")
+    win.refresh()
+    s = view.stop_buttons["game"]
+    assert not s.isHidden() and s.text() == "Stop game"
+    s.click()
+    [sig] = (env.control / "signals").glob("app-*.signal")
+    assert sig.read_text(encoding="utf-8") == "by: app\nrun: game stop\n"
+    win._quitting = True
+    win.close()
+
+
+def test_repos_header_counts_unused_audit_notes(qapp, env, tmp_path):
+    from conductor.app import theme
+    from conductor.app.window import MainWindow
+    env.queue("001_a", "FAKE audit tidy the loader", audit="true")
+    env.tick_until(lambda: env.finished("code/001_a"))
+    win = MainWindow([env.control], settings=_settings(tmp_path), tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    assert [rs.audit_notes for rs in view.snap.repos] == [1]
+    assert any(head.endswith(" · audit pending: 1 audit note") for _, head, _, _ in view.repos_panel._plan(view.snap))
+    top = view.repos_panel._rows[("repo", "code")]
+    assert top.foreground(3).color().name().lower() == theme.AMBER.lower()
+    win._quitting = True
+    win.close()

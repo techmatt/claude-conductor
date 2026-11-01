@@ -17,6 +17,7 @@ Gaps nobody plans to fix unless they bite. Each says what would change that. A l
 
 ## Executors
 
+- **`ask` holds its session** (65). A `poll: true` form would need the daemon to take over the default deadline, which only the server's waiting call applies; the preamble says to start background work first (`questions.md`).
 - **Messages during a subagent.** A message reaches an executor only after one of the lead's own tool calls ends (an `ask` hands back for one, 58). During a subagent or Workflow call, an idle wait or at the run's end it is logged undelivered. Fallback: stream into `-p --input-format stream-json` stdin (`executors.md`).
 - **`ask X` after transcript pruning.** It needs the original's transcript, which Claude Code prunes after `cleanupPeriodDays` (30 by default); then it fails red at launch. `report_changed` checks only reports reviewed since 32 (no hashes before).
 - **A reply is positional.** It is the first `progress` line after a delivery, so a milestone posted first shows as the reply. If that misfires, the preamble could ask for `re #N`.
