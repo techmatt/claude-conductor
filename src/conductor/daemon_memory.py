@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from . import load as load_mod
 from . import memory, procs, talk
 from .util import parse_stamp
 
@@ -24,6 +25,11 @@ MEMORY_TELLS = {
 
 WRITING_SECONDS = 90            # a tool that wrote this recently is still at work (`still_writing`)
 WRITING_SAMPLES = 3             # or this many samples, on a box sampling more slowly
+
+LOAD_SAMPLES = 3                # samples in a row under `load.FREE_THREADS` before a warning: never one spike
+LOAD_TELL = ("Conductor: the box has {free:g} hardware threads free, under the {keep} the load budget leaves ({load}). "
+             "If that is your work, cut its threads. Either way a rate or timing read now is inflated: "
+             "don't set a budget from it.")
 
 
 class MemoryMixin:
@@ -86,6 +92,26 @@ class MemoryMixin:
         self._beat()
         if self.mem_level != was:
             self._memory_changed(was, rec, trees)
+        self._check_load(load)
+
+    def _check_load(self, load: dict | None) -> None:
+        """Short of threads for `LOAD_SAMPLES` samples: a `load_high` event (it toasts) and a
+        message to each running item, once per item, so rates aren't read under the load."""
+        short = load is not None and load_mod.free_threads(load) < load_mod.FREE_THREADS
+        self._load_short = self._load_short + 1 if short else 0
+        if self._load_short < LOAD_SAMPLES:
+            return
+        items = [i for i, run in self.runs.items()
+                 if run.rec.get("phase", "exec") == "exec" and not run.exited() and i not in self.load_told]
+        if not items:
+            return
+        free = load_mod.free_threads(load)
+        self.log.append("load_high", free=free, keep=load_mod.FREE_THREADS, items=items, load=load)
+        text = LOAD_TELL.format(free=free, keep=load_mod.FREE_THREADS, load=load_mod.text(load))
+        for item_id in items:
+            ev = self.log.append("tell", item=item_id, text=text, by="conductor")
+            talk.post(self.cfg.control, item_id, ev.id, text, "conductor")
+            self.load_told.add(item_id)
 
     def still_writing(self, item_id: str) -> bool:
         """Has a tool of this item written anything lately? From the samples, so a box with

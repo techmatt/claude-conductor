@@ -32,6 +32,7 @@ from .util import FrontMatterError, read_text, split_front_matter, stamp
 
 ANSWER_SETTLE_SECONDS = 1.0       # an answer file is read once it stops changing
 OVERRIDES_RE = re.compile(r"^[\s*_#`]*default overrides prompt:\s*(.+)$", re.IGNORECASE)
+AMENDMENT_RE = re.compile(r"\bamend(?:ment|ed)s?\b", re.IGNORECASE)
 PLAN_HEAD_RE = re.compile(r"^[#*_\s]*questions[*_\s]*:[*_\s]*(.*)$", re.IGNORECASE)     # a stage plan's `Questions:`
 PLAN_BULLET_RE = re.compile(r"^(?:[-*•]|\d+[.)])\s+(.+)$")
 PLAN_QUESTIONS = 10               # at most this many reach the inbox, each cut to PLAN_QUESTION_CHARS
@@ -81,6 +82,13 @@ class Question:
 
 def qdir(control: Path) -> Path:
     return control / "questions"
+
+
+def unflagged_amendment(question: str, default: str) -> bool:
+    """Does the question or its default name an amendment, by number or in words, with no
+    `default overrides prompt:` first line?"""
+    first = question.strip().splitlines()[0]
+    return bool(AMENDMENT_RE.search(f"{question}\n{default}")) and not OVERRIDES_RE.match(first)
 
 
 def question_id(item: str, n: int) -> str:

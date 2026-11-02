@@ -15,7 +15,7 @@ from ..inbox import checkpoint_name
 from ..util import clock
 from . import actions, icon, status, theme
 from .events_panel import EventsPanel
-from .model import PRIORITY, Project, Snapshot, overall
+from .model import PRIORITY, Project, Snapshot, overall, restart_due
 from .proposed_panel import ProposedPanel
 from .questions_panel import QuestionsPanel
 from .repos_panel import ReposPanel
@@ -108,6 +108,13 @@ class ProjectView(QWidget):
         self.dismiss_btn.setVisible(False)
         self.dismiss_btn.clicked.connect(self.dismiss_rejected)
         head.addWidget(self.dismiss_btn)
+        # Offered once every open project is idle and a daemon runs newer code (`MainWindow.refresh`).
+        self.restart_btn = QPushButton("Restart all")
+        self.restart_btn.setVisible(False)
+        self.restart_btn.setToolTip("Conductor's code changed: restart the app and every daemon. "
+                                    "`tools/restart_all.py --if-idle`, which refuses if anything has become active")
+        self.restart_btn.clicked.connect(self.restart_all)
+        head.addWidget(self.restart_btn)
         # One Run button per `[run.<name>]` target, rebuilt when the targets change, each
         # with a Stop button beside it, shown while the target is up or starting.
         self.run_bar = QHBoxLayout()
@@ -292,6 +299,11 @@ class ProjectView(QWidget):
                 return
         path = actions.checkpoint(self.project.control, label)
         self.notify(f"new checkpoint: wrote signals/{path.name}; the daemon logs it")
+
+    def restart_all(self) -> None:
+        actions.restart_all(self.project.control)
+        self.restart_btn.setEnabled(False)
+        self.notify("restart all: started; it refuses if anything is active (.conductor/restart.out.log)")
 
     def dismiss_rejected(self) -> None:
         path = actions.ack_invalid(self.project.control)
@@ -490,6 +502,9 @@ class MainWindow(QMainWindow):
             idx = self.tabs.indexOf(view)
             self.tabs.setTabIcon(idx, state_icon(status.summarize([self._good[folder]]).kind))
         self._good = {f: s for f, s in self._good.items() if f in self.views}
+        due = restart_due(self._good.values())
+        for view in self.views.values():
+            view.restart_btn.setVisible(due)
         self.state = overall(states)
         self.status = status.summarize(list(self._good.values()))
         if self.status.kind == "running":

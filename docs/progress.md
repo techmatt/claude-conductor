@@ -3,7 +3,7 @@
 **Progress.** The executor's second tool, `progress` (`mcp__conductor__progress`):
 
 ```
-progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm, 25m); done/remaining: numbers
+progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm (by rate), 25m (to the cap)); done/remaining: numbers
                                                     # outline: [{title, eta, done}], see Outline
 ```
 
@@ -32,6 +32,11 @@ The **request** is `outline: <item>` (the app's **Outline?**, `conductor outline
 <item>`): a `tell` of the fixed text `talk.OUTLINE_REQUEST` ("Post an updated outline
 now: …"), logged with `outline_request: true`, refused exactly as a tell is, and
 delivered like one, so its reply tag pairs it with the outline it produced.
+
+**ETA source** (68). The preamble has an `eta` name its source in brackets after the time,
+`5:40pm (by rate)` or `7:10pm (to the cap)` (aicomplete 068's counted to the cap and read 80
+minutes late); `nightshift.parse_eta` ignores the brackets. A frozen band that misses its target
+posts the gap in SE and the rule being applied before any change.
 
 **ETA drift** (61). A running item's `eta` can stop meaning anything: aicomplete 009's
 stayed 6:20am until 3:11am, and it finished 3:38am. `inbox.eta_drift` warns when the
@@ -97,6 +102,8 @@ run made 20 such calls of 1–10 minutes, about 113 minutes in all. Two parts:
   `foreground_seconds` (default 60) with `run_in_background`, wait on it with `wait_for`
   (`executors.md`; before 61, polls of at most that long), and don't end the turn to wait
   (an idle session takes no message).
+  The full form adds that a background call's `timeout` is a kill limit, not a wait, so a
+  long build starts detached and is waited on (aicomplete 069 lost one to a 59 s timeout).
 - A **PreToolUse hook** on `Bash|PowerShell` in the same `--settings` file:
   `<python> -m conductor.talk pre --cap <foreground_seconds> --background=<glob> …`.
   A call already `run_in_background` is left alone. A command matching one of the

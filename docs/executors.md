@@ -79,8 +79,8 @@ no port.
 - **A skip binds.** A skip in the prompt, or one Matt sends by message, stands: the goal
   decides only routes the prompt didn't rule out. An executor that thinks a skipped route
   is best says so in its report or asks; its own question default never un-skips it.
-- **Question defaults.** A default may not contradict a prompt line unless the question's
-  first line says `default overrides prompt: <line>` (`questions.md`).
+- **Question defaults.** A default may not contradict a prompt line or amendment unless the
+  question's first line says `default overrides prompt: <line>` (`questions.md`).
 - **Scratch** goes in `out/` or another git-ignored folder in the working directory, never
   `%TEMP%` or anywhere outside it.
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
@@ -88,7 +88,9 @@ no port.
   most 2 heavy subagents (builds, sims, browsers) at once; thread counts halve while another
   item runs alongside. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
   no constraint": light read-only reviewers and verifiers don't count
-  against the 2, but run in batches per dimension, about 10 in all. A rule, not enforced: the planner sees it broken on *Now*'s load line (`memory.md`).
+  against the 2, but run in batches per dimension. A Workflow runs at most 10 agents (or the
+  prompt's number), finders and verifiers both, a hard count set before launch (68; `ultracode.md`).
+  A rule, not enforced: the planner sees it broken on *Now*'s load line, and under 4 threads free `load_high` warns (`memory.md`).
   The full preamble gives the PowerShell form, `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`.
 - **Global Claude config.** Editing `~/.claude` is allowed when it's a good idea; each
   edit is named in the report, with its reason.

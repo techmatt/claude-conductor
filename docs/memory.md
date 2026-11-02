@@ -28,6 +28,13 @@ aicomplete/034 41%, python.exe 20% (outside)`), and carried by the `memory` and
 `memory_critical` events. Found live: aicomplete 030's benchmark lost its timings to a
 `pytest -m ""` from another session, and 034 made the box lag, neither visible anywhere.
 
+**Load warning** (68). With an item running and under 4 hardware threads free
+(`load.FREE_THREADS`; busy percent of all threads) for 3 samples in a row (`LOAD_SAMPLES`,
+~90s), the daemon logs `load_high`, which toasts, and messages each running item, once per
+item: cut its threads if the load is its own, and set no budget from a rate read now
+(aicomplete 068: rates read under load inflated a budget). The cause may be outside the
+items; the message doesn't assume. Memory sampling off means no warning.
+
 **Writes.** Each tree also sums the bytes its tools have written (`Tree.writes`, Windows
 I/O counters, so pipes count), leaving out the executor, shells, browsers and conductor's
 own server and hooks, which tick over while idle. `still_writing` says whether that moved

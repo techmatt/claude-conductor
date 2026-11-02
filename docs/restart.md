@@ -89,6 +89,12 @@ spawn, no ready file; a hung new process is killed) gets one `warning` naming
 minutes (`RESTART_RETRY_SECONDS`). A daemon started in a terminal hands that terminal
 back when it restarts itself. The app's Start/Stop and "restart all" are unchanged.
 
+The app doesn't restart itself. Once a daemon runs other code than the app and no open
+project has a running or staged item or an open question (a design question holds nothing up),
+every project header shows **Restart all** (68): `tools/restart_all.py --if-idle`, detached,
+output in `.conductor/restart.out.log`. It rechecks every control folder and refuses if
+anything is active, so the button can't interrupt an item in a project the app doesn't have open.
+
 ## Platform notes
 
 Windows-first, cross-platform by construction. Process handling specific to Windows

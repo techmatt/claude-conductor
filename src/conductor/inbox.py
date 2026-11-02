@@ -362,6 +362,9 @@ def describe(ev: Event) -> str:
                 text += f"; {load.text(d['load'])}"
             if d.get("action"):
                 text += f" — {d['action']}"
+        case "load_high":
+            text = (f"{d.get('free')} hardware threads free, under the {d.get('keep')} kept: "
+                    f"{load.text(d.get('load') or {})}; told {', '.join(d.get('items', []))}")
         case "reaped":
             procs_ = d.get("processes", [])
             text = (f"{who} left {len(procs_)} process(es) running in its worktree ({d.get('context')}); killed: "

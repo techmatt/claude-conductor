@@ -229,8 +229,9 @@ def spent_hours(log: EventLog, window: tuple[datetime, datetime], at: datetime |
 def parse_eta(text: str | None, posted: datetime) -> datetime | None:
     """A progress line's `eta` as a time: a clock time (`5:40pm`, `~11:20am`, `17:40`) on the
     day it was posted (the next day if that is well before the posting), or a duration from
-    the posting (`25m`, `1h`, `1h30m`). None for anything else."""
-    t = str(text or "").strip().lower().lstrip("~").replace(" ", "")
+    the posting (`25m`, `1h`, `1h30m`); a bracketed source after it (`5:40pm (by rate)`) is
+    ignored. None for anything else."""
+    t = str(text or "").split("(")[0].strip().lower().lstrip("~").replace(" ", "")
     if m := re.fullmatch(r"(\d{1,2})(?::(\d{2}))?(am|pm)", t):
         hour, minute = int(m.group(1)) % 12 + (12 if m.group(3) == "pm" else 0), int(m.group(2) or 0)
     elif (m := re.fullmatch(r"(\d{1,2}):(\d{2})", t)) and int(m.group(1)) < 24:

@@ -2,6 +2,7 @@
 
     uv run python tools/restart_all.py --check     # what a restart would interrupt; exit 1 if anything
     uv run python tools/restart_all.py             # restart
+    uv run python tools/restart_all.py --if-idle   # restart unless --check would exit 1 (the app's button)
 
 The control folders are `*-control` folders beside this repo that hold a `conductor.toml`.
 `--check` lists, per live daemon, its running and staged items and open questions, and
@@ -65,7 +66,7 @@ def activity(control: Path) -> list[str]:
     view = state.scan(cfg, EventLog(cfg.events_db))
     lines = [f"running: {i}" for i in view.running] + [f"staged: {i}" for i in view.staged]
     lines += [f"open question {q.id}" + (" (blocking)" if q.block else "")
-              for q in questions.scan(control) if q.is_open]
+              for q in questions.scan(control) if q.is_open and not q.design]     # a design question holds nothing up
     return lines
 
 
@@ -121,6 +122,9 @@ def main(argv: list[str]) -> int:
     running_apps = apps()
     if "--check" in argv:
         return check(live, running_apps)
+    if "--if-idle" in argv and check(live, running_apps):
+        print("not restarting: something is active")
+        return 1
     for control in live:
         restart_daemon(control)
     restart_app(running_apps, all_controls[-1])

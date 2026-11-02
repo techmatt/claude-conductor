@@ -39,6 +39,12 @@ def app_code() -> str | None:
     return code_version()
 
 
+def restart_due(snaps) -> bool:
+    """A daemon runs other code than this app, and nothing "restart all" refuses on is active."""
+    snaps = list(snaps)
+    return any(s.code_differs for s in snaps) and not any(s.active for s in snaps)
+
+
 def ask_how(d: dict) -> str:
     """How an `ask` event's question stands, in a few words."""
     if d.get("design"):
@@ -208,6 +214,7 @@ class Snapshot:
     paused: dict[str, Event] = field(default_factory=dict)     # repo → its `pause` event (`View.paused`)
     tools: dict[str, str] = field(default_factory=dict)        # tool → running | down (`targets.tool_status`)
     code_differs: bool = False                                 # the daemon runs other code than this app
+    active: bool = False                                       # what "restart all" refuses on: running, staged, a question
 
     @property
     def to_pick(self) -> int:
@@ -544,7 +551,8 @@ class Project:
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
                         view.checkpoint, pending, mem, pilot, live_invalids(self.log), list(cfg.repos), view.paused,
                         {name: targets.tool_status(cfg, name) for name in cfg.tools},
-                        daemon.alive and self._daemon_code() not in (None, app_code()))
+                        daemon.alive and self._daemon_code() not in (None, app_code()),
+                        bool(view.running or view.staged or [q for q in open_qs if not q.design]))
 
     def _daemon_code(self) -> str | None:
         """The code version the newest daemon started on, when it said."""

@@ -15,6 +15,7 @@ import psutil
 TOP = 4                 # consumers kept per sample
 MIN_PERCENT = 1.0       # a consumer under this is not named
 MIN_SECONDS = 1.0       # a sample sooner than this (a rising memory level) repeats the last one
+FREE_THREADS = 4        # the preamble's load budget: an item leaves this many hardware threads free
 
 
 class Sampler:
@@ -50,6 +51,11 @@ class Sampler:
         self.last = {"cpu": round(busy), "top": [{"who": who, "cpu": round(pct), "item": item}
                                                  for pct, (who, item) in rows[:TOP] if pct >= MIN_PERCENT]}
         return self.last
+
+
+def free_threads(load: dict) -> float:
+    """Hardware threads a sample left idle."""
+    return round((psutil.cpu_count() or 1) * (100 - load.get("cpu", 0)) / 100, 1)
 
 
 def text(load: dict) -> str:

@@ -68,7 +68,8 @@ Two scripts in `tools/` serve the maintenance pass (`CLEANUP.md`) and any sessio
 item through queue and merge, `session: start`, a request) and then renders the app on
 it offscreen, refusing while the sandbox's own daemon runs.
 
-`uv run python tools/restart_all.py [--check]` is "restart all" (`CLAUDE.md`). It covers every
+`uv run python tools/restart_all.py [--check | --if-idle]` is "restart all" (`CLAUDE.md`). `--if-idle`
+(the app's button, `app.md`) restarts unless `--check` would exit 1. It covers every
 live daemon of the `*-control` folders beside this repo, and the app. `--check` lists what a
 restart would interrupt (running or staged items, open questions) and exits 1 if anything
 is active. Without it, each daemon is stopped by `stop: daemon`, waited for and started

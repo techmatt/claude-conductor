@@ -41,7 +41,11 @@ Options:
   unanswered 1am ask reversed the prompt's "skip it"). A flagged question with a default
   is marked: `overrides_prompt` on its `ask` and later events, bold on its inbox line and
   its `ask` and `default` lines, in its toast, and in an answer's receipt. Conductor can't
-  see an unflagged one: the mark is the executor's to make, and a skip still binds.
+  judge a contradiction: the mark is the executor's to make, and a skip still binds. So
+  since 68 a question or default naming an amendment (`amendment`, `amended`, by number or
+  in words), with a default it could take and no flag, is refused once with a reminder to
+  check; the same call again goes through (aicomplete 068's default crossed an amendment
+  unflagged and the planner corrected it at 12:14am).
 - **Block.** `block: true`, or no default at all: the call waits until answered,
   however long. That time does not count toward `max_hours`.
 - **Design** (67). `design: true`, which needs a default and refuses `block`, is for a

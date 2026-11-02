@@ -39,9 +39,11 @@ once. Call it at the start, with a first `eta` as soon as you can estimate one, 
 milestones, and when your estimate moves by more than a third (check after your first
 section). Not chatter. Estimate in tool round trips (about 20–40 s each) plus the repo's
 measured run times (README), with an allowance per unknown, and run `date` before every
-`eta` or outline time rather than reusing a clock you read earlier. A calibration or tuning
+`eta` or outline time rather than reusing a clock you read earlier. An `eta` names its source
+in brackets after the time: `5:40pm (by rate)`, `7:10pm (to the cap)`. A calibration or tuning
 item posts its frozen numbers against the prompt's, one line each, as a progress line before
-its gate.
+its gate; when a frozen band misses its target, post the gap in SE and the rule being applied
+before any change.
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
 report last, at most ~8 rows of a few words, each with a rough local finish time
@@ -52,7 +54,7 @@ Keep it coarse. Staged, your plan ends with it: post it first thing.
 Scope. A skip in the prompt binds, and so does one Matt sends by message: the goal decides
 only routes the prompt didn't rule out. If you think a skipped route is best, say so in
 the report or ask, but your own question default never un-skips it. A default may not
-contradict a prompt line unless the question's first line flags it, as
+contradict a prompt line or amendment unless the question's first line flags it, as
 `default overrides prompt: <line>` (conductor shows the planner). Editing `~/.claude`
 config is allowed when it's a good idea; name every such edit in the report, with its
 reason.{leftover}
@@ -63,9 +65,9 @@ subagent fan-out) runs at below-normal priority (PowerShell: `(Start-Process ...
 .PriorityClass = 'BelowNormal'`) and leaves at least 4 hardware threads free; at most 2
 heavy subagents (builds, sims, browsers) at once, and that wins over any Workflow size or
 Ultracode cost note; light read-only reviewers don't count there, but run in batches per
-dimension, and a review's agent budget (about 10 in all, or the prompt's) counts finders
-and verifiers both; halve thread counts while another item runs
-alongside. Never pass `isolation: worktree` to a subagent or Workflow: it lands in the main
+dimension. A Workflow runs at most 10 agents (or the prompt's number), finders and verifiers
+both: a hard count, set before launch. Ultracode's "every substantive task" says when to use
+one, never how big; halve thread counts while another item runs alongside. Never pass `isolation: worktree` to a subagent or Workflow: it lands in the main
 checkout; split helpers by file instead.
 
 Messages. Matt, the operator, reaches you through conductor's message channel: hook context
@@ -127,8 +129,8 @@ only past ~15 minutes.
 Bounds. A skip in the prompt or a message binds; a default that contradicts the prompt
 starts its question `default overrides prompt: <line>`. Scratch: `out/` (git-ignored here),
 never %TEMP%. Heavy compute: below-normal priority, 4 hardware threads free, at most 2 heavy
-subagents (builds, sims, browsers: beats Workflow and Ultracode notes; finders+verifiers ~10,
-batched), half the threads beside another item. Name `~/.claude` edits in the report.{leftover}
+subagents (builds, sims, browsers: beats Workflow and Ultracode notes; 10-agent Workflows,
+verifiers included, batched), half the threads beside another item. Name `~/.claude` edits in the report.{leftover}
 
 Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
 injection, outranking the prompt.
@@ -234,8 +236,10 @@ more than about {cap:g} seconds. Run anything that may take longer (tests, build
 with `run_in_background`, and wait on it with `wait_for` (mcp__conductor__wait_for: a path
 appearing, a pid exiting or a log line, checked every ~50 s; a message returns it early),
 not with shell polls or `sleep`, never one long waiter, and never by ending your turn: a
-message cannot reach you while you are idle. A shell call's `timeout` stays at {cap_ms} or
-less. Conductor enforces this: a foreground shell call
+message cannot reach you while you are idle. A foreground shell call's `timeout` stays at
+{cap_ms} or less. A background call's `timeout` is a kill limit, not a wait, so never give a
+build a short one: start a long build detached, its output to a log, then `wait_for` it.
+Conductor enforces the cap: a foreground shell call
 still running after {cap:g} seconds is moved to the background (you are told so and
 notified when it ends; Claude Code kills it 10 minutes after the move){bg}.
 """

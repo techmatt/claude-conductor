@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import items, procs, questions
+from ..session import CONDUCTOR_ROOT
 
 BY = "app"
 _counter = itertools.count(1)
@@ -168,6 +169,13 @@ def start_daemon(control: Path):
     """Spawn the daemon detached; its output goes to `.conductor/daemon.out.log`."""
     control = Path(control).resolve()
     return procs.spawn_daemon(control, control / ".conductor" / "daemon.out.log")
+
+
+def restart_all(control: Path):
+    """`tools/restart_all.py --if-idle`, detached: it stops this app. Output in `.conductor/restart.out.log`."""
+    log = Path(control).resolve() / ".conductor" / "restart.out.log"
+    return procs.spawn_detached([procs.console_python(), str(CONDUCTOR_ROOT / "tools" / "restart_all.py"), "--if-idle"],
+                                CONDUCTOR_ROOT, log)
 
 
 class AnswerError(ValueError):

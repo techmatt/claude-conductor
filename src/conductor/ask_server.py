@@ -55,7 +55,8 @@ TOOL = {
         "Set `block` true only when every default would be worse than waiting; a blocking "
         "call waits until answered, however long, and that time does not count toward your "
         "time limit. With no default the call blocks. If `default` contradicts a line of the "
-        "prompt, start `question` with the line `default overrides prompt: <that line>`. A "
+        "prompt or an amendment, start `question` with the line `default overrides prompt: "
+        "<that line>`; a question naming an amendment without it is refused once, to check. A "
         "message from Matt arriving while you "
         "wait returns the call early with the question still open: act on the message, then "
         "call `ask` with `resume` set to the question's id to wait for its answer again."
@@ -89,7 +90,8 @@ PROGRESS_TOOL = {
         "type": "object",
         "properties": {
             "note": {"type": "string", "description": "What is happening, one line."},
-            "eta": {"type": "string", "description": "When you expect to finish: a clock time (5:40pm) or a duration (25m)."},
+            "eta": {"type": "string", "description": ("When you expect to finish: a clock time (5:40pm) or a duration "
+                                                      "(25m), its source in brackets after it: 5:40pm (by rate), 7:10pm (to the cap).")},
             "done": {"type": "number", "description": "Units done so far, when the work has countable units."},
             "remaining": {"type": "number", "description": "Units still to do."},
             "outline": {
@@ -188,6 +190,7 @@ class Server:
         self._away: dict[str, float] = {}       # question id → seconds spent off the call, on a message
         self._away_since: dict[str, float] = {}
         self._running: list[str] | None = None  # what it last heard runs beside it
+        self._amend_checked: set[tuple] = set() # (question, default) already refused once (`_amendment_check`)
 
     def send(self, obj: dict) -> None:
         with self._lock:
@@ -297,6 +300,17 @@ class Server:
         questions.set_away(q, False)
         return q, None
 
+    def _amendment_check(self, question: str, default: str | None, block: bool) -> str | None:
+        """A takeable default beside a named amendment, unflagged, is refused once: only the
+        executor can tell a contradiction, so the same call again goes through."""
+        key = (question, default)
+        if block or default is None or key in self._amend_checked or not questions.unflagged_amendment(question, default):
+            return None
+        self._amend_checked.add(key)
+        return ("This question names an amendment and has no `default overrides prompt:` line. Check your default "
+                "against the amendment. If it contradicts it (a number or a line), start `question` with "
+                "`default overrides prompt: <that line>`; if it doesn't, make the same call again.")
+
     def ask(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
         if args.get("resume") is not None:
             q, why = self._resume(args["resume"])
@@ -318,6 +332,8 @@ class Server:
                 return "`block` and `design` must be true or false", True
             if design and (block or default is None):
                 return "`design` needs a `default` to carry on with, and no `block`", True
+            if why := self._amendment_check(question, default, block):
+                return why, True
             q = questions.create(self.control, self.item, question, options, default, block,
                                  self.default_minutes, self.session_id, design)
             if design:

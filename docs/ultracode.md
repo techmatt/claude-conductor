@@ -25,7 +25,10 @@ Workflow call needs no approval in an executor (`--dangerously-skip-permissions`
 the Workflow tool is present in every `-p` session; only the opt-in differs.
 
 **Fan-out.** The preamble's subagent rule wins over Workflow's and Ultracode's own notes: at most
-2 heavy subagents at once, light reviewers batched, about 10 in all (`executors.md`, *Load budget*).
+2 heavy subagents at once, light reviewers batched, and at most 10 agents per Workflow, finders and
+verifiers both, unless the prompt gives another number (`executors.md`, *Load budget*). "Every
+substantive task" decides when to use a workflow, never how big one is (aicomplete 068 ran 22
+agents against "about 10", ~800k tokens). The count is a preamble rule; conductor doesn't enforce it.
 
 **No `isolation: worktree`.** Claude Code puts an Agent or Workflow helper's worktree in
 the main checkout's `.claude/worktrees`, even from an item's worktree (aicomplete 040),
