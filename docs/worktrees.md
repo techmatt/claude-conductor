@@ -21,8 +21,9 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   removing a worktree never reaches into a shared folder.
 - **Merging.** When an item finishes `done` or `partial`, it waits in `running/` (phase
   `merge`) and is merged serially per repo, in finish order: **squash** the branch to
-  one commit on its fork point from `main` (subject `<repo>/<NNN_name>: <title>`, the
-  title being the item's first heading; the body lists the branch's commit subjects),
+  one commit on its fork point from `main` (subject `<repo>/<NNN_name>: <subject>` of the
+  branch's final commit, or the item's first heading with no commit to take it from: a title
+  goes stale, aicomplete 051's "Rules revision 21" on r22 code; the body lists the branch's commit subjects),
   rebase that one commit onto current `main` inside its worktree, fast-forward the main
   checkout, remove the worktree and the branch (`merge` with `squashed`, `worktree`
   events), then log `finish`. So `finish` means merged, a `depends_on` item never

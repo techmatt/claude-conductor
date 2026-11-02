@@ -1,6 +1,8 @@
 Self-audit of your own run of {{original}} in `{{repo}}`. Look back over that run, from
 what this session remembers and from your record named above (its prompt, report, run
-log, stage log, audit notes and events). Change nothing: this is a look back, not rework.
+log, stage log, audit notes, amendments and events). If the item was staged, its real
+prompt is `<name>.stage.prompt.md`: `<name>.prompt.md` then holds only the resume preamble.
+`<name>.amend.md` holds every amendment. Change nothing: this is a look back, not rework.
 
 Write audit notes to the audit notes file described above, about that run, not about
 this look back. Start the file with the line `Self-audit of {{original}}.`, then use its

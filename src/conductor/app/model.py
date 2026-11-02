@@ -7,6 +7,7 @@ through `actions.py`.
 
 from __future__ import annotations
 
+import functools
 import os
 import sqlite3
 import urllib.parse
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from .. import config as config_mod
 from .. import git, items, memory, nightshift, picks, questions, state, talk, targets
+from ..daemon_restart import code_version
 from ..events import RED_KINDS, Event, EventLog, live_invalids
 from ..executor import RunPaths, stored_log
 from ..inbox import checkpoint_name, describe, eta_drift, outline_line, outline_rows, progress_line, reply_to, slow_text
@@ -29,6 +31,19 @@ from .streamlog import TEXT_LIMIT, render_stream_json
 PRIORITY = ("red", "asking", "running", "idle")
 PHASES = {"exec": "running", "setup": "setting up", "merge": "merging", "concluding": "concluding", "done": "done"}
 FINISHED_SHOWN = 10           # finished items per repo in Repos (every unreviewed one besides)
+
+
+@functools.cache
+def app_code() -> str | None:
+    """The code version this app runs: read once, as the daemon reads its own."""
+    return code_version()
+
+
+def ask_how(d: dict) -> str:
+    """How an `ask` event's question stands, in a few words."""
+    if d.get("design"):
+        return f"design, held for Matt; default {d.get('default')!r} applied"
+    return "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
 
 
 def sqlite_uri(path: Path, mode: str = "ro") -> str:
@@ -192,6 +207,7 @@ class Snapshot:
     repo_names: list[str] = field(default_factory=list)        # every configured repo, for Pause/Resume
     paused: dict[str, Event] = field(default_factory=dict)     # repo → its `pause` event (`View.paused`)
     tools: dict[str, str] = field(default_factory=dict)        # tool → running | down (`targets.tool_status`)
+    code_differs: bool = False                                 # the daemon runs other code than this app
 
     @property
     def to_pick(self) -> int:
@@ -318,8 +334,7 @@ def activity_text(ev: Event) -> str:
         case "amend_refused":
             return f"amendment to {name} refused{by}: {d.get('reason')}"
         case "ask":
-            how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
-            return f"question asked by {name} ({how}): {d.get('text')}"
+            return f"question asked by {name} ({ask_how(d)}): {d.get('text')}"
         case "answer":
             return f"question answered{by}: {d.get('text')}"
         case "default":
@@ -528,7 +543,13 @@ class Project:
             pilot = (nightshift.autopilot(self.log), f"could not read the backlog: {exc}")
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
                         view.checkpoint, pending, mem, pilot, live_invalids(self.log), list(cfg.repos), view.paused,
-                        {name: targets.tool_status(cfg, name) for name in cfg.tools})
+                        {name: targets.tool_status(cfg, name) for name in cfg.tools},
+                        daemon.alive and self._daemon_code() not in (None, app_code()))
+
+    def _daemon_code(self) -> str | None:
+        """The code version the newest daemon started on, when it said."""
+        ev = self.log.last("daemon_start")
+        return ev.detail.get("code") if ev else None
 
     def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
         """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only
@@ -577,7 +598,7 @@ class Project:
         if not daemon.alive and (busy or counts[2][0]):
             # The header's daemon label says it is down: this says what waits on it.
             return "red", " · ".join(f"{n} {k}" for n, k in counts if n) + " with the daemon down"
-        if open_qs:
+        if open_qs := [q for q in open_qs if not q.design]:     # a design question holds nothing up
             return "asking", f"{len(open_qs)} open question(s)"
         if busy:
             return "running", " · ".join(f"{n} {k}" for n, k in counts[:2] if n)
@@ -690,7 +711,7 @@ def conversation(events: list[Event]) -> list[Turn]:
                                       else "waiting for delivery, after its next tool call"), "wait"
                 out.append(t)
             case "ask":
-                how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
+                how = ask_how(d)
                 text = str(d.get("text") or "")
                 if d.get("options"):
                     text += "\noptions: " + " / ".join(map(str, d["options"]))

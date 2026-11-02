@@ -181,7 +181,7 @@ class WatchMixin:
                 flags.append((f"eta:{item_id}:{posted.id}", "eta", item_id,
                               f"{item_id}: past its ETA {eta} (posted {clock(posted.ts)})"))
         for q in questions.scan(self.cfg.control):
-            if not q.is_open or q.item.split("/", 1)[0] in view.paused:
+            if not q.is_open or q.design or q.item.split("/", 1)[0] in view.paused:
                 continue
             waited = (at - parse_stamp(q.asked)).total_seconds()
             if waited >= self.cfg.watch_check_minutes * 60:

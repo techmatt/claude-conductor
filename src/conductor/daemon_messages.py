@@ -28,6 +28,8 @@ PAUSE_TEXT = ("From conductor: PAUSE. Matt has paused work in `{repo}`. Commit w
               "browser, test worker and server you started, then call `wait` (mcp__conductor__wait) again and "
               "again, doing nothing else, until a message from conductor says RESUME. Don't ask a question to "
               "wait and don't end the session: your time limit stops while you are paused.")
+DESIGN_ANSWER = ("Answer to your design question {id}, which you carried on past with the default ({default}):\n{text}\n"
+                 "Matt's call: an answer, not an amendment. Fit it in as your work allows; say in your report what it changed.")
 RESUME_TEXT = ("From conductor: RESUME. Matt has resumed work in `{repo}` after {paused}. Your time limit "
                "moved later by as much: conductor now stops this session at {deadline}. Move any end time of "
                "your own (a bug hunt's) by {paused} too, restart what you stopped, and carry on where you left off.")
@@ -42,7 +44,10 @@ class MessagesMixin:
             rel = self.cfg.rel(q.path)
             if ("ask", q.id) not in self.q_seen:
                 self._q_log("ask", q, [rel], text=q.summary(), block=q.block, default=q.default,
-                            deadline=q.deadline, deadline_clock=clock(q.deadline) if q.deadline else None)
+                            deadline=q.deadline, deadline_clock=clock(q.deadline) if q.deadline else None,
+                            **({"design": True} if q.design else {}))
+            if q.design and q.is_open and (text := questions.read_answer(q)) is not None:
+                self._answer_design(q, text)
             if q.is_open:
                 if q.block and not q.away_path.exists():     # away: working on a message, not waiting
                     blocked.add(q.item)
@@ -68,6 +73,17 @@ class MessagesMixin:
                                 **({"by": by} if by else {}),
                                 note="answered after the question resolved; the executor never saw it")
         self.blocked = blocked
+
+    def _answer_design(self, q: questions.Question, text: str) -> None:
+        """No `ask` call waits on a design question, so the daemon resolves it. A running
+        item gets the answer as a message; a finished one's stands in the log and inbox."""
+        if not questions.resolve(q, "answered", text, "daemon"):
+            return
+        run = self.runs.get(q.item)
+        if run and run.rec.get("phase", "exec") == "exec" and not run.exited():
+            with self._attributed(questions.answer_by(q) or "planner"):
+                self._message(run, DESIGN_ANSWER.format(id=q.id, default=q.default, text=text),
+                              self.cfg.rel(q.answer_path), answers=q.id)
 
     def process_talk(self) -> None:
         """Log what the executors' progress tool and message hook wrote: one `progress`
@@ -129,7 +145,7 @@ class MessagesMixin:
         the message and the question stays open (`waiting_on`); only an answer file answers."""
         by = self._by or "unknown"
         q = next((q for q in questions.scan(self.cfg.control)
-                  if q.item == run.item_id and q.is_open and not q.answer_path.exists()), None)
+                  if q.item == run.item_id and q.is_open and not q.design and not q.answer_path.exists()), None)
         ev = self.log.append("tell", item=run.item_id, paths=[rel], text=text, by=by,
                              **({"waiting_on": q.id} if q else {}), **extra)
         talk.post(self.cfg.control, run.item_id, ev.id, text, self._by)
@@ -268,6 +284,6 @@ class MessagesMixin:
 
     def _close_questions(self, item_id: str) -> None:
         for q in questions.scan(self.cfg.control):
-            if q.item == item_id and q.is_open:
+            if q.item == item_id and q.is_open and not q.design:     # a design question stays Matt's
                 questions.resolve(q, "closed", None, "daemon", reason="the item finished before an answer")
         self.process_questions()

@@ -101,13 +101,18 @@ no port.
 aicomplete 009's 281 turns were 60-second polls, about a third of its cost.
 
 ```
-wait_for(path | pid | log + line, every?, minutes?)    # every: 50 s; minutes: at most and by default 20
+wait_for(path | pid | log + line [fail?], pid?, every?, minutes?)    # every: 50 s; minutes: at most and by default 20
 ```
 
 It returns when `path` exists, `pid` exits, or a line matching the regular expression
 `line` is in `log` (lines already there count; a UTF-16 log reads fine), saying what
-changed; a relative path is the working directory's (`--workdir`). After `minutes` it says
-how things stand: `path` not there, `pid` running, or `log`'s size and last line. The target
+changed; a relative path is the working directory's (`--workdir`). A `log` wait also ends on
+a line matching `fail` (default `panicked|error`, any case; `""` turns it off), `line` winning
+on one line that matches both; the result says to narrow `fail` if the line is harmless, since
+the same call would stop on it again. A `pid` beside `path` or `log` is the process doing the
+work: its exit ends the wait with how things stand (aicomplete 051: a panic unseen for ~5 min,
+waits on an exited script running out at 4 and 11 min). After `minutes` it says
+how things stand: `path` not there, `pid` running, or `log`'s size, age and last line. The target
 is checked every `every` seconds, the item's mailbox every second, so a message ends the
 wait at once and the hook after the call delivers it; each mail file does that once, so a
 helper's call can't spin (`ask`'s rule). `pid` is a Windows pid: Git Bash's `$!` is not one,

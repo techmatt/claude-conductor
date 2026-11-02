@@ -9,9 +9,9 @@ answers; otherwise it starts the process (unless the recorded one is still alive
 just not answering yet), and `poll` opens the URL once the ready URL answers — or logs
 `run_failed` with the log's tail when the process dies or `ready_seconds` pass.
 
-Tools (`[tools.<name>]`, the `tool:` signal, the app's Repos tab) run the same way through
+Tools (`[tools.<name>]`, the `tool:` signal, the app's Tools menu) run the same way through
 `ToolRunner`, on `tool-<name>.json` and `.log`, at below-normal priority. Their events are
-the same kinds with `tool: true`. The daemon stops them when it stops; its restart, or a
+the same kinds with `tool: true`. `tool: <name> stop` stops one, and the daemon stops them all when it stops; its restart, or a
 crash, leaves them to the next daemon, which finds them by their record.
 """
 

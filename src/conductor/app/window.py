@@ -19,6 +19,7 @@ from .model import PRIORITY, Project, Snapshot, overall
 from .proposed_panel import ProposedPanel
 from .questions_panel import QuestionsPanel
 from .repos_panel import ReposPanel
+from .tools_menu import ToolsMenu
 from .widgets import confirm, muted
 
 # Status-dot colours (graphics, not text: they need 3:1, which each meets).
@@ -89,6 +90,7 @@ class ProjectView(QWidget):
         menu.setToolTipsVisible(True)
         self.autopilot_btn.setMenu(menu)
         self.autopilot_label = muted(QLabel())
+        self.tools = ToolsMenu(project, notify)         # `[tools.<name>]`: no menu in a project with none
         # Pause / Resume (`pause:` / `resume:` a repo): a plain button for one repo, a menu for several.
         self.pause_btn = QPushButton("Pause")
         self.pause_btn.clicked.connect(self.toggle_pause)
@@ -114,6 +116,8 @@ class ProjectView(QWidget):
         self.stop_buttons: dict[str, QPushButton] = {}
         head.addWidget(self.pause_label)
         head.addWidget(self.pause_btn)
+        head.addWidget(self.tools.button)
+        head.addWidget(self.tools.failure, 1)
         head.addWidget(self.autopilot_btn)
         head.addWidget(self.autopilot_label, 1)
         head.addWidget(self.checkpoint_btn)
@@ -216,6 +220,7 @@ class ProjectView(QWidget):
         self.autopilot_label.setToolTip(plan)
         self._update_pause(snap)
         self._update_run_buttons(snap)
+        guarded("tools", self.tools.update_snapshot, snap, new)
         cp = snap.checkpoint
         self.checkpoint_btn.setToolTip(
             (f"Current: {checkpoint_name(cp)}, {clock(cp.ts)}. " if cp else "No checkpoint yet. ")
@@ -231,6 +236,8 @@ class ProjectView(QWidget):
         self.dismiss_btn.setVisible(bool(snap.rejected))
         self.dismiss_btn.setToolTip("Acknowledge: " + "; ".join(f"#{e.id} {e.detail.get('error')}" for e in snap.rejected)
                                     + " (an `ack: invalid` signal; they stay in Events)")
+        if snap.code_differs:
+            bits.append("app and daemon run different code: `invalid` marks here may be stale (restart all)")
         if snap.error:
             bits.append(snap.error)
         self.pending_label.setText(" · ".join(bits))

@@ -192,8 +192,9 @@ class SignalsMixin:
                 if not 1 <= len(parts) <= 2 or (len(parts) == 2 and parts[1].lower() != "stop"):
                     raise ValueError(f"line {n}: run: expects `<target>` or `<target> stop`, got {value!r}")
             elif key == "tool":
-                if len(value.split()) != 1:
-                    raise ValueError(f"line {n}: tool: expects one tool's name, got {value!r}")
+                parts = value.split()
+                if not 1 <= len(parts) <= 2 or (len(parts) == 2 and parts[1].lower() != "stop"):
+                    raise ValueError(f"line {n}: tool: expects `<name>` or `<name> stop`, got {value!r}")
             elif key in ("checkpoint", "session"):
                 pass                                  # any label, or none
             elif key == "pick":
@@ -273,7 +274,8 @@ class SignalsMixin:
             name, *stop = value.split()
             (self.runner.stop if stop else self.runner.request)(name, self._by)
         elif key == "tool":
-            self.tools.request(value, self._by)
+            name, *stop = value.split()
+            (self.tools.stop if stop else self.tools.request)(name, self._by)
         elif key == "reorder":
             where, *refs = value.split()
             self._reorder(where, refs, rel)

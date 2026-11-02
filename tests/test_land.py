@@ -36,7 +36,7 @@ def test_several_commits_land_as_one_commit(env):
     env.tick_until(lambda: env.finished("code/001_three"))
     assert env.finished("code/001_three").detail["status"] == "done"
     log = git(env.repo, "log", "--format=%s", f"{before}..main").splitlines()
-    assert log == ["code/001_three: Three things"]
+    assert log == ["code/001_three: fake: append a.txt"]       # its final commit's subject, not its title
     body = git(env.repo, "log", "-1", "--format=%b", "main")
     assert "3 commit(s)" in body and "- fake: a.txt\n- fake: b.txt\n- fake: append a.txt" in body
     assert (env.repo / "a.txt").read_text(encoding="utf-8") == "a\nmore\n"
@@ -100,7 +100,7 @@ def test_a_kept_red_branch_with_merge_commits_lands_with_land(env):
     before = main_head(env)
     env.signal("l.signal", "land: 001_g\n")
     env.tick_until(lambda: any(e.detail.get("state") == "landed" for e in env.events("land")))
-    assert git(env.repo, "log", "--format=%s", f"{before}..main").splitlines() == ["code/001_g: Golden"]
+    assert git(env.repo, "log", "--format=%s", f"{before}..main").splitlines() == ["code/001_g: regenerate g once more"]
     assert (env.repo / "g.txt").read_text(encoding="utf-8") == "four\n" and (env.repo / "b.txt").is_file()
     assert "conductor/001_g" not in git(env.repo, "branch") and not wt.exists()
     assert "landed later by `land:` on main as" in report(env, "001_g")

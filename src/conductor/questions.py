@@ -11,7 +11,9 @@ Three files per question, each with one writer:
                       (the question still open, the executor working until `resume`).
 
 The daemon only observes these files and logs `ask`, `answer`, `default`, `late` and
-`question_closed`; the executor gets its answer even while the daemon is down.
+`question_closed`; the executor gets its answer even while the daemon is down. A `design`
+question is the exception: its `ask` returned at once with the default, so no server waits
+on it, and the daemon resolves it when Matt's answer comes (`daemon_messages`).
 """
 
 from __future__ import annotations
@@ -30,6 +32,10 @@ from .util import FrontMatterError, read_text, split_front_matter, stamp
 
 ANSWER_SETTLE_SECONDS = 1.0       # an answer file is read once it stops changing
 OVERRIDES_RE = re.compile(r"^[\s*_#`]*default overrides prompt:\s*(.+)$", re.IGNORECASE)
+PLAN_HEAD_RE = re.compile(r"^[#*_\s]*questions[*_\s]*:[*_\s]*(.*)$", re.IGNORECASE)     # a stage plan's `Questions:`
+PLAN_BULLET_RE = re.compile(r"^(?:[-*•]|\d+[.)])\s+(.+)$")
+PLAN_QUESTIONS = 10               # at most this many reach the inbox, each cut to PLAN_QUESTION_CHARS
+PLAN_QUESTION_CHARS = 400
 
 
 @dataclass
@@ -43,6 +49,7 @@ class Question:
     deadline: str | None          # when the default is taken; None when blocking
     body: str                     # the question, then its options
     result: dict | None           # None while open
+    design: bool = False          # held for Matt while its default applies (`docs/questions.md`)
 
     @property
     def answer_path(self) -> Path:
@@ -86,8 +93,10 @@ def _result_name(qid: str) -> str:
 
 
 def create(control: Path, item: str, question: str, options: list[str], default: str | None,
-           block: bool, default_minutes: float, session_id: str | None = None) -> Question:
-    """Write a new question file under the next free number for this item."""
+           block: bool, default_minutes: float, session_id: str | None = None,
+           design: bool = False) -> Question:
+    """Write a new question file under the next free number for this item. A `design`
+    question has no deadline: its default applies from the start."""
     d = qdir(control)
     d.mkdir(parents=True, exist_ok=True)
     if default is None:
@@ -103,8 +112,8 @@ def create(control: Path, item: str, question: str, options: list[str], default:
     asked = time.time()
     meta = {
         "item": item, "asked": stamp(), "block": block, "default": default,
-        "deadline": None if block else stamp_at(asked + default_minutes * 60),
-        "session_id": session_id,
+        "deadline": None if block or design else stamp_at(asked + default_minutes * 60),
+        "session_id": session_id, **({"design": True} if design else {}),
     }
     body = question.strip() + "\n"
     if options:
@@ -145,7 +154,7 @@ def load(path: Path) -> Question | None:
         id=qid, path=path, item=str(meta["item"]), asked=str(meta["asked"]),
         block=bool(meta.get("block")), default=None if meta.get("default") is None else str(meta["default"]),
         deadline=None if meta.get("deadline") is None else str(meta["deadline"]),
-        body=body.strip() + "\n", result=result,
+        body=body.strip() + "\n", result=result, design=bool(meta.get("design")),
     )
 
 
@@ -174,6 +183,27 @@ def find(control: Path, ref: str) -> Question | None:
         return {f"{name}__{n}", f"{name.split('_', 1)[0]}__{n}", f"{repo}__{name.split('_', 1)[0]}__{n}"}
     hits = [q for q in qs if ref in short(q)]
     return hits[0] if len(hits) == 1 else None
+
+
+def plan_questions(plan: str) -> list[str]:
+    """What a stage's plan lists under its `Questions:` line (`executor.STAGE`): its
+    bullets, an indented line joining the one above, or the text on the line itself."""
+    out: list[str] = []
+    inside = False
+    for ln in plan.splitlines():
+        s = ln.strip()
+        if not inside:
+            if m := PLAN_HEAD_RE.match(ln):
+                inside = True
+                if (rest := m.group(1).strip()) and rest.lower().rstrip(".") != "none":
+                    out.append(rest)
+        elif m := PLAN_BULLET_RE.match(s):
+            out.append(m.group(1))
+        elif s and out and ln[0].isspace():
+            out[-1] += f" {s}"
+        elif s:
+            break
+    return [q[:PLAN_QUESTION_CHARS] for q in out[:PLAN_QUESTIONS]]
 
 
 def read_answer(q: Question, settle: float = ANSWER_SETTLE_SECONDS) -> str | None:

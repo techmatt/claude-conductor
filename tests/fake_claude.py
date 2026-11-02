@@ -42,8 +42,8 @@ their stdout JSON. Each context received is written to the report as `CONTEXT: .
 A merge executor's prompt resolves the conflicted files it lists by keeping both sides'
 lines; `FAKE merge-fail` in the item leaves the markers, `FAKE merge-stray` also adds a file.
 
-A staging prompt obeys only `FAKE stage-sleep <seconds>` and `FAKE stage-write <path>
-<text>`, remembers the prompt under its session id, and ends with a plan. `--resume`
+A staging prompt obeys only `FAKE stage-sleep <seconds>`, `FAKE stage-question <text>`
+(a line of its plan's `Questions:`) and `FAKE stage-write <path> <text>`, remembers the prompt under its session id, and ends with a plan. `--resume`
 recalls that prompt, runs its FAKE lines, and says so in the report.
 
 Every session appends its prompt to a transcript under `$CLAUDE_CONFIG_DIR/projects/fake/`.
@@ -128,7 +128,9 @@ if "in its staging phase" in prompt:
             Path(parts[2]).write_text(parts[3] + "\n", encoding="utf-8")
     store.parent.mkdir(parents=True, exist_ok=True)
     store.write_text(prompt, encoding="utf-8")
-    result(f"Plan: run the {sum(ln.startswith('FAKE ') for ln in lines)} FAKE lines.")
+    asks = [ln.split(" ", 2)[2] for ln in lines if ln.startswith("FAKE stage-question ")]
+    result(f"Plan: run the {sum(ln.startswith('FAKE ') for ln in lines)} FAKE lines."
+           + ("\n\nQuestions:\n" + "".join(f"- {q}\n" for q in asks) if asks else ""))
     sys.exit(0)
 
 report = Path(lines[lines.index(next(ln for ln in lines if "write your report to exactly this path" in ln)) + 1].strip())

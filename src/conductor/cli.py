@@ -172,7 +172,8 @@ def cmd_questions(args) -> int:
         print("no open questions" if not args.all else "no questions")
     for q in shown:
         if q.is_open:
-            how = "blocking" if q.block else f"default at {clock(q.deadline)}: {q.default}"
+            how = (f"design, held for Matt; default applied: {q.default}" if q.design else "blocking" if q.block
+                   else f"default at {clock(q.deadline)}: {q.default}")
         else:
             how = f"{q.result.get('outcome')} {clock(q.result['at'])}: {q.result.get('text') or q.result.get('reason')}"
         print(f"{q.id}  ({q.item}, asked {clock(q.asked)}) — {how}")

@@ -104,14 +104,14 @@ def prepare(cfg: Config, log: EventLog, rec: dict) -> str | None:
 
 
 def readable(cfg: Config, orig: str, extract: Path) -> list[Path]:
-    """What a resume item may read of its original's record: its prompt, report, audit
-    notes, run log and stage log (those that exist; a finished log is `.log.gz`), and the
-    events extract."""
+    """What a resume item may read of its original's record: its prompt, stage prompt (a
+    staged item's real one), report, audit notes, amendments, run log and stage log (those
+    that exist; a finished log is `.log.gz`), and the events extract."""
     from .executor import RunPaths, stored_log
     repo, _, name = orig.partition("/")
     p = RunPaths.for_name(cfg, repo, name)
     logs = [s for f in (p.log, p.stage_log) if (s := stored_log(f))]
-    return [f for f in (p.prompt, p.report, p.audit) if f.is_file()] + logs + [extract]
+    return [f for f in (p.prompt, p.stage_prompt, p.report, p.audit, p.amend) if f.is_file()] + logs + [extract]
 
 
 def write_extract(log: EventLog, orig: str, path: Path) -> None:

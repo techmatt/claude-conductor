@@ -1,4 +1,4 @@
-"""Project tools: `[tools.<name>]`, the `tool:` signal and the Repos tab's buttons."""
+"""Project tools: `[tools.<name>]`, the `tool:` signal and the header's Tools menu."""
 
 import json
 import socket
@@ -34,12 +34,12 @@ def send(env, text: str, name: str = "t.signal") -> None:
     env.tick_until(lambda: not (env.control / "signals" / name).exists())
 
 
-def panel_on(env):
-    from conductor.app.repos_panel import ReposPanel
+def menu_on(env):
+    from conductor.app.tools_menu import ToolsMenu
     project = Project(env.control)
-    panel = ReposPanel(project, lambda _: None)
-    panel.update_snapshot(project.snapshot())
-    return project, panel
+    menu = ToolsMenu(project, lambda _: None)
+    menu.update_snapshot(project.snapshot())
+    return project, menu
 
 
 def settle_click(env, button, done) -> None:
@@ -49,15 +49,16 @@ def settle_click(env, button, done) -> None:
 
 
 @pytest.mark.slow
-def test_button_and_signal_start_one_server_below_normal_and_the_daemon_stops_it(env, qapp):
+def test_menu_and_signal_start_one_server_below_normal_stop_it_and_the_daemon_stops_it(env, qapp):
     port = free_port()
     url = f"http://127.0.0.1:{port}/"
     add_tool(env, "demo", f'"{sys.executable}" -m http.server {port} --bind 127.0.0.1', url, label="Demo server")
     opened = []
     env.d.tools.opener = opened.append
-    project, panel = panel_on(env)
-    b = panel.tool_buttons["demo"]
-    assert panel.tool_bar.isHidden() is False and b.text() == "Demo server ● down"
+    project, menu = menu_on(env)
+    row = menu.rows["demo"]
+    b = row.open
+    assert menu.button.isHidden() is False and b.text().strip() == "Demo server" and row.stop.isHidden()
     try:
         settle_click(env, b, lambda: env.events("run_open"))
         assert opened == [url] and len(env.events("run_start")) == 1
@@ -69,8 +70,8 @@ def test_button_and_signal_start_one_server_below_normal_and_the_daemon_stops_it
         root = psutil.Process(rec["pid"])
         below = psutil.BELOW_NORMAL_PRIORITY_CLASS if procs.WINDOWS else 10
         assert [p.nice() for p in [root, *root.children(recursive=True)]] == [below] * (1 + len(root.children(recursive=True)))
-        panel.update_snapshot(project.snapshot())
-        assert b.text() == "Demo server ● running"
+        menu.update_snapshot(project.snapshot())
+        assert b.text() == "● Demo server" and not row.stop.isHidden()
 
         # A second click only opens; so does the signal, for the planner.
         settle_click(env, b, lambda: len(env.events("run_open")) == 2)
@@ -85,10 +86,23 @@ def test_button_and_signal_start_one_server_below_normal_and_the_daemon_stops_it
         send(env, "tool: demo", "again")
         assert len(env.events("run_start")) == 1 and targets.process(env.d.cfg, "demo", "tool") == rec
 
+        # Stop from the menu; start again; stop by signal; start again.
+        settle_click(env, row.stop, lambda: env.events("run_stop"))
+        assert not procs.alive(rec["pid"], rec["create_time"]) and env.events("run_stop")[0].detail["by"] == "app"
+        menu.update_snapshot(project.snapshot())
+        assert b.text().strip() == "Demo server" and row.stop.isHidden()
+        settle_click(env, b, lambda: len(env.events("run_start")) == 2 and len(env.events("run_open")) == 5)
+        send(env, "by: planner\ntool: demo stop", "halt")
+        assert env.events("run_stop")[-1].detail["by"] == "planner"
+        assert targets.process(env.d.cfg, "demo", "tool") is None
+        send(env, "tool: demo", "back")
+        env.tick_until(lambda: len(env.events("run_open")) == 6)
+        rec = targets.process(env.d.cfg, "demo", "tool")
+
         env.d._log_stop("signal")
         assert not procs.alive(rec["pid"], rec["create_time"])
-        assert env.events("run_stop")[0].detail["note"] == "stopped with the daemon"
-        assert env.events("run_stop")[0].detail["tool"] is True
+        assert env.events("run_stop")[-1].detail["note"] == "stopped with the daemon"
+        assert env.events("run_stop")[-1].detail["tool"] is True
         assert not (env.control / ".conductor" / "tool-demo.json").exists()
     finally:
         if rec := targets.process(env.d.cfg, "demo", "tool"):
@@ -99,15 +113,15 @@ def test_button_and_signal_start_one_server_below_normal_and_the_daemon_stops_it
 def test_a_failed_start_shows_its_log_tail_and_flags_no_watch(env, qapp):
     add_tool(env, "broken", f'"{sys.executable}" -c "print(\'boom: no viewer\'); raise SystemExit(3)"',
              f"http://127.0.0.1:{free_port()}/")
-    project, panel = panel_on(env)
+    project, menu = menu_on(env)
     project.poll_events()
     send(env, "tool: broken")
     env.tick_until(lambda: env.events("run_failed"))
     [failed] = env.events("run_failed")
     assert failed.detail["tool"] is True and "boom: no viewer" in failed.detail["log_tail"]
     assert "tool `broken` failed" in (env.control / "inbox.md").read_text(encoding="utf-8").split("## Red", 1)[1]
-    panel.update_snapshot(project.snapshot(), project.poll_events())
-    assert "boom: no viewer" in panel.tool_failure.text() and "boom: no viewer" in panel.tool_failure.toolTip()
+    menu.update_snapshot(project.snapshot(), project.poll_events())
+    assert "boom: no viewer" in menu.failure.text() and "boom: no viewer" in menu.failure.toolTip()
     # The stall check flags a run target's failure, and not the tool's before it.
     env.d.log.append("run_failed", target="web", error="x")
     env.d.cfg.watch_check_minutes = 0.0001
@@ -115,9 +129,9 @@ def test_a_failed_start_shows_its_log_tail_and_flags_no_watch(env, qapp):
     assert ["run target `web` failed: x"] == [e.detail["text"] for e in env.events("watch_flag")]
 
 
-def test_a_project_with_no_tools_shows_no_bar(env, qapp):
-    _, panel = panel_on(env)
-    assert panel.tool_bar.isHidden() and not panel.tool_buttons
+def test_a_project_with_no_tools_shows_no_menu(env, qapp):
+    _, menu = menu_on(env)
+    assert menu.button.isHidden() and not menu.rows
 
 
 def test_a_failing_tool_stop_keeps_the_stop_event(env, monkeypatch):
@@ -130,7 +144,7 @@ def test_a_failing_tool_stop_keeps_the_stop_event(env, monkeypatch):
 
 
 def test_tool_refusals(env):
-    for n, text in enumerate(["tool: nope", "tool: a b", "tool:"]):
+    for n, text in enumerate(["tool: nope", "tool: a b", "tool:", "tool: nope stop"]):
         send(env, text, f"t{n}")
         assert (env.control / "signals" / f"t{n}.bad").is_file(), text
     assert "no tool 'nope'" in env.events("invalid")[0].detail["error"]

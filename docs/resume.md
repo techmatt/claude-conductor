@@ -68,7 +68,8 @@ readonly item whose report goes to the new path; the code may have moved on, wit
 started) as one line per commit (`git log` from `resume_since` to the new worktree's
 base, the newest 50); and **its own record** it may read, the one exception to the
 preamble's rule against reading the control folder, as absolute paths: the original's
-`.prompt.md`, report, `.audit.md`, run log and stage log (each only if it exists), and
+`.prompt.md`, `.stage.prompt.md` (a staged item's real prompt; its `.prompt.md` is then only
+the resume preamble), report, `.audit.md`, `.amend.md`, run log and stage log (each only if it exists), and
 an extract of the original's events, written at launch beside the resume item's
 prompt as `reports/<repo>__NNN_name.original.md` (one line per event: id, time, kind,
 detail). It answers each question by number. It writes only its report (and, as a

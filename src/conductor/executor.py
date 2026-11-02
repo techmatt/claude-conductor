@@ -29,7 +29,9 @@ returns it after {ask_minutes:g} minutes and you carry on. A call holds this who
 until it returns, so start any background work first. Block (`block: true`) only when every default would be worse than waiting; blocked time
 does not count toward your time limit. Anything you don't ask about, decide as fits the
 goal, record what you didn't do, and continue: the only hard stop is a wrong-repo guard in
-the prompt. Leave a step whose default can't be undone (a delete, an overwrite) until
+the prompt. A question touching a stated design principle is Matt's call: `design: true` with
+a default returns at once, you carry on with the default, and his answer arrives later as a
+message. Leave a step whose default can't be undone (a delete, an overwrite) until
 last, so a late answer or message can still change it.
 {servers}
 Progress. `progress` (mcp__conductor__progress) shows Matt one short line and returns at
@@ -37,7 +39,9 @@ once. Call it at the start, with a first `eta` as soon as you can estimate one, 
 milestones, and when your estimate moves by more than a third (check after your first
 section). Not chatter. Estimate in tool round trips (about 20–40 s each) plus the repo's
 measured run times (README), with an allowance per unknown, and run `date` before every
-`eta` or outline time rather than reusing a clock you read earlier.
+`eta` or outline time rather than reusing a clock you read earlier. A calibration or tuning
+item posts its frozen numbers against the prompt's, one line each, as a progress line before
+its gate.
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
 report last, at most ~8 rows of a few words, each with a rough local finish time
@@ -58,8 +62,9 @@ never %TEMP% or anywhere outside it. Heavy compute (simulation sweeps, builds, t
 subagent fan-out) runs at below-normal priority (PowerShell: `(Start-Process ... -PassThru)
 .PriorityClass = 'BelowNormal'`) and leaves at least 4 hardware threads free; at most 2
 heavy subagents (builds, sims, browsers) at once, and that wins over any Workflow size or
-Ultracode cost note; light read-only reviewers and verifiers don't count, but run in
-batches per dimension, about 10 in all; halve thread counts while another item runs
+Ultracode cost note; light read-only reviewers don't count there, but run in batches per
+dimension, and a review's agent budget (about 10 in all, or the prompt's) counts finders
+and verifiers both; halve thread counts while another item runs
 alongside. Never pass `isolation: worktree` to a subagent or Workflow: it lands in the main
 checkout; split helpers by file instead.
 
@@ -122,7 +127,7 @@ only past ~15 minutes.
 Bounds. A skip in the prompt or a message binds; a default that contradicts the prompt
 starts its question `default overrides prompt: <line>`. Scratch: `out/` (git-ignored here),
 never %TEMP%. Heavy compute: below-normal priority, 4 hardware threads free, at most 2 heavy
-subagents (builds, sims, browsers: beats Workflow and Ultracode notes; light reviewers ~10,
+subagents (builds, sims, browsers: beats Workflow and Ultracode notes; finders+verifiers ~10,
 batched), half the threads beside another item. Name `~/.claude` edits in the report.{leftover}
 
 Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
@@ -317,7 +322,8 @@ While staging:
 - run read-only commands only: nothing that writes a file, commits, installs or deletes;
 - nothing long and nothing that holds heavy resources: no builds, no test suites, no
   servers, no GPU work; at most {stage_minutes:g} minutes in all;
-- do not ask questions now (there is no ask tool yet); note them in your plan.
+- do not ask questions now (there is no ask tool yet); list them in your plan under a line
+  `Questions:`, one `- ` bullet each: they reach the planner before you launch.
 
 Then write your plan for executing the prompt as your final message, ending with its
 outline: the sections you will work through, a few words each, the report last. Stop. When

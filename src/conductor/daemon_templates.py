@@ -95,7 +95,8 @@ class TemplatesMixin:
         qs = [q for q in questions.scan(self.cfg.control) if q.is_open]
         out.append("### Open questions\n\n" + ("\n".join(
             f"- `{q.id}` from {q.item}, asked {clock(q.asked)}, "
-            + ("blocking" if q.block else f"default at {clock(q.deadline)}") + f": {q.summary()}" for q in qs)
+            + ("design, held for Matt: never answer it" if q.design else "blocking" if q.block
+               else f"default at {clock(q.deadline)}") + f": {q.summary()}" for q in qs)
             or "None."))
         flags = [e for e in self.log.query(kinds=["watch_flag"])
                  if (at - parse_stamp(e.ts)).total_seconds() < 6 * 3600][-20:]

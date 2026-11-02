@@ -54,8 +54,17 @@ class MergeMixin:
                     break
 
     def _squash_subject(self, run: Run) -> str:
-        """The landed commit's subject: the item id and its title (the body's first
-        heading, less a leading item number)."""
+        """The landed commit's subject: the item id and the branch's final commit's subject,
+        which says what landed (a title goes stale: 051's "Rules revision 21" on r22 code).
+        A branch already squashed keeps its subject. With no commit of its own: the title
+        (the body's first heading, less a leading item number)."""
+        repo = run.rec["repo"]
+        final = git.run(self.cfg.repos[repo], "log", "-1", "--no-merges", "--format=%s",
+                        f"{self.cfg.opts(repo).main}..{run.rec['branch']}").strip()
+        if final == run.rec["item"] or final.startswith(f"{run.rec['item']}: "):
+            return final
+        if final:
+            return f"{run.rec['item']}: {final}"
         body = items.parse(run.md_path, run.rec["repo"]).body if run.md_path.is_file() else ""
         title = next((ln.lstrip("#").strip() for ln in body.splitlines() if ln.startswith("#")), "")
         title = re.sub(r"^\d+[a-z]?\s*[—–:.-]\s*", "", title)[:100].strip()

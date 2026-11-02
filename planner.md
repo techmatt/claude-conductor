@@ -8,7 +8,7 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 
 **start a new <project> session** is five calls. Steps 1–5 are the same in Matt's saved preference, so this file is first read at step 5.
 
-1. **Tool search**, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. It finds nothing: say "This chat isn't linked to the box: link it (the desktop app's Chat tab, not Code) and start again", then stop: no folder request, no other call, no workaround. Linked later: redo step 1 first.
+1. **Tool search**, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. It finds nothing: say "This chat isn't linked to the box: link it (the desktop app's Chat tab, not Code) and start again", then stop: no folder request, no other call, no workaround. Linked later: redo step 1 first. It returns only some of the four: load the rest in the same turn, before step 2.
 2. **Access**, one request for `C:\Code\<project>-control`, each code repo as `C:\Code\<repo>` (`wordwarriors`; `corelight-engine`, `corelight-web`; a new project's: `conductor.toml` `[repos]`) and `C:\Code\claude-conductor`. These paths as written: never a memory read or past-chat search for them.
 3. **One shell command** in the workspace writes the signal and prints its stamp, local time:
    `s=$(TZ=America/Los_Angeles date +%Y%m%d-%H%M%S); mkdir -p /mnt/user-data/outputs; printf 'by: planner\nsession: start\n' > /mnt/user-data/outputs/planner-$s.signal; echo $s`
@@ -58,7 +58,7 @@ C:\Code\<project>-control\
 
 **Signals.** A signal file holds `key: value` lines applied in order: `by: planner`, then any actions (**Vocab**). A rejected one becomes `.bad`; lines before the failing one stay applied. Rules: `docs/signals.md`.
 
-**Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md`, written last (it applies the moment its targets are there):
+**Requests.** The only way tracked control files change. Write `requests\<stamp>\` in one call: whole replacement files at their control-folder paths plus `request.md`, listed last (it applies the moment its targets are there, and waits 60s for a late one):
 
 ```
 ---
@@ -105,7 +105,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 - **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on *Now*, with a bold warning when the ETA can't be right; a small item posts one line only (`docs/executors.md`).
-- **Questions** marked **default overrides prompt** would reverse a prompt line if unanswered: answer them first.
+- **Questions** marked **default overrides prompt** would reverse a prompt line if unanswered: answer them first. Marked **design, held for Matt**: his, relayed, never yours; the default already applies and his answer reaches the item as a message. *Staged plans' questions* wait for launch: answer by **amend**.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`, never a queue number or a planner session's) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.

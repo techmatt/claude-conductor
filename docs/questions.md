@@ -3,7 +3,7 @@
 An executor reaches Matt with the `ask` tool (`mcp__conductor__ask`):
 
 ```
-ask(question, options?, default?, block?)     # block defaults to false
+ask(question, options?, default?, block?, design?)     # block and design default to false
 ask(resume=<id>)                              # wait on a question a message cut short
 ```
 
@@ -44,6 +44,14 @@ Options:
   see an unflagged one: the mark is the executor's to make, and a skip still binds.
 - **Block.** `block: true`, or no default at all: the call waits until answered,
   however long. That time does not count toward `max_hours`.
+- **Design** (67). `design: true`, which needs a default and refuses `block`, is for a
+  question touching a stated design principle: Matt's call, not a planner's turn-around.
+  The call returns at once and the executor carries on with its default, so the item is never
+  blocked. The question has no deadline: it stays open, marked `design`, in the app and the
+  inbox (never counted as `asking`, needing Matt or a watch flag), and outlives its item. When
+  an answer file comes the daemon resolves it (`answer`, not `late`) and a running item gets
+  the answer as a message (a `tell` with `answers: <id>`), an answer rather than an amendment;
+  a finished item's stands in the log and inbox for the planner.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it
   closed by the daemon (`question_closed`).
 - **A message never answers it** (58; before, a tell became the answer, and aicomplete's
@@ -60,6 +68,11 @@ Options:
   once, so a helper's `ask` (the hook never delivers to one) can't spin.
 - **The watch answers.** A watch's `answer:` action (`night-shift.md`) writes an answer
   only from one Matt or the planner already gave, naming its source; `watch_answer` logs it.
+
+**A stage has no ask tool**, so its questions go in its plan under `Questions:`, one bullet
+each (`questions.plan_questions`). They ride the `staged` event (`questions`) and the inbox
+and digest list them under *Staged plans' questions* until the item launches; an amendment
+answers them (066's "96 games or 96 a cell?" sat unread through a 48-minute lock wait).
 
 The ask server resolves the question by creating `<id>.result.json` exclusively
 (`outcome`: `answered` | `default` | `cancelled`, `text`, `at`, `by`); the daemon only

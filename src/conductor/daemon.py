@@ -29,8 +29,8 @@ from pathlib import Path
 
 import psutil
 
-from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, notify, parked, picker, picks, procs, request, state,
-               talk, targets, worktrees)
+from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, notify, parked, picker, picks, procs, questions,
+               request, state, talk, targets, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
@@ -242,8 +242,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._prepare_receipts()
         self._prepare_backlog()
         parked.prepare(self.cfg.control)
-        self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control))
         self._read_code()
+        self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control), code=self.code_version)
         if self._died:
             self._log_death()
         if (owner := procs.claude_ancestor()) is not None:
@@ -890,7 +890,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         plan = str(result.get("result") or "").strip()
         self.log.append("staged", item=run.item_id, paths=[self.cfg.rel(Path(rec["log"]))],
                         session_id=rec["session_id"], plan=plan[:500], cost_usd=result.get("total_cost_usd"),
-                        worktree=str(wt))
+                        worktree=str(wt), questions=questions.plan_questions(plan))
 
     def _stage_dirty(self, rec: dict) -> bool:
         wt = Path(rec["worktree"])

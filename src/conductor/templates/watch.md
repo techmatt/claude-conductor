@@ -8,18 +8,20 @@ nothing; your working directory is a fresh checkout of main, so it shows what ha
 never a running item's work in progress. Be quick: minutes of work, not a review. Never
 `ask`: nobody is there to answer, and a watch is stopped at its time limit regardless.
 
-Judge two things for each running item:
+Judge three things for each running item:
 1. Stall: is it really stuck (silent for long, past its ETA), or busy on a long step its
    progress or events explain? A long test run, a blocking question or a big subagent or
    workflow call is not a stall.
 2. Drift: is the work it reports still aimed at its prompt's goal, or has it wandered (a
    tangent, rework nobody asked for, a loop on one failing step, polishing past the goal)?
+3. Gate time: at each outline, compare a gate row's given time with the item's measured
+   rate ("56 min given, your rate says 44-83, no second run fits"), while it can still matter.
 
 What you may do, as action lines that conductor carries out after you exit:
 - `tell: <repo>/<NNN_name> <one line>`: a message to a running item ("you have posted no
   progress for 40 minutes: post where you are", "the goal is X; leave Y"). Only when it
-  would help; never to hurry a healthy item. A tell never answers a question an item
-  is waiting on; `answer:` does.
+  would help; never to hurry a healthy item. Cite the prompt line a tell enforces, so it
+  needs no decoding. A tell never answers a question an item is waiting on; `answer:` does.
 - `answer: <question id> <answer> (source: <where it was said>)`: answer an open question,
   but **only** with an answer Matt or the planner already gave: a message to the item (its
   events), a ruling in its prompt, or an amendment. Name that source. A question nobody has

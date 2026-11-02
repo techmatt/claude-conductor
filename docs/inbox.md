@@ -105,7 +105,8 @@ for the *Now* section), as a whole-file replace through `<file>.<pid>.tmp`, so a
 sees one render or the next, never a splice; each heading and event line appears once.
 Its header names the current checkpoint (see *Checkpoints*).
 First **Questions**: every open ask, regardless of the read
-mark. Then **Unreviewed reports**: every finished item without a `reviewed` event,
+mark, a `design` one marked held for Matt. **Staged plans' questions**, standing the same way
+until the item launches (`questions.md`). Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`
 line (and ` · slow: …` unless its report said `slow: none` or nothing, and
 ` · pick: <ref>` when its report named a picker, then ` · **picks saved <time>**` once its

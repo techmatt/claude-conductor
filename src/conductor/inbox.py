@@ -262,6 +262,8 @@ def describe(ev: Event) -> str:
         case "staged":
             plan = (d.get("plan") or "").strip().splitlines()
             text = f"{who} staged; waits for the lock" + (f": {plan[0][:160]}" if plan else "")
+            if d.get("questions"):
+                text += f"; its plan asks {_count(len(d['questions']), 'question')}"
         case "merge":
             text = f"{who} merged `{d.get('branch')}` into main at {str(d.get('sha') or '')[:10]} ({d.get('commits')} commit(s))"
             if d.get("squashed"):
@@ -384,6 +386,7 @@ def describe(ev: Event) -> str:
             text = f"control folder changed outside an executor window (accepted): {'; '.join(d.get('changes', []))}"
         case "ask":
             how = "blocking" if d.get("block") else f"default {d.get('default')!r} at {d.get('deadline_clock')}"
+            how = "design, held for Matt, default applied" if d.get("design") else how
             text = f"{who} asked `{d.get('question')}` ({how}{overrides_note(d)}): {d.get('text')}"
         case "answer":
             text = f"{who} got an answer to `{d.get('question')}`: {d.get('text')}"
@@ -435,6 +438,17 @@ def saved_line(c: dict) -> str:
     """A saved picker: `art_alts_009 saved 4:52pm: 6 changed, 2 notes; picks/....json`."""
     return (f"{c.get('name')} saved {clock(c['saved_at'])}: {c.get('changed')} changed, "
             f"{_count(c.get('notes'), 'note')}; `picks/{c.get('name')}.choices.json`")
+
+
+def staged_questions(log: EventLog, view: View) -> list[str]:
+    """What each item staged and not launched yet asks in its plan (`questions.plan_questions`)."""
+    out = []
+    for item_id, rec in view.staged.items():
+        ev = log.last("staged", item=item_id) if rec.get("phase") == "staged" else None
+        if ev and ev.detail.get("questions"):
+            out.append(f"- `{item_id}`, staged {clock(ev.ts)}, asks before it launches (answer: an amendment):")
+            out += [f"  > {q}" for q in ev.detail["questions"]]
+    return out
 
 
 def pick_lines(cfg: Config, log: EventLog, view: View) -> list[str]:
@@ -599,12 +613,15 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
         # Open questions lead whatever the read mark says: they are live, not news.
         out += ["", "## Questions"]
         for q in open_qs:
-            how = ("**blocking**" if q.block else
-                   f"default at {clock(q.deadline)}: {q.default}")
+            how = (f"**design, held for Matt**; default applied: {q.default}" if q.design else
+                   "**blocking**" if q.block else f"default at {clock(q.deadline)}: {q.default}")
             how += overrides_note({"overrides_prompt": q.overrides})
             out.append(f"- {clock(q.asked)} `{q.id}` from {q.item} — {how}")
             out += [f"  > {ln}" if ln else "  >" for ln in q.body.rstrip().splitlines()]
-            out.append(f"  Answer: write `questions/{q.id}.answer.md`.")
+            out.append(f"  {'Matt' if q.design else 'Answer'}: write `questions/{q.id}.answer.md`.")
+    if staged_qs := staged_questions(log, view):
+        # Live too: an amendment answers them, before the item launches.
+        out += ["", "## Staged plans' questions", *staged_qs]
     from . import session        # imports this module
     unreviewed, theirs = view.unreviewed(), session.conductor_reports(root)
     if unreviewed or theirs:

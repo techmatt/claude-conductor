@@ -67,6 +67,9 @@ TOOL = {
             "options": {"type": "array", "items": {"type": "string"}, "description": "Candidate answers, if any."},
             "default": {"type": "string", "description": "What you will do if nobody answers in time."},
             "block": {"type": "boolean", "description": "Wait until answered instead of falling back to the default.", "default": False},
+            "design": {"type": "boolean", "default": False, "description": (
+                "It touches a stated design principle: Matt's call. Needs a `default`. Returns at once, you carry on "
+                "with the default, and his answer reaches you later as a message.")},
             "resume": {"type": "string", "description": ("The id of your own question a message cut short: wait for "
                                                           "its answer again (its default and deadline stand; give no other field).")},
         },
@@ -130,7 +133,9 @@ WAIT_FOR_TOOL = {
     "name": WAIT_FOR_NAME,
     "description": (
         "Wait for background work without polling: until `path` exists, `pid` exits, or a line "
-        "matching `line` appears in `log`. Give exactly one of `path`, `pid` or `log`. Returns "
+        "matching `line` appears in `log`. Give one of `path` or `log`, or `pid` alone; a `pid` "
+        "beside either is the process doing the work, and its exit ends the wait too, with how "
+        "things stand. A `log` wait also ends on a line matching `fail`. Returns "
         "with what changed, or early for a message from conductor (delivered as the call "
         "returns), or after `minutes` with how things stand; then call it again if you still "
         "need to. `pid` is a Windows pid: Git Bash's `$!` is not one, so there use a `log` line "
@@ -140,9 +145,11 @@ WAIT_FOR_TOOL = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "A file or folder to wait for, absolute or relative to your working directory."},
-            "pid": {"type": "integer", "description": "A process to wait out."},
+            "pid": {"type": "integer", "description": "A process to wait out; beside `path` or `log`, the one doing the work."},
             "log": {"type": "string", "description": "A log file to read, absolute or relative to your working directory; lines already in it count."},
             "line": {"type": "string", "description": "With `log`: the regular expression a line must match."},
+            "fail": {"type": "string", "description": ("With `log`: a line matching this regular expression ends the wait as "
+                                                        f"a failure (default, any case: `{waitfor.FAIL_DEFAULT}`; \"\" for none).")},
             "every": {"type": "number", "description": f"Seconds between checks (default {WAIT_FOR_EVERY})."},
             "minutes": {"type": "number", "description": f"At most this long (default and most: {WAIT_MAX_MINUTES})."},
         },
@@ -283,6 +290,8 @@ class Server:
         q = questions.load(questions.qdir(self.control) / f"{ref.strip()}.md")
         if q is None or q.item != self.item:
             return None, f"no question {ref.strip()!r} of this item to resume"
+        if q.design:
+            return None, f"{q.id} is a design question: carry on with its default, there is nothing to wait for"
         if (since := self._away_since.pop(q.id, None)) is not None:
             self._away[q.id] = self._away.get(q.id, 0.0) + time.time() - since
         questions.set_away(q, False)
@@ -304,11 +313,16 @@ class Server:
             if default is not None and not isinstance(default, str):
                 return "`default` must be a string", True
             default = default.strip() if default and default.strip() else None
-            block = args.get("block", False)
-            if not isinstance(block, bool):
-                return "`block` must be true or false", True
+            block, design = args.get("block", False), args.get("design", False)
+            if not isinstance(block, bool) or not isinstance(design, bool):
+                return "`block` and `design` must be true or false", True
+            if design and (block or default is None):
+                return "`design` needs a `default` to carry on with, and no `block`", True
             q = questions.create(self.control, self.item, question, options, default, block,
-                                 self.default_minutes, self.session_id)
+                                 self.default_minutes, self.session_id, design)
+            if design:
+                return (f"{q.id} is held for Matt. Carry on with your default now: {default}\nHis answer, whenever "
+                        "it comes, reaches you as a message; there is nothing to wait for."), False
         deadline = datetime.fromisoformat(q.deadline).timestamp() if q.deadline else None
         started = last_progress = time.time()
         while True:
@@ -385,7 +399,7 @@ class Server:
             if at - checked >= every:
                 checked = at
                 if hit := target.check():
-                    return f"{hit} (after {round(at - started)}s).", False
+                    return f"{hit} (after {round(at - started)}s).{waitfor.advice(hit)}", False
             if fresh := [p.name for p in talk.pending(self.control, self.item) if p.name not in self._announced]:
                 self._announced.update(fresh)
                 return (f"A message from conductor is waiting: it reaches you as this call returns. Do what it "

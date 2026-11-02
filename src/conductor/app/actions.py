@@ -131,8 +131,8 @@ def run_target(control: Path, name: str, stop: bool = False, by: str = BY) -> Pa
     return write_signal(control, f"run: {name}" + (" stop" if stop else ""), by=by)
 
 
-def tool(control: Path, name: str, by: str = BY) -> Path:
-    return write_signal(control, f"tool: {name}", by=by)
+def tool(control: Path, name: str, stop: bool = False, by: str = BY) -> Path:
+    return write_signal(control, f"tool: {name}" + (" stop" if stop else ""), by=by)
 
 
 def pick(control: Path, ref: str, by: str = BY) -> Path:

@@ -6,7 +6,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 
 | kind | when | notable detail |
 |---|---|---|
-| `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control; running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on an `OSError`, with error) |
+| `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control, code (start: its code version, `restart.md`); running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on an `OSError`, with error) |
 | `daemon_restart` | the old daemon restarts itself on a code change (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
 | `daemon_died` | at start: the previous daemon never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item; `memory.md`), action |
@@ -18,7 +18,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
 | `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `scheduling.md`); resume_of, resume_session (`resume.md`); parked (the parked edits it carries: `parked.md`); error (launch failed, setup included) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
-| `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd |
+| `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd, questions (its plan's `Questions:`, `questions.md`) |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
 | `merge` | an item's branch landed on main | branch, sha (main after), commits (the item's own: pre-merge main to sha), note; resolved (prose files a merge executor resolved); squashed (commits folded in) |
 | `land` | a `land:` began, then landed | state, branch; sha, commits, note, resolved, squashed, hashes |
@@ -63,7 +63,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
 | any signal-caused event | a signal file had `by:` | by |
-| `ask` | a question file appeared | question (id), text, block, default, deadline, deadline_clock; overrides_prompt (its first line's flag, here and on the question's later events: `questions.md`) |
+| `ask` | a question file appeared | question (id), text, block, default, deadline, deadline_clock; design (held for Matt, `questions.md`); overrides_prompt (its first line's flag, here and on the question's later events: `questions.md`) |
 | `answer` | answered before it resolved | question, text, outcome, reason, waited_seconds, deadline (moved, when blocking); by (the answer file's `by:`) |
 | `default` | the default deadline passed unanswered | question, text (the default), outcome, reason, waited_seconds |
 | `late` | an answer file after a default or close | question, text, outcome, note; by |

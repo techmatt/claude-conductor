@@ -29,7 +29,7 @@ def wait(server, **args) -> tuple[str, bool]:
 
 def test_wait_for_refuses_what_it_cannot_wait_on(env, tmp_path):
     s = waiter(env, tmp_path)
-    for args in ({}, {"path": "a", "pid": 1}, {"pid": True}, {"pid": "12"}, {"log": "a"},
+    for args in ({}, {"path": "a", "log": "b", "line": "x"}, {"path": "a", "pid": True}, {"pid": True}, {"pid": "12"}, {"log": "a"},
                  {"log": "a", "line": "("}, {"path": "a", "minutes": 0}, {"path": "a", "every": "soon"}):
         text, is_error = s.wait_for(args, threading.Event())
         assert is_error, (args, text)

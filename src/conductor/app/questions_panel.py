@@ -80,6 +80,9 @@ class QuestionCard(QGroupBox):
             severity = "answered"
             self.status.setText("answered — waiting for the executor to pick it up")
             self.send.setEnabled(False)
+        elif self.q.design:
+            severity = "default"
+            self.status.setText(f"DESIGN — held for you; the item carried on with its default: {self.q.default}")
         elif self.q.block:
             severity = "block"
             self.status.setText("BLOCKING — the item waits until you answer")
