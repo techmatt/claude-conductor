@@ -56,11 +56,15 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      planner itself, which it follows and never lists to Matt), under its own heading
      and a one-line note saying so; left out when the section is absent or empty. Habit
      lines filed under *Pending fixes* were relayed as fixes every start;
-   - **Maintenance facts**, per repo, with no judgement: for each template (bug hunt,
+   - **Maintenance facts**: first `**due** trim state` when the control `state.md` is
+     past 25 KB (`STATE_TRIM_KB`), with its growth; then per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's
-     `CLAUDE.md` size (KB and lines, from the main checkout); its unused audit notes;
+     `CLAUDE.md` size (KB and lines, from the main checkout); a `**due** doc trim` line per
+     tracked doc (`.md` at the root or under `docs/`, any `README.md` or `CLAUDE.md`; not
+     results reports) over `doc_budget_kb` (15 KB; `[defaults]`) with its growth since the last
+     digest (sizes kept in `.conductor/doc_sizes.json`), nothing for one under; its unused audit notes;
      and each `slow:` component (the words before ` ~` or the first comma) named in two
      or more of its last five finished reports, with their numbers, and the same for
      `friction:`. Then the **workflow retro** line: the last self-audit (`post-audit`) and

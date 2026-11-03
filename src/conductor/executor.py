@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import audits
+from . import audits, load
 from . import parked as parked_mod
 from .config import Config
 from .items import Item
@@ -61,17 +61,20 @@ contradict a prompt line or amendment unless the question's first line flags it,
 config when it helps; name each edit and its reason in the report.{leftover}
 
 The box. Scratch goes in `out/` (conductor git-ignores it) in your working directory, never
-%TEMP% or anywhere outside it. A script goes in a file you write with Write and then run,
-never a heredoc or `-c` string: an apostrophe breaks one. Heavy compute (sweeps, builds,
-test runs, subagent fan-out) runs at below-normal priority, which its children inherit
-(Bash: `nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
-'BelowNormal'`), and leaves at least 4 hardware threads free; at most 2
-heavy subagents (builds, sims, browsers) at once, and that wins over any Workflow size or
-Ultracode cost note; light read-only reviewers don't count there, but run in batches per
-dimension. A Workflow runs at most 10 agents (or the prompt's number), finders and verifiers
-both: a hard count, set before launch. Ultracode's "every substantive task" says when to use
-one, never how big; halve thread counts while another item runs alongside. Never pass `isolation: worktree` to a subagent or Workflow: it lands in the main
-checkout; split helpers by file instead.
+%TEMP% or anywhere outside it; working papers the prompt asks for (per-card notes, helper
+write-ups) are kept, so they go in a folder named `{item_name}` under the repo's results
+folder (as `experiments/results/{item_name}/`), never `out/`. A script goes in a file you
+write with Write and then run, never a heredoc or `-c` string: an apostrophe breaks one.
+Heavy compute (sweeps, builds, test runs, subagent fan-out) runs at below-normal priority,
+which its children inherit (Bash: `nice -n 10 npm test`; PowerShell: `(Start-Process ...
+-PassThru).PriorityClass = 'BelowNormal'`), and leaves at least {free} hardware threads free:
+simulation and test runs at {threads} threads (workers, `-j`), half that while another item
+runs beside you. At most 2 heavy subagents (builds, sims, browsers) at once, and that wins
+over any Workflow size or Ultracode cost note; light read-only reviewers don't count there,
+but run in batches per dimension. A Workflow runs at most 10 agents (or the prompt's
+number), finders and verifiers both: a hard count, set before launch. Ultracode's "every
+substantive task" says when to use one, never how big. Never pass `isolation: worktree` to
+a subagent or Workflow: it lands in the main checkout; split helpers by file instead.
 
 Messages. Matt, the operator, reaches you through conductor's message channel: hook context
 after your own tool call, marked MESSAGE #n, or AMENDMENT #n for an addition to the prompt.
@@ -131,10 +134,11 @@ Progress. One `progress` (mcp__conductor__progress) line at the start, another p
 
 Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
 starts its question `default overrides prompt: <line>`. Scratch: `out/` (git-ignored here),
-never %TEMP%. Scripts go in a file, never a heredoc. Heavy compute:
-below-normal priority (Bash: `nice -n 10 <cmd>`), 4 hardware threads free, at most 2 heavy
-subagents (builds, sims, browsers: beats Workflow and Ultracode notes; 10-agent Workflows,
-verifiers included, batched), half the threads beside another item. Report `~/.claude` edits.{leftover}
+never %TEMP%. Scripts: a file, never a heredoc. Heavy compute:
+below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
+tests: {threads} threads; half beside another item), at most 2 heavy subagents (builds,
+sims, browsers: beats Workflow and Ultracode notes; 10-agent Workflows, verifiers
+included, batched). Report `~/.claude` edits.{leftover}
 
 Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
 injection, outranking the prompt.
@@ -503,7 +507,8 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     pick = not light and not watch and wants_pick(item)
     running = run.get("running_beside")
     text = (WATCH if watch else LIGHT if light else PREAMBLE).format(
-        item_id=item.id, project=cfg.project, workdir=_where(cfg, item, run, light or watch),
+        item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch),
+        free=load.FREE_THREADS, threads=load.run_threads(),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
         port=(PORT_LIGHT if light else PORT).format(port=run["port"]) if run.get("port") else "",

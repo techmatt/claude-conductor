@@ -83,6 +83,7 @@ class Config:
     merge_minutes: float = 10.0      # a merge executor resolving a prose conflict
     foreground_seconds: float = 60.0  # an executor's foreground shell call moves to the background after this (0: off)
     toasts: bool = True
+    doc_budget_kb: float = 15.0      # a tracked repo doc past this shows **due** in the digest (session.doc_facts)
     # Memory (`memory.py`): sampled every N seconds (0: off); a level is commit at or over
     # a percent of its limit, or free RAM at or under a size (0 turns either off).
     memory_sample_seconds: float = 30.0
@@ -340,6 +341,7 @@ def load(control: Path) -> Config:
         merge_minutes=float(defaults.get("merge_minutes", 10.0)),
         foreground_seconds=float(defaults.get("foreground_seconds", 60.0)),
         toasts=bool(defaults.get("toasts", True)),
+        doc_budget_kb=float(defaults.get("doc_budget_kb", 15.0)),
         **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS + NIGHT_KEYS},
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],

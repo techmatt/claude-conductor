@@ -16,6 +16,15 @@ TOP = 4                 # consumers kept per sample
 MIN_PERCENT = 1.0       # a consumer under this is not named
 MIN_SECONDS = 1.0       # a sample sooner than this (a rising memory level) repeats the last one
 FREE_THREADS = 4        # the preamble's load budget: an item leaves this many hardware threads free
+RUN_HEADROOM = 2        # threads under the budget's ceiling the preamble's default leaves for the session itself
+
+
+def run_threads() -> int:
+    """The preamble's default thread count for a simulation or test run: the box's threads
+    less the load budget and some headroom (6 on a 12-thread box), so an executor at its
+    default leaves room for outside processes (aicomplete #3405: one at the 8 the budget
+    allows tripped `load_high` beside them and was killed)."""
+    return max(1, (psutil.cpu_count() or 1) - FREE_THREADS - RUN_HEADROOM)
 
 
 class Sampler:

@@ -81,6 +81,7 @@ setup_minutes = 10            # per setup command
 merge_minutes = 10            # a merge executor resolving a prose conflict is killed after this
 foreground_seconds = 60       # an executor's foreground shell call moves to the background after this; 0 = off (see progress.md)
 toasts = true                 # Windows desktop notifications (see inbox.md, Toasts)
+doc_budget_kb = 15            # a tracked repo doc past this is **due** in session.md's Maintenance facts (inbox.md)
 memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (see memory.md)
 memory_keep_hours = 24        # samples kept in .conductor/memory.jsonl
 memory_pressure_percent = 90  # pressure: commit at or over this % of its limit (0 = off) ...

@@ -5,15 +5,16 @@ start raises and each repo's maintenance facts."""
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
-from . import inbox, nightshift, parked
+from . import git, inbox, nightshift, parked
 from .audits import canonical
 from .config import Config
 from .events import Event, EventLog
 from .state import View
-from .util import clock, parse_stamp, read_text
+from .util import clock, parse_stamp, read_text, write_text
 
 # Conductor's own checkout: `src/conductor/session.py` → the repo root. Its `planner-notes.md`
 # (git-ignored, the planner's own file) holds the marker for conductor's hand-pasted prompts' reports.
@@ -30,6 +31,8 @@ SLOW_WINDOW = 5     # a `slow:` (or `friction:`) part named in two or more of a 
 RETRO_FLOOR = 12    # non-template items finished since the last workflow retro before one is due regardless
 RETRO_OVERRUN = 1.5     # a run this many times its first ETA (and `RETRO_OVERRUN_MINUTES` over) makes one due
 RETRO_OVERRUN_MINUTES = 10
+STATE_TRIM_KB = 25      # `state.md` past this: **trim state** is due (planner.md, *state.md is status*)
+SIZES = "doc_sizes.json"    # in `.conductor/`: each digest's doc sizes, for the next one's growth
 
 
 def _report_key(name: str) -> tuple[int, str] | None:
@@ -118,10 +121,12 @@ def slow_components(text: str | None) -> list[str]:
     return out
 
 
-def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
+def maintenance(cfg: Config, log: EventLog, view: View, repo: str,
+                docs: tuple[dict, dict | None] | None = None) -> list[str]:
     """One repo's maintenance facts, with no judgement: when each template last ran and
-    how many other items finished since, `CLAUDE.md`'s size, unused audit notes, and
-    `slow:` causes repeated in recent reports."""
+    how many other items finished since, `CLAUDE.md`'s size, each tracked doc over
+    `doc_budget_kb` (from `docs`, `doc_growth`'s pair), unused audit notes, and `slow:`
+    causes repeated in recent reports."""
     fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo), key=lambda e: e.id)
     fins = [ev for ev in fins if not ev.detail.get("resume_of")]     # questions about work, not work
     plain = [ev for ev in fins if not ev.detail.get("template")]
@@ -145,6 +150,9 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
         out.append(f"- `CLAUDE.md`: {len(data) / 1024:.1f} KB, {data.count(b'\n')} lines")
     except OSError:
         out.append("- `CLAUDE.md`: none")
+    if docs is not None:
+        out += [ln for key in sorted(k for k in docs[0] if k.startswith(f"{repo}:"))
+                if (ln := size_line(key, *docs, cfg.doc_budget_kb, "doc trim"))]
     notes = view.unused_notes(cfg, repo)
     out.append(f"- unused audit notes: {len(notes)}" + (f" ({', '.join(n.item.split('/', 1)[1] for n in notes)})"
                                                          if notes else ""))
@@ -165,6 +173,61 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str) -> list[str]:
     waiting, rules = parked.counts(cfg.control, repo)
     out.append(f"- parked edits waiting: {waiting}" + (f" ({rules} `[rules]`)" if rules else ""))
     return out
+
+
+def is_doc(rel: str) -> bool:
+    """A repo's own docs: `.md` at its root or under `docs/`, or a `README.md` or `CLAUDE.md`
+    anywhere. Reports under a results folder are output (aicomplete has ~40 past 15 KB)."""
+    parts = rel.split("/")
+    return parts[-1].lower().endswith(".md") and (
+        len(parts) == 1 or parts[0] == "docs" or parts[-1] in ("README.md", "CLAUDE.md"))
+
+
+def doc_sizes(cfg: Config) -> dict[str, int]:
+    """Bytes of the control `state.md` (key `state.md`) and of each repo's tracked docs
+    (`is_doc`) in its main checkout (key `<repo>:<path>`)."""
+    out = {}
+    if (state_md := cfg.control / "state.md").is_file():
+        out["state.md"] = state_md.stat().st_size
+    for repo, root in cfg.repos.items():
+        try:
+            paths = git.ls_files(root)
+        except (OSError, git.GitError):
+            continue
+        for rel in paths:
+            if is_doc(rel) and (p := root / rel).is_file():
+                out[f"{repo}:{rel}"] = p.stat().st_size
+    return out
+
+
+def doc_growth(cfg: Config) -> tuple[dict[str, int], dict[str, int] | None]:
+    """This digest's doc sizes and the last digest's (None before the first), saving these
+    for the next."""
+    path = cfg.state_dir / SIZES
+    try:
+        prev = json.loads(read_text(path))
+    except (OSError, ValueError):
+        prev = None
+    sizes = doc_sizes(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_text(path, json.dumps(sizes, indent=0, sort_keys=True) + "\n")
+    return sizes, prev
+
+
+def size_line(key: str, sizes: dict[str, int], prev: dict[str, int] | None, budget_kb: float,
+              trim: str) -> str | None:
+    """`- **due** <trim>: `<file>` 61.0 KB, budget 25 KB, +2.0 KB since the last digest`,
+    or None when the file is absent or within its budget."""
+    if (size := sizes.get(key)) is None or size <= budget_kb * 1024:
+        return None
+    name = key.split(":", 1)[-1]
+    if prev is None:
+        growth = "no earlier digest to compare"
+    elif key not in prev:
+        growth = "new since the last digest"
+    else:
+        growth = f"{(size - prev[key]) / 1024:+.1f} KB since the last digest"
+    return f"- **due** {trim}: `{name}` {size / 1024:.1f} KB, budget {budget_kb:g} KB, {growth}"
 
 
 def friction_text(detail: dict) -> str | None:
@@ -311,7 +374,8 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
            root: Path | None = None) -> str:
     """The digest: the inbox since the previous read mark, headed by the session's
     checkpoint, then `state.md`'s due lines and the maintenance facts. The project's
-    `[links]` come first, above everything else."""
+    `[links]` come first, above everything else. Saves this digest's doc sizes for the next."""
+    docs = doc_growth(cfg)
     links = "".join(f"- {name}: {url}\n" for name, url in cfg.links.items())
     head = (f"# Session start — {cfg.project}\n\n"
             + (f"## Links\n\n{links}\n" if links else "")
@@ -320,6 +384,8 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
     habits = planner_habits(cfg.control)
     out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]
+    if state_line := size_line("state.md", *docs, STATE_TRIM_KB, "trim state"):
+        out.append(state_line)
     for repo in cfg.repos:
-        out += maintenance(cfg, log, view, repo)
+        out += maintenance(cfg, log, view, repo, docs)
     return "\n".join(out) + "\n"

@@ -280,10 +280,10 @@ def test_answer_receipt_marks_a_flagged_question(env):
 
 
 FULL_LINES = ("A skip in the prompt binds", "default overrides prompt", "`out/`", "%TEMP%", "below-normal priority",
-              "4 hardware threads", "at most 2\nheavy subagents", "halve thread counts", "`~/.claude`", "over an hour of the time limit",
-              "mcp__conductor__wait_for")
+              "4 hardware threads", "At most 2 heavy subagents", "half that while another item", "`~/.claude`",
+              "over an hour of the time limit", "mcp__conductor__wait_for")
 LIGHT_LINES = ("A skip in the prompt", "default overrides prompt", "`out/`", "%TEMP%", "below-normal priority", "4 hardware threads",
-               "at most 2 heavy", "half the threads", "`~/.claude`", "over an hour left", "mcp__conductor__wait_for")
+               "at most 2 heavy", "half beside another item", "`~/.claude`", "over an hour left", "mcp__conductor__wait_for")
 
 
 def test_both_preambles_carry_the_rules(env):

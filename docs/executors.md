@@ -90,10 +90,16 @@ no port.
 - **Scripts in files** (72; wordwarriors 174, aicomplete 074). A script is written with
   Write and run as a file, never a heredoc or `-c` string: an apostrophe broke quoted-delimiter
   heredocs in executor Bash.
+- **Working papers** (73, aicomplete 079). Papers a prompt asks for (per-card notes,
+  helper write-ups) go in a folder named for the item under the repo's results folder
+  (`experiments/results/<item>/`), committed; ultracode helpers had put them in `out/`,
+  git-ignored, and they were lost. Full preamble only.
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
-  runs at below-normal process priority and leaves at least 4 hardware threads free; at
-  most 2 heavy subagents (builds, sims, browsers) at once; thread counts halve while another
-  item runs alongside. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
+  runs at below-normal process priority and leaves at least 4 hardware threads free:
+  simulation and test runs default to `load.run_threads()` threads (the box's less 4 and 2
+  of headroom: 6 here; 73, after aicomplete #3405 ran at the 8 allowed and was killed beside
+  outside processes), half that while another item runs alongside; at most 2 heavy
+  subagents (builds, sims, browsers) at once. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
   no constraint": light read-only reviewers and verifiers don't count
   against the 2, but run in batches per dimension. A Workflow runs at most 10 agents (or the
   prompt's number), finders and verifiers both, a hard count set before launch (68; `ultracode.md`).
