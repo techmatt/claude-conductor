@@ -108,11 +108,11 @@ class ProjectView(QWidget):
         self.dismiss_btn.setVisible(False)
         self.dismiss_btn.clicked.connect(self.dismiss_rejected)
         head.addWidget(self.dismiss_btn)
-        # Offered once every open project is idle and a daemon runs newer code (`MainWindow.refresh`).
+        # Offered once a daemon runs other code than this app (`MainWindow.refresh`).
         self.restart_btn = QPushButton("Restart all")
         self.restart_btn.setVisible(False)
-        self.restart_btn.setToolTip("Conductor's code changed: restart the app and every daemon. "
-                                    "`tools/restart_all.py --if-idle`, which refuses if anything has become active")
+        self.restart_btn.setToolTip("Conductor's code changed: restart the app and every daemon, each at its safe "
+                                    "point; running items carry on (`tools/restart_all.py`)")
         self.restart_btn.clicked.connect(self.restart_all)
         head.addWidget(self.restart_btn)
         # One Run button per `[run.<name>]` target, rebuilt when the targets change, each
@@ -303,7 +303,7 @@ class ProjectView(QWidget):
     def restart_all(self) -> None:
         actions.restart_all(self.project.control)
         self.restart_btn.setEnabled(False)
-        self.notify("restart all: started; it refuses if anything is active (.conductor/restart.out.log)")
+        self.notify("restart all: started; each daemon restarts at its safe point (.conductor/restart.out.log)")
 
     def dismiss_rejected(self) -> None:
         path = actions.ack_invalid(self.project.control)

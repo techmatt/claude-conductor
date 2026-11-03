@@ -1,16 +1,14 @@
 """Prompt 68's rules: the preamble's new lines, `ask` beside an amendment, an `eta`'s source,
-the load warning and the app's restart offer."""
+the load warning and the app's restart offer (its rules since 71: `test_prompt_71.py`)."""
 
 import importlib.util
 import threading
 from datetime import timedelta
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from conductor import ask_server, daemon_memory, inbox, load, nightshift, notify, questions
-from conductor.app import model
 from conductor.util import now
 from test_memory import status
 from test_preamble import SHORT, render
@@ -96,43 +94,12 @@ def test_a_spike_or_a_box_with_threads_to_spare_never_warns(env, monkeypatch):
     assert not env.events("load_high")
 
 
-def test_restart_is_offered_only_with_other_code_and_nothing_active():
-    snap = lambda differs, active: SimpleNamespace(code_differs=differs, active=active)
-    assert model.restart_due([snap(True, False), snap(False, False)])
-    assert not model.restart_due([snap(True, False), snap(False, True)])
-    assert not model.restart_due([snap(False, False)])
-    assert not model.restart_due([])
-
-
-def test_the_snapshot_is_active_on_a_question_but_not_a_design_one(env):
-    project = model.Project(env.control)
-    assert not project.snapshot().active
-    questions.create(env.control, "code/001_x", "Keep it?", [], "keep", False, 10, design=True)
-    assert not project.snapshot().active
-    questions.create(env.control, "code/001_x", "Keep that?", [], "keep", False, 10)
-    assert project.snapshot().active
-
-
 def restart_tool():
     path = Path(__file__).resolve().parent.parent / "tools" / "restart_all.py"
     spec = importlib.util.spec_from_file_location("restart_all", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
-
-@pytest.mark.parametrize("busy, code, restarted", [(1, 1, False), (0, 0, True)])
-def test_restart_all_if_idle_refuses_while_anything_is_active(monkeypatch, tmp_path, busy, code, restarted):
-    tool, done = restart_tool(), []
-    monkeypatch.setattr(tool, "controls", lambda: [tmp_path])
-    monkeypatch.setattr(tool, "apps", lambda: [])
-    monkeypatch.setattr(tool.config, "load", lambda c: c)
-    monkeypatch.setattr(tool.state, "daemon_info", lambda c: SimpleNamespace(alive=True))
-    monkeypatch.setattr(tool, "check", lambda live, apps: busy)
-    monkeypatch.setattr(tool, "restart_daemon", lambda c: done.append(c))
-    monkeypatch.setattr(tool, "restart_app", lambda apps, fallback: done.append("app"))
-    assert tool.main(["--if-idle"]) == code
-    assert bool(done) is restarted
 
 
 def test_the_header_shows_the_offer_and_its_click_restarts(qapp, env, tmp_path, monkeypatch):

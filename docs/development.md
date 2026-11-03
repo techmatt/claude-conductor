@@ -68,10 +68,14 @@ Two scripts in `tools/` serve the maintenance pass (`CLEANUP.md`) and any sessio
 item through queue and merge, `session: start`, a request) and then renders the app on
 it offscreen, refusing while the sandbox's own daemon runs.
 
-`uv run python tools/restart_all.py [--check | --if-idle]` is "restart all" (`CLAUDE.md`). `--if-idle`
-(the app's button, `app.md`) restarts unless `--check` would exit 1. It covers every
-live daemon of the `*-control` folders beside this repo, and the app. `--check` lists what a
-restart would interrupt (running or staged items, open questions) and exits 1 if anything
-is active. Without it, each daemon is stopped by `stop: daemon`, waited for and started
-detached (`procs.spawn_daemon`). The app is then killed and started detached with the folders
-it was launched with. No app running: it starts one on the newest control folder.
+`uv run python tools/restart_all.py [--check | --force]` is "restart all" (`CLAUDE.md`; the
+app's button runs it too, `app.md`). It covers every live daemon of the `*-control` folders
+beside this repo, and the app. Since 71 it writes `restart: daemon` to each daemon, which
+restarts itself at its next safe point and adopts its executors (`restart.md`), and waits up
+to 10 minutes (`RESTART_WAIT`) for every new pid, printing every 30s what a daemon still
+waits on. One still waiting by then restarts on its own once safe; the tool exits 1.
+`--force` instead stops each daemon (`stop: daemon`), waits and starts it detached
+(`procs.spawn_daemon`): a setup, a merge resolve or an open picker is lost, and the tools
+stop. `--check` lists what runs now and exits 0. The app is then killed (only its own
+processes, never a session console it opened) and started detached with the folders it was
+launched with. No app running: it starts one on the newest control folder.

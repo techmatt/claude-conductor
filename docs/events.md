@@ -7,7 +7,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | kind | when | notable detail |
 |---|---|---|
 | `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control, code (start: its code version, `restart.md`); running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on an `OSError`, with error) |
-| `daemon_restart` | the old daemon restarts itself on a code change (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
+| `daemon_restart` | the old daemon restarts itself on a code change or a `restart: daemon` (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`, or `asked by <by> (restart: daemon)` with paths), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
 | `daemon_died` | at start: the previous daemon never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `load_high` | under 4 hardware threads free for 3 samples with items running, once per item (`memory.md`); inbox only, no toast (70) | free, keep, items (told), load |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item; `memory.md`), action |

@@ -16,7 +16,7 @@ When Matt says "launch the conductor" (or "open conductor" and the like), run `u
 
 ## "Restart all"
 
-When Matt says "restart all" (or "restart everything" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py --check` first. Exit 1 means something is active (a running or staged item, an open question): list it and wait for Matt's go before restarting. Exit 0 means run `uv run python tools/restart_all.py`. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). The warning comes first: Matt times a restart.
+When Matt says "restart all" (or "restart everything" and the like), restart the app and every live daemon: run `uv run python tools/restart_all.py`, with no check and no go first. Running items are adopted, never interrupted: each daemon restarts at its own safe point, which can take up to 10 minutes, so background it with a waiter. Exit 1 means a daemon still waits after that (the output names what on); report it, and run `--force` (stop and start now) only on Matt's word. Never restart either by hand as a Claude Code background command; the tool starts both detached (`docs/restart.md`). The warning comes first: Matt times a restart.
 
 ## "Run next prompt"
 

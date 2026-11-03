@@ -172,9 +172,9 @@ def start_daemon(control: Path):
 
 
 def restart_all(control: Path):
-    """`tools/restart_all.py --if-idle`, detached: it stops this app. Output in `.conductor/restart.out.log`."""
+    """`tools/restart_all.py`, detached: it stops this app. Output in `.conductor/restart.out.log`."""
     log = Path(control).resolve() / ".conductor" / "restart.out.log"
-    return procs.spawn_detached([procs.console_python(), str(CONDUCTOR_ROOT / "tools" / "restart_all.py"), "--if-idle"],
+    return procs.spawn_detached([procs.console_python(), str(CONDUCTOR_ROOT / "tools" / "restart_all.py")],
                                 CONDUCTOR_ROOT, log)
 
 

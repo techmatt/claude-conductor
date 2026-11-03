@@ -87,13 +87,30 @@ executors and keeps stages as for any restart. A version that fails (no import, 
 spawn, no ready file; a hung new process is killed) gets one `warning` naming
 `daemon.out.log`; the old daemon keeps running and tries that version again after 5
 minutes (`RESTART_RETRY_SECONDS`). A daemon started in a terminal hands that terminal
-back when it restarts itself. The app's Start/Stop and "restart all" are unchanged.
+back when it restarts itself. The app's Start/Stop are unchanged.
 
-The app doesn't restart itself. Once a daemon runs other code than the app and no open
-project has a running or staged item or an open question (a design question holds nothing up),
-every project header shows **Restart all** (68): `tools/restart_all.py --if-idle`, detached,
-output in `.conductor/restart.out.log`. It rechecks every control folder and refuses if
-anything is active, so the button can't interrupt an item in a project the app doesn't have open.
+## Asked restarts
+
+"Restart all" (71) restarts without interrupting anything: `tools/restart_all.py` writes
+`restart: daemon` to each live daemon, and the daemon takes the path above with no code
+change needed. Differences: it runs the code on disk as it is (a dirty checkout doesn't
+block it, as it wouldn't block a stop and a start; not a git checkout is no bar either);
+it names its blockers at once in a `warning` ("`restart: daemon` (by …) waits for a safe
+point: …"), which the tool prints while it waits; and one that fails (no import, no spawn,
+no handshake) is dropped with a `warning`, not retried (asking again retries).
+`daemon_restart`'s reason is `asked by <by> (restart: daemon)`, with the signal's paths.
+Before 71 the tool stopped and started each daemon and refused while anything ran; that
+path is still `--force` (it loses a setup, a resolve or a picker, and stops the tools).
+The tool waits up to 10 minutes for every new pid, then restarts the app regardless (it
+kills only the app's own processes, never a `claude --resume` console it opened); a daemon
+still waiting restarts on its own once safe. `docs/development.md` has the flags. Found
+live: aicomplete 078 was adopted across this morning's stop-and-start restart, so the
+stop path never killed executors; what it lost was the go/wait question, the tools, and
+any setup, resolve or picker in flight.
+
+The app doesn't restart itself. Once a daemon runs other code than the app, every project
+header shows **Restart all** (68), running items or not (71): `tools/restart_all.py`,
+detached, output in `.conductor/restart.out.log`.
 
 ## Platform notes
 

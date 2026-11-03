@@ -31,6 +31,7 @@ retire: art_alts_009         # delete that picker's manifest and images (picks.m
 open: reveal C:\Code\x\out.png   # a desktop action on a checked path (below)
 notify: ready when you are   # a desktop toast
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
+restart: daemon              # the daemon restarts itself at its next safe point, adopting executors (restart.md)
 watch: now                   # queue a watch item now (night-shift.md); refused while one is queued or running
 push: sandbox                # push sandbox's main to its remote now (push.md); its push or push_failed follows
 push: control                # the same for the control folder (when no repo is named control)
@@ -140,6 +141,9 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
 - **stop: daemon** — the daemon finishes the signals of that tick, logs `daemon_stop`
   (`reason: signal`), releases its lock and exits. Executors and stages keep running;
   the next start adopts them.
+- **restart: daemon** (71) — "restart all": the daemon restarts itself as on a code change
+  (`restart.md`, *Asked restarts*), on the code on disk, so executors and stages are adopted
+  and the tools keep running. A `stop: daemon` beside it wins.
 - **autopilot** — `autopilot: off|night|always` (`on` is `always`): logs `autopilot`
   (mode, was), which every later decision reads (`night-shift.md`, *Autopilot*).
 - **ack** — `ack: invalid [#<event> …]` (none named: every live one) logs `ack`; those

@@ -73,8 +73,8 @@ hint under the box says so (`widgets.SendBox`, `MessageDialog`).
 **Code check.** Each `daemon_start` carries its code version; the app reads its own once.
 When a live daemon's differs (a daemon restarts itself on a commit, the app doesn't: after
 60 the open app flagged 034 "unknown front-matter fields" the daemon had staged), the header
-says `invalid` marks may be stale and to restart all. Once nothing is active the header offers
-a **Restart all** button (68; `restart.md`).
+says `invalid` marks may be stale and to restart all, and offers a **Restart all** button (68;
+since 71 also while items run: they are adopted, `restart.md`).
 
 **Panels**: Repos (with each item's Conversation), Questions, Events and Proposed, in
 `docs/app-panels.md`.

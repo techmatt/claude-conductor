@@ -104,6 +104,7 @@ class RestartMixin:
         self._restart_to: str | None = None     # a restart wanted, to this version
         self._restart_since: float | None = None
         self._restart_warned = False
+        self._restart_asked: dict | None = None # a `restart: daemon` signal's paths and by, until done or failed
 
     @property
     def _ready_file(self) -> Path:
@@ -123,33 +124,59 @@ class RestartMixin:
                                             f"keeps running the code it started with and tries again every "
                                             f"{duration(RESTART_RETRY_SECONDS)}")
 
+    def ask_restart(self, rel: str, by: str | None) -> None:
+        """`restart: daemon` ("restart all", 71): restart now, on whatever code is on disk,
+        through the same safe point as a code change, so running executors are adopted."""
+        self._restart_asked = {"paths": [rel], "by": by or "unknown"}
+        self._restart_since, self._restart_warned = time.monotonic(), False
+
+    def _fail(self, version: str, why: str) -> None:
+        """A restart that can't happen: an asked one is dropped with a warning (asking again
+        retries it), a code change's version is refused for a while."""
+        if self._restart_asked is None:
+            self._refuse(version, why)
+            return
+        self.log.append("warning", paths=self._restart_asked["paths"],
+                        note=f"`restart: daemon` (by {self._restart_asked['by']}) not done: {why}; "
+                             f"this daemon keeps running")
+        self._restart_asked = None
+
     def restart_due(self) -> bool:
-        """Between ticks: True once a new daemon is started on changed code and this one
-        should leave `run_forever` (without `daemon_stop`)."""
-        if self.code_version is None:
+        """Between ticks: True once a new daemon is started on changed code, or because a
+        `restart: daemon` asked for it, and this one should leave `run_forever` (without
+        `daemon_stop`)."""
+        asked = self._restart_asked is not None
+        if self.code_version is None and not asked:
             return False
         checked = False                 # imports checked in this call: not again before the spawn
         if self._restart_to is None:
-            if self._code_at is not None and time.monotonic() - self._code_at < CODE_CHECK_SECONDS:
-                return False
-            self._code_at = time.monotonic()
-            version = self.code_probe()
-            if version is None or version == self.code_version:
-                return False
-            refused = self._code_refused.get(version)
-            if refused is not None and time.monotonic() - refused < RESTART_RETRY_SECONDS:
-                return False
+            if asked:
+                version = self.code_probe() or self.code_version or "unknown"
+            else:
+                if self._code_at is not None and time.monotonic() - self._code_at < CODE_CHECK_SECONDS:
+                    return False
+                self._code_at = time.monotonic()
+                version = self.code_probe()
+                if version is None or version == self.code_version:
+                    return False
+                refused = self._code_refused.get(version)
+                if refused is not None and time.monotonic() - refused < RESTART_RETRY_SECONDS:
+                    return False
             if error := self.import_check(self.cfg.control):
-                self._refuse(version, f"does not import: {error}")
+                self._fail(version, f"does not import: {error}")
                 return False
-            self._restart_to, self._restart_since, self._restart_warned = version, time.monotonic(), False
-            checked = True
+            self._restart_to, checked = version, True
+            if not asked:
+                self._restart_since, self._restart_warned = time.monotonic(), False
         if blockers := self._restart_blockers():
             waited = time.monotonic() - self._restart_since
-            if waited >= RESTART_PATIENCE_SECONDS and not self._restart_warned:
+            # Asked for: say at once what it waits on (restart_all shows it); a code change: after the patience.
+            if (asked or waited >= RESTART_PATIENCE_SECONDS) and not self._restart_warned:
                 self._restart_warned = True
-                self.log.append("warning", note=f"conductor's code changed; the restart has waited {duration(waited)} "
-                                                f"for a safe point: {'; '.join(blockers)}. It keeps waiting, never forced")
+                why = (f"`restart: daemon` (by {self._restart_asked['by']}) waits" if asked else
+                       f"conductor's code changed; the restart has waited {duration(waited)}")
+                self.log.append("warning", note=f"{why} for a safe point: {'; '.join(blockers)}. "
+                                                f"It keeps waiting, never forced")
             return False
         return self._restart(imports_checked=checked)
 
@@ -157,14 +184,14 @@ class RestartMixin:
         # A `stop: daemon` written since the tick is this daemon's: applied here, never by the new one.
         self.process_signals()
         if self.stop_requested is not None:
-            self._restart_to = None
+            self._restart_to = self._restart_asked = None
             return False                # run_forever stops (`daemon_stop`) at its next check
         if self._restart_blockers():
             return False                # a signal just applied made it unsafe: still wanted, retried
         to, self._restart_to = self._restart_to, None
         # The working tree may have changed since the check at detection (a blocked wait).
         if not imports_checked and (error := self.import_check(self.cfg.control)):
-            self._refuse(to, f"does not import: {error}")
+            self._fail(to, f"does not import: {error}")
             return False
         head = self.head_probe()
         log = self.cfg.state_dir / "daemon.out.log"
@@ -172,15 +199,18 @@ class RestartMixin:
         try:
             new = self.restart_spawner(self.cfg.control, log, after=os.getpid())
         except OSError as exc:
-            self._refuse(to, f"the new daemon could not start: {exc}")
+            self._fail(to, f"the new daemon could not start: {exc}")
             return False
         if not self._handshake(new):
             if new.poll() is None:
                 procs.kill_tree(new.pid)        # never left to take the lock later
-            self._refuse(to, f"the new daemon (pid {new.pid}) did not report ready within "
-                             f"{duration(RESTART_READY_SECONDS)}; see {self.cfg.rel(log)}")
+            self._fail(to, f"the new daemon (pid {new.pid}) did not report ready within "
+                           f"{duration(RESTART_READY_SECONDS)}; see {self.cfg.rel(log)}")
             return False
-        self.log.append("daemon_restart", reason=f"code changed: {self.code_head.split(' ', 1)[0]} → {head}",
+        asked, self._restart_asked = self._restart_asked, None
+        reason = (f"asked by {asked['by']} (restart: daemon)" if asked else
+                  f"code changed: {self.code_head.split(' ', 1)[0]} → {head}")
+        self.log.append("daemon_restart", reason=reason, **({"paths": asked["paths"]} if asked else {}),
                         **{"from": self.code_version, "to": to}, pid=os.getpid(), new_pid=new.pid,
                         running=sorted(self.runs), staging=sorted(self.stages),
                         note="executors keep running; the new daemon adopts them")
@@ -200,8 +230,9 @@ class RestartMixin:
         """What a restart now would break: a merge executor resolving a prose conflict, a
         setup running, a reorder not finished, a picker page still waiting for its save
         (its port and token die with this process), a run target still starting (its wait
-        lives in memory); or what it would run that is not committed (`checkout_blockers`)."""
-        out = list(self.checkout_probe())
+        lives in memory); or, for a code change, what it would run that is not committed
+        (`checkout_blockers`: an asked restart runs the tree as it is, as a stop and start would)."""
+        out = [] if self._restart_asked is not None else list(self.checkout_probe())
         for path in sorted(self.cfg.path("running").glob("*/*.json")):
             try:
                 rec = json.loads(path.read_text(encoding="utf-8"))

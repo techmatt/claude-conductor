@@ -215,9 +215,9 @@ class SignalsMixin:
             elif key == "notify":
                 if not value:
                     raise ValueError(f"line {n}: notify: expects a line of text")
-            elif key == "stop":
+            elif key in ("stop", "restart"):
                 if value.lower() != "daemon":
-                    raise ValueError(f"line {n}: stop: only `stop: daemon` is known, got {value!r}")
+                    raise ValueError(f"line {n}: {key}: only `{key}: daemon` is known, got {value!r}")
             elif key == "watch":
                 if value.lower() != "now":
                     raise ValueError(f"line {n}: watch: only `watch: now` is known, got {value!r}")
@@ -301,6 +301,8 @@ class SignalsMixin:
             self.log.append("notify", paths=[rel], text=value, by=self._by or "unknown")
         elif key == "stop":
             self.stop_requested = {"paths": [rel], **({"by": self._by} if self._by else {})}
+        elif key == "restart":
+            self.ask_restart(rel, self._by)             # daemon_restart: taken at the next safe point
         elif key == "watch":
             # Asked for: the planner rule and memory don't hold it back (daemon_watch).
             if why := self._launch_watch(f"asked for by {self._by or 'unknown'} (`watch: now`)", [], force=True):
