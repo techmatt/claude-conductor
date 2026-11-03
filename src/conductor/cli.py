@@ -194,7 +194,7 @@ def cmd_audits(args) -> int:
         for n in notes:
             if n in free or args.all:
                 lines = len(n.path.read_text(encoding="utf-8", errors="replace").splitlines())
-                how = (f"used by {n.used_by.item} (#{n.used_by.id})" if n.used_by else
+                how = (f"used by {n.used_by.item or n.used_by.detail.get('by')} (#{n.used_by.id})" if n.used_by else
                        "claimed by a running cleanup" if n.item in claimed else "unused")
                 print(f"  {n.item}  finished {n.finish.detail.get('status')} {clock(n.finish.ts)} — "
                       f"{cfg.rel(n.path)} ({lines} lines) · {how}")

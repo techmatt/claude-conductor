@@ -180,6 +180,10 @@ class SignalsMixin:
             elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit", "land"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
+            elif key == "audit_used":
+                if not all(len(ref.split()) == 1 for ref in value.split(",")):
+                    raise ValueError(f"line {n}: audit_used: expects `<repo>/<NNN_name>[, ...]` or `<repo>/all`, "
+                                     f"got {value!r}")
             elif key == "reorder":
                 parts = value.split()
                 if len(parts) < 2 or (parts[0] != "proposed" and parts[0] not in self.cfg.repos):
@@ -266,6 +270,8 @@ class SignalsMixin:
             self._land(value, rel)                      # daemon_merge
         elif key == "audit":
             self._audit(value, rel)
+        elif key == "audit_used":
+            self._audit_used(value, rel)
         elif key == "checkpoint":
             self._checkpoint(value, rel)
         elif key == "session":
@@ -517,6 +523,36 @@ class SignalsMixin:
         run.rec["audit"] = True
         self._save(run)
         self._tell(f"{run.item_id} {text}", rel, audit=True)
+
+    def _audit_used(self, value: str, rel: str) -> None:
+        """`audit_used: <item>[, ...]` or `<repo>/all`: notes an item already handled, marked
+        used by hand so no cleanup is handed them. One event per repo; nothing logs if any
+        ref is refused."""
+        view = state.scan(self.cfg, self.log)
+        chosen: dict[str, list[str]] = {}
+        for ref in (r.strip() for r in value.split(",")):
+            repo, slash, name = ref.rpartition("/")
+            if slash and name.lower() == "all":
+                if repo not in self.cfg.repos:
+                    raise ValueError(f"audit_used: {repo!r} is not a repo")
+                ids = [n.item for n in view.unused_notes(self.cfg, repo)]
+                if not ids:
+                    raise ValueError(f"audit_used: {repo} has no unused audit notes")
+            else:
+                item_id, _ = self._finished_item("audit_used", ref)
+                repo = item_id.split("/", 1)[0]
+                ids = [item_id]
+                if ev := view.audit_used.get(item_id):
+                    raise ValueError(f"audit_used: {item_id}'s notes were already used (#{ev.id})")
+                if item_id in view.claimed_notes():
+                    raise ValueError(f"audit_used: {item_id}'s notes are claimed by a running cleanup")
+                if item_id not in [n.item for n in view.unused_notes(self.cfg, repo)]:
+                    raise ValueError(f"audit_used: {item_id} left no audit notes")
+            mine = chosen.setdefault(repo, [])
+            mine += [i for i in ids if i not in mine]
+        for repo, ids in chosen.items():
+            self.log.append("audit_used", repo=repo, notes=ids, by=self._by or "unknown",
+                            paths=[rel, *(self.cfg.rel(audits.note_path(self.cfg, *i.split("/", 1))) for i in ids)])
 
     def _running_target(self, ref: str, verb: str) -> Run:
         """The running executor `ref` names, or why a message can't reach it."""

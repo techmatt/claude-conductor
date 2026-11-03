@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, audit, checkpoint, session, run, tool, pick, retire, open, notify, stop, watch, push, autopilot, ack,
+outline, audit, audit_used, checkpoint, session, run, tool, pick, retire, open, notify, stop, watch, push, autopilot, ack,
 pause, resume.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
@@ -21,6 +21,7 @@ review: all                  # write review.md: every unreviewed report inlined 
 reviewed: sandbox/003        # the planner has acted on that finished item's report
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see progress.md)
 outline: sandbox/005         # ask running sandbox/005 for an updated outline (a tell of fixed text)
+audit_used: sandbox/003, 005 # those audit notes were handled already (`audit_used: sandbox/all`: every unused one)
 checkpoint: mid-session      # a session boundary (see inbox.md)
 session: start               # a checkpoint, then session.md, then the read mark moved (see inbox.md)
 run: game                    # start run target `game` if needed, open its URL (`run: game stop`)
@@ -114,6 +115,11 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   its `finish` carries `audit: true` and the next cleanup reads its notes. Refused for an
   item not running, or one already keeping notes. A queued item takes `audit: true` in its
   front-matter instead (`templates.md`).
+- **audit_used** — `audit_used: <item>[, <item> …]` (each resolved as for `reviewed`) or
+  `<repo>/all` (every unused note of the repo at that moment): notes an item already handled,
+  so they leave *audit pending* and no cleanup is handed them. Logs one `audit_used` per repo
+  with no item (`by`). Refused, with nothing marked, for an item with no notes, one already
+  used or claimed by a running cleanup, or a repo with no unused notes.
 - **checkpoint** — `checkpoint: <label>` (any text, a ` # ` included, or none): see
   `inbox.md`.
 - **session** — `session: <label>` (any text, or none): a checkpoint with that label,

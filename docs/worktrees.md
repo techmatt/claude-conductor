@@ -128,8 +128,8 @@ launches a session with a stage preamble — read the prompt and what it points 
 read-only commands only, nothing long or heavy, no edits, no asks (no `--mcp-config`),
 write a plan as the final message, stop. The item stays in `queue/`; its record is
 `running/<repo>/NNN_name.stage.json` (`stage` event, then `staged` with the plan's
-first 500 characters). At most one staged item per repo. A `template: cleanup` or
-`template: disk_cleanup` item never stages: what it is handed (audit notes, sizes) is
+first 500 characters). At most one staged item per repo. A `template: cleanup`,
+`general_cleanup` or `disk_cleanup` item never stages: what it is handed (audit notes, sizes) is
 fixed at launch, and the item it waits on may still change it. Nor does a `resume:` item
 (`resume.md`): a stage is a new session, and its point is the original's.
 

@@ -748,9 +748,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         }
         if item.template:
             rec["template_version"] = audits.template_version(item.template)
-        if item.template == "cleanup":
+        if item.template in audits.USES_NOTES:
             # Claimed in the run record from the first save, so no other cleanup takes them.
-            rec["notes"] = self._free_notes(item.repo)        # a cleanup never stages
+            rec["notes"] = self._free_notes(item.repo)        # these never stage
         run = Run(rec, rec_path, md_path)
         # Durable order: record, then worktree, then move, then launch, then the pid. A
         # restart that finds no pid and no live process with this session id requeues it.

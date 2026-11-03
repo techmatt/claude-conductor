@@ -97,6 +97,69 @@ def test_general_cleanup_writes_and_uses_its_own_notes(env):
     assert "audit pending" not in out
 
 
+@pytest.mark.slow
+def test_general_cleanup_takes_unused_notes_and_never_stages(env):
+    env.queue("001_a", "FAKE audit note one", audit="true")
+    env.queue("002_ga", "FAKE audit own note", template="general_cleanup")
+    env.tick_until(lambda: env.finished("code/002_ga"))
+    text = prompt(env, "002_ga")
+    assert "Notes from code/001_a" in text and "note one" in text
+    assert text.index("note one") < text.index("The planner adds")
+    assert not env.events("stage") and not env.events("hold")
+    assert env.d.log.last("start", item="code/002_ga").detail["notes"] == ["code/001_a"]
+    [used] = env.events("audit_used")
+    assert used.item == "code/002_ga" and used.detail["notes"] == ["code/001_a", "code/002_ga"]
+    assert "audit pending" not in (env.control / "inbox.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.slow
+def test_a_red_general_cleanup_leaves_the_notes_it_took(env):
+    env.queue("001_a", "FAKE audit note one", audit="true")
+    env.queue("002_ga", "FAKE report red", template="general_cleanup", after_red="continue")
+    env.tick_until(lambda: env.finished("code/002_ga"))
+    assert not env.events("audit_used")
+    assert "audit pending: 1 audit note (001_a)" in (env.control / "inbox.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.slow
+def test_audit_used_signal_marks_notes_by_hand(env):
+    env.queue("001_a", "FAKE audit note one", audit="true")
+    env.queue("002_b", "FAKE audit note two", audit="true")
+    env.queue("003_c", "FAKE audit note three", audit="true")
+    env.queue("004_plain", "FAKE commit b.txt b")
+    env.tick_until(lambda: env.finished("code/004_plain"))
+    env.signal("one.txt", "by: planner\naudit_used: code/001_a, 002")
+    env.tick_until(lambda: env.events("audit_used"))
+    [used] = env.events("audit_used")
+    assert used.item is None and used.repo == "code" and used.detail["by"] == "planner"
+    assert used.detail["notes"] == ["code/001_a", "code/002_b"]
+    assert "reports/code__002_b.audit.md" in used.paths
+    assert "audit pending: 1 audit note (003_c)" in (env.control / "inbox.md").read_text(encoding="utf-8")
+    out = subprocess.run([*ROOT_CLI, "audits", "--all", str(env.control)], capture_output=True, text=True,
+                         encoding="utf-8").stdout
+    assert f"used by planner (#{used.id})" in out
+    # A ref refused anywhere in the line marks nothing: used already, no notes, or not a note.
+    for n, line in enumerate(("code/001_a", "code/003_c, code/004_plain", "code/999", "nope/all")):
+        env.signal(f"bad{n}.txt", f"audit_used: {line}")
+        env.tick_until(lambda: len(env.events("invalid")) == n + 1)
+    assert len(env.events("audit_used")) == 1
+    env.signal("all.txt", "audit_used: code/all")
+    env.tick_until(lambda: len(env.events("audit_used")) == 2)
+    assert env.events("audit_used")[-1].detail["notes"] == ["code/003_c"]
+    assert "audit pending" not in (env.control / "inbox.md").read_text(encoding="utf-8")
+    env.signal("none.txt", "audit_used: code/all")
+    env.tick_until(lambda: "no unused audit notes" in (env.events("invalid") or [None])[-1].detail["error"])
+    env.queue("005_clean", "", template="cleanup")
+    env.tick_until(lambda: env.events("hold"))
+    assert "no unused audit notes" in env.events("hold")[-1].detail["reason"]
+
+
+def test_audit_used_signal_syntax(env):
+    env.signal("bad.txt", "audit_used: code/001 code/002")
+    env.tick_until(lambda: env.events("invalid"))
+    assert "audit_used: expects" in env.events("invalid")[-1].detail["error"]
+
+
 def test_disk_cleanup_is_handed_conductors_measurements(env):
     (env.control / "reports" / "code__000_old.log").write_bytes(b"x" * 5000)
     env.queue("001_disk", "Leave the fixtures alone.", template="disk_cleanup")

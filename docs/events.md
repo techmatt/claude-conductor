@@ -32,7 +32,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
 | `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow and friction (as written, or null), pick (`<repo>/<path>`, or null), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
-| `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on | notes (item ids); paths (their files) |
+| `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on; or an `audit_used:` signal (no item, `by`) | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
 | `drift` | control folder changed with no executor running, or by conductor's own git | changes, note; own |

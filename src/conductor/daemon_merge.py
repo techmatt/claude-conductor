@@ -287,7 +287,7 @@ class MergeMixin:
             if notes.is_file():
                 report_paths.append(cfg.rel(notes))
         if rec.get("template") in audits.USES_NOTES and out["status"] != "red":
-            # What this cleanup (or general cleanup, its own notes) acted on: the next
+            # What this cleanup (or general cleanup, its own notes too) acted on: the next
             # cleanup sees only newer notes. A red one uses none.
             used = list(rec.get("notes") or [])
             if audits.canonical(rec["template"]) == "general_cleanup" and notes.is_file():

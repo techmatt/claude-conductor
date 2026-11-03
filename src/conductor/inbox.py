@@ -400,7 +400,8 @@ def describe(ev: Event) -> str:
         case "question_closed":
             text = f"`{d.get('question')}` closed unanswered: {d.get('reason') or d.get('outcome')}"
         case "audit_used":
-            text = f"{who} used {len(d.get('notes', []))} audit note(s): {', '.join(d.get('notes', []))}"
+            text = (f"{who} used {len(d.get('notes', []))} audit note(s): " if ev.item else
+                    f"{d.get('by')} marked {len(d.get('notes', []))} audit note(s) used: ") + ", ".join(d.get("notes", []))
         case "queue_empty":
             text = f"queue `{ev.repo}` is empty (last: {d.get('last')})"
         case "backlog_draw":

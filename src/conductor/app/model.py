@@ -320,6 +320,8 @@ def activity_text(ev: Event) -> str:
         case "reviewed":
             return f"report {name} reviewed{by}"
         case "audit_used":
+            if not ev.item:
+                return f"{len(d.get('notes', []))} audit note(s) of {name} marked used{by}"
             return f"{name} used {len(d.get('notes', []))} audit note(s)"
         case "checkpoint":
             return f"new {checkpoint_name(ev)}{by}"

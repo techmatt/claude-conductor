@@ -42,9 +42,10 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   defined and defers every design-level call (its report lists them under
   **Deferred**, with options and a recommendation, any that is Matt's own, by taste, scope or a
   rules term, marked `(Matt's call)`, as in every template with a **Deferred**: `planner.md`). A cleanup never stages.
-- **`template: general_cleanup`** (was `general_audit`). The same, with no notes to go on: it behaves as
+- **`template: general_cleanup`** (was `general_audit`). The same, with its own audit first: it behaves as
   `audit: true` (it writes its own notes file), audits the whole repo, then carries out
-  the clear items and defers the design calls.
+  the clear items and defers the design calls. It also takes every unused note at launch and
+  inlines them as a cleanup does (prompt 69), but with none it simply runs. It never stages.
 - **`template: test_cleanup`** (was `test_perf`). Set up or tighten a fast/slow lane split and speed tests
   up generally; a small loss of thoroughness or moving a slow test to the slow lane is
   allowed; the report gives before/after timings per lane (the one report where test
@@ -124,12 +125,13 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
 **Which notes are unused.** A note is a finished item whose `finish` event has
 `audit: true` (an `audit: true`, general cleanup or self-audit item) and whose `.audit.md` exists and is not blank, in any status (a red
 item's notes are still notes). It is *used* once an `audit_used` event names it, and
-*claimed* while a running cleanup's `.run.json` lists it under `notes`. A cleanup takes
-every note neither used nor claimed at the moment it launches (they are in its `start`
-event as `notes`). When it concludes, unless it ended red, conductor logs
+*claimed* while a running cleanup's `.run.json` lists it under `notes`. A cleanup or
+general cleanup takes every note neither used nor claimed at the moment it launches (they
+are in its `start` event as `notes`). When it concludes, unless it ended red, conductor logs
 `audit_used` (`notes`, and their files as `paths`) before its `finish`, so the next
-cleanup sees only newer notes. A red cleanup uses none: they stay for the next one. A
-general cleanup that does not end red uses its own notes the same way. A cleanup that
+cleanup sees only newer notes. A red one uses none: they stay for the next one. A
+general cleanup that does not end red uses its own notes the same way. Notes another item
+already handled are marked by hand with the `audit_used:` signal (`signals.md`). A cleanup that
 could run but has no unused notes holds (`hold`: *cleanup: no unused audit notes*)
 until an audit item finishes or it is cancelled. While something else still blocks
 it, it only waits, since the item it waits on may add notes.

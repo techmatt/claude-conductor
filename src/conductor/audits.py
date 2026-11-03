@@ -1,10 +1,10 @@
 """Audit notes and the standard prompt templates conductor owns.
 
 An item with `audit: true` (or `template: general_cleanup` or `self_audit`) keeps notes beside its
-report, `reports/<repo>__NNN_name.audit.md`. A `template: cleanup` item is handed every
-note of its repo not yet used by an earlier cleanup; an `audit_used` event records the
-notes a cleanup (or a general cleanup, its own) used, so the next one sees only newer ones.
-The template texts live in `templates/` beside this module, versioned with the repo.
+report, `reports/<repo>__NNN_name.audit.md`. A `template: cleanup` or `general_cleanup` item
+is handed every note of its repo not yet used; an `audit_used` event records the notes one
+used (a general cleanup, its own too) or an `audit_used:` signal marked, so the next one
+sees only newer ones. The template texts live in `templates/` beside this module, versioned with the repo.
 """
 
 from __future__ import annotations
@@ -38,9 +38,9 @@ def _named(*names: str) -> tuple[str, ...]:
 
 
 NOTE_TEMPLATES = _named("general_cleanup", "self_audit")   # keep audit notes without `audit: true`
-USES_NOTES = _named("cleanup", "general_cleanup")          # a finish not red logs `audit_used`
+USES_NOTES = _named("cleanup", "general_cleanup")          # take unused notes; a finish not red logs `audit_used`
 # What they are handed is fixed at launch, so they never stage.
-NO_STAGE = _named("cleanup", "disk_cleanup", "watch")
+NO_STAGE = _named("cleanup", "general_cleanup", "disk_cleanup", "watch")
 # Repo-wide templates that run alone in their repo: never beside another item, readonly ones
 # included (a perf or disk measurement is skewed by anything else running), and nothing
 # behind one in its queue starts early (`state.early_starts`), so they are never starved.
