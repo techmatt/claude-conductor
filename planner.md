@@ -109,7 +109,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.
-- **Load.** *Now*'s line after memory: CPU busy and its top consumers, by item or "(outside)". A laggy box: check it before blaming an item. Under 4 threads free for ~90s: `load_high`, a toast and a message to running items.
+- **Load.** *Now*'s line after memory: CPU busy and its top consumers, by item or "(outside)". A laggy box: check it before blaming an item. Under 4 threads free for ~90s: `load_high` in the inbox (no toast) and a message to running items.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.

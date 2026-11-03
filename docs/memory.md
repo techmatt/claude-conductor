@@ -30,8 +30,8 @@ aicomplete/034 41%, python.exe 20% (outside)`), and carried by the `memory` and
 
 **Load warning** (68). With an item running and under 4 hardware threads free
 (`load.FREE_THREADS`; busy percent of all threads) for 3 samples in a row (`LOAD_SAMPLES`,
-~90s), the daemon logs `load_high`, which toasts, and messages each running item, once per
-item: cut its threads if the load is its own, and set no budget from a rate read now
+~90s), the daemon logs `load_high` (inbox, no toast since 70: too noisy for Matt) and messages
+each running item, once per item: cut its threads if the load is its own, and set no budget from a rate read now
 (aicomplete 068: rates read under load inflated a budget). The cause may be outside the
 items; the message doesn't assume. Memory sampling off means no warning.
 

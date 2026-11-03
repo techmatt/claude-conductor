@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import sys
 
-from . import load
-
 APP_TEXT = "Conductor"
 
 
@@ -66,9 +64,6 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
         case "memory_critical":
             return (f"{project}: memory CRITICAL",
                     f"{detail.get('free')} GiB free, {detail.get('percent')}% committed. {detail.get('action', '')}"[:250])
-        case "load_high":
-            return (f"{project}: {detail.get('free')} threads free, under {detail.get('keep')}",
-                    f"Rates read now are inflated. {load.text(detail.get('load') or {})}"[:250])
         case "daemon_died":
             return (f"{project}: the daemon had died",
                     f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}.")

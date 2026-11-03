@@ -95,7 +95,7 @@ class MemoryMixin:
         self._check_load(load)
 
     def _check_load(self, load: dict | None) -> None:
-        """Short of threads for `LOAD_SAMPLES` samples: a `load_high` event (it toasts) and a
+        """Short of threads for `LOAD_SAMPLES` samples: a `load_high` event (no toast: 70) and a
         message to each running item, once per item, so rates aren't read under the load."""
         short = load is not None and load_mod.free_threads(load) < load_mod.FREE_THREADS
         self._load_short = self._load_short + 1 if short else 0

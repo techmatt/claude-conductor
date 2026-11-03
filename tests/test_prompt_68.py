@@ -75,8 +75,7 @@ def test_a_short_box_warns_once_per_item_after_a_run_of_samples(env, monkeypatch
     [ev] = env.events("load_high")
     assert ev.detail["free"] == 2.0 and ev.detail["items"] == ["code/001_hold"]
     assert "under the 4 kept" in inbox.describe(ev)
-    title, body = notify.message("p", ev.kind, ev.item, ev.repo, ev.detail)
-    assert "2.0 threads free" in title and "CPU 90%" in body
+    assert notify.message("p", ev.kind, ev.item, ev.repo, ev.detail) is None     # 70: no toast
     [tell] = [e for e in env.events("tell") if "threads free" in e.detail["text"]]
     assert tell.item == "code/001_hold" and tell.detail["by"] == "conductor"
 
