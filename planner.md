@@ -29,10 +29,10 @@ Steps 4 and 5 go out in the same turn. Nothing else at start: no memory reads, p
 ## The bridge
 
 - One missing path fails a whole access request ("can't be granted"): check a path that may not exist yet first (a names-only listing of its parent).
-- Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. A re-stage can still show the old copy for a moment ("dispatched"): before building on it, check it's the new one (`mtimeMs` against the stage result, or a header line), else wait and read again. LF line endings always.
-- Each upload goes once to a fresh workspace path, never edited after.
+- Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. A re-stage can briefly show the old copy ("dispatched"): before building on it, check it's new (`mtimeMs` against the stage result, or a header line), else read again. LF line endings always.
+- Each upload goes once, to a fresh workspace path.
 - A conductor prompt: read `prompts\ledger.md`'s tail first. Never edit conductor's `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
-- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (`receipts\signals\planner-<stamp>.md`, `receipts\requests\<stamp>.md`). `accepted` with `result` (a `warning`, such as a `depends_on` that will hold: fix it now), `pending` (says what holds it) or `refused` with `reason`. Missing: not handled yet; re-stage once (`docs/receipts.md`).
+- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (`receipts\signals\planner-<stamp>.md`, `receipts\requests\<stamp>.md`). `accepted` with `result` (a `warning`, such as a `depends_on` that will hold: fix it now), `pending` (says what holds it) or `refused` with `reason`. Missing: not handled yet; re-stage once, then tell Matt the daemon may be down (`docs/receipts.md`).
 - **Never list a control folder recursively**, nor `reports\`: every file is named below; stage a report by name.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (in a code repo), or a command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.
 
@@ -85,7 +85,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Audits and templates are conductor's texts**, never retyped: `audit: true` keeps notes for a later cleanup: on by default for rules and gate items, off for art and small items, and for anything else when Matt asks; `template: <name>` is conductor's prompt, any body appended (`docs/templates.md`); Matt saying a template's phrase queues it.
 - **Concurrency** (`docs/scheduling.md`): a worktree per item; `done` and `partial` merge into `main` one at a time per repo. **`alongside: <what it touches>`** starts one beside its repo's others: a clearly separate code area, nothing shared outside git (art, voice, readonly prototypes). Templates but bug hunt, self audit and watch run alone. `depends_on` only where queue order doesn't serialize (another repo, `alongside`, `readonly`); a `partial` dependency holds it. `readonly` never merges, starts at once, sees `main` as then.
 - **Staging is automatic**: a queue head waiting on a busy lock or a running dependency gets a read-only head start; `stage: false` when wasted or its plan needs the running item's result.
-- **Approval**: every prompt Matt asks for, discusses or has the planner write goes to `queue\`; he cancels what he doesn't want. `proposed\` only for what he says to hold. Items move only by signal (approve, cancel, reorder).
+- **Approval**: write a prompt only when Matt asks for one ("queue it", "write the prompt"); a discussion or his answer to a design question is not one. One he asks for goes to `queue\` (he cancels any he doesn't want); `proposed\` only for what he says to hold. Items move only by signal.
 - **Rewrite, amend, or new item.** **queue status** first. Rewrite a queued, staging or staged item for a changed plan (its stage is redone); never a running one. **Amend** adds to a plan that still stands, until merging; a correction to finished work is a new item.
 - **Short, goal-first.** Length scales with risk; trust the executor on mechanics; never restate the repo's `CLAUDE.md`. **Done when**: a feature prompt's goal ends with one or two checks Matt can observe himself (a spec that plays it, a checker kind at 0, a picker saved). End with "Commit when done." unless the prompt says why not.
 - **Quote what executors can't open**: design docs, canvases, any claude.ai artifact; only the sections the prompt implements.
@@ -97,19 +97,19 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors'; never give one of your own.
 - **Heavy work** (long Playwright sweeps, ultracode): one browser, one test worker. Tests or builds over ten minutes need the repo's `background` globs. The load budget lives in the preamble: mention load only when an item's differs. A gate inside a time limit: put its measured run time beside the limit and say which checks may be dropped.
-- **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them, a template never (`docs/parked.md`). Matt never edits config or docs by hand.
+- **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them (`docs/parked.md`). Matt never edits config or docs by hand.
 - **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why); its receipt confirms.
 - **Never mention git push, remotes, commit state or tests.**
 
 ## While items run
 
-- **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters, a new item).
+- **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late`, changing nothing (if it matters, a new item).
 - **Progress**: the latest line (with ETA) and outline, on *Now*, with a bold warning when the ETA can't be right; a small item posts one line only (`docs/executors.md`).
 - **Questions** marked **default overrides prompt** would reverse a prompt line if unanswered: answer them first. Marked **design, held for Matt**: his, relayed, never yours; the default already applies and his answer reaches the item as a message. *Staged plans' questions* wait for launch: answer by **amend**.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.
-- **Load.** *Now*'s line after memory: CPU busy and its top consumers, by item or "(outside)". A laggy box: check it before blaming an item. Under 4 threads free for ~90s: `load_high` (inbox only) and a message to running items.
+- **Load.** *Now*'s line after memory: CPU busy and its top consumers, by item or "(outside)". Laggy box: check it before blaming one. Under 4 threads free for ~90s: `load_high` (inbox only) and a message to items.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.
@@ -162,7 +162,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 | Phrase | What the planner does |
 |---|---|
-| **enqueue** / **propose** | Writes a prompt to `queue\<repo>\` (*Approval*); to `proposed\` only when Matt says to hold it. |
+| **enqueue** / **propose** | Writes a prompt to `queue\<repo>\`, or `proposed\` to hold it (*Approval*). |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` (a held item, to the queue) / `cancel: <item>` (proposed or queued, never running). |
 | **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new item or a queued X; a running X: signal `audit: <repo>/<NNN_name>` (never a hand-written `tell`) / lists unused notes per repo, reading one if asked. |
 | **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency* allows; else why not. |

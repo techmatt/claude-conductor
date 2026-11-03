@@ -10,6 +10,8 @@ Code: `parked.py`.
 one edit per line starting `- `. `[rules]` first marks an edit that changes play. Any
 other line is ignored, so a heading or a note is fine. `parked/` is runtime and ignores
 itself (its `.gitignore` is `*`, written at daemon start), so no request is needed.
+Each write gets a receipt, `receipts/parked/<repo>.md`, saying how many edits wait
+(72; before it the planner staged one that never came: `receipts.md`).
 `parked/<repo>.done.md` is conductor's: each edit handed out, as
 `- <edit> — <item name> (<launch time>)`.
 

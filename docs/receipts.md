@@ -17,6 +17,7 @@ The write's path under `receipts/`, with `.signal` or `.md` changed to `.md`:
 | `questions/<id>.answer.md` | `receipts/questions/<id>.answer.md` |
 | `proposed/012_x.md` | `receipts/proposed/012_x.md` |
 | `backlog/<repo>/bug_sweep.md` | `receipts/backlog/<repo>/bug_sweep.md` (`night-shift.md`; a draw rewrites it) |
+| `parked/<repo>.md` | `receipts/parked/<repo>.md` (72; conductor's own take or put-back rewrites it) |
 
 Every signal file and request gets one, whoever wrote it (the app's too).
 
@@ -61,6 +62,7 @@ events: [812, 813]
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` (and `; its default overrode the prompt: <line>` for a flagged question) | `late` (the question had resolved) |
 | proposed item | readable, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |
+| parked edits | readable, new or changed (no event; `process_parked`) | `N parked edit(s) waiting for <repo> (K `[rules]`): the next serial item carries them` | a file naming no configured repo |
 
 `<start>` is when the item will start and why, read from the scheduler's rules at queue
 time (`state.start_estimate`; a guess, not a promise): `starts now`, `starts now, beside
@@ -97,6 +99,14 @@ handled just before and just after each one (`process_requests(between=True)`; o
 targeting `conductor.toml` waits for the next tick): the bridge writes `request.md` after
 the call's queue files, and on 2026-10-22 two requests written with queue items got their
 receipts ~6s late, behind the item's launch (sandbox, the same order: 1.5s → 0.6–0.8s).
+
+**How long, at most.** With the daemon up, every receipt lands within a tick plus a
+launch: seconds. Nothing else delays one; the longest seen with a live daemon is ~6s. A
+receipt still missing after ~30s means no daemon is taking writes: Word Warriors' 174
+(2026-11-02) was written at 2:37pm while its daemon was down (a self-restart that died at
+startup, `restart.md`) and took its receipt at 2:43pm, when the daemon was started again;
+the planner had moved on two stages. Missing past a re-stage: say so to Matt (the app shows
+whether the daemon runs) rather than waiting longer.
 
 ## Lifetime
 

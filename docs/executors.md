@@ -81,8 +81,15 @@ no port.
   is best says so in its report or asks; its own question default never un-skips it.
 - **Question defaults.** A default may not contradict a prompt line or amendment unless the
   question's first line says `default overrides prompt: <line>` (`questions.md`).
-- **Scratch** goes in `out/` or another git-ignored folder in the working directory, never
-  `%TEMP%` or anywhere outside it.
+- **Scratch** goes in `out/` in the working directory, never `%TEMP%` or anywhere outside
+  it. Conductor makes `out/` ignored before every launch and stage (`executor.SCRATCH`,
+  `git.ignore_locally`): unless a rule already ignores it, `/out/` goes into the repo's
+  `.git/info/exclude`, local to the clone and shared by its worktrees, never committed and
+  silent (a `warning` only if it fails). Before 72 the preamble named `out/` git-ignored
+  scratch in repos that didn't ignore it (wordwarriors 172, 175).
+- **Scripts in files** (72; wordwarriors 174, aicomplete 074). A script is written with
+  Write and run as a file, never a heredoc or `-c` string: an apostrophe broke quoted-delimiter
+  heredocs in executor Bash.
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
   runs at below-normal process priority and leaves at least 4 hardware threads free; at
   most 2 heavy subagents (builds, sims, browsers) at once; thread counts halve while another
@@ -91,9 +98,12 @@ no port.
   against the 2, but run in batches per dimension. A Workflow runs at most 10 agents (or the
   prompt's number), finders and verifiers both, a hard count set before launch (68; `ultracode.md`).
   A rule, not enforced: the planner sees it broken on *Now*'s load line, and under 4 threads free `load_high` warns (`memory.md`).
-  The full preamble gives the PowerShell form, `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`.
-- **Global Claude config.** Editing `~/.claude` is allowed when it's a good idea; each
-  edit is named in the report, with its reason.
+  The recipe (72, after wordwarriors 174 ran `npm run test:browser` at normal priority): Git
+  Bash `nice -n 10 <cmd>` (both preambles), which gives `BELOW_NORMAL` on Windows and its
+  children inherit it (measured: the class reads `0x4000` in the process and its child); the
+  full preamble adds the PowerShell form, `(Start-Process … -PassThru).PriorityClass = 'BelowNormal'`.
+- **Global Claude config.** Editing `~/.claude` is allowed when it helps; each edit is
+  named in the report, with its reason.
 - **Leftover budget.** Finishing with over an hour of the time limit left and the goal
   not fully met, the executor runs the next most useful step toward it, in scope, and says
   what it was. `max_hours` is a kill time, not a budget, so a goal fully met stops there.

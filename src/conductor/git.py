@@ -78,6 +78,22 @@ def changed_files(repo: Path, before: str, after: str) -> list[str]:
     return [p for p in out.split("\0") if p]
 
 
+def ignore_locally(repo: Path, folder: str) -> bool:
+    """Make sure git ignores `folder/` in `repo`: unless a rule already does, add it to the
+    clone's `info/exclude` (never committed, shared by every worktree). True when added."""
+    probe = subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", f"{folder}/x"],
+                           capture_output=True, **NO_WINDOW)
+    if probe.returncode == 0:
+        return False
+    common = repo / run(repo, "rev-parse", "--git-common-dir").strip()   # relative in a main checkout
+    exclude = common / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    text = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    with exclude.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(("" if not text or text.endswith("\n") else "\n") + f"/{folder}/\n")
+    return True
+
+
 def rebase_in_progress(worktree: Path) -> bool:
     gitdir = Path(run(worktree, "rev-parse", "--absolute-git-dir").strip())
     return (gitdir / "rebase-merge").exists() or (gitdir / "rebase-apply").exists()

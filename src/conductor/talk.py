@@ -45,7 +45,8 @@ from .util import clock, parse_stamp, stamp, write_text
 HOOK_TIMEOUT_SECONDS = 15
 # The `outline:` signal's message: a tell of fixed text, so its reply is the outline.
 OUTLINE_REQUEST = ("Post an updated outline now: call `progress` with `outline` (remaining sections, "
-                   "titles and finish times only, finished ones done), nothing else.")
+                   "titles and finish times only, finished ones done, a row still for every done-when "
+                   "item of the prompt), nothing else.")
 SHELL_TOOLS = ("Bash", "PowerShell")
 TOUCH_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit", *SHELL_TOOLS)     # tools that may write
 _lock = threading.Lock()

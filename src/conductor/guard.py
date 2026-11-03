@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import git
+from .util import retry_io
+
+RENAME_SECONDS = 10.0           # a folder rename waits out a scanner's or an old daemon's handle
 
 
 @dataclass
@@ -70,9 +73,11 @@ def take(control: Path, state_dir: Path, taken: str) -> Snapshot:
     (new / "meta.json").write_text(json.dumps(snap.to_json(), indent=1), encoding="utf-8", newline="\n")
     cur, old = _dir(state_dir), state_dir / "snapshot.old"
     shutil.rmtree(old, ignore_errors=True)
+    # Retried: a self-restart's first take once died here on a held handle (wordwarriors,
+    # 2026-11-02), leaving the daemon down for 21 minutes.
     if cur.exists():
-        os.replace(cur, old)
-    os.replace(new, cur)
+        retry_io(os.replace, cur, old, seconds=RENAME_SECONDS)
+    retry_io(os.replace, new, cur, seconds=RENAME_SECONDS)
     shutil.rmtree(old, ignore_errors=True)
     return snap
 

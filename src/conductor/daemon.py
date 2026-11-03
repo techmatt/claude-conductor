@@ -346,6 +346,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             return                  # `stop: daemon`: nothing more starts; run_forever exits
         self.process_requests()
         self.process_proposed()
+        self.process_parked()
         self.process_questions()
         self.process_talk()
         self.runner.poll()
@@ -727,6 +728,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         cfg = self.cfg
         # Idle: a difference is drift (accepted, re-snapshotted). Busy: it is tamper.
         self._guard_check(f"before launching {item.id}")
+        self._ignore_scratch(item)
         repo_path = cfg.repos[item.repo]
         max_hours = item.max_hours or cfg.max_hours
         started = now()
@@ -833,6 +835,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         plans, then stops; `resume` continues the same session once it can run."""
         cfg = self.cfg
         self._guard_check(f"before staging {item.id}")
+        self._ignore_scratch(item)
         paths = executor.RunPaths.for_item(cfg, item)
         started = now()
         rec = {

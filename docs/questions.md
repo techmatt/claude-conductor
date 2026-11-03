@@ -50,6 +50,8 @@ Options:
   however long. That time does not count toward `max_hours`.
 - **Design** (67). `design: true`, which needs a default and refuses `block`, is for a
   question touching a stated design principle: Matt's call, not a planner's turn-around.
+  So is a lever that reverses a direction the brief or an amendment states, however clear the
+  data (72; aicomplete 075 froze a cheaper card against its brief and amendment).
   The call returns at once and the executor carries on with its default, so the item is never
   blocked. The question has no deadline: it stays open, marked `design`, in the app and the
   inbox (never counted as `asking`, needing Matt or a watch flag), and outlives its item. When

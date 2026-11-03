@@ -188,6 +188,14 @@ class SetupMixin:
             self.finish(run, interrupted=True)
 
     # ---------------------------------------------------------------- second halves
+    def _ignore_scratch(self, item: items.Item) -> None:
+        """The preambles name `out/` as git-ignored scratch: make it so in the item's repo
+        (wordwarriors 172 and 175 tripped on a repo that didn't ignore it). Silent when it works."""
+        try:
+            git.ignore_locally(self.cfg.repos[item.repo], executor.SCRATCH)
+        except (git.GitError, OSError) as exc:
+            self.log.append("warning", item=item.id, note=f"could not git-ignore `{executor.SCRATCH}/`: {exc}")
+
     def _start_exec(self, run: Run, item: items.Item) -> None:
         """The second half of a launch, once the worktree and its setup are ready: the
         prompt (with any amendments written meanwhile), then the executor."""

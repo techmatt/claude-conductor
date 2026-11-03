@@ -18,7 +18,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
-from . import daemon_signals, inbox, items, request
+from . import daemon_signals, inbox, items, parked, request
 from .events import Event
 from .util import FrontMatterError, clock, now, read_text, split_front_matter, write_text
 
@@ -66,6 +66,7 @@ class ReceiptsMixin:
         self._capturing: list[Event] | None = None  # events of the signal file or request being handled
         self._pruned_at = 0.0
         self.proposed_seen: dict[str, int] = {}     # proposed file → the mtime its receipt covers
+        self.parked_seen: dict[str, int] = {}       # parked file → the same
         self._pending: dict[str, str] = {}          # waiting request → what its pending receipt says
         self._woke_for: set[tuple[str, int]] = set()    # settled files a nap already cut short for (`_nap`)
 
@@ -185,7 +186,7 @@ class ReceiptsMixin:
     def _planner_writes(self) -> dict[str, int]:
         """Each entry of the folders the planner writes into, by path → mtime (ns). A request
         folder's mtime moves as its files are added."""
-        dirs = [self.cfg.path(d) for d in ("requests", "signals", "proposed", "questions")]
+        dirs = [self.cfg.path(d) for d in ("requests", "signals", "proposed", "questions", parked.ROOT)]
         dirs += [self.cfg.path(top, repo) for top in ("queue", "backlog") for repo in self.cfg.repos]
         out = {}
         for d in dirs:
@@ -209,6 +210,20 @@ class ReceiptsMixin:
                 self._write_receipt(rel, [], reason="; ".join(errors))
             else:
                 self._write_receipt(rel, [], result=f"proposed for {repo}: waits for Matt (`approve: {p.stem}`)")
+
+    def process_parked(self) -> None:
+        """A receipt for each new or rewritten `parked/<repo>.md`: how many edits wait there
+        (`parked.md`). No event; conductor's own take or put-back rewrites it too."""
+        files = [p for p in sorted(self.cfg.path(parked.ROOT).glob("*.md")) if not p.name.endswith(".done.md")]
+        fresh, self.parked_seen = self._new_versions(files, self.parked_seen)
+        for p, rel in fresh:
+            if p.stem not in self.cfg.repos:
+                self._write_receipt(rel, [], reason=f"`{p.stem}` is not a configured repo")
+                continue
+            n, rules = parked.counts(self.cfg.control, p.stem)
+            tagged = f" ({rules} `[rules]`)" if rules else ""
+            self._write_receipt(rel, [], result=f"{n} parked edit(s) waiting for {p.stem}{tagged}: "
+                                                "the next serial item carries them")
 
     def _new_versions(self, paths: list[Path], seen: dict[str, int]) -> tuple[list[tuple[Path, str]], dict[str, int]]:
         """The readable files among `paths` that are new or rewritten since `seen` (rel → the

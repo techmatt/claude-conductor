@@ -86,7 +86,12 @@ to 60s for the old pid to exit. The old daemon waits up to 20s for that file
 executors and keeps stages as for any restart. A version that fails (no import, no
 spawn, no ready file; a hung new process is killed) gets one `warning` naming
 `daemon.out.log`; the old daemon keeps running and tries that version again after 5
-minutes (`RESTART_RETRY_SECONDS`). A daemon started in a terminal hands that terminal
+minutes (`RESTART_RETRY_SECONDS`). The ready file comes before `startup()`, so a new
+daemon that dies there is past the handover and nothing runs until someone starts it:
+wordwarriors' self-restart onto 68 (2026-11-02, 2:22pm) died renaming its guard snapshot
+(`PermissionError`, a handle still held) and stayed down 21 minutes, which looked like a
+queue receipt that never came. Since 72 the snapshot's renames retry for up to 10s
+(`guard.RENAME_SECONDS`). A daemon started in a terminal hands that terminal
 back when it restarts itself. The app's Start/Stop are unchanged.
 
 ## Asked restarts

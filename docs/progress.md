@@ -15,8 +15,9 @@ in the inbox's *Now*, `conductor status`, the app's Repos tab and the Activity v
 `progress` events are left out of the inbox's *Other* section.
 
 **Outline.** `progress` also takes `outline`: the item's sections in order, the report
-last, each `{title, eta, done}` (a few words, a local clock time, a bool; ~8 rows asked,
-12 taken). With an outline, `note` may be left out. It is stored on the progress line
+last, each `{title, eta, done}` (a few words, a local clock time, a bool; 12 rows taken).
+The full preamble asks for one row per done-when item of the prompt (72, after aicomplete
+075's calibration step vanished into a generic row), so a dropped one stays visible. With an outline, `note` may be left out. It is stored on the progress line
 and logged on the `progress` event (`outline`); the newest one per item is its current
 outline (`inbox.latest_outline`). The full preamble's *Outline* rule (a light item's preamble asks only for one line at
 the start, another past ~15 minutes): post one once oriented
