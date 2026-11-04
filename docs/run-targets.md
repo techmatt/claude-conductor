@@ -39,4 +39,4 @@ A repo's main checkout has no installed dependencies: executors install them in 
 worktrees, which are removed after the merge. So a target whose server needs them
 installs them first, e.g. `command = "npm install && npm run dev -- --port 5173"`.
 Name the port in `url` (or `ready`): conductor never hands a target's port to an
-executor (`executors.md`, *Port*).
+executor (`preambles.md`, *Port*).

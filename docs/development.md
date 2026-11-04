@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~60-85s; 322 tests; 2026-11-01)
+uv run pytest            # the fast lane, after every change (~65-90s; 376 tests; 2026-11-03)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~170-230s; 450 tests); run this before committing
+uv run pytest -m ""      # everything (~220-245s; 509 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -69,13 +69,8 @@ item through queue and merge, `session: start`, a request) and then renders the 
 it offscreen, refusing while the sandbox's own daemon runs.
 
 `uv run python tools/restart_all.py [--check | --force]` is "restart all" (`CLAUDE.md`; the
-app's button runs it too, `app.md`). It covers every live daemon of the `*-control` folders
-beside this repo, and the app. Since 71 it writes `restart: daemon` to each daemon, which
-restarts itself at its next safe point and adopts its executors (`restart.md`), and waits up
-to 10 minutes (`RESTART_WAIT`) for every new pid, printing every 30s what a daemon still
-waits on. One still waiting by then restarts on its own once safe; the tool exits 1.
-`--force` instead stops each daemon (`stop: daemon`), waits and starts it detached
-(`procs.spawn_daemon`): a setup, a merge resolve or an open picker is lost, and the tools
-stop. `--check` lists what runs now and exits 0. The app is then killed (only its own
-processes, never a session console it opened) and started detached with the folders it was
-launched with. No app running: it starts one on the newest control folder.
+app's button runs it too, `app.md`) for every live daemon of the `*-control` folders beside
+this repo, and the app; how, `restart.md`, *Asked restarts*. It prints every 30s what a
+daemon still waits on and exits 1 if one still waits after 10 minutes (`RESTART_WAIT`).
+`--force` stops and starts each daemon detached (`procs.spawn_daemon`) instead; `--check`
+lists what runs now and exits 0. No app running: it starts one on the newest control folder.

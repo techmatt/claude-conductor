@@ -1,7 +1,7 @@
 # Signals
 
 The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
-outline, audit, audit_used, checkpoint, session, run, tool, pick, retire, open, notify, stop, watch, push, autopilot, ack,
+outline, audit, audit_used, checkpoint, session, run, tool, pick, retire, open, notify, stop, restart, watch, push, autopilot, ack,
 pause, resume.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon

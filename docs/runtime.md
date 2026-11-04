@@ -9,7 +9,9 @@ write.
 - `cancelled/`: cancelled items, kept.
 - `reorder.json`, `signal.json`: crash journals for a reorder and for the signal file
   being applied (`signals.md`).
-- `daemon.out.log`: the output of a daemon the app started.
+- `daemon.out.log`: the output of a daemon the app, a self-restart or `restart_all.py --force` started.
+- `restart.out.log`: the app's **Restart all** run; `app.out.log`: the app `restart_all.py` started (`restart.md`).
+- `doc_sizes.json`: each digest's doc sizes, for the next one's growth (`inbox.md`).
 - `progress/`, `mail/`: progress lines, and messages waiting for executors (`progress.md`).
 - `touch/`: the control-folder paths each item's tool calls named, for tamper
   attribution (`control-folder.md`).

@@ -1,6 +1,6 @@
 # Audits and templates
 
-A template ends with the leftover-budget line (`executor.LEFTOVER`, `executors.md`), but not `watch` or a readonly one; `self_audit` gets `LEFTOVER_AUDIT`: optional, scratch-only, inside the load budget (047's speed pair ran all 12 threads).
+A template ends with the leftover-budget line (`executor.LEFTOVER`, `preambles.md`), but not `watch` or a readonly one; `self_audit` gets `LEFTOVER_AUDIT`: optional, scratch-only, inside the load budget (047's speed pair ran all 12 threads).
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`cleanup.md`, `general_cleanup.md`, `test_cleanup.md`,
@@ -11,7 +11,7 @@ carries `template` and `template_version` (the text's sha256, first 12 hex digit
 folder, so whatever a template needs is inlined into the prompt (kept, as always, in
 `.prompt.md`). The texts use `{{name}}` placeholders (`repo`, `project`, `notes`, `usage`,
 `original`; `audit.md`'s `notes_path`). A template item gets the full preamble, a watch its own
-(`executors.md`, *Three preambles*), and the template's text follows it unchanged.
+(`preambles.md`), and the template's text follows it unchanged.
 
 **Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
 `self_audit`); one that edits, deletes or moves anything is a *cleanup*. So `general_audit` became

@@ -183,8 +183,10 @@ def env_template(tmp_path_factory) -> Path:
 @pytest.fixture
 def env(tmp_path, monkeypatch, env_template):
     monkeypatch.setattr(request, "FRESH_SECONDS", 0)
-    monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", 0)
-    monkeypatch.setattr(daemon_signals, "PLANNER_SIGNAL_SETTLE_SECONDS", 0)
+    # Below 0: a file written just now can carry an mtime a hair past time.time() (0.24µs
+    # seen), so at 0 its age reads negative and a tick skips it (test_old_receipts_are_pruned, ~1 in 15).
+    monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", -0.01)
+    monkeypatch.setattr(daemon_signals, "PLANNER_SIGNAL_SETTLE_SECONDS", -0.01)
     e = Env(tmp_path, env_template)
     yield e
     for run in list(e.d.runs.values()):

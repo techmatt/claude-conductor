@@ -64,8 +64,9 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
-| `docs/push.md` | Pushing main to a remote after each merge, the control folder after its commits, on `push:` and at closeout; failures and rejections |
-| `docs/executors.md` | How an executor is launched: the preamble (full, light or watch), its port, MCP and settings files, `wait_for`, the rules on scope, scratch and load, long tool calls, setup |
+| `docs/push.md` | Pushing main after each merge and the control folder after its commits, `push:`, closeout; failures |
+| `docs/executors.md` | Launching an executor: MCP and settings files, `wait_for`, message delivery, long calls, setup |
+| `docs/preambles.md` | What it is told: the full, light or watch preamble, its port, scope, scratch and load |
 | `docs/reports.md` | The report's header and an item's outcome |
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |

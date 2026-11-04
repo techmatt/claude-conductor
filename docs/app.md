@@ -55,8 +55,8 @@ or `● down` (green, amber, grey; probed each refresh); a click writes `run: <n
 which opens the URL (starting the target first when it is down). While a target is
 up or starting, a **Stop <name>** button beside its Run button writes `run: <name>
 stop` (no confirmation: a click is cheap to undo with Run).
-**Tools** are the same idea for what Matt looks at rather than what he tests, with a button
-each at the top of the Repos tab (*Project tools*, below).
+**Tools** are the same idea for what Matt looks at rather than what he tests, in the
+header's **Tools** menu (*Project tools*, below).
 **Pause** / **Resume** writes `pause: <repo>` / `resume: <repo>` (`night-shift.md`, *Pause*):
 a plain button for a one-repo project, a menu of `Pause <repo>` / `Resume <repo>` for
 several; while any repo is paused an amber **PAUSED <repo> since <time>** sits beside it.
@@ -107,9 +107,9 @@ writes `tool: <name> stop` (`run_stop`, its process tree killed). Choosing one w
   inbox's Red section show it too. It flags no watch.
 
 The events are `run_*` with `tool: true`. Stopping the daemon (`stop: daemon`, Ctrl+C, too
-many failed ticks) stops its tools, `run_stop` with `stopped with the daemon`, so "restart
-all" does too. A self-restart on a code change, or a crash, leaves a tool running and the
-next daemon owns it by its record. Like a run target, a tool
+many failed ticks) stops its tools, `run_stop` with `stopped with the daemon`, as does
+`restart_all.py --force`. A self-restart (on a code change, or the `restart: daemon` that
+"restart all" sends) or a crash leaves a tool running and the next daemon owns it by its record. Like a run target, a tool
 in a main checkout can hold a file a merge wants to replace (Windows).
 
 Every action is a signal file `signals/app-<YYYYmmdd-HHMMSS>-<nnnnnn>.signal` (written as

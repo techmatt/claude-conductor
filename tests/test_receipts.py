@@ -198,7 +198,7 @@ def test_any_planner_write_cuts_the_nap_short(env, monkeypatch):
         env.d._nap()
         timer.join()
         assert time.monotonic() - start < 1.5, rel
-    # A file still settling (younger than SIGNAL_SETTLE_SECONDS, 0 in tests) ends the nap once it settles.
+    # A file still settling (younger than SIGNAL_SETTLE_SECONDS, just below 0 in tests) ends the nap once it settles.
     monkeypatch.setattr(daemon_signals, "SIGNAL_SETTLE_SECONDS", 1.0)
     path.write_text("---\nrepo: code\n---\n\nlater again\n", encoding="utf-8")
     start = time.monotonic()
