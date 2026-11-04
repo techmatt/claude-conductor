@@ -19,7 +19,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
 | `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `scheduling.md`); resume_of, resume_session (`resume.md`); parked (the parked edits it carries: `parked.md`); error (launch failed, setup included) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
-| `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd, questions (its plan's `Questions:`, `questions.md`) |
+| `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd, questions (its plan's `Questions:` or `## Questions`, `questions.md`), questions_parsed (their count) |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
 | `merge` | an item's branch landed on main | branch, sha (main after), commits (the item's own: pre-merge main to sha), note; resolved (prose files a merge executor resolved); squashed (commits folded in) |
 | `land` | a `land:` began, then landed | state, branch; sha, commits, note, resolved, squashed, hashes |

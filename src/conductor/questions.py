@@ -34,6 +34,7 @@ ANSWER_SETTLE_SECONDS = 1.0       # an answer file is read once it stops changin
 OVERRIDES_RE = re.compile(r"^[\s*_#`]*default overrides prompt:\s*(.+)$", re.IGNORECASE)
 AMENDMENT_RE = re.compile(r"\bamend(?:ment|ed)s?\b", re.IGNORECASE)
 PLAN_HEAD_RE = re.compile(r"^[#*_\s]*questions[*_\s]*:[*_\s]*(.*)$", re.IGNORECASE)     # a stage plan's `Questions:`
+PLAN_HEADING_RE = re.compile(r"^\s*#{1,6}\s+[*_]*(?:open\s+)?questions\b", re.IGNORECASE)   # or `## Questions` (75)
 PLAN_BULLET_RE = re.compile(r"^(?:[-*•]|\d+[.)])\s+(.+)$")
 PLAN_QUESTIONS = 10               # at most this many reach the inbox, each cut to PLAN_QUESTION_CHARS
 PLAN_QUESTION_CHARS = 400
@@ -194,10 +195,11 @@ def find(control: Path, ref: str) -> Question | None:
 
 
 def plan_questions(plan: str) -> list[str]:
-    """What a stage's plan lists under its `Questions:` line (`executor.STAGE`): its
-    bullets, an indented line joining the one above, or the text on the line itself."""
+    """What a stage's plan lists under its `Questions:` line or `## Questions` heading
+    (`executor.STAGE`): its bullets, an indented line joining the one above, the text on
+    the line itself, or under a heading a plain line ending in `?`."""
     out: list[str] = []
-    inside = False
+    inside = heading = False
     for ln in plan.splitlines():
         s = ln.strip()
         if not inside:
@@ -205,10 +207,14 @@ def plan_questions(plan: str) -> list[str]:
                 inside = True
                 if (rest := m.group(1).strip()) and rest.lower().rstrip(".") != "none":
                     out.append(rest)
+            elif PLAN_HEADING_RE.match(ln):
+                inside = heading = True
         elif m := PLAN_BULLET_RE.match(s):
             out.append(m.group(1))
         elif s and out and ln[0].isspace():
             out[-1] += f" {s}"
+        elif heading and s.endswith("?") and not s.startswith("#"):
+            out.append(s)
         elif s:
             break
     return [q[:PLAN_QUESTION_CHARS] for q in out[:PLAN_QUESTIONS]]

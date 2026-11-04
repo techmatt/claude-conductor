@@ -29,8 +29,8 @@ Steps 4 and 5 go out in the same turn. Nothing else at start: no memory reads, p
 ## The bridge
 
 - One missing path fails a whole access request ("can't be granted"): check a path that may not exist yet first (a names-only listing of its parent).
-- Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. A re-stage can briefly show the old copy ("dispatched"): before building on it, check it's new (`mtimeMs` against the stage result, or a header line), else read again. LF line endings always.
-- Each upload goes once, to a fresh workspace path.
+- Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. A re-stage can briefly show the old copy ("dispatched"): before building on it, check it's new (`mtimeMs`, or a header line), else read again. LF line endings always.
+- Each upload goes once, to a fresh workspace path: one written twice can send its first copy.
 - A conductor prompt: read `prompts\ledger.md`'s tail first. Never edit conductor's `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
 - **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (`receipts\signals\planner-<stamp>.md`, `receipts\requests\<stamp>.md`). `accepted` with `result` (a `warning`, such as a `depends_on` that will hold: fix it now), `pending` (says what holds it) or `refused` with `reason`. Missing: not handled yet; re-stage once, then tell Matt the daemon may be down (`docs/receipts.md`).
 - **Never list a control folder recursively**, nor `reports\`: every file is named below; stage a report by name.
@@ -67,13 +67,13 @@ message: "state: v0.2"
 ---
 ```
 
-Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target; quote a `message:` holding a colon. `nothing to commit: … identical to HEAD`: the copy sent was unedited; resend it. Refusals, stale folders, the tamper guard, a `not git-ignored` warning: `docs/control-folder.md`.
+Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target; quote a `message:` holding a colon. `nothing to commit: … identical to HEAD`: the copy sent was unedited; resend it from a fresh path. Refusals, stale folders, the tamper guard, a `not git-ignored` warning: `docs/control-folder.md`.
 
 ## Every session
 
 - **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken.
 - **Rejected signals** (`invalid`, *Red* in the inbox) show until a checkpoint or an acknowledgement: once the cause is addressed (resent, fixed, or moot), signal `ack: invalid #<event>` unasked.
-- Matt raises every next step: answer what is asked, never assume or schedule the next leg.
+- Matt raises every next step: answer what is asked, never schedule the next leg.
 - **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`), or the rejected-signal rule (`ack:`). One instruction, one signal file; nothing rides along.
 - Design and scoping are decided with Matt, never by an executor; executors add facts, usually as `readonly` items.
 - If this file is wrong or lacking, say so and add it to `planner-notes.md`.
@@ -81,8 +81,8 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 ## Writing a prompt
 
 - **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick` (`docs/items.md`).
-- **Ultracode** (`ultracode: true`): subagent workflows where they help (multi-part, sweeps, redesigns, new systems), 10 agents each at most, verifiers included, unless the prompt says otherwise; a feature one also gets an adversarial review of its diff unless the prompt says not.
-- **Audits and templates are conductor's texts**, never retyped: `audit: true` keeps notes for a later cleanup: on by default for rules and gate items, off for art and small items, and for anything else when Matt asks; `template: <name>` is conductor's prompt, any body appended (`docs/templates.md`); Matt saying a template's phrase queues it.
+- **Ultracode** (`ultracode: true`): subagent workflows where they help (multi-part, sweeps, redesigns, new systems), 10 agents each at most, verifiers included, unless the prompt says otherwise; a feature one also gets an adversarial review of its diff.
+- **Audits and templates are conductor's texts**, never retyped: `audit: true` keeps notes for a later cleanup (it fixes obvious ones itself): on by default for rules and gate items, off for art and small items, and for anything else when Matt asks; `template: <name>` is conductor's prompt, any body appended (`docs/templates.md`); Matt saying a template's phrase queues it.
 - **Concurrency** (`docs/scheduling.md`): a worktree per item; `done` and `partial` merge into `main` one at a time per repo. **`alongside: <what it touches>`** starts one beside its repo's others: a clearly separate code area, nothing shared outside git (art, voice, readonly prototypes). Templates but bug hunt, self audit and watch run alone. `depends_on` only where queue order doesn't serialize (another repo, `alongside`, `readonly`); a `partial` dependency holds it. `readonly` never merges, starts at once, sees `main` as then.
 - **Staging is automatic**: a queue head waiting on a busy lock or a running dependency gets a read-only head start; `stage: false` when wasted or its plan needs the running item's result.
 - **Approval**: write a prompt only when Matt asks for one ("queue it", "write the prompt"); a discussion or his answer to a design question is not one. One he asks for goes to `queue\` (he cancels any he doesn't want); `proposed\` only for what he says to hold. Items move only by signal.
@@ -95,17 +95,16 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **The goal is the authority.** When the planned route runs out, the executor advances the goal another way and says how; idling to a deadline or re-running an exhausted step is a failure. A skip in a prompt binds; write "lower priority" unless Matt meant a skip.
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. A prompt names a question in advance only when Matt must decide it.
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
-- **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors'; never give one of your own.
-- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 minutes need the repo's `background` globs. The preamble holds the load budget, premises (quoted numbers re-read, ratios beside others), report budget: restate one if an item's differs. A gate inside a time limit: its measured run time beside the limit, and which checks may drop.
-- **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them (`docs/parked.md`). Matt never edits config or docs by hand.
+- **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors', never your own.
+- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 minutes need the repo's `background` globs. The preamble holds the load budget, premises, an early finish's done-when check, report budget: restate one if an item's differs. A gate inside a time limit: its measured run time beside the limit, and which checks may drop.
+- **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them, whatever its file limits (`docs/parked.md`). Matt never edits config or docs by hand.
 - **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why); its receipt confirms.
 - **Never mention git push, remotes, commit state or tests.**
 
 ## While items run
 
-- **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late`, changing nothing (if it matters, a new item).
+- **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late`, changing nothing (if it matters, a new item). **Default overrides prompt** ones would reverse a prompt line if unanswered: answer them first. **Design, held for Matt**: his, relayed, never yours; the default applies and his answer reaches the item as a message. *Staged plans' questions* wait for launch: answer by **amend**.
 - **Progress**: the latest line (with ETA) and outline, on *Now*, bold-warned when the ETA can't be right; a small item posts one line.
-- **Questions** marked **default overrides prompt** would reverse a prompt line if unanswered: answer them first. Marked **design, held for Matt**: his, relayed, never yours; the default already applies and his answer reaches the item as a message. *Staged plans' questions* wait for launch: answer by **amend**.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.

@@ -57,7 +57,7 @@ events: [812, 813]
 | write | written when | result | refused when |
 |---|---|---|---|
 | signal | its lines applied or it was rejected | `applied`; with tells (`tell:`, `outline:`, `pause:`, `resume:`) where each went, `; `-joined | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line |
-| request | applied or failed (within a second of `request.md`); `pending` while an earlier request or its own files hold it | `committed <sha>`, `nothing to commit: every target is identical to HEAD (was the edited copy sent?)`, `applied; nothing changed` | `request_failed` (it is `.failed`; `targets missing: …`) |
+| request | applied or failed (within a second of `request.md`); `pending` while an earlier request or its own files hold it | `committed <sha>`, `nothing to commit: every target is identical to HEAD (was the edited copy sent? resend it from a fresh workspace path)`, `applied; nothing changed` | `request_failed` (it is `.failed`; `targets missing: …`) |
 | queue item | `enqueue`, `edited` | `queued as <id>; <start>` (and `; carries N parked edit(s) as things stand: …` when it would: `parked.md`; plus, if a watch or draw took its number meanwhile, `its number is also <id>'s: name it in full`); `rewritten: it runs the new text` / `its stage is redone`, plus `; now <start>` when the rewrite moved it | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` (and `; its default overrode the prompt: <line>` for a flagged question) | `late` (the question had resolved) |

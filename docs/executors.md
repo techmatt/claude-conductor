@@ -76,14 +76,14 @@ ports in its `url` and `ready`), another live item's or the picker's. It is in t
 record and the `start` event (`port`), and in the executor's environment as
 `CONDUCTOR_PORT`. Where the repo can serve (`has_servers`), the preamble says any server the
 executor starts uses that port, passed through where the repo hard-codes one, so an item that
-starts the app never collides with **run game** or another item's server; elsewhere the port
-is only in the environment (74). A stage and a merge executor run no servers and get no port.
+starts the app never collides with **run game** or another item's server; elsewhere it is
+only in the environment (74). Stages and merge executors get none.
 
 **Scope, scratch and load** (61, from aicomplete's 009, 030, 032 and 034). Both preambles say:
 
 - **A skip binds.** A skip in the prompt, or one Matt sends by message, stands: the goal
-  decides only routes the prompt didn't rule out. An executor that thinks a skipped route
-  is best says so in its report or asks; its own question default never un-skips it.
+  decides only routes the prompt didn't rule out. A skipped route it thinks best goes in
+  its report or a question; its own default never un-skips it.
 - **Question defaults.** A default may not contradict a prompt line or amendment unless the
   question's first line says `default overrides prompt: <line>` (`questions.md`).
 - **Scratch** goes in `out/` in the working directory, never `%TEMP%` or anywhere outside
@@ -117,10 +117,11 @@ is only in the environment (74). A stage and a merge executor run no servers and
   `CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md`. Aicomplete 087 wrote a
   memory into `~/.claude/projects/C--Code-aicomplete/memory/`, which loads into sessions
   started in the main checkout (Matt's), not worktree executors or other projects.
-- **Leftover budget.** Finishing with over an hour of the time limit left and the goal
-  not fully met, the executor runs the next most useful step toward it, in scope, and says
-  what it was. `max_hours` is a kill time, not a budget, so a goal fully met stops there.
-  A template's plainer form has no goal condition (`templates.md`).
+- **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the
+  executor lists each done-when item against its measured result and takes a step that
+  advances an unmet one, in scope, saying which (aicomplete 090 stopped 3 of 4 hours early
+  on its band alone, two targets unmet). `max_hours` is a kill time, not a budget. A
+  template's plainer form has no goal condition (`templates.md`).
 
 **`wait_for`** (`mcp__conductor__wait_for`) replaces hand-written polls: 109 of
 aicomplete 009's 281 turns were 60-second polls, about a third of its cost.

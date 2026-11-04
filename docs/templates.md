@@ -32,7 +32,10 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   outside its working directory. It keeps a running notes file there while it works,
   covering every task, under four headings: what was poorly structured, what took
   longer than expected and why, what should be refactored or cleaned up, and what
-  CLAUDE.md or README should say. Nobody reviews notes per item. The item's `finish`
+  CLAUDE.md or README should say. Nobody reviews notes per item. Before finishing it
+  implements each obvious note (a small, safe fix, a doc line), leaving notes only for a
+  decision or a large change, and its report lists those it implemented (`executor.AUDIT_FIX`;
+  75, Matt: less churn for the cleanup; not in a readonly or template item). The item's `finish`
   event carries `audit: true` and lists the notes file among its paths. Once running,
   the `audit:` signal sends the same paragraph as a message instead (`signals.md`).
 - **`template: cleanup`**. The prompt after the preamble is `cleanup.md` with every
@@ -110,7 +113,9 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   `.audit.md` path, start `Self-audit of <orig>.` and use the four headings plus
   *What happened vs. what was asked* (each divergence and when it started), *What
   misled you* (quoted, with the wording that would have worked, then concrete workflow
-  changes, each with what it would have saved: 59) and *Where the time went*. It runs as the
+  changes, each with what it would have saved: 59) and *Where the time went*, writing only
+  what the original's own notes miss or got wrong (75: aicomplete 089 and 095 repeated
+  theirs, and the cleanup verified them twice). It runs as the
   digest's **workflow retro** (when: `inbox.md`, *Session start digest*). They count as unused notes for the repo's next cleanup, whose inlined heading
   names the original (`… : a self-audit of <orig>, written by its own session`). The
   report has **Summary** and **About conductor** (findings about the template,

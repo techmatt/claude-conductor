@@ -27,7 +27,9 @@ SECTION = """
 ## Parked edits (also do these)
 
 Small edits the planner parked for this repo. Do each alongside the work above, unless it
-conflicts with it or can't be done safely. Your report answers each on its own line, right
+conflicts with it or can't be done safely. They are part of this item whatever the prompt's
+own file limits say ("touch no other files" included; only a declared `paths:` binds them).
+Your report answers each on its own line, right
 after the header: `parked P<n>: done` or `parked P<n>: skipped (why)`. A skipped one goes
 back to the list for a later item.
 

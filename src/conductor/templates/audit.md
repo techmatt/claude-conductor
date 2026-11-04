@@ -1,7 +1,6 @@
 Audit notes. While you do this item, keep a running notes file at exactly this path:
     {{notes_path}}
-It is the second file you may write outside the working directory; nobody reviews it
-per item, and a later cleanup item acts on it. Write it as you go, not at the end, so
+Nobody reviews it per item; a later cleanup acts on what is left. Write it as you go, so
 it survives a kill, and cover every task you perform, under these headings:
 - Poorly structured: what was badly organised in the code or the repo layout.
 - Slower than expected: what took longer than it should have, and why.

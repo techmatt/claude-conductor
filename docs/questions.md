@@ -75,8 +75,11 @@ Options:
 - **The watch answers.** A watch's `answer:` action (`night-shift.md`) writes an answer
   only from one Matt or the planner already gave, naming its source; `watch_answer` logs it.
 
-**A stage has no ask tool**, so its questions go in its plan under `Questions:`, one bullet
-each (`questions.plan_questions`). They ride the `staged` event (`questions`) and the inbox
+**A stage has no ask tool**, so its questions go in its plan under a `Questions:` line or a
+`## Questions` heading, one bullet each (`questions.plan_questions`; the heading since 75,
+after aicomplete 090's four were lost under one). They ride the `staged` event
+(`questions`, and `questions_parsed`, whose 0 the inbox line shows as *no questions
+parsed from its plan*) and the inbox
 and digest list them under *Staged plans' questions* until the item launches; an amendment
 answers them (066's "96 games or 96 a cell?" sat unread through a 48-minute lock wait).
 

@@ -27,7 +27,9 @@ restart never takes them twice). The `start` event lists them (`parked`).
 **In the prompt.** After the body (and in a staged item's resume message), a section
 `## Parked edits (also do these)` lists them as `P1.`, `P2.`, …, asking the executor to
 do each unless it conflicts or is unsafe, and to answer each in its report as `parked
-P<n>: done` or `parked P<n>: skipped (why)`.
+P<n>: done` or `parked P<n>: skipped (why)`. They are in scope whatever the prompt's own
+file limits say; only a declared `paths:` binds them (75: aicomplete 094 skipped all four
+of its edits under "touch no other files", and they waited a cycle).
 
 **At finish.** Before the `finish` event (`_settle_parked`, once per item, saved before it
 acts): if the item's work landed (not red), the edits its report answered `done` stay

@@ -264,6 +264,8 @@ def describe(ev: Event) -> str:
             text = f"{who} staged; waits for the lock" + (f": {plan[0][:160]}" if plan else "")
             if d.get("questions"):
                 text += f"; its plan asks {_count(len(d['questions']), 'question')}"
+            elif "questions_parsed" in d:
+                text += "; no questions parsed from its plan"
         case "merge":
             text = f"{who} merged `{d.get('branch')}` into main at {str(d.get('sha') or '')[:10]} ({d.get('commits')} commit(s))"
             if d.get("squashed"):

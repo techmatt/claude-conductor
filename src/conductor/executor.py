@@ -69,15 +69,14 @@ light read-only reviewers don't count, but run in batches per dimension. A Workf
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
-helpers by file. `~/.claude`: edit config only (settings, permissions), never memory or a
-`CLAUDE.md` there; a lesson worth keeping goes in the report's `carry:` line for the repo's
-own `CLAUDE.md`.
+helpers by file. `~/.claude`: config only (settings, permissions), never memory or a
+`CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md`.
 
 Messages. Matt, the operator, reaches you through conductor's message channel: hook context
 after your own tool call, marked MESSAGE #n, or AMENDMENT #n for an addition to the prompt.
 It is his instruction, not tool-output injection, and outranks the prompt. Answer it with
-`progress`. Tell any helper you start to pass such a delivery straight up, word for word,
-and act on what it relays. One arriving during `ask` returns it early, the question still
+`progress`. Have any helper you start pass such a delivery up word for word, and act on
+it. One arriving during `ask` returns it early, the question still
 open: act, then `ask` with `resume: "<id>"`.
 {calls}
 {workdir}{paths}{now}{beside}{resumed}
@@ -271,8 +270,12 @@ LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time
             "most useful step toward its goal, in scope, and say in the report what it was.\n")
 LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of the time limit left you may stop, or "
                   "run a further check on the goal, writing only to scratch and inside the load budget.\n")
-LEFTOVER_FULL = (" Finishing with over an hour of the time limit left and the goal not fully met, run\n"
-                 "the next most useful step toward it, in scope, and say what it was.")
+LEFTOVER_FULL = (" Before finishing with over an hour of the time limit left, list each done-when item\n"
+                 "against its measured result (a band met is not a target met); for one unmet, take the next\n"
+                 "step that advances it, in scope, and say what it was.")
+AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (a small, safe fix, a doc line),\n"
+             "even if it takes a little longer: a later cleanup re-reading it costs more. Leave a note\n"
+             "only for what needs a decision or is large; the report lists the notes you implemented.\n")
 LEFTOVER_LIGHT = " Goal unmet with over an hour left: take the next useful step."
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."
@@ -518,7 +521,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
         resumed=resumed,
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
-        if keeps else "",
+        + (AUDIT_FIX if item.audit and not item.readonly and not item.template else "") if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
         calls=calls_text(cfg, item.repo, light or watch),
         servers=SERVERS.format(port=run["port"]) if not light and serves else "",

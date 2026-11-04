@@ -893,9 +893,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._save(run)
         self.stages.pop(run.item_id, None)
         plan = str(result.get("result") or "").strip()
+        asked = questions.plan_questions(plan)
         self.log.append("staged", item=run.item_id, paths=[self.cfg.rel(Path(rec["log"]))],
                         session_id=rec["session_id"], plan=plan[:500], cost_usd=result.get("total_cost_usd"),
-                        worktree=str(wt), questions=questions.plan_questions(plan))
+                        worktree=str(wt), questions=asked, questions_parsed=len(asked))
 
     def _stage_dirty(self, rec: dict) -> bool:
         wt = Path(rec["worktree"])

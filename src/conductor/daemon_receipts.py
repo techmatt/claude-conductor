@@ -95,7 +95,8 @@ class ReceiptsMixin:
                 request = next((e for e in got if e.kind == "request"), None)
                 tells = [e for e in got if e.kind == "tell"]
                 result = (f"committed {commit.detail.get('sha', '')[:8]}" if commit else
-                          "nothing to commit: every target is identical to HEAD (was the edited copy sent?)"
+                          "nothing to commit: every target is identical to HEAD (was the edited copy sent? "
+                          "resend it from a fresh workspace path)"
                           if request and request.detail.get("identical") else
                           "applied; nothing changed" if request else
                           "; ".join(map(tell_result, tells)) if tells else "applied")
