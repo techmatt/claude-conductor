@@ -7,7 +7,7 @@ progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm (by
                                                     # outline: [{title, eta, done}], see Outline
 ```
 
-It returns at once (`Logged; carry on.`, plus *Running beside you now* when that changed). The ask server appends a line (`seq`, `at`,
+It returns at once (`Logged; carry on.`, plus *Running beside you now* when that changed; `wait_for` adds the same line, and either tool says a change once). The ask server appends a line (`seq`, `at`,
 `note` — whitespace collapsed, 500 chars — and the rest) to
 `.conductor/progress/<repo>__<NNN_name>.jsonl`; the daemon logs one `progress` event
 per new line (`seq` dedupes across restarts). The latest line of a running item shows

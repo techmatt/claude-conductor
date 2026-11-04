@@ -32,9 +32,9 @@ def test_a_watch_gets_only_what_applies(env):
         assert dropped not in text, dropped
 
 
-def test_a_readonly_item_loses_the_commit_rules_and_keeps_the_port(env):
+def test_a_readonly_item_loses_the_commit_rules_and_keeps_the_rest(env):
     text = render(env, readonly=True, max_hours=2.0)
-    for kept in ("Asking.", "Outline.", "The box.", "Port.", "commit nothing"):
+    for kept in ("Asking and scope.", "Outline.", "The box.", "commit nothing"):
         assert kept in text, kept
     for dropped in ("Commit your work", "uncommitted", "over an hour", "rebases this branch"):
         assert dropped not in text, dropped
@@ -50,8 +50,8 @@ def test_a_landing_item_keeps_them(env):
 
 def test_the_full_preamble_says_ask_holds_the_session(env):
     text = render(env)
-    assert "holds this whole session\nuntil it returns, so start any background work first" in text
-    assert "your reading of a\nscope line" in text and "changed two things at once" in text
+    assert "holds this whole session, so start any background work first" in text
+    assert "your reading of a scope line" in text and "changed two things at once" in text
 
 
 def test_both_preambles_rule_on_subagents(env):

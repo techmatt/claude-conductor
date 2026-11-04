@@ -415,13 +415,14 @@ class Server:
             if at - checked >= every:
                 checked = at
                 if hit := target.check():
-                    return f"{hit} (after {round(at - started)}s).{waitfor.advice(hit)}", False
+                    return f"{hit} (after {round(at - started)}s).{waitfor.advice(hit)}{self._running_now()}", False
             if fresh := [p.name for p in talk.pending(self.control, self.item) if p.name not in self._announced]:
                 self._announced.update(fresh)
                 return (f"A message from conductor is waiting: it reaches you as this call returns. Do what it "
-                        f"says, then call `wait_for` again if you still need to. So far: {target.state()}."), False
+                        f"says, then call `wait_for` again if you still need to. So far: {target.state()}."
+                        f"{self._running_now()}"), False
             if at >= end:
-                return f"Nothing yet after {round(at - started)}s: {target.state()}.", False
+                return f"Nothing yet after {round(at - started)}s: {target.state()}.{self._running_now()}", False
             if token is not None and at - last_progress >= PROGRESS_SECONDS:
                 last_progress = at
                 self.send({"jsonrpc": "2.0", "method": "notifications/progress", "params": {

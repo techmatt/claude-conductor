@@ -20,8 +20,8 @@ def ask(server, question, **args):
 
 def test_the_preamble_carries_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "A background call's `timeout` is a kill limit, not a wait" in full
-    assert "post the gap in SE and the rule being applied" in full
+    assert "a background call's `timeout` is a kill limit, not a wait" in full
+    assert "post the gap in SE and the rule being applied" in " ".join(render(env, SHORT * 3, rules=True).split())
     assert "`5:40pm (by rate)`" in full
     assert "finders and verifiers" in full and "never how big" in full
 

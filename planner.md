@@ -96,7 +96,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. A prompt names a question in advance only when Matt must decide it.
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors'; never give one of your own.
-- **Heavy work** (long Playwright sweeps, ultracode): one browser, one test worker. Tests or builds over ten minutes need the repo's `background` globs. The load budget lives in the preamble: mention load only when an item's differs. A gate inside a time limit: put its measured run time beside the limit and say which checks may be dropped.
+- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 minutes need the repo's `background` globs. The preamble holds the load budget, premises (quoted numbers re-read, ratios beside others), report budget: restate one if an item's differs. A gate inside a time limit: its measured run time beside the limit, and which checks may drop.
 - **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them (`docs/parked.md`). Matt never edits config or docs by hand.
 - **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why); its receipt confirms.
 - **Never mention git push, remotes, commit state or tests.**
@@ -104,7 +104,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 ## While items run
 
 - **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late`, changing nothing (if it matters, a new item).
-- **Progress**: the latest line (with ETA) and outline, on *Now*, with a bold warning when the ETA can't be right; a small item posts one line only (`docs/executors.md`).
+- **Progress**: the latest line (with ETA) and outline, on *Now*, bold-warned when the ETA can't be right; a small item posts one line.
 - **Questions** marked **default overrides prompt** would reverse a prompt line if unanswered: answer them first. Marked **design, held for Matt**: his, relayed, never yours; the default already applies and his answer reaches the item as a message. *Staged plans' questions* wait for launch: answer by **amend**.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
 - **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.

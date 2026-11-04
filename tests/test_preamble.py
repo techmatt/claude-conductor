@@ -27,9 +27,9 @@ def test_a_short_item_gets_the_light_preamble(env):
     assert len(text.split()) <= 385
     assert "It holds the\nsession until then: start background work first" in text
     for kept in ("Nobody is watching", "mcp__conductor__ask", "AMENDMENT #n", "run_in_background",
-                 "Time limit: 1h", "status: done | partial | red", "slow: none", "`red`:", "uses port 5200", "branch `conductor/001_a`"):
+                 "Time limit: 1h", "status: done | partial | red", "slow: none", "`red`:", "branch `conductor/001_a`"):
         assert kept in text
-    for dropped in ("Outline.", "`eta`", "Pickers.", "pick:", "Servers."):
+    for dropped in ("Outline.", "`eta`", "Pickers.", "pick:", "Servers.", "Port.", "calibration"):
         assert dropped not in text
 
 
@@ -48,11 +48,28 @@ def test_pickers_only_for_an_item_that_could_produce_candidates(env):
     assert '"art_alts_009"' in text
 
 
-def test_servers_only_when_the_repo_runs_one(env):
+def test_servers_and_port_only_when_the_repo_runs_one(env):
     long = SHORT * 3
-    assert "Servers." not in render(env, long)
+    assert "Servers." not in render(env, long) and "5200" not in render(env, long)
+    assert "Port." not in render(env, SHORT)
     tree = env.root / "worktrees" / "001_a"                # the worktree's own package.json
     tree.mkdir(parents=True)
     (tree / "package.json").write_text('{"scripts": {"dev:web": "vite"}}', encoding="utf-8")
-    assert "Servers." in render(env, long)
-    assert "Servers." not in render(env, SHORT)          # the light preamble never has it
+    assert "Servers." in render(env, long) and "uses port\n5200 (`CONDUCTOR_PORT`)" in render(env, long)
+    assert "Servers." not in render(env, SHORT)          # the light preamble never has it,
+    assert "uses port 5200" in render(env, SHORT)        # only its port line
+
+
+def test_a_dev_script_one_folder_down_counts(env):
+    web = env.root / "worktrees" / "001_a" / "web"         # aicomplete keeps its app in web/
+    web.mkdir(parents=True)
+    (web / "package.json").write_text('{"scripts": {"preview": "vite preview"}}', encoding="utf-8")
+    assert "Servers." in render(env, SHORT * 3)
+
+
+def test_the_calibration_line_only_where_a_prompt_names_a_gate_or_bumps_the_rules(env):
+    long = SHORT * 3
+    assert "calibration or tuning" not in render(env, long)
+    assert "calibration or tuning" in render(env, long, rules=True)
+    for words in ("48 seeds a cell", "target band 45-85", "the 0.8 gate"):
+        assert "calibration or tuning" in render(env, long + words), words

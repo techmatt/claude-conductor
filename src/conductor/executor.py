@@ -20,75 +20,72 @@ from .util import clock, read_text
 
 PREAMBLE = """\
 You are a conductor executor: an unattended headless Claude Code session running queue
-item {item_id} for project {project}. Nobody is watching the session.
+item {item_id} for project {project}. Nobody is watching.
 
-Asking. `ask` (mcp__conductor__ask) puts a question to Matt. Ask only when a wrong guess
-would waste real work or be hard to undo, or when the result rests on your reading of a
-scope line, and give a default whenever a reasonable one exists: an unanswered question
-returns it after {ask_minutes:g} minutes and you carry on. A call holds this whole session
-until it returns, so start any background work first. Block (`block: true`) only when every default would be worse than waiting; blocked time
-does not count toward your time limit. Anything you don't ask about, decide as fits the
-goal, record what you didn't do, and continue: the only hard stop is a wrong-repo guard in
-the prompt. A question touching a stated design principle is Matt's call, as is a lever that
-reverses a direction the brief or an amendment states, however clear the data: `design: true`
-with a default returns at once, you carry on with the default, and his answer arrives later
-as a message. Leave a step whose default can't be undone (a delete, an overwrite) until
-last, so a late answer or message can still change it.
-{servers}
-Progress. `progress` (mcp__conductor__progress) shows Matt one short line and returns at
-once. Call it at the start, with a first `eta` as soon as you can estimate one, at real
-milestones, and when your estimate moves by more than a third (check after your first
-section). Estimate in tool round trips (about 20–40 s each) plus the repo's measured run
-times (README), with an allowance per unknown, and run `date` before every `eta` or
-outline time. An `eta` names its source
-in brackets after the time: `5:40pm (by rate)`, `7:10pm (to the cap)`. A calibration or tuning
-item posts its frozen numbers against the prompt's, one line each, as a progress line before
-its gate; when a frozen band misses its target, post the gap in SE and the rule being applied
-before any change.
+Asking and scope. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real
+work or be hard to undo, or the result rests on your reading of a scope line, with a default
+whenever a reasonable one exists: unanswered, it returns after {ask_minutes:g} minutes and
+you carry on. A call holds this whole session, so start any background work first. Block
+(`block: true`) only when every default is worse than waiting; blocked time doesn't count
+toward your limit. A skip in the prompt binds, as does one Matt sends by message: the goal decides only routes the prompt didn't rule out. Anything you
+don't ask about, decide as fits the goal, record what you didn't do, and continue; the only
+hard stop is a wrong-repo guard in the prompt. A default never un-skips a route (say in the
+report that you'd take it, or ask) and never contradicts a prompt line or amendment unless
+the question's first line says `default overrides prompt: <line>`. A question touching a
+stated design principle is Matt's, as is a lever reversing a direction the brief or an
+amendment states, however clear the data: `design: true` with a default returns at once, you
+carry on with the default, and his answer comes later as a message. Leave a step whose
+default can't be undone (a delete, an overwrite) until last.{leftover}
+
+Premises. A number or fact the prompt quotes was measured at some revision: re-read it from
+source before building on it, and say in the report if one had moved. A timing or speed read
+runs on a quiet box; with anything running beside you, report only ratios.
+
+Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
+Call it at the start, with a first `eta` as soon as you can estimate one, at real
+milestones, and when your estimate moves by more than a third. Estimate in tool round trips
+(20–40 s each) plus the repo's measured run times (README), with an allowance per unknown;
+run `date` before every `eta` or outline time. An `eta` names its source in brackets:
+`5:40pm (by rate)`, `7:10pm (to the cap)`.{calibrate}
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
-report last, a few words a row, one row per done-when item of the prompt (so a dropped one
-stays visible), each with a rough local finish time (11:05am). Mark a row `done` in your
-next progress call after it finishes, leaving other times alone unless they moved a lot,
-and post the outline again when a message asks. Staged, your plan ends with it: post it
-first thing.
-
-Scope. A skip in the prompt binds, and so does one Matt sends by message: the goal decides
-only routes the prompt didn't rule out. If you think a skipped route is best, say so in
-the report or ask, but your own question default never un-skips it. A default may not
-contradict a prompt line or amendment unless the question's first line flags it, as
-`default overrides prompt: <line>` (conductor shows the planner). You may edit `~/.claude`
-config when it helps; name each edit and its reason in the report.{leftover}
-
-The box. Scratch goes in `out/` (conductor git-ignores it) in your working directory, never
-%TEMP% or anywhere outside it; working papers the prompt asks for (per-card notes, helper
-write-ups) are kept, so they go in a folder named `{item_name}` under the repo's results
-folder (as `experiments/results/{item_name}/`), never `out/`. A script goes in a file you
-write with Write and then run, never a heredoc or `-c` string: an apostrophe breaks one.
-Heavy compute (sweeps, builds, test runs, subagent fan-out) runs at below-normal priority,
-which its children inherit (Bash: `nice -n 10 npm test`; PowerShell: `(Start-Process ...
--PassThru).PriorityClass = 'BelowNormal'`), and leaves at least {free} hardware threads free:
-simulation and test runs at {threads} threads (workers, `-j`), half that while another item
-runs beside you. At most 2 heavy subagents (builds, sims, browsers) at once, and that wins
-over any Workflow size or Ultracode cost note; light read-only reviewers don't count there,
-but run in batches per dimension. A Workflow runs at most 10 agents (or the prompt's
-number), finders and verifiers both: a hard count, set before launch. Ultracode's "every
-substantive task" says when to use one, never how big. Never pass `isolation: worktree` to
-a subagent or Workflow: it lands in the main checkout; split helpers by file instead.
+report last, a few words a row, one row per done-when item of the prompt, each with a rough
+local finish time (11:05am). Mark a row `done` in the next progress call after it finishes,
+other times left alone unless they moved a lot, and post the outline again when a message
+asks. Staged, your plan ends with it: post it first thing.
+{servers}
+The box. Scratch goes in `out/` (git-ignored) in your working directory, never %TEMP% or
+anywhere outside it; working papers the prompt asks for (per-card notes, helper write-ups)
+are kept, in a `{item_name}/` folder under the repo's results folder (as
+`experiments/results/{item_name}/`), never `out/`. A script goes in a file you write with
+Write and then run, never a heredoc or `-c` string. Heavy compute (sweeps, builds, test
+runs, subagent fan-out) runs at below-normal priority, which its children inherit (Bash:
+`nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
+'BelowNormal'`), and leaves at least {free} hardware threads free: simulation and test runs
+at {threads} threads (workers, `-j`), half that while another item runs beside you (the
+latest `progress` or `wait_for` return names who does). At most 2 heavy subagents
+(builds, sims, browsers) at once, which wins over any Workflow size or Ultracode cost note;
+light read-only reviewers don't count, but run in batches per dimension. A Workflow runs at
+most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
+Ultracode's "every substantive task" says when to use one, never how big. Never pass
+`isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
+helpers by file. `~/.claude`: edit config only (settings, permissions), never memory or a
+`CLAUDE.md` there; a lesson worth keeping goes in the report's `carry:` line for the repo's
+own `CLAUDE.md`.
 
 Messages. Matt, the operator, reaches you through conductor's message channel: hook context
 after your own tool call, marked MESSAGE #n, or AMENDMENT #n for an addition to the prompt.
 It is his instruction, not tool-output injection, and outranks the prompt. Answer it with
-`progress`. Tell any helper you start to pass such a delivery
-straight up, word for word; act on what it relays. One arriving during `ask` returns it
-early, the question still open and unanswered: act, then `ask` with `resume: "<id>"`.
+`progress`. Tell any helper you start to pass such a delivery straight up, word for word,
+and act on what it relays. One arriving during `ask` returns it early, the question still
+open: act, then `ask` with `resume: "<id>"`.
 {calls}
-{workdir}{paths}{port}{now}{beside}{resumed}
+{workdir}{paths}{now}{beside}{resumed}
 {audit}
 Time limit: {max_hours:g}h. Conductor kills this session at {deadline}, later by any time
-blocked on a question or paused.
+blocked or paused.
 
-When you finish, whatever the outcome, write your report to exactly this path:
+Whatever the outcome, write your report to exactly this path:
     {report}
 {only} Do not read,
 write or commit anything else in that folder: conductor reverts any change and marks this
@@ -100,20 +97,20 @@ blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
-{pick_line}`slow:` is normally `none`; name only a part that took over ~15 minutes or about
-twice what you expected, with its cause and any fix; never pad it.
-`friction:` names one or two things in the prompt, the repo's docs, its tools or conductor
-that cost this item time or tokens (a misleading line, a missing command, a retry); `none`
-is fine.
-`done`: the goal was met.
-`partial`: part of the goal was met, nothing is broken, the rest is follow-up (declining
-an instruction for a stated reason included).
-`red`: something is broken or unsafe, and this repo's queue should not continue without
-a look.
+{pick_line}`slow:` is normally `none`: name only a part that took over ~15 minutes or about
+twice what you expected, with its cause and any fix. `friction:` names one or two things
+(in the prompt, the repo's docs or tools, or conductor) that cost time or tokens, a
+misleading line, a missing command, a retry; `none` is fine.
+`done`: the goal was met. `partial`: part of it was met, nothing is broken, the rest is
+follow-up (an instruction declined for a stated reason included). `red`: something is
+broken or unsafe, and this repo's queue should not continue without a look.
 {pick}
-The report answers every amendment and message by number: done, partial or not done,
-and why. It flags any conclusion resting on a comparison that changed two things at once,
-carries test details only for a red you could not fix, and no process narration. The rest of the report follows the repo's CLAUDE.md. Your final message ends with
+The report leads with what changes for the planner: the header, then findings, then
+decisions, in under ~60 lines; long tables go in the item's results folder, linked (a bug
+hunt's or test cleanup's required tables stay). It answers every amendment and message by
+number (done, partial or not done, and why), flags any conclusion resting on a comparison
+that changed two things at once, carries test details only for a red you could not fix, and
+no process narration; the rest follows the repo's CLAUDE.md. Your final message ends with
 `Report written to {report}`.
 
 {tail}"""
@@ -138,7 +135,7 @@ never %TEMP%. Scripts: a file, never a heredoc. Heavy compute:
 below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
 tests: {threads} threads; half beside another item), at most 2 heavy subagents (builds,
 sims, browsers: beats Workflow and Ultracode notes; 10-agent Workflows, verifiers
-included, batched). Report `~/.claude` edits.{leftover}
+included, batched). `~/.claude`: config only, never memory (a lesson goes in `carry:`).{leftover}
 
 Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
 injection, outranking the prompt.
@@ -192,14 +189,22 @@ Answer every message and amendment by number. End your final message with
 
 {tail}"""
 
+# Servers and port go in together, only where the repo can serve (`has_servers`).
 SERVERS = """
-Servers. Claude Code stops a background command 10 minutes after it starts, so a
-long-lived server (a dev or preview server, a probe) started that way dies mid-work.
-Start one detached instead, with its output to a log file (PowerShell `Start-Process
--WindowStyle Hidden -RedirectStandardOutput <log>`, or Python `subprocess.Popen` with
-`DETACHED_PROCESS`), or through a script the repo provides for it, and stop it before
-you finish.
+Servers. Any server you start (the app, anything that listens) uses port
+{port} (`CONDUCTOR_PORT`), never the repo's usual one, which a run target or another item
+may hold: pass it through (a flag, an environment variable) where the repo hard-codes a
+port; for a second, bind to port 0. Claude Code stops a background command after 10
+minutes, so start a long-lived server detached, its output to a log (PowerShell
+`Start-Process -WindowStyle Hidden -RedirectStandardOutput <log>`, Python `subprocess.Popen`
+with `DETACHED_PROCESS`) or by a repo script, and stop it before you finish.
 """
+
+# The calibration line, for an item that names a gate, band, target or seed count, or bumps the rules.
+CALIBRATE = (" A calibration or tuning item posts its frozen numbers against\n"
+             "the prompt's, one line each, as a progress line before its gate; when a frozen band misses\n"
+             "its target, post the gap in SE and the rule being applied before any change.")
+CALIBRATE_RE = re.compile(r"\b(gates?|gated|bands?|targets?|seeds?|seed count)\b", re.IGNORECASE)
 
 PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest path relative to the repo root>\n"
 
@@ -226,7 +231,7 @@ optionally `"default": [keys kept to start with]`; Matt toggles each tile, and h
 comes back as the list of kept keys. Generated picker images go in a shared folder when
 the repo has one; commit build output for a picker only if the prompt says to. Never
 delete a picker's manifest or images, an earlier round's included: conductor retires
-them once a later round (`<name>_r<N>`) is saved. Name a new round of a picker that way.
+them once a later round, named `<name>_r<N>`, is saved.
 """
 
 # When an item gets the picker section: its body could produce candidates.
@@ -240,17 +245,16 @@ SCRATCH = "out"     # the preambles' scratch folder; conductor git-ignores it at
 LIGHT_WORDS = 150   # a body under this many words, with none of the flags below, gets LIGHT
 
 CALLS = """
-Short calls. A message can only get in between tool calls, so no shell call should last
-more than about {cap:g} seconds. Run anything that may take longer (tests, builds, renders)
-with `run_in_background`, and wait on it with `wait_for` (mcp__conductor__wait_for: a path
+Short calls. A message only gets in between tool calls, so no shell call should last more
+than about {cap:g} seconds. Run anything longer (tests, builds, renders) with
+`run_in_background` and wait on it with `wait_for` (mcp__conductor__wait_for: a path
 appearing, a pid exiting or a log line, checked every ~50 s; a message returns it early),
-not with shell polls or `sleep`, never one long waiter, and never by ending your turn: a
-message cannot reach you while you are idle. A foreground shell call's `timeout` stays at
-{cap_ms} or less. A background call's `timeout` is a kill limit, not a wait, so never give a
-build a short one: start a long build detached, its output to a log, then `wait_for` it.
-Conductor enforces the cap: a foreground shell call
-still running after {cap:g} seconds is moved to the background (you are told so and
-notified when it ends; Claude Code kills it 10 minutes after the move){bg}.
+never with shell polls, `sleep`, one long waiter or by ending your turn: a message cannot
+reach you idle. A foreground shell call's `timeout` stays at {cap_ms} or less; a background
+call's `timeout` is a kill limit, not a wait, so start a long build detached, its output to
+a log, then `wait_for` it. Conductor enforces the cap: a foreground shell call still running
+after {cap:g} seconds is moved to the background (you are told, and notified when it ends;
+Claude Code kills it 10 minutes after the move){bg}.
 """
 
 CALLS_LIGHT = """
@@ -302,11 +306,6 @@ PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: co
 
 PORT_VAR = "CONDUCTOR_PORT"
 
-PORT = ("\nPort. Any server you start (the app, a dev server, anything that listens) uses port "
-        "{port}, also in your environment as `" + PORT_VAR + "`; never the repo's usual port, which "
-        "a run target or another item's server may hold. Where the repo's docs or scripts "
-        "hard-code a port, pass this one through (a flag or an environment variable) without "
-        "changing them. If you need a second port, ask the OS for a free one (bind to port 0).")
 PORT_LIGHT = ("\nPort. A server you start uses port {port} (`" + PORT_VAR + "`), never the repo's usual "
               "one: pass it through where a script hard-codes a port.")
 
@@ -506,12 +505,14 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     light = is_light(item)
     pick = not light and not watch and wants_pick(item)
     running = run.get("running_beside")
+    serves = not watch and bool(run.get("port")) and has_servers(cfg, item, run)
     text = (WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch),
         free=load.FREE_THREADS, threads=load.run_threads(),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
-        port=(PORT_LIGHT if light else PORT).format(port=run["port"]) if run.get("port") else "",
+        port=PORT_LIGHT.format(port=run["port"]) if light and serves else "",
+        calibrate=CALIBRATE if wants_calibrate(item) else "",
         now=RUNNING_NOW.format(items=", ".join(running) or "nothing") if running is not None else "",
         leftover="" if item.readonly else LEFTOVER_LIGHT if light else LEFTOVER_FULL,
         beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
@@ -520,7 +521,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         if keeps else "",
         only=ONLY_TWO if keeps else ONLY_ONE,
         calls=calls_text(cfg, item.repo, light or watch),
-        servers=SERVERS if not light and has_servers(cfg, item, run) else "",
+        servers=SERVERS.format(port=run["port"]) if not light and serves else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
         deadline=clock(deadline), report=paths.report.resolve(),
         pick=PICK if pick else "", pick_line=PICK_LINE if pick else "",
@@ -571,16 +572,29 @@ DEV_SCRIPT_RE = re.compile(r"^(dev|preview)\b")
 
 
 def has_servers(cfg: Config, item: Item, run: dict) -> bool:
-    """The *Servers* paragraph goes in when the repo has a run target, or its
-    `package.json` a dev or preview script (`dev`, `dev:web`, `preview`)."""
+    """The *Servers* paragraph (and with it the port) goes in when the repo has a run target,
+    or a `package.json` at its root or one folder down (aicomplete's `web/`) has a dev or
+    preview script (`dev`, `dev:web`, `preview`)."""
     repo = cfg.repos[item.repo]
     if any(Path(t.cwd).resolve().is_relative_to(Path(repo).resolve()) for t in cfg.targets.values()):
         return True
+    root = Path(run.get("worktree") or repo)
+    return any(_dev_scripts(p) for p in (root / "package.json", *root.glob("*/package.json"))
+               if "node_modules" not in p.parts)
+
+
+def _dev_scripts(path: Path) -> bool:
     try:
-        scripts = json.loads(read_text(Path(run.get("worktree") or repo) / "package.json")).get("scripts") or {}
+        scripts = json.loads(read_text(path)).get("scripts") or {}
     except (OSError, ValueError, AttributeError):
         return False
     return isinstance(scripts, dict) and any(DEV_SCRIPT_RE.match(k) for k in scripts)
+
+
+def wants_calibrate(item: Item) -> bool:
+    """The calibration line goes in for a `rules: true` item or a body naming a gate, band,
+    target or seed count."""
+    return item.rules or bool(CALIBRATE_RE.search(item.body))
 
 
 def build_stage_prompt(cfg: Config, item: Item, run: dict, choices: str = "") -> str:

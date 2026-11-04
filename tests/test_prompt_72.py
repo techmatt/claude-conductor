@@ -62,8 +62,8 @@ def test_a_parked_write_gets_a_receipt(env):
 def test_the_preambles_carry_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
     assert "never a heredoc or `-c` string" in full and "`nice -n 10 npm test`" in full
-    assert "conductor git-ignores it" in full
-    assert "reverses a direction the brief or an amendment states, however clear the data" in full
+    assert "`out/` (git-ignored)" in full
+    assert "reversing a direction the brief or an amendment states, however clear the data" in full
     assert "one row per done-when item" in full
     light = " ".join(render(env, SHORT).split())
     assert "never a heredoc" in light and "`nice -n 10 <cmd>`" in light
