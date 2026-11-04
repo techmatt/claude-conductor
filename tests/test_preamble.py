@@ -33,6 +33,12 @@ def test_a_short_item_gets_the_light_preamble(env):
         assert dropped not in text
 
 
+def test_both_preambles_rule_out_elevation(env):
+    # aicomplete 103: samply's UAC prompt sat unseen on the desktop for ~30 minutes.
+    assert "No elevation (UAC, admin installs, services)" in render(env, SHORT)
+    assert "Never run what needs elevation (UAC, an admin install or service)" in render(env, SHORT * 3)
+
+
 def test_a_flagged_or_long_item_gets_the_full_preamble(env):
     for body, meta in ((SHORT, {"ultracode": True}), (SHORT, {"max_hours": 2.0}), (SHORT, {"audit": True}),
                        (SHORT * 3, {})):

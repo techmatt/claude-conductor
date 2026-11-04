@@ -96,7 +96,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. A prompt names a question in advance only when Matt must decide it.
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors', never your own.
-- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 minutes need the repo's `background` globs. The preamble holds the load budget, premises, an early finish's done-when check, report budget: restate one if an item's differs. A gate inside a time limit: its measured run time beside the limit, and which checks may drop.
+- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 minutes need the repo's `background` globs. The preamble holds the load budget, no elevation, premises, an early finish's done-when check, report budget: restate one if an item's differs. A gate inside a time limit: its measured run time beside it, and which checks may drop.
 - **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them, whatever its file limits (`docs/parked.md`). Matt never edits config or docs by hand.
 - **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why); its receipt confirms.
 - **Never mention git push, remotes, commit state or tests.**
@@ -143,7 +143,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, process all, defaults all, post-audit, art round, review cards / tool X, park / resume project, rename repo) are in `planner-vocab.md` beside this file: read it only when Matt uses one of those or a phrase not here.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, process all, defaults all, post-audit, art round, review cards / tool X, park / resume project, rename repo) are in `planner-vocab.md`: read it only for one of those or a phrase not here.
 
 **Session and inbox**
 

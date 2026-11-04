@@ -108,6 +108,10 @@ only in the environment (74). Stages and merge executors get none.
   `CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md`. Aicomplete 087 wrote a
   memory into `~/.claude/projects/C--Code-aicomplete/memory/`, which loads into sessions
   started in the main checkout (Matt's), not worktree executors or other projects.
+- **No elevation** (76, both). Nothing that needs elevation (UAC, an admin install or
+  service): a no-admin route, or the report says what needs Matt. Aicomplete 103's `samply`
+  raised a UAC consent prompt that sat unseen on the desktop, ~30 minutes lost before it
+  switched profilers. Conductor doesn't yet show a hang like that (`HANDOFF.md` *Open*).
 - **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the
   executor lists each done-when item against its measured result and takes a step that
   advances an unmet one, in scope, saying which (aicomplete 090 stopped 3 of 4 hours early
