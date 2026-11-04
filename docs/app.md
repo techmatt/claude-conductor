@@ -126,6 +126,13 @@ reads. The app sets its own AppUserModelID (`conductor.app`, `procs.set_app_id`)
 taskbar shows this icon rather than Python's. Each project's tab carries the icon with
 its hub red (needs Matt), gold (running) or slate (idle).
 
+**Tab motion.** While a project has an item moving (executing, or a stage still
+staging, in a repo that isn't paused), its tab's name leads with the title's turning
+glyph, ◐ ◓ ◑ ◒ once a second (`status.moving`, `status.tab_text`), whichever tab is
+selected. It turns on while that project needs Matt (the hub says that; the title holds
+still), stops when the item finishes or its repo is paused, and rides the refresh, so a
+still row of tabs means nothing is running anywhere.
+
 **Window title**: the most urgent thing across every open project, cheap enough to ride
 the refresh:
 
@@ -137,7 +144,7 @@ the refresh:
 
 Needs Matt ranks above running and holds still; unreviewed reports and non-blocking
 questions never count (the planner handles those). The glyph's timer (`TURN_MS`) runs
-only while items run. A project whose refresh fails part-way keeps its last whole
+only while the title or a tab turns. A project whose refresh fails part-way keeps its last whole
 snapshot in the title. The header's state line above the tabs is unchanged.
 
 **Tray.** The same three states on the icon's hub: red when something needs Matt,

@@ -507,7 +507,9 @@ class MainWindow(QMainWindow):
             view.restart_btn.setVisible(due)
         self.state = overall(states)
         self.status = status.summarize(list(self._good.values()))
-        if self.status.kind == "running":
+        # The turner runs while the title turns or any tab moves (a project needing Matt
+        # holds the title still, but its tab keeps turning while its items run).
+        if self.status.kind == "running" or any(map(status.moving, self._good.values())):
             if not self.turner.isActive():
                 self.turner.start(TURN_MS)
         else:
@@ -523,8 +525,14 @@ class MainWindow(QMainWindow):
 
     def _show_status(self) -> None:
         """The title and the tray's icon: the gold hub pulses while items run and turns
-        red when something needs Matt. Needs Matt holds still."""
+        red when something needs Matt. Needs Matt holds still. Each project tab leads
+        with the same turning glyph while it has an item moving (`status.moving`)."""
         self.setWindowTitle(self.status.title(self._tick))
+        for folder, view in self.views.items():
+            text = status.tab_text(view.project.name, self._good.get(folder), self._tick)
+            idx = self.tabs.indexOf(view)
+            if self.tabs.tabText(idx) != text:
+                self.tabs.setTabText(idx, text)
         if self.tray:
             self.tray.setIcon(icon.icon(tray_hub(self.status, self._tick)))
 

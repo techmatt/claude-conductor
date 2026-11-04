@@ -42,6 +42,18 @@ def _running(snap: Snapshot) -> int:
     return sum(len(r.running) + sum(a.phase == "staging" for a in r.staged) for r in snap.repos)
 
 
+def moving(snap: Snapshot) -> int:
+    """What turns a project's tab glyph: `_running` less the repos paused (their items
+    wait, clocks stopped)."""
+    return sum(len(r.running) + sum(a.phase == "staging" for a in r.staged)
+               for r in snap.repos if r.name not in snap.paused)
+
+
+def tab_text(name: str, snap: Snapshot | None, tick: int = 0) -> str:
+    """A project's tab label: its name, led by the title's turning glyph while it moves."""
+    return f"{GLYPHS[tick % len(GLYPHS)]} {name}" if snap is not None and moving(snap) else name
+
+
 def summarize(snaps: list[Snapshot]) -> Status:
     asks, reds, picks, down = (sum(c) for c in zip((0, 0, 0, 0), *map(_needs, snaps)))
     if asks or reds or picks or down:
