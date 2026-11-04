@@ -91,7 +91,10 @@ daemon that dies there is past the handover and nothing runs until someone start
 wordwarriors' self-restart onto 68 (2026-11-02, 2:22pm) died renaming its guard snapshot
 (`PermissionError`, a handle still held) and stayed down 21 minutes, which looked like a
 queue receipt that never came. Since 72 the snapshot's renames retry for up to 10s
-(`guard.RENAME_SECONDS`). A daemon started in a terminal hands that terminal
+(`guard.RENAME_SECONDS`). Second case, 2026-11-04: commit 77's subject held `◐`, and
+`code_head` decoded `git log` under the locale's cp1252, so stdout came back None and
+every daemon onto it (aicomplete, fractals) died in `startup()`. Every captured
+subprocess now decodes UTF-8 with `errors="replace"`. A daemon started in a terminal hands that terminal
 back when it restarts itself. The app's Start/Stop are unchanged.
 
 ## Asked restarts

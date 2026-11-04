@@ -264,7 +264,7 @@ def spawn_detached(cmd: list[str] | str, cwd: Path, log: Path, below_normal: boo
     spec = json.dumps({"cmd": cmd, "cwd": str(cwd), "log": str(log), "shell": isinstance(cmd, str),
                        "flags": flags, "posix": not WINDOWS, "nice": 10 if below_normal and not WINDOWS else 0})
     out = subprocess.run([sys.executable, "-c", _LAUNCHER, spec], stdin=subprocess.DEVNULL,
-                         capture_output=True, text=True, env=child_env(),
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env(),
                          **({"creationflags": subprocess.CREATE_NO_WINDOW} if WINDOWS else {}))
     if out.returncode != 0 or not out.stdout.strip().isdigit():
         raise OSError(f"could not start {cmd!r}: {out.stderr.strip().splitlines()[-1:] or out.returncode}")

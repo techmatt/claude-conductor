@@ -320,3 +320,10 @@ def test_wait_exit_gives_up(monkeypatch):
     finally:
         old.kill()
         old.wait()
+
+
+def test_a_head_subject_outside_cp1252_reads_whole(tmp_path):
+    """77's subject (`◐ ◓ ◑ ◒`) decoded under cp1252 left stdout None: every daemon died in startup."""
+    init_repo(tmp_path / "r", {"a.txt": "a\n"})
+    git(tmp_path / "r", "commit", "-q", "--allow-empty", "-m", "tabs turn ◐ ◓ ◑ ◒")
+    assert daemon_restart.code_head(tmp_path / "r").endswith("tabs turn ◐ ◓ ◑ ◒")

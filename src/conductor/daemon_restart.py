@@ -41,8 +41,10 @@ IN_PROGRESS = {"rebase-merge": "a rebase", "rebase-apply": "a rebase", "MERGE_HE
 
 def _git(root: Path, *args: str) -> str | None:
     try:
+        # UTF-8 pinned: under the locale's cp1252 a subject like `◐` killed the reader
+        # thread, stdout came back None, and every daemon died in startup (77's commit).
         out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30,
-                             **git.NO_WINDOW)
+                             encoding="utf-8", errors="replace", **git.NO_WINDOW)
     except (OSError, subprocess.SubprocessError):
         return None
     return out.stdout.strip() if out.returncode == 0 else None
@@ -80,7 +82,7 @@ def imports_ok(cwd: Path) -> str | None:
     """Does the code on disk import in a fresh interpreter? The error, if not."""
     try:
         out = subprocess.run([procs.console_python(), "-c", IMPORT_CHECK], cwd=cwd, capture_output=True, text=True,
-                             timeout=120, env=procs.child_env(), **git.NO_WINDOW)
+                             encoding="utf-8", errors="replace", timeout=120, env=procs.child_env(), **git.NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as exc:
         return repr(exc)
     if out.returncode == 0:

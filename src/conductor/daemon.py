@@ -275,7 +275,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         probes = [n if "." in n and n != ".conductor" else f"{n}/probe" for n in RUNTIME]
         # One call for every probe: it prints the ones that are ignored.
         out = subprocess.run(["git", "-C", str(self.cfg.control), "check-ignore", *probes],
-                             capture_output=True, text=True, **git.NO_WINDOW).stdout
+                             capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             **git.NO_WINDOW).stdout
         ignored = set(out.splitlines())
         missing = [p.split("/")[0] for p in probes if p not in ignored]
         if missing:
