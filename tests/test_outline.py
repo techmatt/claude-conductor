@@ -75,7 +75,7 @@ def test_outline_posted_ticked_and_requested(env, capsys):
     assert asked.who == "matt" and asked.text == "" and asked.under[-1][0] == "reply"
     assert asked.under[-1][2] == "outline 2/3 · next: Report by 11:20am · finish ~11:20am"
     assert model.current_outline(events).id == reply.id
-    assert model.activity_text(req) == f"outline request #{req.id} to 001_out (by cli)"
+    assert model.activity_text(req) == f"outline request #{req.id} to 001_out from CLI"
     project.close()
 
 

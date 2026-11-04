@@ -8,6 +8,7 @@ import pytest
 from conductor import cli, procs, talk
 from conductor.app import actions, model
 from conductor.app.model import Project
+from conductor.app.trail import ConversationView
 from conductor.inbox import describe
 
 
@@ -294,6 +295,27 @@ def test_activity_shows_progress_and_messages(env):
     shown = [e for e in p.filter_events(advanced=False) if e.item == "code/004_x"]
     assert [model.activity_text(e) for e in shown] == [
         "004_x: tests pass (ETA 5:40pm, 3 done, 1 to go)",
-        f"message #{t.id} to 004_x (by app): ship it",
+        f"message #{t.id} to 004_x from Matt: ship it",
         f"message #{t.id} reached 004_x"]
+    p.close()
+
+
+def test_messages_name_their_sender(env):
+    """A Conversation header names who sent each message, from its `by:`: Matt only for
+    the app's buttons; a watch, the planner and conductor by name."""
+    log = env.d.log
+    item = "code/004_x"
+    by = {"watch": "Watch", "planner": "Planner", "conductor": "Conductor", "app": "Matt", "cli": "CLI"}
+    tells = {b: log.append("tell", item=item, text=f"from {b}", by=b) for b in by}
+    amend = log.append("amended", item=item, text="also this", by="app", state="running", delivery="next tool call")
+    p = Project(env.control)
+    p.poll_events()
+    turns = {t.id: t for t in model.conversation(p.trail(item).events)}
+    for b, ev in tells.items():
+        assert turns[ev.id].name == by[b] and turns[ev.id].title == f"Message #{ev.id}"
+        assert model.activity_text(ev).startswith(f"message #{ev.id} to 004_x from {by[b]}:")
+    assert turns[amend.id].name == "Matt"
+    html = ConversationView.render([turns[tells["watch"].id]])
+    assert f"<b>Watch</b> · <b>Message #{tells['watch'].id}</b>" in html and "Matt" not in html
+    assert model.sender(None) == "Unknown" and model.sender("restart_all") == "Restart_all"
     p.close()

@@ -79,7 +79,7 @@ class ConversationView(QWidget):
     outline = Signal(str)
     amend = Signal(str)
 
-    LOOK = {"matt": (theme.SELECT, "Matt"), "executor": (theme.BASE, "executor"), "conductor": (theme.BAND, "conductor")}
+    LOOK = {"matt": (theme.SELECT, "Matt"), "executor": (theme.BASE, "Executor"), "conductor": (theme.BAND, "Conductor")}
     TONE = {"wait": theme.MUTED, "warn": theme.AMBER, "red": theme.RED, "done": theme.GREEN,
             "partial": theme.AMBER}
 
@@ -175,6 +175,7 @@ class ConversationView(QWidget):
         rows = []
         for t in turns:
             bg, name = cls.LOOK.get(t.who, (theme.BASE, t.who))
+            name = t.name or name           # a message names its sender (`model.sender`)
             tone = cls.TONE.get(t.tone)
             colour = f" style='color:{tone}'" if tone and not t.note else ""
             head = (f"<b>{_esc(name)}</b> · <b{colour}>{_esc(t.title)}</b> "

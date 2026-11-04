@@ -327,18 +327,18 @@ def activity_text(ev: Event) -> str:
         case "progress":
             return f"{name}{reply_to(ev)}: {progress_text(ev).replace(chr(10), ' · ')}"
         case "tell" if d.get("outline_request"):
-            return f"outline request #{ev.id} to {name}{by}"
+            return f"outline request #{ev.id} to {name} from {sender(d.get('by'))}"
         case "tell" if d.get("pause") or d.get("resume"):
-            return f"{'pause' if d.get('pause') else 'resume'} message #{ev.id} to {name}{by}"
+            return f"{'pause' if d.get('pause') else 'resume'} message #{ev.id} to {name} from {sender(d.get('by'))}"
         case "tell":
             answers = f" (as the answer to {d['answers']})" if d.get("answers") else ""
-            return f"message #{ev.id} to {name}{by}{answers}: {d.get('text')}"
+            return f"message #{ev.id} to {name} from {sender(d.get('by'))}{answers}: {d.get('text')}"
         case "delivered":
             if d.get("amend"):
                 return f"amendment #{d['amend']} reached {name} (via {d.get('via')})"
             return f"message #{d.get('tell')} reached {name}"
         case "amended":
-            return f"amendment #{ev.id} to {name}{by}, while {d.get('state')} ({d.get('delivery')}): {d.get('text')}"
+            return f"amendment #{ev.id} to {name} from {sender(d.get('by'))}, while {d.get('state')} ({d.get('delivery')}): {d.get('text')}"
         case "amend_refused":
             return f"amendment to {name} refused{by}: {d.get('reason')}"
         case "ask":
@@ -618,19 +618,29 @@ class Project:
 
 
 # ---------------------------------------------------------------- an item's conversation
+# A message's sender, from the `by:` its event records. Only the app's buttons are Matt
+# (`by: app`); `cli` is whoever typed a `conductor tell`, Claude Code sessions included.
+SENDERS = {"app": "Matt", "planner": "Planner", "watch": "Watch", "conductor": "Conductor", "cli": "CLI"}
+
+
+def sender(by: str | None) -> str:
+    return SENDERS.get(by or "") or (by or "unknown").capitalize()
+
+
 @dataclass
 class Turn:
     """One entry of an item's Conversation: who said it, and what came back under it
     (a tell's reply, a question's answer, an amendment's delivery)."""
     id: int                     # the event it stands for
     ts: str
-    who: str                    # matt | executor | conductor
+    who: str                    # matt | executor | conductor: where it sits
     title: str
     text: str = ""
     under: list[tuple[str, str, str]] = field(default_factory=list)    # (label, ts, text)
     note: str = ""              # what it still waits for, or why it never arrived
     tone: str = ""              # "" | wait | warn | red | done | partial
     report: bool = False        # a finish: links to the Report tab
+    name: str = ""              # the header's sender, when not who's own (`sender`)
 
 
 # Shown in Conversation; every other kind (delivered, merge, reaped, enqueue, edited,
@@ -698,8 +708,8 @@ def conversation(events: list[Event]) -> list[Turn]:
                 who = "conductor" if by == "conductor" else "matt"
                 asks = d.get("outline_request")         # the fixed text: the title says it
                 what = "Amendment" if amend else "Outline request" if asks else "Message"
-                title = f"{what} #{e.id}" + (f" (by {by})" if by and who == "matt" else "")
-                t = Turn(e.id, e.ts, who, title, "" if asks else str(d.get("text") or ""))
+                t = Turn(e.id, e.ts, who, f"{what} #{e.id}", "" if asks else str(d.get("text") or ""),
+                         name=sender(by))
                 if amend:
                     t.title += f", while {d.get('state')}"
                     t.under.append(("delivery", "", str(d.get("delivery") or "")))
