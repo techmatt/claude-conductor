@@ -72,7 +72,7 @@ an item's detail in `trail.py`.
   on the right (conductor's own across), each headed by its sender from the `by:` its
   event records: **Matt** only for the app's Tell, Amend and Outline buttons
   (`by: app`), else **Watch**, **Planner**, **Conductor** (load warnings and the
-  like), **CLI** (`conductor tell`, whoever typed it) or the `by:` itself; the Events
+  like), **CLI** (`conductor tell`, whoever typed it) or any other `by:` capitalised (`Unknown` when none); the Events
   feed words them the same way ("message #12 to 004_x from Watch: …"). The executor's
   progress lines (note, ETA, done / to go), questions and its staged plan line sit on
   the left, conductor's start, picker and finish lines across. Under a tell sits its delivery and the executor's **reply** (the

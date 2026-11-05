@@ -126,8 +126,8 @@ reads. The app sets its own AppUserModelID (`conductor.app`, `procs.set_app_id`)
 taskbar shows this icon rather than Python's. Each project's tab carries the icon with
 its hub red (needs Matt), gold (running) or slate (idle).
 
-**Tab motion.** While a project has an item moving (executing, or a stage still
-staging, in a repo that isn't paused), its tab's name leads with the title's turning
+**Tab motion.** While a project has an item moving (executing, setup, merge and
+concluding included, or a stage still staging, in a repo that isn't paused), its tab's name leads with the title's turning
 glyph, ◐ ◓ ◑ ◒ once a second (`status.moving`, `status.tab_text`), whichever tab is
 selected. It turns on while that project needs Matt (the hub says that; the title holds
 still), stops when the item finishes or its repo is paused, and rides the refresh, so a

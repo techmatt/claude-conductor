@@ -97,7 +97,7 @@ class Config:
     memory_critical_free_gb: float = 1.5
     memory_calm_seconds: float = 300.0   # a level falls only after the box stays clear this long
     # The load warning (`daemon_memory._check_load`, docs/memory.md): under this many threads
-    # free for this long logs `load_high`; an item causing it is told at most once per N minutes.
+    # free for this long logs `load_high`, again every N minutes; an item causing it is told at most as often.
     load_warn_free_threads: float = 2.0
     load_warn_seconds: float = 180.0
     load_tell_minutes: float = 15.0

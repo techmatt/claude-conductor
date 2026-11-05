@@ -20,6 +20,7 @@ write.
 - `memory.jsonl`: memory samples (`memory.md`).
 - `push/<target>.log`: the last push's output (`push.md`).
 - `leftovers.json`: worktrees to retry removing (`worktrees.md`).
+- `merge-attributes/<repo>.attributes`: the union-merge attributes a rebase lands `append_only` files with (`worktrees.md`).
 - `landing/<repo>__NNN_name.json`: a `land:` still landing, resumed after a restart (`worktrees.md`).
 - `run-<name>.log`, `run-<name>.json`: run targets (`run-targets.md`).
 - `tool-<name>.log`, `tool-<name>.json`: project tools (`app.md`).

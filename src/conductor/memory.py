@@ -21,6 +21,7 @@ import psutil
 from . import load as load_mod
 from . import procs
 from .config import Config
+from .util import clock as util_clock
 from .util import now, parse_stamp, stamp, write_text
 
 GIB = 2 ** 30
@@ -221,11 +222,11 @@ def load_high(state_dir: Path, max_age: float = HIGH_AGE) -> dict | None:
 
 
 def clock(at: str) -> str:
+    """`util.clock`, tolerating a malformed stamp from a sample file."""
     try:
-        t = parse_stamp(at).astimezone()
+        return util_clock(at)
     except (ValueError, TypeError):
         return str(at)
-    return t.strftime("%I:%M%p").lstrip("0").lower()
 
 
 def line(cfg: Config, rec: dict | None = None) -> tuple[str, str]:

@@ -36,17 +36,17 @@ def _needs(snap: Snapshot) -> tuple[int, int, int, int]:
             int(down))
 
 
-def _running(snap: Snapshot) -> int:
+def _running(snap: Snapshot, skip_paused: bool = False) -> int:
     """Items executing (setup, merge and concluding included), plus stages still staging:
     each has a live session. A staged item waiting with its plan does not count."""
-    return sum(len(r.running) + sum(a.phase == "staging" for a in r.staged) for r in snap.repos)
+    return sum(len(r.running) + sum(a.phase == "staging" for a in r.staged)
+               for r in snap.repos if not (skip_paused and r.name in snap.paused))
 
 
 def moving(snap: Snapshot) -> int:
     """What turns a project's tab glyph: `_running` less the repos paused (their items
     wait, clocks stopped)."""
-    return sum(len(r.running) + sum(a.phase == "staging" for a in r.staged)
-               for r in snap.repos if r.name not in snap.paused)
+    return _running(snap, skip_paused=True)
 
 
 def tab_text(name: str, snap: Snapshot | None, tick: int = 0) -> str:

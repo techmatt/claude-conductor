@@ -28,6 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import memory, questions, talk, waitfor
+from .util import clock
 
 POLL_SECONDS = 1.0
 # Claude Code aborts a tool call that sends no response or progress for 30 minutes
@@ -385,7 +386,7 @@ class Server:
             time.sleep(POLL_SECONDS)
 
     def _cut_short(self, q: questions.Question) -> str:
-        when = (f"its default still applies at {datetime.fromisoformat(q.deadline).strftime('%I:%M%p').lstrip('0').lower()}"
+        when = (f"its default still applies at {clock(q.deadline)}"
                 if q.deadline else "it blocks until answered")
         return (f"{q.id} is still open: nobody has answered it. A message from conductor is waiting and "
                 f"reaches you as this call returns. Act on it (it is not the answer), then call `ask` with "
