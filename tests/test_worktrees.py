@@ -112,6 +112,54 @@ def test_commit_to_main_during_run_conflicts(env):
     assert not git(env.worktree("001_c"), "status", "--porcelain").strip()     # rebase aborted
 
 
+# ---------------------------------------------------------------- append-only files
+HISTORY = "experiments/history.md"
+
+
+def append_on_main_during_run(env, body: str, main_also: dict[str, str] = {}) -> None:
+    """Run 001 (held) with `body` while main gets its own row in the history file (and
+    `main_also`'s tracked files rewritten, in the same commit)."""
+    env.configure(f'[repos.code]\npath = "../code"\nappend_only = ["{HISTORY}"]\n')
+    hist = env.repo / HISTORY
+    hist.parent.mkdir(parents=True, exist_ok=True)
+    hist.write_text("| item | result |\n", encoding="utf-8", newline="\n")
+    git(env.repo, "add", HISTORY)
+    git(env.repo, "commit", "-qm", "history")
+    env.queue("001_a", f"{env.hold()}\n{body}")
+    env.tick_until(lambda: env.events("start"))
+    with hist.open("a", encoding="utf-8", newline="\n") as f:
+        f.write("| 000_main | landed first |\n")
+    for rel, text in main_also.items():
+        (env.repo / rel).write_text(text, encoding="utf-8", newline="\n")
+    git(env.repo, "commit", "-qam", "main's row")
+    env.release()
+    env.tick_until(lambda: env.finished("code/001_a"))
+
+
+@pytest.mark.slow
+def test_append_only_file_lands_by_union_keeping_both_rows(env):
+    # aicomplete 112: two items side by side each appended a row; the rebase conflicted, held red.
+    append_on_main_during_run(env, f"FAKE append {HISTORY} | 001_a | the item's row |")
+    assert env.finished("code/001_a").detail["status"] == "done" and not env.events("conflict")
+    assert (env.repo / HISTORY).read_text(encoding="utf-8") == (
+        "| item | result |\n| 000_main | landed first |\n| 001_a | the item's row |\n")
+    assert not (env.repo / ".gitattributes").exists()            # nothing written into the repo
+
+
+@pytest.mark.slow
+def test_a_conflict_beside_an_append_only_file_is_still_red(env):
+    (env.repo / "app.txt").write_text("base\n", encoding="utf-8")
+    git(env.repo, "add", "app.txt")
+    git(env.repo, "commit", "-qm", "app")
+    append_on_main_during_run(env, f"FAKE append {HISTORY} | 001_a | row |\nFAKE commit app.txt from the item",
+                              {"app.txt": "from main\n"})
+    fin = env.finished("code/001_a")
+    assert fin.detail["status"] == "red" and any("conflicted" in r for r in fin.detail["reasons"])
+    [c] = env.events("conflict")
+    assert c.detail["files"] == ["app.txt"]                     # the history file merged; only app.txt stops it
+    assert "001_a" not in (env.repo / HISTORY).read_text(encoding="utf-8")   # main untouched
+
+
 # ---------------------------------------------------------------- prose files
 def test_prose_globs_are_outside_disjointness():
     prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]

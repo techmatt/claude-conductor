@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import git, procs, setup_run
+from . import git, globs, procs, setup_run
 from .config import Config
 
 BRANCH_PREFIX = "conductor/"
@@ -296,10 +296,41 @@ def conflicted(path: Path) -> list[str]:
     return [f for f in git.run(path, "diff", "--name-only", "--diff-filter=U", check=False).splitlines() if f]
 
 
+def union_attributes(cfg: Config, repo: str, path: Path, branch: str) -> list[str]:
+    """`-c core.attributesFile=<file>` giving each of the repo's `append_only` files git's
+    union merge driver for this rebase: both sides' added rows are kept, and those files
+    never stop it (aicomplete 112: two items appending to `experiments/history.md`).
+    Exact paths, from main's and the branch's trees, so `append_only` globs mean what
+    they mean for `prose`; the file lives in the control folder's state dir, never the
+    repo, so Matt's own merges are untouched. Empty when the repo lists none."""
+    opts = cfg.opts(repo)
+    if not opts.append_only:
+        return []
+    names: set[str] = set()
+    for ref in (opts.main, f"refs/heads/{branch}"):
+        out = git.run(path, "ls-tree", "-r", "-z", "--name-only", ref, check=False)
+        names.update(n for n in out.split("\0") if n and any(globs.matches(n, g) for g in opts.append_only))
+    if not names:
+        return []
+    attrs = cfg.state_dir / "merge-attributes" / f"{repo}.attributes"
+    attrs.parent.mkdir(parents=True, exist_ok=True)
+    attrs.write_text("".join(f"{_attr_pattern(n)} merge=union\n" for n in sorted(names)),
+                     encoding="utf-8", newline="\n")
+    return ["-c", f"core.attributesFile={attrs.resolve().as_posix()}"]
+
+
+def _attr_pattern(name: str) -> str:
+    """A gitattributes pattern matching exactly `name` from the repo root."""
+    escaped = "/" + re.sub(r"([*?\[\\])", r"\\\1", name)
+    if any(c in escaped for c in ' "\t'):
+        return '"' + escaped.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return escaped
+
+
 def _rebase(cfg: Config, repo: str, path: Path, branch: str, args: list[str]) -> Merge:
     repo_path, opts = cfg.repos[repo], cfg.opts(repo)
     try:
-        git.run(path, *args)
+        git.run(path, *union_attributes(cfg, repo, path, branch), *args)
     except git.GitError as exc:
         files = conflicted(path)
         reason = str(exc).strip()[:300]

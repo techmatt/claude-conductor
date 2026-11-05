@@ -9,7 +9,7 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   `progress` line, scratch, short calls and `wait_for`, messages, the readonly line, the time
   limit and the report rules. No asking, outline, ETAs, port,
   load rules or leftover step.
-- **Light** (`LIGHT`, ~380 words) for a small item (`executor.is_light`): a body under
+- **Light** (`LIGHT`, ~385 words) for a small item (`executor.is_light`): a body under
   150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
   explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
   short art round needs the picker schema). It keeps only what a
@@ -49,7 +49,9 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
 Template texts follow the preamble unchanged; a template item but a watch always gets the
 full one, as do `audit` items (with the *Audit notes* paragraph) and resume items (with
 *Resumed*). A **readonly** item in a worktree, light or full, gets the readonly line in place
-of the worktree's commit and merge paragraph, and no leftover step; a full one keeps *Asking and
+of the worktree's commit and merge paragraph, and no leftover step; since 79 (not a watch) the
+line adds that nothing merges, so seed-ledger entries and anything the prompt says to commit go
+in `carry:` for the planner (aicomplete 109 had to work that out itself); a full one keeps *Asking and
 scope*, *Outline*, *The box* and, where the repo serves, *Servers*, since a notes-only bug hunt
 runs for hours and may serve the app.
 
@@ -112,6 +114,13 @@ only in the environment (74). Stages and merge executors get none.
   service): a no-admin route, or the report says what needs Matt. Aicomplete 103's `samply`
   raised a UAC consent prompt that sat unseen on the desktop, ~30 minutes lost before it
   switched profilers. Conductor doesn't yet show a hang like that (`HANDOFF.md` *Open*).
+- **Design asks** (79, both; the full one in *Asking and scope*): a ruling splitting a pass
+  (over ~30% of its items on one side) and a fix changing play beyond its bug are `design:
+  true` asks with a default (`questions.md`, *Design*). Template words held: full 1,051 → 1,051,
+  light 294 → 308 (rendered under its 385 cap), paid for by tightening the skip, premises,
+  outline, messages, report-header and status lines.
+- **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
+  (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`).
 - **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the
   executor lists each done-when item against its measured result and takes a step that
   advances an unmet one, in scope, saying which (aicomplete 090 stopped 3 of 4 hours early

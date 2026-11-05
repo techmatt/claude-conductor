@@ -17,7 +17,7 @@ RUNTIME = (
     "signals", "receipts", "backlog", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
 )
 
-REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background", "push"}
+REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background", "push", "append_only"}
 
 # Shared prose nearly every item touches: exempt from `paths`, merged textually.
 DEFAULT_PROSE = ["CLAUDE.md", "README.md", "docs/**/*.md"]
@@ -39,6 +39,7 @@ class RepoOptions:
     setup: list[str] = field(default_factory=list)       # shell commands run in a new worktree
     prose: list[str] = field(default_factory=lambda: list(DEFAULT_PROSE))   # globs outside `paths`
     background: list[str] = field(default_factory=list)  # command globs an executor always backgrounds
+    append_only: list[str] = field(default_factory=list) # files rows are only appended to: merged by union on landing
 
     def is_prose(self, path: str) -> bool:
         return any(globs.matches(path, g) for g in self.prose)
@@ -166,7 +167,7 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
         if not isinstance(table["main"], str) or not table["main"]:
             raise ConfigError(f"{where}.main must be a branch name")
         opts.main = table["main"]
-    for key in ("shared", "setup", "prose", "background"):
+    for key in ("shared", "setup", "prose", "background", "append_only"):
         value = table.get(key, getattr(opts, key))
         if isinstance(value, str):
             value = [value]
@@ -177,9 +178,10 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
         p = Path(rel)
         if p.is_absolute() or ".." in p.parts:
             raise ConfigError(f"{where}.shared: {rel!r} must be a path inside the repo")
-    for glob in opts.prose:
-        if globs.invalid(glob):
-            raise ConfigError(f"{where}.prose: {glob!r} must be a relative glob inside the repo")
+    for key in ("prose", "append_only"):
+        for glob in getattr(opts, key):
+            if globs.invalid(glob):
+                raise ConfigError(f"{where}.{key}: {glob!r} must be a relative glob inside the repo")
     return opts
 
 

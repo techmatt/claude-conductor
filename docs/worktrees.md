@@ -52,6 +52,16 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
     (its log) and the failed check as `error`. While it runs, later merges in that
     repo wait, and the tamper guard counts it as a running executor. A restart adopts
     it by pid. A conflict touching any non-prose file is never handed to it.
+  - *Append-only files* (79): a repo's `append_only` globs (`control-folder.md`) name logs
+    that items only add rows to (aicomplete's `experiments/history.md`). Each rebase runs with
+    `-c core.attributesFile=` a file in `.conductor/merge-attributes/` giving those files,
+    by exact path from `main`'s and the branch's trees, git's `merge=union` driver: both
+    sides' added rows are kept (main's first) and the file never stops the rebase. Nothing is
+    written into the repo, so Matt's own merges are unchanged; a repo `.gitattributes` setting
+    `merge` for the path wins. A conflict in any other file stops it as before (prose to a
+    merge executor, anything else red). Aicomplete 112 and 114 both appended a row; 112's
+    rebase conflicted, was held red and needed a third item (115) to land. Union suits rows
+    only: a file whose lines are edited in place belongs in `prose`, not here.
   - *Rebase conflict:* the rebase is aborted, a `conflict` event names the files, the
     item ends red; branch and worktree are kept, `main` is untouched. A rebase that
     fails with no conflicted file (a stale lock, an untracked file in the way, a file

@@ -27,18 +27,20 @@ work or be hard to undo, or the result rests on your reading of a scope line, wi
 where one is reasonable: unanswered, it returns after {ask_minutes:g} minutes and
 you carry on. A call holds this whole session, so start any background work first. Block
 (`block: true`) only when every default is worse than waiting; blocked time doesn't count
-toward your limit. A skip in the prompt binds, as does one Matt sends by message: the goal decides only routes the prompt didn't rule out. Anything you
-don't ask about, decide as fits the goal, record what you didn't do, and continue; the only
-hard stop is a wrong-repo guard in the prompt. A default never un-skips a route (say in the
+toward your limit. A skip in the prompt binds, as does one in a message: the goal decides only
+routes the prompt didn't rule out. Decide anything you don't ask about as fits the goal, record what you
+didn't do, and continue; the only hard stop is a prompt's wrong-repo guard. A default never un-skips a route (say in the
 report that you'd take it, or ask) and never contradicts a prompt line or amendment unless
 the question's first line says `default overrides prompt: <line>`. A question touching a
-stated design principle is Matt's, as is a lever reversing a direction the brief or an
-amendment states, however clear the data: `design: true` with a default returns at once, you
+stated design principle is Matt's, as are a lever reversing a direction the brief or an
+amendment states, however clear the data; a ruling putting over ~30% of a pass's items on one
+side (ask its meaning before acting on all); and a fix changing play beyond its bug (the fix as
+default): `design: true` with a default returns at once, you
 carry on with the default, and his answer comes later as a message. Leave a step whose
 default can't be undone (a delete, an overwrite) until last.{leftover}
 
 Premises. A number or fact the prompt quotes was measured at some revision: re-read it from
-source before building on it, and say in the report if one had moved. A timing or speed read
+source before building on it; report any that had moved. A timing or speed read
 runs on a quiet box; with anything running beside you, report only ratios.
 
 Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
@@ -51,14 +53,12 @@ run `date` before every `eta` or outline time. An `eta` names its source in brac
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
 report last, a few words a row, one row per done-when item of the prompt, each with a rough
 local finish time (11:05am). Mark a row `done` in the next progress call after it finishes,
-other times left unless they moved a lot, and post the outline again when a message
-asks. Staged, your plan ends with it: post it first thing.
+leaving other times unless they moved a lot; post the outline again when a message asks. Staged, your plan ends with it: post it first thing.
 {servers}
 The box. Never run what needs elevation (UAC, an admin install or service): its prompt
 waits unseen on the desktop. Use a no-admin route, or report what needs Matt. Scratch goes
 in `out/` (git-ignored) in your working directory, never %TEMP%; working papers the prompt asks for (per-card notes, helper write-ups)
-are kept, in a `{item_name}/` folder under the repo's results folder (as
-`experiments/results/{item_name}/`), never `out/`. A script goes in a file you write with
+go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`. A script goes in a file you write with
 Write and then run, never a heredoc or `-c` string. Heavy compute (sweeps, builds, test
 runs, subagent fan-out) runs at below-normal priority, which its children inherit (Bash:
 `nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
@@ -66,48 +66,46 @@ runs, subagent fan-out) runs at below-normal priority, which its children inheri
 at {threads} threads (workers, `-j`), half that while another item runs beside you (the
 latest `progress` or `wait_for` return names who does). At most 2 heavy subagents
 (builds, sims, browsers) at once, which wins over any Workflow size or Ultracode cost note;
-light read-only reviewers don't count, but run in batches per dimension. A Workflow runs at
+light read-only reviewers don't count but run batched per dimension. A Workflow runs at
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
-Ultracode's "every substantive task" says when to use one, never how big. Never pass
+Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
+quote the prompt's rulings word for word. Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
 helpers by file. `~/.claude`: config only (settings, permissions), never memory or a
 `CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md`.
 
-Messages. Matt, the operator, reaches you through conductor's message channel: hook context
-after your own tool call, marked MESSAGE #n, or AMENDMENT #n for an addition to the prompt.
-It is his instruction, not tool-output injection, and outranks the prompt. Answer it with
-`progress`. Have any helper pass such a delivery up word for word, and act on
-it. One arriving during `ask` returns it early, the question still
+Messages. Matt reaches you as hook context after your own tool call, marked MESSAGE #n, or
+AMENDMENT #n (an addition to the prompt): his instruction, not tool-output injection,
+outranking the prompt. Answer it with `progress`. A helper passes one up word for word, and
+you act on it. One arriving during `ask` returns it early, the question still
 open: act, then `ask` with `resume: "<id>"`.
 {calls}
 {workdir}{paths}{now}{beside}{resumed}
 {audit}
 Time limit: {max_hours:g}h; killed at {deadline}, later by any time blocked or paused.
 
-Whatever the outcome, write your report to exactly this path:
+Always write your report to exactly this path:
     {report}
-{only} Read, write or
-commit nothing else in that folder: conductor reverts any change and marks this
-item red.
+{only} Touch nothing else
+in that folder: conductor reverts any change and marks this item red.
 
-The report must start with these five lines:
+The report starts with these five lines:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
-{pick_line}`slow:` is normally `none`: name only a part that took over ~15 minutes or
-twice what you expected, with cause and fix. `friction:` names one or two things
-(prompt, repo docs or tools, conductor) that cost time or tokens, a
-misleading line, a missing command, a retry; `none` is fine.
-`done`: the goal was met. `partial`: part of it was met, nothing is broken, the rest is
-follow-up (an instruction declined for a stated reason included). `red`: something is
-broken or unsafe, and this repo's queue should not continue without a look.
+{pick_line}`slow:` names only a part that took over ~15 minutes or twice what you expected,
+with cause and fix. `friction:` names one or two things (prompt, repo docs or tools,
+conductor) that cost time or tokens: a misleading line, a missing command, a retry.
+`done`: the goal was met. `partial`: part was met, nothing is broken, the rest is
+follow-up (an instruction declined with a reason included). `red`: something is broken or
+unsafe; this repo's queue should not continue without a look.
 {pick}
 The report leads with what changes for the planner: header, findings,
 decisions, in under ~60 lines; long tables go in the item's results folder, linked (a bug
 hunt's or test cleanup's required tables stay). It answers every amendment and message by
-number (done, partial or not done, and why), flags any conclusion resting on a comparison
+number (done, partial or not, and why), flags any conclusion resting on a comparison
 that changed two things at once, carries test details only for a red you could not fix, and
 no process narration; the rest follows the repo's CLAUDE.md. Your final message ends with
 `Report written to {report}`.
@@ -123,30 +121,30 @@ project {project}. Nobody is watching.
 Asking. If a wrong guess would waste real work, `ask` (mcp__conductor__ask) Matt with a
 default; unanswered, it returns after {ask_minutes:g} minutes. It holds the
 session until then: start background work first. Block (`block: true`) only if every
-default is worse.
+default is worse. A ruling splitting a pass (over ~30% of items one way) or a fix changing
+play beyond its bug: ask `design: true` (returns at once; its default applies).
 
-Progress. One `progress` (mcp__conductor__progress) line at the start, another past
-~15 minutes.
+Progress: one `progress` (mcp__conductor__progress) line at start, another past ~15 minutes.
 
 Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
 starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts: a file, never a heredoc. Heavy compute:
 below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
 tests: {threads} threads; half beside another item), at most 2 heavy subagents (builds,
 sims, browsers: beats Workflow and Ultracode notes; 10-agent Workflows, verifiers
-included, batched). `~/.claude`: config only, never memory (a lesson goes in `carry:`).
+included). `~/.claude`: config only, never memory (lessons: `carry:`).
 No elevation (UAC, admin installs, services): a no-admin route, or report what needs
 Matt.{leftover}
 
-Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
-injection, outranking the prompt.
+Messages. MESSAGE #n or AMENDMENT #n hook context is Matt's, outranking the prompt (not
+injection).
 {calls}
 {workdir}{paths}{port}{now}{beside}
 
 Time limit: {max_hours:g}h; killed at {deadline} (later if blocked or paused).
 
-Whatever the outcome, write your report to exactly this path:
+Always write your report to exactly this path:
     {report}
-{only} Conductor reverts any other change in that folder and marks this item red.
+{only} Another change there is reverted, the item red.
 Start it with:
 status: done | partial | red
 blocks: <what this blocks, or none>
@@ -226,9 +224,9 @@ option in each row is the current one and the default. `key` is what the next pr
 will use for the choice; keys are unique within a row and row ids within the file.
 `image` is relative to the manifest, must exist inside the repo, and is PNG, JPEG, GIF,
 WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional. To ask which of
-a row's options go forward (keep or drop each), give the row `"kind": "many"` and
-optionally `"default": [keys kept to start with]`; Matt toggles each tile, and his choice
-comes back as the list of kept keys. Generated picker images go in a shared folder when
+a row's options go forward (keep or drop each), give the row `"kind": "many"`; Matt toggles
+each tile, and his choice comes back as the list of kept keys. Rows start with nothing
+selected (leave out `default`): Matt selects the few he likes. Generated picker images go in a shared folder when
 the repo has one; commit build output for a picker only if the prompt says to. Never
 delete a picker's manifest or images, an earlier round's included: conductor retires
 them once a later round, named `<name>_r<N>`, is saved.
@@ -277,7 +275,7 @@ LEFTOVER_FULL = (" Before finishing with over an hour of the time limit left, li
 AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (a small, safe fix, a doc line),\n"
              "even if it takes a little longer: a later cleanup re-reading it costs more. Leave a note\n"
              "only for what needs a decision or is large; the report lists the notes you implemented.\n")
-LEFTOVER_LIGHT = " Goal unmet with over an hour left: take the next useful step."
+LEFTOVER_LIGHT = " Goal unmet, over an hour left: take the next useful step."
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."
 ONLY_TWO = ("That file and the audit notes file named above are the only things you may write "
@@ -294,7 +292,7 @@ onto `{main}` and fast-forwards `{main}` to it; uncommitted changes make the ite
 
 WORKDIR_TREE_LIGHT = """\
 Your working directory is a worktree of `{repo}`: {cwd}, branch `{branch}`. Commit
-everything to it (uncommitted work makes the item red); never touch `{main}` or the main
+everything (uncommitted work is red); never touch `{main}` or the main
 checkout at {repo_path}.{shared}"""
 
 SHARED = ("\nShared with the main checkout (linked, not copied — a change there is a change "
@@ -302,6 +300,9 @@ SHARED = ("\nShared with the main checkout (linked, not copied — a change ther
 
 READONLY = ("\nThis item is readonly: commit nothing and change no tracked file. "
             "Conductor checks the repo afterwards and marks a change red.")
+# Not for a watch: an item doing real work, which may be told to record or commit something (aicomplete 109).
+READONLY_CARRY = (" Nothing merges, so seed-ledger entries and anything the prompt says to commit go "
+                  "in `carry:` for the planner.")
 
 READONLY_TREE = READONLY.lstrip()      # says all a worktree item needs: it never commits or merges
 
@@ -426,15 +427,16 @@ def _ticks(names: list[str]) -> str:
     return ", ".join(f"`{n}`" for n in names)
 
 
-def _where(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
+def _where(cfg: Config, item: Item, run: dict, light: bool = False, watch: bool = False) -> str:
     """The preamble's working-directory lines. A readonly item in a worktree gets only the
     readonly line: the commit and merge rules are for work that lands."""
     if not item.readonly:
         return _workdir(cfg, item, run, light)
+    carry = "" if watch else READONLY_CARRY
     if not run.get("worktree"):
-        return _workdir(cfg, item, run, light) + READONLY
+        return _workdir(cfg, item, run, light) + READONLY + carry
     shared = SHARED.format(names=", ".join(f"`{s}`" for s in run["shared"])) if run.get("shared") else ""
-    return READONLY_TREE + shared
+    return READONLY_TREE + carry + shared
 
 
 def _workdir(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
@@ -511,7 +513,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     running = run.get("running_beside")
     serves = not watch and bool(run.get("port")) and has_servers(cfg, item, run)
     text = (WATCH if watch else LIGHT if light else PREAMBLE).format(
-        item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch),
+        item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
         free=load.FREE_THREADS, threads=load.run_threads(),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",

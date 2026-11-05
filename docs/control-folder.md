@@ -106,6 +106,7 @@ push = false                  # true: push main to the remote after each merge (
 shared = ["data", ".venv"]    # untracked folders linked into every worktree (junctions)
 setup = ["uv sync"]           # shell commands run in a new worktree before launch
 prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]   # the default: exempt from `paths`, merged textually
+append_only = ["experiments/history.md"]            # logs only appended to: merged by union on landing (default none; worktrees.md)
 background = ["npm test*", "*playwright test*"]       # shell commands executors always background (default none; see progress.md)
 
 [executor]                    # optional

@@ -47,7 +47,9 @@ row whose choice differs from it is *changed*.
 **Many rows** (58): `"kind": "many"` on a row (`"one"`, the default, is pick one) asks
 "which of these go forward": each option is kept or dropped, any number kept, so an
 executor need not ask Matt to "select the bare tile to carry it" (aicomplete 026).
-`"default": [keys]`, optional, is what is kept to start with (none if absent); a
+`"default": [keys]`, optional, is what is kept to start with (none if absent). Since 79
+the schema handed to executors says rows start with nothing selected and to leave `default`
+out: Matt selects the few he likes (every project). A
 default naming a key the row lacks, or any other `kind`, refuses the manifest. Its saved
 row has `keys` (kept, in option order) instead of `key`, and is *changed* when they
 differ from the default.
