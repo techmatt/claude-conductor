@@ -28,12 +28,20 @@ aicomplete/034 41%, python.exe 20% (outside)`), and carried by the `memory` and
 `memory_critical` events. Found live: aicomplete 030's benchmark lost its timings to a
 `pytest -m ""` from another session, and 034 made the box lag, neither visible anywhere.
 
-**Load warning** (68). With an item running and under 4 hardware threads free
-(`load.FREE_THREADS`; busy percent of all threads) for 3 samples in a row (`LOAD_SAMPLES`,
-~90s), the daemon logs `load_high` (inbox, no toast since 70: too noisy for Matt) and messages
-each running item, once per item: cut its threads if the load is its own, and set no budget from a rate read now
-(aicomplete 068: rates read under load inflated a budget). The cause may be outside the
-items; the message doesn't assume. Memory sampling off means no warning.
+**Load warning** (68; awareness, not a limit, since 80). Under `load_warn_free_threads`
+(2; busy percent of all threads) for 3 samples in a row (`LOAD_SAMPLES`) and
+`load_warn_seconds` (180), the daemon logs `load_high` (inbox only, no toast since 70), again
+every `load_tell_minutes` (15) while the stretch lasts. Only a running item whose own tree is
+a real share of the load (`load.own_share`: a quarter of the box, or 3 threads' worth) is
+messaged to cut its threads, at most once per `load_tell_minutes`; load from outside the items
+is logged with `causes: []` and no item told. Found live: aicomplete 121 was told to cut at
+3.8 free under 68's rule (4 free for ~90s), the load mostly Defender, ServiceShell and Chrome.
+The caution that a rate or timing read now is inflated (aicomplete 068: such reads inflated a
+budget) rides the event, the sample (`load.high: {since, free}` in `memory.jsonl`), *Now*'s
+load line (`· **high** since 9:12am: timing reads inflated`) and, once per stretch, the next
+`progress` or `wait_for` return (`memory.load_high`), so an item timing something checks one
+call rather than being messaged. The budget the preamble sets (4 free, `load.FREE_THREADS`) is
+unchanged. Memory sampling off means no warning.
 
 **Writes.** Each tree also sums the bytes its tools have written (`Tree.writes`, Windows
 I/O counters, so pipes count), leaving out the executor, shells, browsers and conductor's

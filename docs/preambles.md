@@ -100,7 +100,8 @@ only in the environment (74). Stages and merge executors get none.
   no constraint": light read-only reviewers and verifiers don't count
   against the 2, but run in batches per dimension. A Workflow runs at most 10 agents (or the
   prompt's number), finders and verifiers both, a hard count set before launch (68; `ultracode.md`).
-  Not enforced: *Now*'s load line shows it broken, and `load_high` warns under 4 threads free (`memory.md`).
+  Not enforced: *Now*'s load line shows it broken; `load_high` logs under 2 free for ~3 min and messages only an
+  item that is a real share of it (80); the next `progress` or `wait_for` return says when timing reads are inflated (`memory.md`).
   The recipe (72, after wordwarriors 174): Git Bash `nice -n 10 <cmd>` gives `BELOW_NORMAL`
   on Windows, inherited by children (measured `0x4000` in both); the full preamble adds the
   PowerShell form.

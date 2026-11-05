@@ -63,7 +63,7 @@ TOOL_KEYS = {"label", "run", "cwd", "url"}
 
 MEMORY_KEYS = ("memory_sample_seconds", "memory_keep_hours", "memory_pressure_percent",
                "memory_pressure_free_gb", "memory_critical_percent", "memory_critical_free_gb",
-               "memory_calm_seconds")
+               "memory_calm_seconds", "load_warn_free_threads", "load_warn_seconds", "load_tell_minutes")
 NIGHT_KEYS = ("watch_check_minutes", "watch_quiet_minutes", "watch_every_minutes", "watch_planner_minutes",
               "watch_blocked_minutes", "watch_max_hours", "backlog_night_hours", "night_start_hour", "night_end_hour")
 
@@ -96,6 +96,11 @@ class Config:
     memory_critical_percent: float = 95.0
     memory_critical_free_gb: float = 1.5
     memory_calm_seconds: float = 300.0   # a level falls only after the box stays clear this long
+    # The load warning (`daemon_memory._check_load`, docs/memory.md): under this many threads
+    # free for this long logs `load_high`; an item causing it is told at most once per N minutes.
+    load_warn_free_threads: float = 2.0
+    load_warn_seconds: float = 180.0
+    load_tell_minutes: float = 15.0
     # The night shift (`daemon_watch.py`, docs/night-shift.md).
     watch_check_minutes: float = 10.0    # the daemon's stall check (no tokens; 0: off)
     watch_quiet_minutes: float = 20.0    # a running item with no progress line this long is flagged

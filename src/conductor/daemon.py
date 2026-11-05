@@ -151,8 +151,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._writes: dict[str, tuple[int, float | None]] = {}   # item → its tools' bytes written, when that last moved
         self._mem_clear_since: float | None = None  # below the level since (monotonic), not yet calm
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about
-        self._load_short = 0                        # samples in a row under load.FREE_THREADS
-        self.load_told: set[str] = set()            # running items warned of it
+        self._load_short = 0                        # samples in a row under cfg.load_warn_free_threads
+        self._load_since: float | None = None       # short of threads since (monotonic)
+        self._load_high: dict | None = None         # the sustained stretch: {since, logged} (`_check_load`)
+        self.load_told: dict[str, float] = {}       # running item → when it was last told (monotonic)
         self._init_restart()
         self._init_watch()
         self._init_push()
@@ -961,7 +963,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._reap(item_id, rec.get("worktree"), rec.get("started"), "its executor exited",
                    job=(rec.get("pid"), rec.get("create_time")))
         self.mem_told.pop(item_id, None)
-        self.load_told.discard(item_id)
+        self.load_told.pop(item_id, None)
         self._writes.pop(item_id, None)
         reasons: list[str] = []
         if run.tamper:

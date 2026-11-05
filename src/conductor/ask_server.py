@@ -27,7 +27,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import questions, talk, waitfor
+from . import memory, questions, talk, waitfor
 
 POLL_SECONDS = 1.0
 # Claude Code aborts a tool call that sends no response or progress for 30 minutes
@@ -190,6 +190,7 @@ class Server:
         self._away: dict[str, float] = {}       # question id → seconds spent off the call, on a message
         self._away_since: dict[str, float] = {}
         self._running: list[str] | None = None  # what it last heard runs beside it
+        self._load_said: str | None = None      # the load stretch it was last cautioned about
         self._amend_checked: set[tuple] = set() # (question, default) already refused once (`_amendment_check`)
 
     def send(self, obj: dict) -> None:
@@ -276,7 +277,19 @@ class Server:
         return "Logged; carry on." + self._running_now(), False
 
     def _running_now(self) -> str:
-        """The preamble's *Running beside you now* line, when what runs beside it changed."""
+        """The preamble's *Running beside you now* line, when what runs beside it changed, and
+        the load caution once per sustained stretch (80: carried here, not messaged)."""
+        return self._beside() + self._load_note()
+
+    def _load_note(self) -> str:
+        high = memory.load_high(self.control / ".conductor")
+        if not high or high.get("since") == self._load_said:
+            return ""
+        self._load_said = high.get("since")
+        return (f" The box is short of threads ({high.get('free')} free, since {memory.clock(high.get('since'))}): "
+                "a rate or timing read now is inflated; don't set a budget from it.")
+
+    def _beside(self) -> str:
         if self._running is None:
             self._running = talk.told_beside(self.control, self.item)
         if self._running is None:                   # a watch, or no run record

@@ -365,8 +365,19 @@ def describe(ev: Event) -> str:
             if d.get("action"):
                 text += f" — {d['action']}"
         case "load_high":
-            text = (f"{d.get('free')} hardware threads free, under the {d.get('keep')} kept: "
-                    f"{load.text(d.get('load') or {})}; told {', '.join(d.get('items', []))}")
+            told = d.get("items") or []
+            if told:
+                tail = f"told {', '.join(told)}"
+            elif d.get("causes"):
+                tail = f"{', '.join(d['causes'])} already told (once per 15 minutes at most)"
+            elif "causes" in d:
+                tail = "mostly outside the items: none told"
+            else:
+                tail = "told nobody"
+            text = (f"{d.get('free')} hardware threads free, under {d.get('keep')}: "
+                    f"{load.text(d.get('load') or {})}; {tail}")
+            if d.get("caution"):
+                text += f" — {d['caution']}"
         case "reaped":
             procs_ = d.get("processes", [])
             text = (f"{who} left {len(procs_)} process(es) running in its worktree ({d.get('context')}); killed: "

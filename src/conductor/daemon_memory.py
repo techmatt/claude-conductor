@@ -7,7 +7,7 @@ from pathlib import Path
 
 from . import load as load_mod
 from . import memory, procs, talk
-from .util import parse_stamp
+from .util import parse_stamp, stamp
 
 # What a running item is told when the box's memory level changes (`sample_memory`).
 MEMORY_TELLS = {
@@ -26,10 +26,10 @@ MEMORY_TELLS = {
 WRITING_SECONDS = 90            # a tool that wrote this recently is still at work (`still_writing`)
 WRITING_SAMPLES = 3             # or this many samples, on a box sampling more slowly
 
-LOAD_SAMPLES = 3                # samples in a row under `load.FREE_THREADS` before a warning: never one spike
-LOAD_TELL = ("Conductor: the box has {free:g} hardware threads free, under the {keep} the load budget leaves ({load}). "
-             "If that is your work, cut its threads. Either way a rate or timing read now is inflated: "
-             "don't set a budget from it.")
+LOAD_SAMPLES = 3                # samples in a row short of threads before a warning: never one spike
+LOAD_CAUTION = "a rate or timing read now is inflated: don't set a budget from it"
+LOAD_TELL = ("Conductor: the box has {free:g} hardware threads free, under {keep}, and your processes are a "
+             "large share of it ({load}). Cut their threads. Meanwhile " + LOAD_CAUTION + ".")
 
 
 class MemoryMixin:
@@ -84,7 +84,8 @@ class MemoryMixin:
             was_written, at = self._writes.get(item_id, (t.writes, None))   # its first sample is the baseline
             self._writes[item_id] = (t.writes, moved if t.writes != was_written else at)
         load = self._load.sample({pid: item_id for item_id, t in trees.items() for pid in t.pids})
-        rec = memory.sample(status, self.mem_level, trees, load)
+        high = self._check_load(load)
+        rec = memory.sample(status, self.mem_level, trees, {**load, "high": high} if high else load)
         try:
             memory.store(self.cfg.state_dir, rec, self.cfg.memory_keep_hours)
         except OSError as exc:
@@ -92,26 +93,40 @@ class MemoryMixin:
         self._beat()
         if self.mem_level != was:
             self._memory_changed(was, rec, trees)
-        self._check_load(load)
 
-    def _check_load(self, load: dict | None) -> None:
-        """Short of threads for `LOAD_SAMPLES` samples: a `load_high` event (no toast: 70) and a
-        message to each running item, once per item, so rates aren't read under the load."""
-        short = load is not None and load_mod.free_threads(load) < load_mod.FREE_THREADS
+    def _check_load(self, load: dict | None) -> dict | None:
+        """Awareness, not a limit (80). Under `load_warn_free_threads` free for `LOAD_SAMPLES`
+        samples and `load_warn_seconds`: a `load_high` event (inbox only, no toast: 70) carrying
+        the inflated-timing caution, again every `load_tell_minutes` while it lasts. Only a
+        running item whose own tree is a real share of the load (`load.own_share`) is
+        messaged, at most once per `load_tell_minutes`; load from outside is logged, no item
+        told (aicomplete 121 was told to cut its threads beside Defender and Chrome). Returns
+        the stretch (`{since, free}`) for the sample to carry, None when the box has room."""
+        cfg, at = self.cfg, time.monotonic()
+        short = load is not None and load_mod.free_threads(load) < cfg.load_warn_free_threads
         self._load_short = self._load_short + 1 if short else 0
-        if self._load_short < LOAD_SAMPLES:
-            return
-        items = [i for i, run in self.runs.items()
-                 if run.rec.get("phase", "exec") == "exec" and not run.exited() and i not in self.load_told]
-        if not items:
-            return
+        self._load_since = (self._load_since or at) if short else None
+        if self._load_short < LOAD_SAMPLES or at - self._load_since < cfg.load_warn_seconds:
+            self._load_high = None
+            return None
+        every = cfg.load_tell_minutes * 60
+        if self._load_high is None:
+            self._load_high = {"since": stamp(), "logged": None}
+        high = self._load_high
+        live = [i for i, run in self.runs.items() if run.rec.get("phase", "exec") == "exec" and not run.exited()]
+        causes = [i for i in live if load_mod.own_share(load, i)]
+        items = [i for i in causes if i not in self.load_told or at - self.load_told[i] >= every]
         free = load_mod.free_threads(load)
-        self.log.append("load_high", free=free, keep=load_mod.FREE_THREADS, items=items, load=load)
-        text = LOAD_TELL.format(free=free, keep=load_mod.FREE_THREADS, load=load_mod.text(load))
+        if items or high["logged"] is None or at - high["logged"] >= every:
+            high["logged"] = at
+            self.log.append("load_high", free=free, keep=cfg.load_warn_free_threads, items=items,
+                            causes=causes, load=load, caution=LOAD_CAUTION)
         for item_id in items:
+            text = LOAD_TELL.format(free=free, keep=f"{cfg.load_warn_free_threads:g}", load=load_mod.text(load))
             ev = self.log.append("tell", item=item_id, text=text, by="conductor")
             talk.post(self.cfg.control, item_id, ev.id, text, "conductor")
-            self.load_told.add(item_id)
+            self.load_told[item_id] = at
+        return {"since": high["since"], "free": free}
 
     def still_writing(self, item_id: str) -> bool:
         """Has a tool of this item written anything lately? From the samples, so a box with

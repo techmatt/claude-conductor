@@ -17,6 +17,8 @@ MIN_PERCENT = 1.0       # a consumer under this is not named
 MIN_SECONDS = 1.0       # a sample sooner than this (a rising memory level) repeats the last one
 FREE_THREADS = 4        # the preamble's load budget: an item leaves this many hardware threads free
 RUN_HEADROOM = 2        # threads under the budget's ceiling the preamble's default leaves for the session itself
+OWN_SHARE = 25          # percent of the box an item's tree uses before `load_high` messages it (80) ...
+OWN_THREADS = 3         # ... or this many threads' worth, whichever comes first
 
 
 def run_threads() -> int:
@@ -65,6 +67,13 @@ class Sampler:
 def free_threads(load: dict) -> float:
     """Hardware threads a sample left idle."""
     return round((psutil.cpu_count() or 1) * (100 - load.get("cpu", 0)) / 100, 1)
+
+
+def own_share(load: dict, item: str) -> bool:
+    """Is `item`'s own tree a real share of the box's load (80): at least `OWN_SHARE` of the
+    CPU, or `OWN_THREADS` threads' worth? Below that the load is someone else's to cut."""
+    pct = sum(t["cpu"] for t in load.get("top") or [] if t.get("item") and t.get("who") == item)
+    return pct >= OWN_SHARE or pct * (psutil.cpu_count() or 1) / 100 >= OWN_THREADS
 
 
 def text(load: dict) -> str:

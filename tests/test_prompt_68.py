@@ -53,26 +53,33 @@ def test_an_eta_with_its_source_still_parses():
     assert nightshift.parse_eta("(to the cap)", posted) is None
 
 
-def busy_box(env, monkeypatch, cpu):
+def busy_box(env, monkeypatch, cpu, own=None):
+    """A 20-thread box `cpu`% busy, `own`% of it (all, by default) the held item's; 80's
+    3-minute wait off, so samples alone decide."""
     monkeypatch.setattr(load.psutil, "cpu_count", lambda: 20)
     env.d.cfg.memory_sample_seconds = 0.01
+    env.d.cfg.load_warn_seconds = 0
     env.d.memory_probe = lambda: status(50, 10)
-    sample = {"cpu": cpu, "top": [{"who": "code/001_hold", "cpu": cpu, "item": True}]}
+    own = cpu if own is None else own
+    top = [{"who": "code/001_hold", "cpu": own, "item": True}] if own else []
+    if cpu > own:
+        top.append({"who": "MsMpEng.exe", "cpu": cpu - own, "item": False})
+    sample = {"cpu": cpu, "top": sorted(top, key=lambda t: -t["cpu"])}
     env.d._load.sample = lambda owned: sample
 
 
 def test_a_short_box_warns_once_per_item_after_a_run_of_samples(env, monkeypatch):
     env.queue("001_hold", env.hold())
     env.tick_until(lambda: env.events("start"))
-    busy_box(env, monkeypatch, 90)                          # 2 of 20 threads free
+    busy_box(env, monkeypatch, 95)                          # 1 of 20 threads free
     for _ in range(daemon_memory.LOAD_SAMPLES - 1):
         env.d.sample_memory(force=True)
     assert not env.events("load_high")
     for _ in range(3):
         env.d.sample_memory(force=True)
     [ev] = env.events("load_high")
-    assert ev.detail["free"] == 2.0 and ev.detail["items"] == ["code/001_hold"]
-    assert "under the 4 kept" in inbox.describe(ev)
+    assert ev.detail["free"] == 1.0 and ev.detail["items"] == ["code/001_hold"]
+    assert "under 2" in inbox.describe(ev) and "inflated" in inbox.describe(ev)
     assert notify.message("p", ev.kind, ev.item, ev.repo, ev.detail) is None     # 70: no toast
     [tell] = [e for e in env.events("tell") if "threads free" in e.detail["text"]]
     assert tell.item == "code/001_hold" and tell.detail["by"] == "conductor"
@@ -81,7 +88,7 @@ def test_a_short_box_warns_once_per_item_after_a_run_of_samples(env, monkeypatch
 def test_a_spike_or_a_box_with_threads_to_spare_never_warns(env, monkeypatch):
     env.queue("001_hold", env.hold())
     env.tick_until(lambda: env.events("start"))
-    busy_box(env, monkeypatch, 70)                          # 6 free
+    busy_box(env, monkeypatch, 85)                          # 3 free: under 68's 4, not 80's 2
     for _ in range(4):
         env.d.sample_memory(force=True)
     busy_box(env, monkeypatch, 95)

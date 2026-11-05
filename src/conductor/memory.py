@@ -28,6 +28,7 @@ LEVELS = ("ok", "pressure", "critical")
 SLACK_PERCENT = 3.0
 SLACK_GB = 0.5
 FILE = "memory.jsonl"
+HIGH_AGE = 120.0        # a sample older than this no longer says the load is high (`load_high`)
 NOT_WRITERS = ("claude", "shell", "chromium")
 
 
@@ -200,7 +201,31 @@ def load_line(cfg: Config) -> str | None:
     """The *Now* line for the box's load, from the daemon's latest sample while it is fresh:
     `load CPU 63%: aicomplete/034 41%, python.exe 20% (outside)`."""
     rec = latest(cfg.state_dir)
-    return f"load {load_mod.text(rec['load'])}" if fresh(rec, cfg) and rec.get("load") else None
+    if not (fresh(rec, cfg) and rec.get("load")):
+        return None
+    high = rec["load"].get("high")
+    return f"load {load_mod.text(rec['load'])}" + (f" · **high** since {clock(high['since'])}: timing reads "
+                                                  "inflated" if high else "")
+
+
+def load_high(state_dir: Path, max_age: float = HIGH_AGE) -> dict | None:
+    """The sustained load stretch (`{since, free}`) the daemon's latest sample carries, while
+    that sample is under `max_age` seconds old: what `progress` and `wait_for` tell an item
+    reading timing (80), without a message each time."""
+    rec = latest(state_dir)
+    try:
+        age = now().timestamp() - parse_stamp(rec["at"]).timestamp()
+    except (KeyError, ValueError, TypeError):
+        return None
+    return (rec.get("load") or {}).get("high") if age <= max_age else None
+
+
+def clock(at: str) -> str:
+    try:
+        t = parse_stamp(at).astimezone()
+    except (ValueError, TypeError):
+        return str(at)
+    return t.strftime("%I:%M%p").lstrip("0").lower()
 
 
 def line(cfg: Config, rec: dict | None = None) -> tuple[str, str]:

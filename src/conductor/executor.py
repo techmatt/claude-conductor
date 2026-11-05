@@ -64,7 +64,7 @@ runs, subagent fan-out) runs at below-normal priority, which its children inheri
 `nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
 'BelowNormal'`), and leaves at least {free} hardware threads free: simulation and test runs
 at {threads} threads (workers, `-j`), half that while another item runs beside you (the
-latest `progress` or `wait_for` return names who does). At most 2 heavy subagents
+latest `progress` or `wait_for` return names who does, and says when the box's load inflates a timing read). At most 2 heavy subagents
 (builds, sims, browsers) at once, which wins over any Workflow size or Ultracode cost note;
 light read-only reviewers don't count but run batched per dimension. A Workflow runs at
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
