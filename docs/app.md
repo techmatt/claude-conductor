@@ -124,7 +124,8 @@ nothing races a launch. With the daemon down, actions wait in `signals/`.
 taskbar's. At 24 px and below the links and nodes are drawn bolder so the shape still
 reads. The app sets its own AppUserModelID (`conductor.app`, `procs.set_app_id`), so the
 taskbar shows this icon rather than Python's. Each project's tab carries the icon with
-its hub red (needs Matt), gold (running) or slate (idle).
+its hub red (needs Matt), orange (waiting for review), gold (running) or slate (idle);
+an unselected tab's name is red or orange to match (the selected tab's stays dark).
 
 **Tab motion.** While a project has an item moving (executing, setup, merge and
 concluding included, or a stage still staging, in a repo that isn't paused), its tab's name leads with the title's turning
@@ -140,15 +141,27 @@ the refresh:
 |---|---|
 | Needs Matt: a blocking question, a red hold, a picker waiting, a daemon down with work | `● Conductor · 1 question` (`· red`, `· pick`, `· daemon down`; counts when more than one) |
 | Items running (a stage still staging counts; a staged item waiting with its plan doesn't) | `◐ Conductor · 2 running`, the glyph turning ◐ ◓ ◑ ◒ once a second |
+| Nothing running, something waiting | `🟠 Conductor · 2 to review · 1 open question` |
 | Idle | `Conductor` |
 
-Needs Matt ranks above running and holds still; unreviewed reports and non-blocking
-questions never count (the planner handles those). The glyph's timer (`TURN_MS`) runs
+Needs Matt ranks above running and holds still. The glyph's timer (`TURN_MS`) runs
 only while the title or a tab turns. A project whose refresh fails part-way keeps its last whole
 snapshot in the title. The header's state line above the tabs is unchanged.
 
-**Tray.** The same three states on the icon's hub: red when something needs Matt,
-pulsing gold (gold and dim on alternate seconds) while items run, plain gold when idle.
+**Waiting** (81): an unreviewed report or any open question (non-blocking and design
+included; a blocking one is also *needs Matt*), in any project, paused repos included.
+The title adds it to the other parts (`· 1 to review`, `· 1 open question`) and, with
+nothing running, leads with an orange dot. A window title can't be coloured, so the
+colour lives on the icon: the **taskbar** (the window's icon, `icon.window_icon`) gets a
+badge over its bottom-right corner, orange and still with nothing running, orange and
+turning (its bright half going round ◐ ◓ ◑ ◒ with the title) while items run too, red
+while something needs Matt, and none when merely running or quiet. A project tab's hub
+and name turn orange the same way (`status.tab_kind`). A `reviewed` event or the
+question's answer clears it on the next refresh (`Status.badge`, `status.summarize`).
+
+**Tray.** The same states on the icon's hub: red when something needs Matt,
+pulsing gold (gold and dim on alternate seconds) while items run, pulsing orange while
+they run and something waits, plain orange when only that waits, plain gold when idle.
 Its tooltip lists each project's state; clicking opens the window. Closing the window
 hides it to the tray; *Quit* in the tray menu exits. Neither touches a daemon or an
 executor. Without a system tray, closing the window quits.

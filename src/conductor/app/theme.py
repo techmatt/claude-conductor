@@ -33,6 +33,7 @@ RED = "#b3261e"
 RED_BG = "#fdecea"
 AMBER = "#8a4b00"
 AMBER_BG = "#fff3dc"
+ORANGE = "#c2410c"         # a project tab waiting for review (81): 4.5:1 on WINDOW
 GREEN = "#1b6e2a"
 GREEN_BG = "#e6f4e9"
 GREEN_DARK = "#145220"

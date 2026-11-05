@@ -31,18 +31,23 @@ AUTOPILOT = {                   # mode → menu label, what it means
     "night": ("Night only", "Backlog draws, a watch's included, only at night ([defaults] night hours)"),
     "always": ("Always", "Backlog draws day and night"),
 }
-HUBS = {"need": "red", "running": "gold", "idle": "slate"}     # a project tab's icon, by `status` kind
-TURN_MS = 1000                  # the running title's glyph and the tray's pulse
+HUBS = {"need": "red", "waiting": "orange", "running": "gold", "idle": "slate"}   # a project tab's icon (`status.tab_kind`)
+TAB_COLOURS = {"need": theme.RED, "waiting": theme.ORANGE}     # an unselected project tab's label; else MUTED
+TURN_MS = 1000                  # the running title's glyph, the tray's pulse, the taskbar badge's turn
 
 
 def tray_hub(st: status.Status, tick: int) -> str:
-    """The tray's hub: red when something needs Matt, pulsing gold while items run."""
-    return {"need": "red", "running": "dim" if tick % 2 else "gold"}.get(st.kind, "gold")
+    """The tray's hub: red when something needs Matt; while items run, pulsing gold, or
+    orange when something waits for review too; still orange when only that waits."""
+    if st.kind == "need":
+        return "red"
+    hue = "orange" if st.waiting else "gold"
+    return ({"orange": "orange_dim", "gold": "dim"}[hue] if tick % 2 else hue) if st.kind == "running" else hue
 
 
 def state_icon(kind: str) -> QIcon:
-    """The app's icon with its hub coloured by a `status` kind: red when something needs
-    Matt, gold while items run, slate when idle."""
+    """The app's icon with its hub coloured by `status.tab_kind`: red when something needs
+    Matt, orange when something waits for review, gold while items run, slate when idle."""
     return icon.icon(HUBS.get(kind, "slate"))
 
 
@@ -372,6 +377,7 @@ class MainWindow(QMainWindow):
         self.status = status.Status("idle", [])
         self._good: dict[Path, Snapshot] = {}      # each project's last snapshot read whole: the title's
         self._tick = 0
+        self._badge: tuple = (None, 0)              # the window icon's badge, as last set
         # Only while items run: turns the title's glyph and pulses the tray's hub.
         self.turner = QTimer(self)
         self.turner.timeout.connect(self._turn)
@@ -500,7 +506,9 @@ class MainWindow(QMainWindow):
             if not snap.error or folder not in self._good:
                 self._good[folder] = snap     # a read that failed part-way keeps the title where it was
             idx = self.tabs.indexOf(view)
-            self.tabs.setTabIcon(idx, state_icon(status.summarize([self._good[folder]]).kind))
+            kind = status.tab_kind(self._good[folder])
+            self.tabs.setTabIcon(idx, state_icon(kind))
+            self.tabs.tabBar().setTabTextColor(idx, QColor(TAB_COLOURS.get(kind, theme.MUTED)))
         self._good = {f: s for f, s in self._good.items() if f in self.views}
         due = restart_due(self._good.values())
         for view in self.views.values():
@@ -524,7 +532,8 @@ class MainWindow(QMainWindow):
         self._show_status()
 
     def _show_status(self) -> None:
-        """The title and the tray's icon: the gold hub pulses while items run and turns
+        """The title, the window's (taskbar's) badge and the tray's icon: the gold hub
+        pulses while items run, orange when something waits for review too, and turns
         red when something needs Matt. Needs Matt holds still. Each project tab leads
         with the same turning glyph while it has an item moving (`status.moving`)."""
         self.setWindowTitle(self.status.title(self._tick))
@@ -533,6 +542,10 @@ class MainWindow(QMainWindow):
             idx = self.tabs.indexOf(view)
             if self.tabs.tabText(idx) != text:
                 self.tabs.setTabText(idx, text)
+        badge = (self.status.badge, self._tick % 4 if self.status.badge == "turn" else 0)
+        if badge != self._badge:            # the taskbar shows the window's icon (81)
+            self._badge = badge
+            self.setWindowIcon(icon.window_icon(*badge))
         if self.tray:
             self.tray.setIcon(icon.icon(tray_hub(self.status, self._tick)))
 
