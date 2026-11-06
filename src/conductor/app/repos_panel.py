@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QHeaderView, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout
+from PySide6.QtWidgets import (QHeaderView, QMenu, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
+                               QVBoxLayout)
 
 from .. import audits
 from ..events import Event
@@ -15,7 +16,7 @@ from . import actions, theme
 from .model import Finished, Project, Snapshot
 from .trail import TrailView
 from .widgets import (AMBER, KeepColourDelegate, Panel, ask_text, compact_button, compact_buttons, confirm,
-                      open_session, pick_note, when)
+                      open_session, pick_label, pick_note, picks_state, when)
 
 
 def finished_note(f: Finished, when) -> str:
@@ -88,7 +89,8 @@ class ReposPanel(Panel):
         self._sig: tuple | None = None
         self._rows: dict[tuple, QTreeWidgetItem] = {}
         self._sessions: dict[str, str | None] = {}      # finished item → its session id
-        self._picks: dict[str, str] = {}                # finished item → its manifest ref
+        self._picks: dict[str, list[str]] = {}          # finished item → its manifest refs, a `pick:` line each
+        self._pick_infos: dict = {}                     # manifest ref → its `picks.PickInfo`
         self._open: dict[tuple, bool] = {}              # repo row / group key → expanded, once clicked
         self.tree.itemExpanded.connect(lambda w: self._expanded(w, True))
         self.tree.itemCollapsed.connect(lambda w: self._expanded(w, False))
@@ -148,7 +150,9 @@ class ReposPanel(Panel):
                     state, look = a.phase, "stage"
                     elapsed = duration(a.elapsed(at)) if staging else ""
                     note = "" if staging else "plan ready; resumes when it can run"
-                if i == 0 and held:
+                if why := rs.set_aside.get(it.id):
+                    state, look, note = "held", "blocked", why     # holds only itself
+                elif i == 0 and held:
                     # the hold row above says why; a staged item still looks staged
                     state, look = ((f"{state} · blocked by hold", "stage") if it.id in stages
                                    else ("blocked by hold", "blocked"))
@@ -180,11 +184,14 @@ class ReposPanel(Panel):
                 mark = "reviewed" if f.reviewed else "unreviewed"
                 note = finished_note(f, when)
                 look = f"done:{f.status}:{mark}"
-                if f.pick:
+                if f.picks:
                     # The pick state is part of the look: a save changes the button's tone.
-                    p = snap.picks.get(f.item)
-                    note += " · pick: " + pick_note(p)
-                    look += f"|pick:{p.state if p else 'waiting'}"
+                    ps = snap.picks.get(f.item) or []
+                    if len(f.picks) == 1:
+                        note += " · pick: " + pick_note(ps[0] if ps else None)
+                    else:                   # one per `pick:` line (fractals 022 had three)
+                        note += " · picks: " + "; ".join(f"{pick_label(p.ref, p)} {pick_note(p)}" for p in ps)
+                    look += f"|pick:{picks_state(ps)}"
                 rows.append((("done", f.item), [f.name, f"{f.status} · {mark}", "", note], f.item, look,
                              ("group", rs.name, "finished")))
             if rs.unreviewed:
@@ -198,14 +205,15 @@ class ReposPanel(Panel):
             for f in rs.earlier:
                 note = finished_note(f, when)
                 look = f"done:{f.status}:reviewed"
-                if f.pick:                          # settled: no longer waits, but reopens
-                    note += f" · pick: {f.pick}"
+                if f.picks:                         # settled: no longer waits, but reopens
+                    note += f" · pick: {', '.join(f.picks)}"
                     look += "|pick:settled"
                 rows.append((("old", f.item), [f.name, f"{f.status} · reviewed", "", note], f.item, look,
                              ("group", rs.name, "earlier")))
             parts = (["held after red"] if rs.red else ["held"] if rs.action == "hold" else [])
             parts += [f"{n} {word}" for word, n in counts.items()] or ([] if parts else ["idle"])
-            if waiting := sum(1 for p in snap.picks.values() if p.item.split("/", 1)[0] == rs.name and p.state != "saved"):
+            if waiting := sum(1 for ps in snap.picks.values() for p in ps
+                              if p.item.split("/", 1)[0] == rs.name and p.state != "saved"):
                 parts.append(f"{waiting} to pick")
             # The audit marker last, so it reads as its own: time for a cleanup when convenient.
             head = " · ".join(parts + ([audits.pending(rs.audit_notes)] if rs.audit_notes else []))
@@ -214,7 +222,8 @@ class ReposPanel(Panel):
 
     def update_snapshot(self, snap: Snapshot, new: list[Event] = ()) -> None:
         self._sessions = {f.item: f.session_id for rs in snap.repos for f in (*rs.finished, *rs.earlier)}
-        self._picks = {f.item: f.pick for rs in snap.repos for f in (*rs.finished, *rs.earlier) if f.pick}
+        self._picks = {f.item: f.picks for rs in snap.repos for f in (*rs.finished, *rs.earlier) if f.picks}
+        self._pick_infos = {p.ref: p for ps in snap.picks.values() for p in ps}
         plan = self._plan(snap)
         # Tell and Amend follow the tree's buttons: Tell only while executing, Amend
         # queued (staged included) or executing.
@@ -402,9 +411,9 @@ class ReposPanel(Panel):
                         ("Amend…", lambda _=False, i=key[1]: self._amend(i), None)))
                 elif key[0] in ("done", "old"):
                     specs = [("Terminal", lambda _=False, i=key[1]: self._open_session(i), None)]
-                    if pick_state and (ref := self._picks.get(key[1])):
-                        # Amber until saved: the picker waits for Matt.
-                        specs.insert(0, ("Pick…", lambda _=False, r=ref: self._pick(r),
+                    if pick_state and (refs := self._picks.get(key[1])):
+                        # Amber until saved: the picker waits for Matt. Several: a menu of them.
+                        specs.insert(0, ("Pick…", (lambda _=False, r=refs[0]: self._pick(r)) if len(refs) == 1 else None,
                                          None if pick_state in ("saved", "settled") else "default"))
                     if look.endswith(":unreviewed"):
                         specs.insert(0, ("Mark reviewed", None, None if pick_state == "saved" else "default"))
@@ -414,6 +423,15 @@ class ReposPanel(Panel):
                         b.setToolTip("Mark its report read (a `reviewed:` signal the daemon carries out)")
                     if b := holder.buttons.get("Pick…"):
                         b.setToolTip("Open its picker in the browser (a `pick:` signal the daemon carries out)")
+                        if len(refs := self._picks.get(key[1], [])) > 1:
+                            b.setToolTip(f"Its {len(refs)} pickers: choose one to open in the browser "
+                                         "(a `pick:` signal the daemon carries out)")
+                            menu = QMenu(b)
+                            for ref in refs:
+                                p = self._pick_infos.get(ref)
+                                menu.addAction(f"{pick_label(ref, p)} — {pick_note(p) if p else 'settled'}",
+                                               lambda r=ref: self._pick(r))
+                            b.setMenu(menu)
                     term = holder.buttons["Terminal"]
                     term.setToolTip("Open this item's session in a terminal (claude --resume)")
                     term.setEnabled(bool(self._sessions.get(key[1])))

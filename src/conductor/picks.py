@@ -5,7 +5,8 @@ still wait for him. Data only; the HTTP server is `picker`, the page `web/picker
     picks/<name>.choices.json        what Matt saved for it, in the control folder
 
 A manifest is named by its ref, `<repo>/<path relative to the repo root>`: the `pick:`
-signal's value and the finish event's `detail.pick`. Choices files and `pick_open`
+signal's value and the finish event's `detail.pick` (with several `pick:` lines, the first;
+`detail.picks` has them all: `refs`). Choices files and `pick_open`
 events carry the same ref as `manifest`, so nothing here needs the manifest itself to
 say what is saved or opened.
 
@@ -77,6 +78,14 @@ class Manifest:
 
     def row(self, row_id: str) -> Row | None:
         return next((r for r in self.rows if r.id == row_id), None)
+
+
+def refs(detail: dict) -> list[str]:
+    """Every manifest a finish names: `picks` (several `pick:` lines, 82), else `pick`."""
+    many = detail.get("picks")
+    if isinstance(many, list) and many:
+        return [r for r in many if isinstance(r, str)]
+    return [detail["pick"]] if isinstance(detail.get("pick"), str) and detail["pick"] else []
 
 
 @dataclass
@@ -370,12 +379,12 @@ def pending(cfg: Config, view: View, log: EventLog) -> list[PickInfo]:
             opens[ev.detail["manifest"]] = ev
     latest: dict[str, int] = {}
     for fin in view.finishes.values():
-        if ref := fin.detail.get("pick"):
+        for ref in refs(fin.detail):
             latest[ref] = max(latest.get(ref, 0), fin.id)
     out = []
-    for item_id, fin in sorted(view.finishes.items(), key=lambda kv: kv[1].id):
-        ref = fin.detail.get("pick")
-        if not ref or gone.get(ref, 0) > fin.id:
+    for item_id, fin, ref in ((i, f, r) for i, f in sorted(view.finishes.items(), key=lambda kv: kv[1].id)
+                              for r in refs(f.detail)):
+        if gone.get(ref, 0) > fin.id:
             continue                            # retired: its files are gone
         settled = view.settled(item_id)
         if settled and latest[ref] != fin.id:
@@ -396,11 +405,15 @@ def pending(cfg: Config, view: View, log: EventLog) -> list[PickInfo]:
 
 
 def saved_at(cfg: Config, view: View) -> dict[str, str]:
-    """item id → when its picker was saved, for each finish whose `pick:` manifest has a
-    choices file saved after it (the digests' "picks saved <time>")."""
-    choices = scan_choices(cfg.control)
-    return {item_id: c["saved_at"] for item_id, fin in view.finishes.items()
-            if (ref := fin.detail.get("pick")) and (c := choices.get(ref)) and _after(c.get("saved_at"), fin.ts)}
+    """item id → when its pickers were saved, for each finish whose every `pick:` manifest
+    has a choices file saved after it, the latest (the digests' "picks saved <time>")."""
+    choices, out = scan_choices(cfg.control), {}
+    for item_id, fin in view.finishes.items():
+        saves = [c["saved_at"] for ref in refs(fin.detail)
+                 if (c := choices.get(ref)) and _after(c.get("saved_at"), fin.ts)]
+        if saves and len(saves) == len(refs(fin.detail)):      # every picker saved: the last save
+            out[item_id] = max(saves, key=parse_stamp)
+    return out
 
 
 # ---------------------------------------------------------------- `needs_pick:` items
@@ -418,7 +431,7 @@ def awaited(cfg: Config, view: View, name: str) -> bool:
     """Do its choices still have to be saved? As for `pending`: a save from before a later
     finish that names the same manifest doesn't count."""
     saved = load_choices(cfg.control, name)
-    return saved is None or any(fin.detail.get("pick") == saved["manifest"] and not _after(saved["saved_at"], fin.ts)
+    return saved is None or any(saved["manifest"] in refs(fin.detail) and not _after(saved["saved_at"], fin.ts)
                                 for fin in view.finishes.values())
 
 
@@ -478,11 +491,12 @@ def known(cfg: Config, log: EventLog) -> dict[str, str]:
     events, and finishes' `pick:` manifests that still load. The newest ref wins."""
     out: dict[str, str] = {}
     for ev in log.query(kinds=["finish"]):
-        if (ref := ev.detail.get("pick")) and ref not in out.values():
-            try:
-                out[load_manifest(cfg, ref).name] = ref
-            except ValueError:
-                pass
+        for ref in refs(ev.detail):
+            if ref not in out.values():
+                try:
+                    out[load_manifest(cfg, ref).name] = ref
+                except ValueError:
+                    pass
     for ev in log.query(kinds=["pick_open"]):
         if isinstance(ev.detail.get("name"), str) and isinstance(ev.detail.get("manifest"), str):
             out[ev.detail["name"]] = ev.detail["manifest"]

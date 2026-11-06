@@ -131,6 +131,21 @@ def pick_note(p) -> str:
     return f"saved {when(p.saved_at)} ({p.changed} changed, {notes} note{'' if notes == 1 else 's'})"
 
 
+def picks_state(ps: list) -> str:
+    """One state for an item's pickers, the furthest behind: any waiting, else any opened, else saved."""
+    states = {p.state for p in ps} or {"waiting"}
+    return next(s for s in ("waiting", "opened", "saved") if s in states or s == "saved")
+
+
+def pick_label(ref: str, p=None) -> str:
+    """A picker's name: its manifest's, once known, else its folder (`…/style_x_r1/manifest.json`)
+    or file name."""
+    if p is not None and p.name:
+        return p.name
+    path = ref.rsplit("/", 2)
+    return path[-2] if len(path) > 2 and path[-1] == "manifest.json" else path[-1].removesuffix(".json")
+
+
 def countdown(deadline: str | None) -> str:
     if not deadline:
         return ""

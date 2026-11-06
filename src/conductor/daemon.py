@@ -578,15 +578,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._refuse_late_writes(view)
         queued: dict[str, items.Item] = {}
         edited: set[str] = set()
-        cancelled: set[str] | None = None
 
         def dep_warning(item: items.Item) -> dict:
-            nonlocal cancelled
-            if not item.depends_on:
-                return {}
-            if cancelled is None:
-                cancelled = {e.item for e in self.log.query(kinds=["cancel"]) if e.item}
-            warning = state.dependency_warning(view, item, cancelled)
+            warning = state.dependency_warning(view, item) if item.depends_on else None
             return {"warning": warning} if warning else {}      # its receipt says so (docs/receipts.md)
 
         for repo, queue in view.queued.items():
@@ -648,6 +642,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         amending = self.process_amends(view)
         reordering = self._reorder_pending()      # its items are under temp names: wait
         decisions = state.decide(self.cfg, view)
+        for item_id, why in view.set_aside.items():         # holds itself only; its repo runs on
+            if self.holds.get(item_id) != why and (item := queued.get(item_id)):
+                self.holds[item_id] = why
+                self.log.append("hold", item=item_id, paths=[self.cfg.rel(item.path)], reason=why, alone=True)
         for repo, d in decisions.items():
             if repo == reordering:
                 continue
@@ -1019,6 +1017,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "conductor": own,
             "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
             "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
+            "picks": [r for v in (header or {}).get("picks", []) if (r := _pick_ref(repo, v))],
             "friction": (header or {}).get("friction"),
             "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),

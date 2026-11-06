@@ -28,8 +28,11 @@ WRITING_SAMPLES = 3             # or this many samples, on a box sampling more s
 
 LOAD_SAMPLES = 3                # samples in a row short of threads before a warning: never one spike
 LOAD_CAUTION = "a rate or timing read now is inflated: don't set a budget from it"
-LOAD_TELL = ("Conductor: the box has {free:g} hardware threads free, under {keep}, and your processes are a "
-             "large share of it ({load}). Cut their threads. Meanwhile " + LOAD_CAUTION + ".")
+# Information, not an order (82): executors killed and relaunched renders on it (fractals 022, 026, 028).
+LOAD_TELL = ("Conductor, for information: the box has {free:g} hardware threads free, under {keep}, and your "
+             "processes are a large share of it ({load}). Let the unit in flight finish and start the next one "
+             "with fewer threads; never kill and relaunch running work for load alone. Meanwhile "
+             + LOAD_CAUTION + ".")
 
 
 class MemoryMixin:

@@ -73,6 +73,29 @@ def test_dependency_ended_red_holds(env):
     assert "ended red" in env.events("hold")[0].detail["reason"]
 
 
+@pytest.mark.slow
+def test_a_cancelled_dependency_holds_only_its_dependent(env):
+    """fractals: cancelling 026 left website 003 holding the whole repo as an unknown dependency."""
+    from test_receipts import receipt
+    env.queue("001_long", env.hold())
+    env.queue("002_gone", "FAKE report done")
+    env.queue("003_dep", "FAKE report done", depends_on="002_gone")
+    env.queue("004_after", "FAKE report done")
+    env.tick_until(lambda: env.events("start"))
+    env.signal("planner-1.signal", "by: planner\ncancel: 002_gone\n")
+    env.d.tick()
+    meta, _ = receipt(env, "signals/planner-1.signal")
+    assert meta["outcome"] == "accepted" and "code/003_dep depends on it" in meta["warning"]
+    env.release()
+    env.tick_until(lambda: env.finished("code/004_after"))
+    assert not env.finished("code/003_dep")
+    [hold] = [e for e in env.events("hold") if e.item == "code/003_dep"]
+    assert hold.detail["alone"] and hold.detail["reason"] == (
+        "waits on cancelled code/002_gone: requeue 002_gone or cancel this")
+    env.queue("002_gone", "FAKE report done")       # requeued: the dependency is met again
+    env.tick_until(lambda: env.finished("code/003_dep"))
+
+
 def test_tamper_is_reverted_and_red(env):
     state = env.control / "state.md"
     env.queue("001_tamper", f"FAKE write {state.as_posix()} hacked\nFAKE report done")

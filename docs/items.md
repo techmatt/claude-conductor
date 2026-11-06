@@ -54,8 +54,9 @@ names neither: a `depends_on` on it holds.
 A `depends_on` that can never be met in order is flagged when the item is queued or
 rewritten, not only as a hold once it is the head: the receipt stays `accepted` and gains
 a `warning` naming each such dependency and why (later in the same queue; already ended
-`partial`, `red` or the like; cancelled), and the `enqueue` event carries it too
-(`state.dependency_warning`). A dependency not written yet is not flagged.
+`partial`, `red` or the like; cancelled, which holds only this item: `scheduling.md`), and
+the `enqueue` event carries it too (`state.dependency_warning`). A dependency not written
+yet is not flagged.
 
 **Scheduling** (order, holds, readonly, `alongside` and exclusive items): `scheduling.md`.
 

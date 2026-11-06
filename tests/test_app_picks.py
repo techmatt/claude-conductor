@@ -24,13 +24,13 @@ def test_snapshot_picks_follow_open_and_save(env):
     snap = p.snapshot()
     [rs] = snap.repos
     assert {f.name: f.pick for f in rs.finished} == {"001_x": ref, "002_y": None}
-    assert set(snap.picks) == {"code/001_x"} and snap.picks["code/001_x"].state == "waiting"
+    assert set(snap.picks) == {"code/001_x"} and [q.state for q in snap.picks["code/001_x"]] == ["waiting"]
     assert snap.to_pick == 1
     log.append("pick_open", item="code/001_x", name="m", manifest=ref, url="http://x/", opened=True, by="app")
-    assert p.snapshot().picks["code/001_x"].state == "opened"
+    assert p.snapshot().picks["code/001_x"][0].state == "opened"
     _choices(env.control, "m", ref, changed=6, notes=2)
     snap = p.snapshot()
-    info = snap.picks["code/001_x"]
+    [info] = snap.picks["code/001_x"]
     assert (info.state, info.changed, info.notes, info.name) == ("saved", 6, 2, "m")
     assert snap.to_pick == 0
     p.close()

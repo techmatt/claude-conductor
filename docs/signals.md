@@ -57,7 +57,10 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   moved, not deleted, to `.conductor/cancelled/<YYYYmmdd-HHMMSS>__<repo|proposed>__NNN_name.md`;
   `cancel` is logged with `from` (`queue`/`proposed`) and `kept`. A cancelled proposal's
   event has item `proposed/NNN_name` and the repo its front-matter names (or `proposed`
-  when that repo is missing or not configured).
+  when that repo is missing or not configured). A queued item whose `depends_on` names the
+  cancelled one is listed on the event (`dependents`) and in the receipt's `warning`: each
+  now holds by itself, its repo running on, until the name is requeued or it is cancelled
+  (82; `scheduling.md`).
 - **reorder** — `reorder: <repo|proposed> <item> ...`: the listed items take the sorted
   numbers they already hold, in the listed order (each number keeps its zero padding;
   the name after it is unchanged). Refused when an item is unknown, listed twice or

@@ -100,7 +100,9 @@ class ReceiptsMixin:
                           if request and request.detail.get("identical") else
                           "applied; nothing changed" if request else
                           "; ".join(map(tell_result, tells)) if tells else "applied")
-                self._write_receipt(rel, got, result=result)
+                # A cancel with queued dependents says so: each now holds by itself.
+                warning = "; ".join(e.detail["warning"] for e in got if e.kind == "cancel" and e.detail.get("warning"))
+                self._write_receipt(rel, got, result=result, warning=warning or None)
 
     def _receipt_event(self, ev: Event) -> None:
         """Every appended event: into the receipt being gathered, or the receipt of the

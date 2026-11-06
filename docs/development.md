@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~90-110s; 392 tests; 2026-11-05)
+uv run pytest            # the fast lane, after every change (~90-110s; 399 tests; 2026-11-05)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~255s; 527 tests); run this before committing
+uv run pytest -m ""      # everything (~250s; 535 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 

@@ -32,7 +32,7 @@ Steps 4 and 5 go out in the same turn. Nothing else at start: no memory reads, p
 - Reading stages a snapshot: re-stage before relying on a file that may have changed, and pass the staged `mtimeMs` as `expectedMtimeMs` when replacing one. A re-stage can briefly show the old copy ("dispatched"): before building on it, check it's new (`mtimeMs`, or a header line), else read again. LF line endings always.
 - Each upload goes once, to a fresh workspace path: one written twice can send its first copy.
 - A conductor prompt: read `prompts\ledger.md`'s tail first. Never edit conductor's `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
-- **After a write, stage its receipt, never the inbox**: `receipts\` + the write's path with its extension swapped for `.md` (`receipts\signals\planner-<stamp>.md`, `receipts\requests\<stamp>.md`). `accepted` with `result` (a `warning`, such as a `depends_on` that will hold: fix it now), `pending` (says what holds it) or `refused` with `reason`. Missing: not handled yet; re-stage once, then tell Matt the daemon may be down (`docs/receipts.md`).
+- **After a write, stage its receipt in a later call than the write** (same batch: not there yet), never the inbox: `receipts\` + the write's path, extension `.md` (`receipts\requests\<stamp>.md`). `accepted` with `result` (a `warning`: a `depends_on` that will hold, a cancel's dependents: act now), `pending` (what holds it) or `refused` with `reason`. None: re-stage once, then tell Matt the daemon may be down (`docs/receipts.md`).
 - **Never list a control folder recursively**, nor `reports\`: every file is named below; stage a report by name.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (in a code repo), or a command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.
 
@@ -67,7 +67,7 @@ message: "state: v0.2"
 ---
 ```
 
-Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target; quote a `message:` holding a colon. `nothing to commit: … identical to HEAD`: the copy sent was unedited; resend it from a fresh path. Refusals, stale folders, the tamper guard, a `not git-ignored` warning: `docs/control-folder.md`.
+Stage the current file, edit it in the workspace, send it whole: never hunks, never in place. Every file is a target; quote a `message:` holding a colon. `nothing to commit: … identical to HEAD`: the copy sent was unedited; resend it from a fresh path. Refusals, stale folders, the tamper guard, warnings: `docs/control-folder.md`.
 
 ## Every session
 
@@ -81,9 +81,9 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 ## Writing a prompt
 
 - **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick` (`docs/items.md`).
-- **Ultracode** (`ultracode: true`): subagent workflows where they help (multi-part, sweeps, redesigns, new systems), 10 agents each at most, verifiers included, unless the prompt says otherwise; a feature one also gets an adversarial review of its diff.
+- **Ultracode** (`ultracode: true`): subagent workflows where they help (multi-part, sweeps, redesigns, new systems), ≤10 agents each, verifiers included, unless the prompt says otherwise; a feature one also gets an adversarial review of its diff.
 - **Audits and templates are conductor's texts**, never retyped: `audit: true` keeps notes for a later cleanup (it fixes obvious ones itself): on by default for rules and gate items, off for art and small items, and for anything else when Matt asks; `template: <name>` is conductor's prompt, any body appended (`docs/templates.md`); Matt saying a template's phrase queues it.
-- **Concurrency** (`docs/scheduling.md`): a worktree per item; `done` and `partial` merge into `main` one at a time per repo. **`alongside: <what it touches>`** starts one beside its repo's others: a clearly separate code area, nothing shared outside git (art, voice, readonly prototypes). Templates but bug hunt, self audit and watch run alone. `depends_on` only where queue order doesn't serialize (another repo, `alongside`, `readonly`); a `partial` dependency holds it. `readonly` never merges, starts at once, sees `main` as then. Append-only logs: the repo's `append_only` (union merge).
+- **Concurrency** (`docs/scheduling.md`): a worktree per item; `done` and `partial` merge into `main` one at a time per repo. **`alongside: <what it touches>`** starts one beside its repo's others: a clearly separate code area, nothing shared outside git (art, voice, readonly prototypes). Templates but bug hunt, self audit and watch run alone. `depends_on` only where queue order doesn't serialize (another repo, `alongside`, `readonly`); a `partial` dependency holds its repo, a cancelled one only the item. `readonly` never merges, starts at once, sees `main` as then. Append-only logs: the repo's `append_only` (union merge).
 - **Staging is automatic**: a queue head waiting on a busy lock or a running dependency gets a read-only head start; `stage: false` when wasted or its plan needs the running item's result.
 - **Approval**: write a prompt only when Matt asks for one ("queue it", "write the prompt"); a discussion or his answer to a design question is not one. One he asks for goes to `queue\` (he cancels any he doesn't want); `proposed\` only for what he says to hold. Items move only by signal.
 - **Rewrite, amend, or new item.** **queue status** first. Rewrite a queued, staging or staged item for a changed plan (its stage is redone); never a running one. **Amend** adds to a plan that still stands, until merging; a correction to finished work is a new item.
@@ -116,7 +116,7 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## Reading a report
 
-A report opens with `status: done | partial | red`, `blocks:` (what it blocks), `carry:` (what `state.md` should change), `slow:`, `friction:`, and `pick:` (a manifest path) if any. It answers each amendment and message by number.
+A report opens with `status: done | partial | red`, `blocks:` (what it blocks), `carry:` (what `state.md` should change), `slow:`, `friction:`, a `pick:` per picker (manifest path). It answers each amendment and message by number.
 
 - `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
 - A `conductor:` line under the header overrides `status:`: `NOT on main` (red after a `done` report; branch kept) or `landed on main … despite …` (conductor's own red; no hold). Kept work Matt wants lands with **land X**.

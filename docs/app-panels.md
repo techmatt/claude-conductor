@@ -46,7 +46,11 @@ an item's detail in `trail.py`.
   unreviewed. A finished row whose report named a picker has **Pick…** (`pick: <ref>`,
   `by: app`; amber until saved) and its note adds ` · pick: saved 4:52pm (6 changed, 2
   notes)`, ` · pick: opened, not saved` or ` · pick: waiting for Matt` (see `picks.md`,
-  *Pending*); the tab label adds `N to pick` while any is unsaved. Items settled by the
+  *Pending*); the tab label adds `N to pick` while any is unsaved. A report with several
+  `pick:` lines (82; fractals 022 had three) gets one **Pick…** whose menu lists each picker by
+  name with its state, the note ` · picks: <name> <state>; …`, and amber while any waits;
+  `N to pick` counts pickers. A set-aside queued item (its dependency cancelled: `scheduling.md`)
+  sits after the queue's others, `held`, its note saying why. Items settled by the
   latest checkpoint sit in *Earlier checkpoints* (the 10 newest; the count is all of
   them).
   Columns: Repo / item, State and Elapsed fit their contents, the buttons sit far right in

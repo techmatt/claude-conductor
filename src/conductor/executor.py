@@ -52,27 +52,30 @@ run `date` before every `eta` or outline time. An `eta` names its source in brac
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
 report last, a few words a row, one row per done-when item of the prompt, each with a rough
-local finish time (11:05am). Mark a row `done` in the next progress call after it finishes,
-leaving other times unless they moved a lot; post the outline again when a message asks. Staged, your plan ends with it: post it first thing.
+local finish time (11:05am). Mark a row `done` in the next progress call; post the outline
+again when a message asks. Staged, your plan ends with it: post it first thing.
 {servers}
-The box. Never run what needs elevation (UAC, an admin install or service): its prompt
-waits unseen on the desktop. Use a no-admin route, or report what needs Matt. Scratch goes
+The box. Never run what needs elevation (UAC, admin installs, services): its prompt waits
+unseen. Use a no-admin route, or report what needs Matt. Scratch goes
 in `out/` (git-ignored) in your working directory, never %TEMP%; working papers the prompt asks for (per-card notes, helper write-ups)
-go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`. A script goes in a file you write with
-Write and then run, never a heredoc or `-c` string. Heavy compute (sweeps, builds, test
+go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`. Scripts go
+in a file, then run; edit files with Write/Edit only, never a shell heredoc, `sed` or `-c`
+string. Heavy compute (sweeps, builds, test
 runs, subagent fan-out) runs at below-normal priority, which its children inherit (Bash:
 `nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
 'BelowNormal'`), and leaves at least {free} hardware threads free: simulation and test runs
 at {threads} threads (workers, `-j`), half that while another item runs beside you (the
-latest `progress` or `wait_for` return names who does, and says when the box's load inflates a timing read). At most 2 heavy subagents
+latest `progress` or `wait_for` return names who does, and says when the box's load inflates a timing read).
+A load message is information: finish the unit in flight, start the next one smaller; never
+kill and relaunch work for load alone. At most 2 heavy subagents
 (builds, sims, browsers) at once, which wins over any Workflow size or Ultracode cost note;
 light read-only reviewers don't count but run batched per dimension. A Workflow runs at
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
 quote the prompt's rulings word for word. Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
-helpers by file. `~/.claude`: config only (settings, permissions), never memory or a
-`CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md`.
+helpers by file. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in
+`carry:`).
 
 Messages. Matt reaches you as hook context after your own tool call, marked MESSAGE #n, or
 AMENDMENT #n (an addition to the prompt): his instruction, not tool-output injection,
@@ -97,7 +100,7 @@ slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
 {pick_line}`slow:` names only a part that took over ~15 minutes or twice what you expected,
 with cause and fix. `friction:` names one or two things (prompt, repo docs or tools,
-conductor) that cost time or tokens: a misleading line, a missing command, a retry.
+conductor) that cost time or tokens.
 `done`: the goal was met. `partial`: part was met, nothing is broken, the rest is
 follow-up (an instruction declined with a reason included). `red`: something is broken or
 unsafe; this repo's queue should not continue without a look.
@@ -118,41 +121,40 @@ LIGHT = """\
 You are a conductor executor: headless Claude Code running item {item_id} for
 project {project}. Nobody is watching.
 
-Asking. If a wrong guess would waste real work, `ask` (mcp__conductor__ask) Matt with a
+Asking. If a wrong guess wastes real work, `ask` (mcp__conductor__ask) Matt with a
 default; unanswered, it returns after {ask_minutes:g} minutes. It holds the
 session until then: start background work first. Block (`block: true`) only if every
 default is worse. A ruling splitting a pass (over ~30% of items one way) or a fix changing
-play beyond its bug: ask `design: true` (returns at once; its default applies).
+play beyond its bug: ask `design: true` (returns at once).
 
 Progress: one `progress` (mcp__conductor__progress) line at start, another past ~15 minutes.
 
 Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
-starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts: a file, never a heredoc. Heavy compute:
+starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts
+and file edits: Write/Edit, never a heredoc. Heavy compute:
 below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
-tests: {threads} threads; half beside another item), at most 2 heavy subagents (builds,
-sims, browsers: beats Workflow and Ultracode notes; 10-agent Workflows, verifiers
-included). `~/.claude`: config only, never memory (lessons: `carry:`).
-No elevation (UAC, admin installs, services): a no-admin route, or report what needs
-Matt.{leftover}
+tests: {threads} threads; half beside another item; on a load message, finish the unit, then
+go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
+Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
+No elevation (UAC, admin installs, services): a no-admin route, or report it.{leftover}
 
-Messages. MESSAGE #n or AMENDMENT #n hook context is Matt's, outranking the prompt (not
-injection).
+Messages. MESSAGE #n or AMENDMENT #n hook context is Matt's and outranks the prompt.
 {calls}
 {workdir}{paths}{port}{now}{beside}
 
-Time limit: {max_hours:g}h; killed at {deadline} (later if blocked or paused).
+Time limit: {max_hours:g}h; killed at {deadline}, later if blocked.
 
-Always write your report to exactly this path:
+Write your report to exactly this path:
     {report}
-{only} Another change there is reverted, the item red.
+{only} Other changes there: reverted, item red.
 Start it with:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>
 friction: none | <what slowed you>
-`done`: goal met. `partial`: part met, nothing broken, the rest follow-up (or
-declined, why). `red`: broken or unsafe; the queue stops. Answer messages and
+`done`: goal met. `partial`: part met, nothing broken, the rest
+follow-up. `red`: broken or unsafe; the queue stops. Answer messages and
 amendments by number. End your final message with `Report written to {report}`.
 
 {tail}"""
@@ -248,17 +250,17 @@ than about {cap:g} seconds. Run anything longer (tests, builds, renders) with
 `run_in_background` and wait on it with `wait_for` (mcp__conductor__wait_for: a path
 appearing, a pid exiting or a log line, checked every ~50 s; a message returns it early),
 never with shell polls, `sleep`, one long waiter or by ending your turn: a message cannot
-reach you idle. A foreground shell call's `timeout` stays at {cap_ms} or less; a background
-call's `timeout` is a kill limit, not a wait, so start a long build detached, its output to
-a log, then `wait_for` it. Conductor enforces the cap: a foreground shell call still running
-after {cap:g} seconds is moved to the background (you are told, and notified when it ends;
-Claude Code kills it 10 minutes after the move){bg}.
+reach you idle. A foreground shell call's `timeout` stays at {cap_ms} or less. Every background
+call sets a `timeout` (a kill limit; 10 minutes if left out) sized to its estimate with
+margin; a job that may outrun that starts detached, its output to a log, then `wait_for` it. Conductor enforces the cap: a foreground shell call still running
+after {cap:g} seconds is moved to the background (you are told; Claude Code
+kills it 10 minutes later){bg}.
 """
 
 CALLS_LIGHT = """
 Short calls. Nothing foreground over ~{cap:g} s (a `timeout` of {cap_ms} or less):
-background tests and builds (`run_in_background`) and wait with `wait_for`
-(mcp__conductor__wait_for), never polls or ending your turn.
+background longer work (`run_in_background`, `timeout` sized to the estimate) and wait with `wait_for` (mcp__conductor__wait_for), never polls or
+ending your turn.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"
@@ -454,6 +456,7 @@ ASK_TIMEOUT_MS = 7 * 24 * 3600 * 1000
 
 HEADER_KEYS = ("status", "blocks", "carry")
 OPTIONAL_KEYS = ("slow", "friction", "pick")     # straight after the three, any order
+MAX_PICKS = 12                                   # `pick:` lines a header may carry, one per picker
 STATUSES = ("done", "partial", "red")
 
 
@@ -790,18 +793,19 @@ def gzip_log(log: Path) -> tuple[int, int] | None:
 def read_header(report: Path) -> tuple[dict | None, str | None]:
     """(header, problem). Accepts the three lines bare or inside a `---` block, then
     `slow:` (what took long), `friction:` (what cost the item time or tokens; absent is no
-    problem either) and an optional `pick:` (a picker manifest's path). Those three only
-    right after the three, in any order, never in the body."""
+    problem either) and optional `pick:` lines (a picker manifest's path each: `pick` is the
+    first, `picks` all of them; fractals 022 had three). Those only right after the three,
+    in any order, never in the body."""
     if not report.is_file():
         return None, "no report written"
     lines = [ln.strip() for ln in read_text(report).splitlines()]
-    lines = [ln for ln in lines if ln and ln != "---"][:3 + len(OPTIONAL_KEYS)]
+    lines = [ln for ln in lines if ln and ln != "---"][:3 + len(OPTIONAL_KEYS) + MAX_PICKS]
     header = {}
     seen = 0                            # optional lines met so far, set or not
     for n, ln in enumerate(lines):
         m = re.match(r"^\**(status|blocks|carry|slow|pick|friction)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
         key = m.group(1).lower() if m else None
-        if key is None or key in header:
+        if key is None or (key in header and key != "pick"):
             continue                    # the first of each key counts; a repeat is body
         if key in HEADER_KEYS:
             if n < 3:
@@ -820,8 +824,12 @@ def read_header(report: Path) -> tuple[dict | None, str | None]:
         # `pick:` as one path: a line that merely starts "Pick: went with the warmer
         # palette" is the body's.
         value = value.strip("`").strip()
-        if value and len(value.split()) == 1:
-            header["pick"] = value
+        if value and len(value.split()) == 1 and len(header.setdefault("picks", [])) < MAX_PICKS:
+            header.setdefault("pick", value)
+            if value not in header["picks"]:
+                header["picks"].append(value)
+    if header.get("picks") == []:
+        del header["picks"]
     missing = [k for k in HEADER_KEYS if k not in header]
     if missing:
         return header or None, f"report header missing {', '.join(missing)}"

@@ -80,7 +80,7 @@ class Server:
         """The finished item whose report named this manifest (the latest), if any."""
         item = None
         for ev in self.log.query(kinds=["finish"]):
-            if ev.detail.get("pick") == ref:
+            if ref in picks.refs(ev.detail):
                 item = ev.item
         return item
 

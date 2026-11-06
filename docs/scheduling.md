@@ -17,7 +17,8 @@ runs when all of these hold:
 - any `needs_pick` picker's choices are saved (a wait, no stage: `picks.md`);
 - every `depends_on` item finished with status `done` (a dependency still queued
   or running elsewhere means *wait*; one that ended `partial`/`red`, is unknown,
-  or sits later in the same queue means *hold*);
+  or sits later in the same queue means *hold*; one that was cancelled sets the item
+  aside, below);
 - the item id has not run before (a re-run is a new item number).
 
 **Holds** are logged as `hold` events (once per reason change). Waiting on a busy lock
@@ -28,6 +29,14 @@ lock but releases its named locks.
   holds until a `clear: <repo>` signal. `continue` items don't hold.
 - *needs_planner*: the repo's next item holds until the read mark is at or past the
   finished item's `finish` event id.
+- *a cancelled dependency* (82) holds only its dependent: a queued item whose `depends_on`
+  names nothing live but an item cancelled from a queue is **set aside** (`View.set_aside`,
+  `View.queue`): the scheduler skips it, so the item after it can be the head and its repo
+  runs on. It logs `hold` with `alone: true` and the reason `waits on cancelled <id>:
+  requeue <name> or cancel this`; its queue receipt reads `held (only this item): …`, and
+  `conductor status` and the app list it after the queue's others, held. Requeuing the
+  cancelled name meets the dependency again. Before 82 it held the whole repo as an
+  unknown dependency (fractals' website 003 after wallpapers 026 was cancelled).
 
 **Readonly items** take no repo lock (in a repo with worktrees; with `worktrees = false`
 they share the one checkout, so the lock stays). They never merge, so nothing waits for

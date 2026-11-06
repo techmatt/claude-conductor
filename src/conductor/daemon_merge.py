@@ -315,6 +315,8 @@ class MergeMixin:
             extra["conductor"] = out["conductor"]       # a red of conductor's making, landed anyway
         if rec.get("parked"):
             extra |= self._settle_parked(run)
+        if len(out.get("picks") or []) > 1:
+            extra["picks"] = out["picks"]               # one per `pick:` line; `pick` is the first
         self.log.append(
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],

@@ -21,7 +21,9 @@ non-blank lines are read: `status`, `blocks` and `carry` count only in the first
 order, each counted only when every line before it was a header line; `pick:` with a one-word value; so a body that opens with
 "Status: …" or "Pick: went with …" stays body. Backticks around a pick are dropped, `\`
 becomes `/`, and `pick: none` is no pick. The `finish` event carries it as
-`pick: <repo>/<path>`, the ref the `pick:` signal takes.
+`pick: <repo>/<path>`, the ref the `pick:` signal takes. Several `pick:` lines (up to
+`executor.MAX_PICKS`, 12) are one picker each (82): `pick` stays the first and `picks` lists
+them all (`picks.refs` reads either), so each is pending, listed and opened on its own.
 
 `slow:` is where the executor's time went, the one thing an audit can't reconstruct
 later: a component listed only if it took over ~15 minutes or about twice what was

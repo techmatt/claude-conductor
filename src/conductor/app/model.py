@@ -155,7 +155,8 @@ class Finished:
     reviewed: bool
     carry: str | None = None
     session_id: str | None = None
-    pick: str | None = None     # the manifest ref its report's `pick:` line named
+    pick: str | None = None     # the manifest ref its report's first `pick:` line named
+    picks: list[str] = field(default_factory=list)     # every one, a line each (`picks.refs`)
     slow: str | None = None     # its report's `slow:`, unless `none` or absent
     resumed: str = ""           # a resume item's `resume of <orig>` / `post-audit of <orig>`
 
@@ -166,7 +167,8 @@ class RepoState:
     path: Path
     running: list[Activity] = field(default_factory=list)
     staged: list[Activity] = field(default_factory=list)
-    queued: list[items.Item] = field(default_factory=list)
+    queued: list[items.Item] = field(default_factory=list)     # the scheduler's order, set-aside items last
+    set_aside: dict[str, str] = field(default_factory=dict)   # queued id → why it holds itself alone
     action: str = "idle"        # state.decide's action for the queue head
     reason: str = ""
     stage_dropped: str = ""     # the head's stage was discarded or failed: it launches fresh
@@ -206,7 +208,7 @@ class Snapshot:
     error: str | None = None
     targets: dict[str, str] = field(default_factory=dict)      # run target → up | starting | down
     checkpoint: Event | None = None                            # the latest `checkpoint` event
-    picks: dict[str, picks.PickInfo] = field(default_factory=dict)  # finished item → its picker (`picks.pending`)
+    picks: dict[str, list[picks.PickInfo]] = field(default_factory=dict)  # finished item → its pickers (`picks.pending`)
     memory: tuple[str, str] = ("", "ok")                       # `memory.line`: text, level
     autopilot: tuple[str, str] = ("always", "")                # mode, what it starts next (`nightshift.plan`)
     rejected: list[Event] = field(default_factory=list)        # `events.live_invalids`: the header's "N rejected"
@@ -218,7 +220,7 @@ class Snapshot:
     @property
     def to_pick(self) -> int:
         """Pickers that wait for Matt: named by a current report, not saved since."""
-        return sum(1 for p in self.picks.values() if p.state != "saved")
+        return sum(1 for ps in self.picks.values() for p in ps if p.state != "saved")
 
 
 TARGET_PROBE_SECONDS = 0.3      # per target per refresh, on the UI thread: a local server answers at once
@@ -250,7 +252,7 @@ def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
 def _finished(view: state.View, e: Event) -> Finished:
     return Finished(e.item, e.item.split("/", 1)[-1], str(e.detail.get("status")), e.ts,
                     view.reviewed(e.item), e.detail.get("carry"), e.detail.get("session_id"),
-                    e.detail.get("pick") or None, slow_text(e.detail), resume_label(e.detail))
+                    e.detail.get("pick") or None, picks.refs(e.detail), slow_text(e.detail), resume_label(e.detail))
 
 
 def finished_items(view: state.View, repo: str, recent: int = FINISHED_SHOWN,
@@ -313,8 +315,8 @@ def activity_text(ev: Event) -> str:
                 text += f" (carry: {d['carry']})"
             if slow := slow_text(d):
                 text += f" (slow: {slow})"
-            if d.get("pick"):
-                text += f" (pick: {d['pick']})"
+            if refs := picks.refs(d):
+                text += f" (pick: {', '.join(refs)})"
             return text
         case "reviewed":
             return f"report {name} reviewed{by}"
@@ -507,9 +509,11 @@ class Project:
             view, decisions, error = state.View(), {}, f"could not read the queue: {exc}"
         pending = self.scan_picks(view)
         # An item whose picker waits stays current and shown, however old or settled.
-        waiting = {item for item, p in pending.items() if p.state != "saved"}
+        waiting = {item for item, ps in pending.items() if any(p.state != "saved" for p in ps)}
         for repo, path in cfg.repos.items():
-            rs = RepoState(repo, path, queued=view.queued.get(repo, []), red=view.red_hold.get(repo))
+            aside = {i.id: view.set_aside[i.id] for i in view.queued.get(repo, []) if i.id in view.set_aside}
+            rs = RepoState(repo, path, queued=view.queue(repo) + [i for i in view.queued.get(repo, []) if i.id in aside],
+                           set_aside=aside, red=view.red_hold.get(repo))
             for rec in view.running.values():
                 if rec.get("repo") == repo:
                     a = Activity(rec.get("item", "?"), rec.get("name", "?"), PHASES.get(rec.get("phase", "exec"), rec.get("phase")),
@@ -559,13 +563,16 @@ class Project:
         ev = self.log.last("daemon_start")
         return ev.detail.get("code") if ev else None
 
-    def scan_picks(self, view: state.View) -> dict[str, picks.PickInfo]:
-        """`picks.pending` (the inbox's Picks section reads the same), keyed by item; only
-        asked when some report named a manifest, so most refreshes read nothing."""
+    def scan_picks(self, view: state.View) -> dict[str, list[picks.PickInfo]]:
+        """`picks.pending` (the inbox's Picks section reads the same), by item, a picker per
+        `pick:` line; only asked when some report named a manifest, so most refreshes read nothing."""
         if not any(f.detail.get("pick") for f in view.finishes.values()):
             return {}
         try:
-            return {p.item: p for p in picks.pending(self.cfg, view, self.log)}
+            out: dict[str, list[picks.PickInfo]] = {}
+            for p in picks.pending(self.cfg, view, self.log):
+                out.setdefault(p.item, []).append(p)
+            return out
         except (OSError, ValueError):            # a choices file caught mid-write
             return {}
 
@@ -755,8 +762,7 @@ def conversation(events: list[Event]) -> list[Turn]:
                 for key in ("blocks", "carry"):
                     lines.append(f"{key}: {d.get(key) or 'none'}")
                 lines.append(f"slow: {slow_text(d) or 'none'}")
-                if d.get("pick"):
-                    lines.append(f"pick: {d['pick']}")
+                lines += [f"pick: {ref}" for ref in picks.refs(d)]
                 if resumed := resume_label(d):
                     lines.append(resumed)
                 out.append(Turn(e.id, e.ts, "conductor", f"Finished {status}", "\n".join(lines),

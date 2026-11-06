@@ -140,9 +140,12 @@ def cmd_status(args) -> int:
                         else f"staging  {rec['name']}  {duration(age)}, pid {rec.get('pid')}" if rec["phase"] == "staging"
                         else f"staged   {rec['name']}  plan ready, resumes when it can run")
                 print(f"  {what}")
-        for i, item in enumerate(view.queued.get(repo, [])):
+        aside = [i for i in view.queued.get(repo, []) if i.id in view.set_aside]
+        for i, item in enumerate(view.queue(repo) + aside):
             note = ""
-            if i == 0 and decisions[repo].action in ("hold", "wait", "run", "resume", "stage"):
+            if why := view.set_aside.get(item.id):
+                note = f"  — held (only this item): {why}"
+            elif i == 0 and decisions[repo].action in ("hold", "wait", "run", "resume", "stage"):
                 note = f"  — {decisions[repo].action}" + (f": {decisions[repo].reason}" if decisions[repo].reason else "")
             print(f"  queued   {item.name}" + (f" ({resume_label(item.meta())})" if item.resume_of else "") + note)
         if ev := view.red_hold.get(repo):

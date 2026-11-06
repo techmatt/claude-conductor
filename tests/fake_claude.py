@@ -133,7 +133,7 @@ if "in its staging phase" in prompt:
            + ("\n\nQuestions:\n" + "".join(f"- {q}\n" for q in asks) if asks else ""))
     sys.exit(0)
 
-report = Path(lines[lines.index(next(ln for ln in lines if "write your report to exactly this path" in ln)) + 1].strip())
+report = Path(lines[lines.index(next(ln for ln in lines if "write your report to exactly this path" in ln.lower())) + 1].strip())
 memory = ""
 if resume:
     staged = store.read_text(encoding="utf-8") if store.is_file() else ""

@@ -368,8 +368,14 @@ class SignalsMixin:
             raise ValueError(f"cancel: {ref!r} is ambiguous: {[f'{r}/{p.stem}' for r, p in hits]}")
         repo, src = hits[0]
         item_id = f"{repo}/{src.stem}"
+        view = state.scan(self.cfg, self.log)
+        known = view.known()
+        deps = [i.id for q in view.queued.values() for i in q if i.id != item_id
+                and any(items.resolve_ref(r, i.repo, known) == item_id for r in i.depends_on)]
+        warning = {"warning": f"{', '.join(deps)} depend{'s' if len(deps) == 1 else ''} on it: each now holds "
+                              f"by itself (its repo runs on) until {src.stem} is requeued or it is cancelled"} if deps else {}
         self._drop_stage(repo, src.stem, "the item was cancelled")
-        self._cancel_file(src, "queue", item_id, repo, rel)
+        self._cancel_file(src, "queue", item_id, repo, rel, dependents=deps, **warning)
         self._forget(item_id)
 
     def _finished_item(self, verb: str, ref: str) -> tuple[str, state.View]:
@@ -580,7 +586,7 @@ class SignalsMixin:
                                                    if started else "has not started; a message reaches only a running executor"))
         return run
 
-    def _cancel_file(self, src: Path, origin: str, item_id: str, repo: str, rel: str) -> None:
+    def _cancel_file(self, src: Path, origin: str, item_id: str, repo: str, rel: str, **extra) -> None:
         cdir = self.cfg.state_dir / "cancelled"
         cdir.mkdir(parents=True, exist_ok=True)
         base = f"{time.strftime('%Y%m%d-%H%M%S')}__{repo if origin == 'queue' else 'proposed'}__{src.stem}"
@@ -589,7 +595,8 @@ class SignalsMixin:
             dest, n = cdir / f"{base}-{n}.md", n + 1
         retry_io(os.replace, src, dest)
         kept = self.cfg.rel(dest)
-        self.log.append("cancel", item=item_id, repo=repo, paths=[rel, kept], kept=kept, **{"from": origin})
+        extra = {k: v for k, v in extra.items() if v}
+        self.log.append("cancel", item=item_id, repo=repo, paths=[rel, kept], kept=kept, **{"from": origin}, **extra)
 
     def _drop_stage(self, repo: str, name: str, reason: str) -> None:
         """Discard the stage of queued `repo/name`, if it has one (its process tree is killed)."""

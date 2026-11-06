@@ -152,8 +152,8 @@ def describe(ev: Event) -> str:
                 text += f" · slow: {slow}"
             if (friction := (d.get("friction") or "").strip()) and friction.lower().rstrip(".") != "none":
                 text += f" · friction: {friction}"
-            if d.get("pick"):
-                text += f" · pick: {d['pick']}"
+            if refs := picks.refs(d):
+                text += f" · pick: {', '.join(refs)}"
             if d.get("parked_done") or d.get("parked_back"):
                 text += (f" · parked edits: {len(d.get('parked_done') or [])} done, "
                          f"{len(d.get('parked_back') or [])} back to `parked/{(ev.item or '').split('/', 1)[0]}.md`")
@@ -238,7 +238,7 @@ def describe(ev: Event) -> str:
             elif d.get("concurrent"):
                 text += f" (also running: {', '.join(d['concurrent'])})"
         case "hold":
-            text = f"{who} held: {d.get('reason')}"
+            text = f"{who} held{' (only this item; its repo runs on)' if d.get('alone') else ''}: {d.get('reason')}"
         case "start":
             how = "resumed its staged session" if d.get("resumed") else "started"
             text = f"{who} {how} (session {d.get('session_id')}, pid {d.get('pid')})"
@@ -393,6 +393,7 @@ def describe(ev: Event) -> str:
             text = f"{who} approved from {d.get('from')}"
         case "cancel":
             text = f"{who} cancelled from {d.get('from')}; file kept at {d.get('kept')}"
+            text += f"; warning: {d['warning']}" if d.get("warning") else ""
         case "repo_renamed":
             text = f"repo `{d.get('old')}` renamed `{d.get('new')}`" + (f"; checkout moved to {d.get('path')}"
                                                                          if d.get("moved") else "")
@@ -525,7 +526,7 @@ def unreviewed_lines(view: View, finishes: list[Event], saved: dict[str, str] | 
         report = f" — {ev.paths[0]}" if ev.paths else ""
         carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
         slow = f" · slow: {s}" if (s := slow_text(d)) else ""
-        pick = f" · pick: {d['pick']}" if d.get("pick") else ""
+        pick = f" · pick: {', '.join(refs)}" if (refs := picks.refs(d)) else ""
         pick += f" · **picks saved {clock(saved[ev.item])}**" if pick and ev.item in saved else ""
         resumed = f" · {r}" if (r := resume_label(d)) else ""
         resumed += f" · **{changed_text(chg)}**" if (chg := view.changed_since_review(ev.item)) else ""

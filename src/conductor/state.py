@@ -69,10 +69,17 @@ class View:
     stray: list[Path] = field(default_factory=list)            # queue folders for unknown repos
     checkpoint: Event | None = None                            # the latest `checkpoint` event
     audit_used: dict[str, Event] = field(default_factory=dict) # note's item id → `audit_used` event
+    cancelled: set[str] = field(default_factory=set)           # ids cancelled from a queue
+    set_aside: dict[str, str] = field(default_factory=dict)    # queued id → why it holds itself alone
 
     def known(self) -> list[str]:
         ids = [i.id for q in self.queued.values() for i in q]
         return ids + list(self.running) + sorted(self.done)
+
+    def queue(self, repo: str) -> list[Item]:
+        """`repo`'s queue as the scheduler sees it: an item set aside (its dependency was
+        cancelled) holds only itself, so the item after it can be the head."""
+        return [i for i in self.queued.get(repo, []) if i.id not in self.set_aside]
 
     def status_of(self, item_id: str) -> str:
         if item_id in self.running:
@@ -173,7 +180,22 @@ def scan(cfg: Config, log: EventLog) -> View:
     for item in (i for q in view.queued.values() for i in q if i.needs_pick and not i.errors):
         if why := picks.problem(cfg, log, item.needs_pick):
             item.errors.append(why)
+    view.cancelled = {ev.item for ev in log.query(kinds=["cancel"]) if ev.item and ev.detail.get("from") == "queue"}
+    known = view.known()
+    for item in (i for q in view.queued.values() for i in q if i.depends_on):
+        if gone := cancelled_dependency(view, item, known):
+            view.set_aside[item.id] = f"waits on cancelled {gone}: requeue {_short(gone)} or cancel this"
     return view
+
+
+def cancelled_dependency(view: View, item: Item, known: list[str]) -> str | None:
+    """The cancelled item one of `item`'s `depends_on` names, when nothing live answers to it:
+    a requeued item of that name satisfies it again."""
+    for ref in item.depends_on:
+        if not items.ref_matches(ref, item.repo, known):
+            if gone := items.resolve_ref(ref, item.repo, sorted(view.cancelled)):
+                return gone
+    return None
 
 
 def pick_wait(cfg: Config, view: View, item: Item) -> str:
@@ -238,7 +260,7 @@ def decide(cfg: Config, view: View) -> dict[str, Decision]:
     out: dict[str, Decision] = {}
     for repo in cfg.repos:
         running_here = {i: r for i, r in view.running.items() if r["repo"] == repo}
-        queue = view.queued.get(repo, [])
+        queue = view.queue(repo)
         head = queue[0] if queue else None
         if head is None:
             out[repo] = Decision(repo, "busy" if running_here else "idle", None,
@@ -266,7 +288,7 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
     out: list[Item] = []
     for repo in cfg.repos:
         trees = cfg.opts(repo).worktrees
-        queue = view.queued.get(repo, [])
+        queue = view.queue(repo)
         running_here = [r for r in view.running.values() if r["repo"] == repo]
         for i, item in enumerate(queue[1:], 1):
             # A watch starts beside anything, past any barrier, in any repo: it always has a worktree.
@@ -309,11 +331,13 @@ def start_estimate(cfg: Config, view: View, item: Item) -> str:
     repo, known = item.repo, view.known()
     if (ev := view.paused.get(repo)) and item.template != "watch":
         return f"waits: `{repo}` paused {clock(ev.ts)}"
+    if why := view.set_aside.get(item.id):
+        return f"held (only this item): {why}"
     if hold := _hold(cfg, view, repo, item, known):
         return f"held: {hold.reason}"
     if why := pick_wait(cfg, view, item):
         return f"waits for {why}"
-    queue = view.queued.get(repo, [])
+    queue = view.queue(repo)
     ahead = queue[:next((i for i, q in enumerate(queue) if q.id == item.id), len(queue))]
     running = {i: r for i, r in view.running.items() if r["repo"] == repo}
     shares = (item.readonly or item.alongside or item.template == "watch") and cfg.opts(repo).worktrees
@@ -433,19 +457,20 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
     return None
 
 
-def dependency_warning(view: View, item: Item, cancelled: set[str]) -> str | None:
+def dependency_warning(view: View, item: Item) -> str | None:
     """Why `item`'s `depends_on` can never be met in order, said at write time so the planner
     fixes it at once instead of finding a hold later: a later item in its own queue, or one
-    already red, partial or cancelled (`cancelled`: ids of cancelled items). None if it can
-    be met, or names something not written yet."""
+    already red, partial or cancelled. None if it can be met, or names something not written yet."""
     known = view.known()
     queue = [i.id for i in view.queued.get(item.repo, [])]
     out = []
     for ref in item.depends_on:
         dep = items.resolve_ref(ref, item.repo, known)
         if dep is None:
-            if gone := items.resolve_ref(ref, item.repo, sorted(cancelled)):
-                out.append(f"`{ref}` names {gone}, which was cancelled: it holds as an unknown dependency")
+            if not items.ref_matches(ref, item.repo, known) and (
+                    gone := items.resolve_ref(ref, item.repo, sorted(view.cancelled))):
+                out.append(f"`{ref}` names {gone}, which was cancelled: this item holds (its repo does not) "
+                           f"until {_short(gone)} is requeued")
             continue
         status = view.status_of(dep)
         if status == "queued" and dep in queue and item.id in queue and queue.index(dep) > queue.index(item.id):

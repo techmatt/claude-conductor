@@ -86,7 +86,13 @@ only in the environment (74). Stages and merge executors get none.
   silent (a `warning` only if it fails; 72, after wordwarriors 172 and 175).
 - **Scripts in files** (72; wordwarriors 174, aicomplete 074). A script is written with
   Write and run as a file, never a heredoc or `-c` string: an apostrophe broke quoted-delimiter
-  heredocs in executor Bash.
+  heredocs in executor Bash. Since 82 file edits too go through Write/Edit only, never a shell
+  heredoc, `sed` or `-c` string: fractals 025 and website 003 broke Python and JS by patching
+  through a heredoc, which turned `"\n"` into a real newline, despite their `CLAUDE.md`s.
+- **Background timeouts** (82, both, in *Short calls*). Every `run_in_background` call sets a
+  `timeout` sized to its estimate with margin (left out, Claude Code kills it at 10 minutes:
+  fractals 026's and website 003's render chains died mid-run); a job that may outrun that
+  starts detached, its output to a log, and is waited on with `wait_for`.
 - **Working papers** (73, aicomplete 079). Papers a prompt asks for (per-card notes,
   helper write-ups) go in a folder named for the item under the repo's results folder
   (`experiments/results/<item>/`), committed; ultracode helpers had put them in `out/`,
@@ -102,6 +108,8 @@ only in the environment (74). Stages and merge executors get none.
   prompt's number), finders and verifiers both, a hard count set before launch (68; `ultracode.md`).
   Not enforced: *Now*'s load line shows it broken; `load_high` logs under 2 free for ~3 min and messages only an
   item that is a real share of it (80); the next `progress` or `wait_for` return says when timing reads are inflated (`memory.md`).
+  A load message is information (82): finish the unit in flight, start the next one smaller,
+  never kill and relaunch running work for load alone.
   The recipe (72, after wordwarriors 174): Git Bash `nice -n 10 <cmd>` gives `BELOW_NORMAL`
   on Windows, inherited by children (measured `0x4000` in both); the full preamble adds the
   PowerShell form.
@@ -120,6 +128,10 @@ only in the environment (74). Stages and merge executors get none.
   true` asks with a default (`questions.md`, *Design*). Template words held: full 1,051 → 1,051,
   light 294 → 308 (rendered under its 385 cap), paid for by tightening the skip, premises,
   outline, messages, report-header and status lines.
+- **Words** (82): the full template plus *Short calls* held at 1,205 → 1,203 words, the light
+  one rendered at 385, its cap, paid for by the outline's done-marking, elevation,
+  `~/.claude`, `friction:` and moved-command lines, and in light the design-ask, report-path
+  and status lines.
 - **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
   (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`).
 - **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the

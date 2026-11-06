@@ -33,7 +33,11 @@ aicomplete/034 41%, python.exe 20% (outside)`), and carried by the `memory` and
 `load_warn_seconds` (180), the daemon logs `load_high` (inbox only, no toast since 70), again
 every `load_tell_minutes` (15) while the stretch lasts. Only a running item whose own tree is
 a real share of the load (`load.own_share`: a quarter of the box, or 3 threads' worth) is
-messaged to cut its threads, at most once per `load_tell_minutes`; load from outside the items
+messaged, at most once per `load_tell_minutes`, and since 82 as information: let the unit in
+flight finish and start the next one with fewer threads, never kill and relaunch running work
+for load alone (fractals 022, 026 and 028 each restarted renders three or more times on "cut
+their threads", minutes lost each time; both preambles' load lines say the same). Memory
+pressure keeps its own messages; load from outside the items
 is logged with `causes: []` and no item told. Found live: aicomplete 121 was told to cut at
 3.8 free under 68's rule (4 free for ~90s), the load mostly Defender, ServiceShell and Chrome.
 The caution that a rate or timing read now is inflated (aicomplete 068: such reads inflated a
