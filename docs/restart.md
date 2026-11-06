@@ -116,9 +116,10 @@ live: aicomplete 078 was adopted across this morning's stop-and-start restart, s
 stop path never killed executors; what it lost was the go/wait question, the tools, and
 any setup, resolve or picker in flight.
 
-The app doesn't restart itself. Once a daemon runs other code than the app, every project
-header shows **Restart all** (68), running items or not (71): `tools/restart_all.py`,
-detached, output in `.conductor/restart.out.log`.
+Since 83 the app restarts itself onto a new commit once nothing in it is mid-action
+(`app.md`, *Self-restart*). Once a daemon runs other code than the app, or the app waits to
+restart, every project header shows **Restart all** (68), running items or not (71):
+`tools/restart_all.py`, detached, output in `.conductor/restart.out.log`.
 
 ## Platform notes
 

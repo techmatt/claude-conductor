@@ -103,12 +103,12 @@ Stage the current file, edit it in the workspace, send it whole: never hunks, ne
 
 ## While items run
 
-- **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late`, changing nothing (if it matters, a new item). **Default overrides prompt** ones would reverse a prompt line if unanswered: answer them first. **Design, held for Matt**: his, relayed, never yours; his answer reaches the item as a message. *Staged plans' questions* wait for launch: answer by **amend**.
+- **Questions** land in `questions\`. Answer once (**answer Q**); after its default it is `late`, changing nothing (if it matters, a new item). **Default overrides prompt** ones would reverse a prompt line if unanswered: answer them first. **Design, held for Matt**: his, relayed, never yours; his answer reaches a running item as a message (*item finished*: a ruling). *Staged plans' questions* wait for launch: answer by **amend**.
 - **Progress**: the latest line (with ETA) and outline, on *Now*, bold-warned when the ETA can't be right; a small item posts one line.
 - **Messages** (**tell**, **outline**) land after the lead's next tool call, never during a helper; one waiting on its own question gets it at once, the question left open (a tell never answers one). Longer, or not started: **amend**.
-- **Pause.** Matt needs the box: **pause R**, never a tell asking the item to wait; it holds across sessions until **resume R**.
+- **Pause.** Matt needs the box: **pause R**, never a tell asking it to wait; holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): while items run, a readonly **watch** item (`W<n>_watch`) judges stalls and drift; it may tell, answer (only with an answer already given, source named), toast, or draw the next `backlog\<repo>\` item into an empty queue (nightly budget; two full-length ones need Matt between). **Autopilot** (off / night / always) gates only draws.
-- **Load.** *Now*'s line after memory: CPU busy and its top consumers, by item or "(outside)". Laggy box: check it before blaming one. Under 2 free ~3 min: `load_high` (inbox); only an item causing it is told, ≤ every 15 min.
+- **Load.** *Now*'s line after memory: CPU busy, top consumers by item or "(outside)". Laggy? Check it first. Under 2 free ~3 min: `load_high` (inbox); only an item causing it is told, ≤ every 15 min.
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge's fast-forward stopped part-way and the main checkout holds changes not the branch's; the merge waits. Name the files to Matt; he cleans them, then it lands by itself.

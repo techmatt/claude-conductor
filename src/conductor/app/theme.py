@@ -115,8 +115,9 @@ QPushButton[tone="danger"] {{ color: {RED}; border: 1px solid {RED}; font-weight
 QPushButton[tone="danger"]:hover {{ background: {RED_BG}; }}
 QPushButton[tone="default"] {{ border: 2px solid {AMBER}; font-weight: bold; }}
 QPushButton[tone="default"]:hover {{ background: {AMBER_BG}; }}
-QLabel[pill="block"], QLabel[pill="default"], QLabel[pill="answered"] {{
+QLabel[pill="block"], QLabel[pill="default"], QLabel[pill="answered"], QLabel[pill="finished"] {{
     border-radius: 4px; padding: 4px 10px; font-weight: bold; font-size: {BASE_POINT_SIZE * 1.25}pt; }}
+QLabel[pill="finished"] {{ color: {MUTED}; background: {DISABLED_BG}; border: 1px solid {MUTED}; }}
 QLabel[pill="block"] {{ color: {RED}; background: {RED_BG}; border: 1px solid {RED}; }}
 QLabel[pill="default"] {{ color: {AMBER}; background: {AMBER_BG}; border: 1px solid {AMBER}; }}
 QLabel[pill="answered"] {{ color: {GREEN}; background: {GREEN_BG}; border: 1px solid {GREEN}; }}
@@ -139,6 +140,7 @@ QGroupBox[card="true"] {{ background: {BASE}; border: 1px solid {BORDER}; border
 QGroupBox[severity="block"] {{ border-left-color: {RED}; }}
 QGroupBox[severity="default"] {{ border-left-color: {AMBER}; }}
 QGroupBox[severity="answered"] {{ border-left-color: {GREEN}; }}
+QGroupBox[severity="finished"] {{ border-left-color: {MUTED}; }}
 QScrollArea {{ border: none; background: {WINDOW}; }}
 QScrollArea > QWidget > QWidget {{ background: {WINDOW}; }}
 QSplitter::handle {{ background: {WINDOW}; }}

@@ -71,10 +71,24 @@ sideways, several lines tall; **Enter** sends (as OK), **Shift+Enter** is a new 
 hint under the box says so (`widgets.SendBox`, `MessageDialog`).
 
 **Code check.** Each `daemon_start` carries its code version; the app reads its own once.
-When a live daemon's differs (a daemon restarts itself on a commit, the app doesn't: after
-60 the open app flagged 034 "unknown front-matter fields" the daemon had staged), the header
-says `invalid` marks may be stale and to restart all, and offers a **Restart all** button (68;
-since 71 also while items run: they are adopted, `restart.md`).
+When a live daemon's differs (after 60 the open app flagged 034 "unknown front-matter
+fields" the daemon had staged), the header offers a **Restart all** button (68; since 71
+also while items run: they are adopted, `restart.md`).
+
+**Self-restart** (83; `app/stale.py`). Every 10s, off the GUI thread, the app reads the
+checkout's committed version the daemon's way (`restart.md`, *Self-restart*). Once it
+differs from the app's own, the checkout is settled and `conductor.app.window` imports in a
+fresh interpreter (tried once per version), the app restarts at the first refresh with
+nothing mid-action: no dialog or menu open, no unsent text in any answer or message box. It
+stops serving forwarded launches, spawns `conductor app <its folders>` detached (output in
+the first control folder's `.conductor/app.out.log`), and quits; the new window comes up
+shown. Not after **Restart all** was clicked (the tool restarts it). Until then each project
+shows a wrapped amber line under the header with the whole sentence: the commit, that this
+app runs the old code, what it waits for (or why it can't: an unsettled checkout, an import
+error) and that "Restart all" fixes it now. A daemon on other code than a current app gets
+its own line. Before 83 the app never restarted itself, and a clipped header label read
+"app and daemon run different code: `invalid`", cut at the backtick (aicomplete, twice on
+2026-11-05).
 
 **Panels**: Repos (with each item's Conversation), Questions, Events and Proposed, in
 `docs/app-panels.md`.

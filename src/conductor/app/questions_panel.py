@@ -6,17 +6,19 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea, QSplitter,
                                QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
+from ..questions import ITEM_DONE_NOTE
 from . import actions, theme
 from .model import Project, Snapshot
 from .widgets import SEND_HINT, FlowLayout, Panel, SendBox, countdown, muted, when
 
 
 class QuestionCard(QGroupBox):
-    def __init__(self, panel: "QuestionsPanel", q):
+    def __init__(self, panel: "QuestionsPanel", q, done: bool = False):
         super().__init__()
         self.setProperty("card", True)
         self._severity = None
         self.q = q
+        self.done = done                # its item finished: an answer records a ruling (83)
         self.panel = panel
         lay = QVBoxLayout(self)
         lay.setSpacing(8)
@@ -80,6 +82,10 @@ class QuestionCard(QGroupBox):
             severity = "answered"
             self.status.setText("answered — waiting for the executor to pick it up")
             self.send.setEnabled(False)
+        elif self.done:
+            severity = "finished"
+            self.status.setText(f"{ITEM_DONE_NOTE[0].upper()}{ITEM_DONE_NOTE[1:]}"
+                                + (f" (it carried on with: {self.q.default})" if self.q.default is not None else ""))
         elif self.q.design:
             severity = "default"
             self.status.setText(f"DESIGN — held for you; the item carried on with its default: {self.q.default}")
@@ -173,21 +179,23 @@ class QuestionsPanel(Panel):
             c.tick()
 
     @staticmethod
-    def _urgency(q) -> tuple:
-        """Blocking questions first, then the soonest default; answered ones last."""
-        return (q.answer_path.exists(), not q.block, str(q.deadline or "~"), q.asked)
+    def _urgency(q, done: set[str] = frozenset()) -> tuple:
+        """Blocking questions first, then the soonest default; answered ones and those whose
+        item finished last."""
+        return (q.answer_path.exists(), q.id in done, not q.block, str(q.deadline or "~"), q.asked)
 
     def update_snapshot(self, snap: Snapshot) -> None:
-        ordered = sorted(snap.open_questions, key=self._urgency)
+        done = snap.item_done
+        ordered = sorted(snap.open_questions, key=lambda q: self._urgency(q, done))
         open_ids = [q.id for q in ordered]
-        if open_ids != list(self.cards):
+        if open_ids != list(self.cards) or any(c.done != (i in done) for i, c in self.cards.items()):
             drafts = {qid: c.box.toPlainText() for qid, c in self.cards.items()}
             for c in self.cards.values():
                 c.setParent(None)
                 c.deleteLater()
             self.cards = {}
             for q in ordered:
-                card = QuestionCard(self, q)
+                card = QuestionCard(self, q, q.id in done)
                 card.box.setPlainText(drafts.get(q.id, ""))
                 self.cards_lay.insertWidget(self.cards_lay.count() - 1, card)
                 self.cards[q.id] = card

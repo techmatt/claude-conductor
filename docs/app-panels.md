@@ -97,7 +97,8 @@ an item's detail in `trail.py`.
   **Outline?** (sends `outline: <item>`) and **Amend…** at the bottom act on the item
   on screen, enabled by the tree's rules (Tell and Outline? while it executes; Amend
   queued, staged or executing). The thread is `model.conversation`.
-- *Questions* — open asks, blocking ones first, then by soonest default; each shows
+- *Questions* — open asks, blocking ones first, then by soonest default, then those whose item
+  finished (a grey *Item finished: an answer records a ruling* banner, 83); each shows
   *BLOCKING* or the default and a live countdown to it, its options as buttons that
   fill the answer box (the default's marked *(default)*), and **Answer**, which writes
   `questions/<id>.answer.md` through the same function as `conductor answer` (never

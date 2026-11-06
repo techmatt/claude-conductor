@@ -78,10 +78,10 @@ def checkout_blockers(root: Path = CONDUCTOR_ROOT) -> list[str]:
     return out
 
 
-def imports_ok(cwd: Path) -> str | None:
+def imports_ok(cwd: Path, check: str = IMPORT_CHECK) -> str | None:
     """Does the code on disk import in a fresh interpreter? The error, if not."""
     try:
-        out = subprocess.run([procs.console_python(), "-c", IMPORT_CHECK], cwd=cwd, capture_output=True, text=True,
+        out = subprocess.run([procs.console_python(), "-c", check], cwd=cwd, capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=120, env=procs.child_env(), **git.NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as exc:
         return repr(exc)

@@ -19,7 +19,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"conductor app: PySide6 is not available ({exc})", file=sys.stderr)
         return 1
     from .. import procs
-    from . import icon, single, theme
+    from . import icon, model, single, stale, theme
     from .window import MainWindow
 
     procs.set_app_id()                        # the taskbar shows conductor's icon, not Python's
@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setQuitOnLastWindowClosed(False)      # closing the window hides it to the tray
     win = MainWindow(folders)
     win.server = single.listen(win.open_forwarded)
+    win.stale = stale.Watcher(model.app_code())   # restarts itself onto a new commit (83)
     win.show()
     if not win.has_tray():
         app.setQuitOnLastWindowClosed(True)

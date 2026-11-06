@@ -216,6 +216,7 @@ class Snapshot:
     paused: dict[str, Event] = field(default_factory=dict)     # repo → its `pause` event (`View.paused`)
     tools: dict[str, str] = field(default_factory=dict)        # tool → running | down (`targets.tool_status`)
     code_differs: bool = False                                 # the daemon runs other code than this app
+    item_done: set[str] = field(default_factory=set)            # open questions whose item finished (`questions.item_done`)
 
     @property
     def to_pick(self) -> int:
@@ -556,7 +557,8 @@ class Project:
         return Snapshot(cfg.project, cfg.control, daemon, repos, open_qs, resolved, proposed, st, why, error, run,
                         view.checkpoint, pending, mem, pilot, live_invalids(self.log), list(cfg.repos), view.paused,
                         {name: targets.tool_status(cfg, name) for name in cfg.tools},
-                        daemon.alive and self._daemon_code() not in (None, app_code()))
+                        daemon.alive and self._daemon_code() not in (None, app_code()),
+                        questions.item_done(open_qs, view.finishes))
 
     def _daemon_code(self) -> str | None:
         """The code version the newest daemon started on, when it said."""

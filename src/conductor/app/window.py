@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QInputDia
 from .. import config as config_mod
 from ..inbox import checkpoint_name
 from ..util import clock
-from . import actions, icon, status, theme
+from . import actions, icon, stale, status, theme
 from .events_panel import EventsPanel
 from .model import PRIORITY, Project, Snapshot, overall, restart_due
 from .proposed_panel import ProposedPanel
@@ -135,6 +135,13 @@ class ProjectView(QWidget):
         head.addWidget(self.checkpoint_btn)
         head.addWidget(self.daemon_btn)
         lay.addLayout(head)
+        # Code that differs (`stale.banner`): its own wrapped line, so the whole sentence
+        # shows; the header's clipped label once cut it at its first word (83).
+        self.code_label = QLabel()
+        self.code_label.setWordWrap(True)
+        self.code_label.setStyleSheet(f"color: {theme.AMBER}; font-weight: bold")
+        self.code_label.hide()
+        lay.addWidget(self.code_label)
         # The header's second line: the box's memory (`memory.line`), only when it needs
         # Matt: amber under pressure, red when critical. Hidden (and its space collapsed) at ok.
         self.memory_label = QLabel()
@@ -248,8 +255,6 @@ class ProjectView(QWidget):
         self.dismiss_btn.setVisible(bool(snap.rejected))
         self.dismiss_btn.setToolTip("Acknowledge: " + "; ".join(f"#{e.id} {e.detail.get('error')}" for e in snap.rejected)
                                     + " (an `ack: invalid` signal; they stay in Events)")
-        if snap.code_differs:
-            bits.append("app and daemon run different code: `invalid` marks here may be stale (restart all)")
         if snap.error:
             bits.append(snap.error)
         self.pending_label.setText(" · ".join(bits))
@@ -384,6 +389,8 @@ class MainWindow(QMainWindow):
         self.settings = settings or QSettings("conductor", "conductor-app")
         self.views: dict[Path, ProjectView] = {}
         self._quitting = False
+        self.server = None                          # `single.listen`'s, set by `app.main`
+        self.stale = stale.Watcher(None)            # off; `app.main` arms it with the app's code version
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.empty = QLabel("No project yet. Add a control folder with “Add project…”.")
@@ -511,8 +518,17 @@ class MainWindow(QMainWindow):
             self.tabs.tabBar().setTabTextColor(idx, QColor(TAB_COLOURS.get(kind, theme.MUTED)))
         self._good = {f: s for f, s in self._good.items() if f in self.views}
         due = restart_due(self._good.values())
-        for view in self.views.values():
-            view.restart_btn.setVisible(due)
+        probe = self.stale.poll()                     # the checkout moved past this app's code
+        waits = stale.busy(self) if probe else []
+        if probe and probe.ready and not waits and all(v.restart_btn.isEnabled() for v in self.views.values()):
+            if (err := stale.restart(self, list(self.views))) is None:
+                return
+            probe.blockers = [f"the restart failed ({err})"]
+        for folder, view in self.views.items():
+            text = stale.banner(probe, waits, bool((s := self._good.get(folder)) and s.code_differs))
+            view.code_label.setText(text)
+            view.code_label.setVisible(bool(text))
+            view.restart_btn.setVisible(due or probe is not None)
         self.state = overall(states)
         self.status = status.summarize(list(self._good.values()))
         # The turner runs while the title turns or any tab moves (a project needing Matt

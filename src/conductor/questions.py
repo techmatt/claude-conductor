@@ -180,6 +180,21 @@ def scan(control: Path) -> list[Question]:
     return sorted(out, key=lambda q: q.asked)
 
 
+ITEM_DONE_NOTE = "item finished: an answer records a ruling"
+
+
+def item_done(qs: list[Question], finishes: dict) -> set[str]:
+    """Open questions whose item finished after asking (`View.finishes`: item → its last
+    `finish` event). Only a design question outlives its item (the daemon closes the rest),
+    so an answer to one no longer reaches an executor: it records a ruling."""
+    def after(fin, q: Question) -> bool:
+        try:
+            return datetime.fromisoformat(fin.ts) >= datetime.fromisoformat(q.asked)
+        except (TypeError, ValueError):
+            return True
+    return {q.id for q in qs if q.is_open and (fin := finishes.get(q.item)) is not None and after(fin, q)}
+
+
 def find(control: Path, ref: str) -> Question | None:
     """`sandbox__001_x__1`, or any unambiguous suffix of it (`001_x__1`, `001__1`)."""
     qs = scan(control)

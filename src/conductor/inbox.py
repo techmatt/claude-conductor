@@ -629,10 +629,13 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
         out.append("No checkpoint yet: signal `checkpoint: <label>` to start a session's view.")
     if open_qs:
         # Open questions lead whatever the read mark says: they are live, not news.
+        # One whose item finished sorts below the live ones and says so (83).
         out += ["", "## Questions"]
-        for q in open_qs:
+        done = questions.item_done(open_qs, view.finishes)
+        for q in sorted(open_qs, key=lambda q: q.id in done):
             how = (f"**design, held for Matt**; default applied: {q.default}" if q.design else
                    "**blocking**" if q.block else f"default at {clock(q.deadline)}: {q.default}")
+            how = f"{questions.ITEM_DONE_NOTE}; {how.replace('**', '')}" if q.id in done else how
             how += overrides_note({"overrides_prompt": q.overrides})
             out.append(f"- {clock(q.asked)} `{q.id}` from {q.item} — {how}")
             out += [f"  > {ln}" if ln else "  >" for ln in q.body.rstrip().splitlines()]

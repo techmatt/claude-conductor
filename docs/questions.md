@@ -61,7 +61,10 @@ Options:
   inbox (never counted as `asking`, needing Matt or a watch flag), and outlives its item. When
   an answer file comes the daemon resolves it (`answer`, not `late`) and a running item gets
   the answer as a message (a `tell` with `answers: <id>`), an answer rather than an amendment;
-  a finished item's stands in the log and inbox for the planner.
+  a finished item's stands in the log and inbox for the planner. Once its item has finished
+  (a `finish` at or after the ask), the Questions tab and the inbox mark it "item finished:
+  an answer records a ruling" and sort it below live questions (83, `questions.item_done`);
+  answering it works as before. Before 83, aicomplete 128's two read as blocking with 128 done.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it
   closed by the daemon (`question_closed`).
 - **A message never answers it** (58; before, a tell became the answer, and aicomplete's
