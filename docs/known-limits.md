@@ -44,7 +44,7 @@ Gaps nobody plans to fix unless they bite. Each says what would change that. A l
 
 ## App and pickers
 
-- **The app's refresh runs on the UI thread.** It probes run targets there (0.3s timeout each) and re-reads every `finish`, `red`, `clear` and `reviewed` event. Move it to a worker if it gets sluggish.
+- **The app's refresh runs on the UI thread.** Run target probes moved off it (they froze typing at ~0.4s per target per tick); it still re-reads every `finish`, `red`, `clear` and `reviewed` event. Move it to a worker if it gets sluggish.
 - **Only the latest checkpoint shapes the views.** The Repos tab's earlier group shows the 10 newest settled items per repo; older ones are in Events (*since checkpoint* off), `conductor events --since checkpoint N` or `conductor open`.
 - **`uv run conductor app` locks `.venv\Scripts\conductor.exe`** while the app is open, so any `pyproject.toml` change makes every `uv run` fail until it closes. `uv run python -m conductor app` would avoid it.
 - **A restart loses the picker server's port and token,** so an open picker tab can't save until `pick:` is resent. A fixed port and a token in `.conductor/` would fix it.

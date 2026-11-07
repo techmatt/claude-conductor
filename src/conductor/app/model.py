@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import os
 import sqlite3
+import threading
 import urllib.parse
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -224,7 +225,48 @@ class Snapshot:
         return sum(1 for ps in self.picks.values() for p in ps if p.state != "saved")
 
 
-TARGET_PROBE_SECONDS = 0.3      # per target per refresh, on the UI thread: a local server answers at once
+TARGET_PROBE_SECONDS = 0.3      # per target per refresh, off the UI thread (`TargetProbe`)
+
+
+class TargetProbe:
+    """Run targets' `targets.status`, off the UI thread. A closed localhost port costs a
+    probe its whole timeout, twice over on Windows (`::1`, then `127.0.0.1`): on the UI
+    thread that froze the app for ~0.4 s per target per refresh, typing included. Each
+    call starts a fresh probe unless one for that target is still out, and answers with
+    the newest result; before the first one lands, the record alone (`starting`/`down`)."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._seen: dict[str, str] = {}
+        self._out: dict[str, threading.Thread] = {}
+
+    def status(self, cfg: config_mod.Config, t) -> str:
+        with self._lock:
+            known = self._seen.get(t.name)
+            out = self._out.get(t.name)
+            if out is None or not out.is_alive():
+                out = threading.Thread(target=self._probe, args=(cfg, t), daemon=True,
+                                       name=f"probe-{t.name}")
+                self._out[t.name] = out
+                out.start()
+        if known is None:
+            return "starting" if targets.process(cfg, t.name) else "down"
+        return known
+
+    def _probe(self, cfg: config_mod.Config, t) -> None:
+        try:
+            s = targets.status(cfg, t, TARGET_PROBE_SECONDS)
+        except Exception:                   # noqa: BLE001 - a probe thread must never die loud
+            s = "down"
+        with self._lock:
+            self._seen[t.name] = s
+
+    def settle(self, timeout: float = 5.0) -> None:
+        """Wait for probes still out (tests)."""
+        with self._lock:
+            out = list(self._out.values())
+        for th in out:
+            th.join(timeout)
 
 
 def scan_proposed(cfg: config_mod.Config) -> list[ProposedItem]:
@@ -418,6 +460,7 @@ class Project:
         self._kinds: set[str] = set()
         self.checkpoint: Event | None = None   # the latest `checkpoint` event seen so far
         self._qcache: dict[Path, tuple[tuple, questions.Question | None]] = {}
+        self.probe = TargetProbe()
 
     @property
     def name(self) -> str:
@@ -545,7 +588,7 @@ class Project:
             rs.audit_notes = len(view.unused_notes(cfg, repo))
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
-        run = {name: targets.status(cfg, t, TARGET_PROBE_SECONDS) for name, t in cfg.targets.items()}
+        run = {name: self.probe.status(cfg, t) for name, t in cfg.targets.items()}
         try:
             mem = memory.line(cfg)
         except OSError as exc:

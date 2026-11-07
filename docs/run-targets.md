@@ -31,8 +31,9 @@ The signal `run: <name>` (planner, app) or `conductor run-target <name>` (CLI):
 kills the recorded process tree; `run_stop`. The daemon never blocks on a start: it checks pending targets every
 tick. A daemon restart forgets a start it was waiting on (run it again: it opens at
 once if up). The CLI waits in the foreground and prints the events. On Windows a probe
-of a closed local port can take up to its timeout (1s; the app's header probe uses
-0.3s per target per refresh). The planner adds or changes targets with a
+of a closed local port can take up to its timeout, twice over for `localhost` (`::1`, then
+`127.0.0.1`): 1s here; the app's header probe uses 0.3s and runs on a background thread
+(`model.TargetProbe`), since on the UI thread it froze typing. The planner adds or changes targets with a
 `conductor.toml` request.
 
 A repo's main checkout has no installed dependencies: executors install them in their

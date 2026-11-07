@@ -317,6 +317,9 @@ def test_run_buttons_in_the_header(qapp, env, tmp_path, monkeypatch):
     assert sig.read_text(encoding="utf-8") == "by: app\nrun: game\n"
     sig.unlink()
     monkeypatch.setattr(model.targets, "status", lambda *a: "up")
+    view.project.probe.settle()        # probes run off the UI thread: the next refresh starts
+    win.refresh()                      # one, and the refresh after it shows its answer
+    view.project.probe.settle()
     win.refresh()
     s = view.stop_buttons["game"]
     assert not s.isHidden() and s.text() == "Stop game"
@@ -325,6 +328,25 @@ def test_run_buttons_in_the_header(qapp, env, tmp_path, monkeypatch):
     assert sig.read_text(encoding="utf-8") == "by: app\nrun: game stop\n"
     win._quitting = True
     win.close()
+
+
+def test_target_probe_never_blocks_a_snapshot(env, monkeypatch):
+    import threading
+    import time
+    toml = env.control / "conductor.toml"
+    toml.write_text(toml.read_text(encoding="utf-8") + '\n[run.game]\nrepo = "code"\ncommand = "x"\n'
+                    'url = "http://127.0.0.1:9/"\n', encoding="utf-8", newline="\n")
+    gate = threading.Event()
+    monkeypatch.setattr(model.targets, "status", lambda *a: gate.wait(5) and "up")
+    project = model.Project(env.control)
+    t = time.perf_counter()
+    assert project.snapshot().targets == {"game": "down"}       # the record's answer meanwhile
+    assert project.snapshot().targets == {"game": "down"}       # one probe out, not a second
+    assert time.perf_counter() - t < 2
+    gate.set()
+    project.probe.settle()
+    assert project.snapshot().targets == {"game": "up"}
+    project.close()
 
 
 def test_repos_header_counts_unused_audit_notes(qapp, env, tmp_path):

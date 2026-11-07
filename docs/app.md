@@ -51,7 +51,7 @@ detached through a launcher that exits (no live parent, no window, its own proce
 allowed: `restart.md`, *Platform notes*), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log`; *Stop daemon…* asks first,
 then writes a `stop: daemon` signal. Executors and stages keep running either way.
 Each run target gets a **Run <name>** button beside them, reading `● up`, `● starting`
-or `● down` (green, amber, grey; probed each refresh); a click writes `run: <name>`,
+or `● down` (green, amber, grey; probed each refresh on a background thread, so a button shows the previous refresh's answer); a click writes `run: <name>`,
 which opens the URL (starting the target first when it is down). While a target is
 up or starting, a **Stop <name>** button beside its Run button writes `run: <name>
 stop` (no confirmation: a click is cheap to undo with Run).
