@@ -33,7 +33,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-11-05, after prompt 80
+Last cleanup: 2026-11-07, after prompt 85
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`), aicomplete (`C:\Code\aicomplete-control`) and fractals (`C:\Code\fractals-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
@@ -69,7 +69,7 @@ Chores:
 
 Still not live:
 
-- **84's lines** (notes of 11-05 to 11-07): unseen live. The six identical-to-HEAD requests were the bridge's stale copies (only a fresh-path re-send cleared them): edit blocks are the fix, the restarted wait insurance. Do planners use edits? Do ETAs stop running ahead? Do cleanups still defer decision notes? The taskbar mark is the window icon's badge, not ITaskbarList3 (Qt 6 has no QWinTaskbar); `npm ci` a *Servers* line, not a `node_modules` junction (a worktree's `npm ci` through one would wipe main's).
+- **84's lines** (notes of 11-05 to 11-07): unseen live. The six identical-to-HEAD requests were the bridge's stale copies: edit blocks are the fix, the restarted wait insurance. Do planners use edits? Do ETAs stop running ahead (aicomplete 080, 082, 085 finished 1-5 h early; the clock and time left now ride every return)? Do cleanups still defer decision notes?
 - **82's lines** (fractals' notes of 2026-11-05): does an executor told about load now finish its render and start the next smaller, rather than relaunching? Do background calls carry a sized `timeout`, and edits stop going through heredocs? A cancelled dependency's set-aside item and the cancel receipt's `warning`, and the Pick… menu, are unseen live.
 
 - **Cut-short `ask`** (58): no message has landed during an `ask` since 58, so its `resume` is unseen.
@@ -89,5 +89,4 @@ Still not live:
 - **83's lines** (aicomplete): unseen live, the app's self-restart once idle (no dialog, menu or unsent text) and a finished item's held question marked *item finished*, sorted last. Does a restart leave one tray icon?
 - **81's waiting mark**: not seen on a real taskbar. Does the corner badge read at Windows' 16-24 px, and does Windows 10's title bar draw `🟠` (monochrome is fine; a box is not)?
 - **Repos that don't fit worktrees** (78, fractals checkpoint #1): new-project step 5 starts them with `worktrees = false`, the contract item reporting what a worktree would need. Does fractals' report name enough to switch?
-- **Executor ETAs run long** (aicomplete, 2026-11-03; observation, low priority): 080, 082 and 085 finished 1-5 h before their posted ETAs. A light nudge in the preamble: base a finish time on measured progress so far, and revise it earlier as well as later at each milestone. Due from checkpoint #3486.
 - **Inbox sections read twice** (aicomplete 2026-11-03: 6:59am *Unreviewed reports* with 075 twice, checkpoint #2865; 9:52pm `## Now` and its memory, load and repo lines twice, #3876). `inbox.render` emits each heading once, `write_inbox` is the one writer and `write_text` replaces atomically, so conductor can't write such a file (72, cleanup 2026-11-03). Likely a read spliced across a replace: the daemon rewrites `inbox.md` at least every 30s, and a reader fetching by offset across that would see the head of one version and the tail of a longer one. Next copy: save it with the time it was read, to set against that minute's events.

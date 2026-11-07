@@ -111,7 +111,8 @@ Before 71 the tool stopped and started each daemon and refused while anything ra
 path is still `--force` (it loses a setup, a resolve or a picker, and stops the tools).
 The tool waits up to 10 minutes for every new pid, then restarts the app regardless (it
 kills only the app's own processes, never a `claude --resume` console it opened); a daemon
-still waiting restarts on its own once safe. `docs/development.md` has the flags. Found
+still waiting restarts on its own once safe. `docs/development.md` has the flags; any other
+argument (`--help`) prints the usage and exits 2, restarting nothing. Found
 live: aicomplete 078 was adopted across this morning's stop-and-start restart, so the
 stop path never killed executors; what it lost was the go/wait question, the tools, and
 any setup, resolve or picker in flight.

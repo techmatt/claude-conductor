@@ -178,6 +178,11 @@ def restart_app(running_apps: list[psutil.Process], fallback: Path) -> None:
 
 
 def main(argv: list[str]) -> int:
+    if unknown := [a for a in argv if a not in ("--check", "--force")]:
+        # An unread flag (`--help`) must never fall through to a restart.
+        print(__doc__.strip(), file=sys.stderr)
+        print(f"\nunknown argument(s): {' '.join(unknown)}", file=sys.stderr)
+        return 2
     all_controls = controls()
     live = [c for c in all_controls if state.daemon_info(config.load(c)).alive]
     running_apps = apps()

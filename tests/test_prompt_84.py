@@ -16,7 +16,7 @@ from datetime import timedelta
 
 import pytest
 
-from conductor import ask_server, audits, inbox, procs, questions, request, session, state, talk, waitfor
+from conductor import ask_server, audits, inbox, procs, questions, request, session, state, waitfor
 from conductor.app import status
 from conductor.util import now, read_text, stamp
 from test_app_title import snap

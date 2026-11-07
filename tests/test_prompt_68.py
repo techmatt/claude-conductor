@@ -109,6 +109,12 @@ def restart_tool():
     return mod
 
 
+def test_restart_tool_refuses_an_unknown_flag(monkeypatch):
+    tool = restart_tool()
+    monkeypatch.setattr(tool, "controls", lambda: pytest.fail("an unknown flag must not restart"))
+    assert tool.main(["--help"]) == 2
+
+
 def test_the_header_shows_the_offer_and_its_click_restarts(qapp, env, tmp_path, monkeypatch):
     from PySide6.QtCore import QSettings
 

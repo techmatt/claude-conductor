@@ -15,7 +15,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any; starts (when it will start and why: `receipts.md`); parked (the parked edits it will carry as the queue stands); warning (a `depends_on` that can't be met) |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start); warning |
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
-| `hold` | a queue head cannot run, or a merge waits (reason changed) | reason; merge |
+| `hold` | a queue head cannot run, an item is set aside (its dependency cancelled), or a merge waits (reason changed) | reason; merge; alone (only this item holds) |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
 | `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `scheduling.md`); resume_of, resume_session (`resume.md`); parked (the parked edits it carries: `parked.md`); error (launch failed, setup included) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
@@ -31,7 +31,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow and friction (as written, or null), pick (`<repo>/<path>`, or null), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow and friction (as written, or null), pick (`<repo>/<path>`, or null; picks: all of them, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
 | `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on; or an `audit_used:` signal (no item, `by`) | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
@@ -61,7 +61,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `open_refused` | an `open:` target failed its check (not red; the signal file goes on) | verb, target (as given), reason; by |
 | `notify` | a `notify:` signal or a watch's action raised a toast | text, by; item (a watch's) |
 | `approve` | a `proposed/` item moved into its queue | item, from |
-| `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept |
+| `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept; dependents and warning (queued items that depend on it) |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
 | any signal-caused event | a signal file had `by:` | by |
 | `ask` | a question file appeared | question (id), text, block, default, deadline, deadline_clock; design (held for Matt, `questions.md`); overrides_prompt (its first line's flag, here and on the question's later events: `questions.md`) |
