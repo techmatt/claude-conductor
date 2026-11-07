@@ -42,8 +42,8 @@ def test_something_waiting_for_review_marks_orange_whatever_else_holds():
     # Running too: the ticker turns, and so does the badge, orange.
     both = status.summarize([snap(running=1, unreviewed=1)])
     assert both.title(1) == "◓ Conductor · 1 running · 1 to review" and both.badge == "turn"
-    # Running alone: a gold badge that turns (84); quiet: none.
-    assert status.summarize([snap(running=1)]).badge == "run" and status.summarize([snap()]).badge is None
+    # Running alone: no badge, the title's `N running` says it (85 dropped 84's gold one); quiet: none.
+    assert status.summarize([snap(running=1)]).badge is None and status.summarize([snap()]).badge is None
     # Needs Matt stays red; a blocking question is waiting too, so it is counted once there.
     need = status.summarize([snap(asks=1, unreviewed=1)])
     assert need.title() == "● Conductor · 1 question · 1 to review" and need.badge == "need" and need.waiting == 2
@@ -87,7 +87,7 @@ def test_the_taskbar_turns_orange_while_a_report_waits_and_clears_on_review(qapp
     assert win._badge == ("turn", 1) and [tray_hub(win.status, t) for t in (0, 1)] == ["orange", "orange_dim"]
     env.d.log.append("reviewed", item="code/001_x", status="done", by="planner")
     win.refresh()
-    assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == ("run", 1)
+    assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == (None, 0)
     env.release()
     win._quitting = True
     win.close()

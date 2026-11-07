@@ -254,4 +254,4 @@ def test_the_taskbar_shows_running_work_whatever_else_holds():
     st = status.summarize([snap(running=1, picks=1, unreviewed=1)])
     assert st.title() == "● Conductor · pick · 1 running · 1 to review" and st.badge == "need"
     alone = status.summarize([snap(running=2)])
-    assert alone.badge == "run" and alone.title(0) == "◐ Conductor · 2 running"
+    assert alone.badge is None and alone.title(0) == "◐ Conductor · 2 running"    # 85: the title says it

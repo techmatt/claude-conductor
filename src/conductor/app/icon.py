@@ -24,7 +24,7 @@ HUB = {"gold": "#f4b942", "dim": "#8a6a22", "red": "#e5484d", "slate": "#8da9c4"
        "orange": "#ff7a1a", "orange_dim": "#8f4410"}
 BADGE_RING = "#0b2545"      # the icon's navy, round the taskbar badge
 TURN_STARTS = (90, 0, 270, 180)     # the turning badge's filled half: ◐ ◓ ◑ ◒ (degrees, Qt's)
-TURNING = ("turn", "run")           # the badges that turn
+TURNING = ("turn",)                 # the badges that turn
 
 # (link width, node radius, hub radius): the master's, and the bolder small one.
 _WEIGHTS = {False: ("2.6", "3.6", "7"), True: ("4.4", "5.4", "9.5")}
@@ -49,16 +49,15 @@ def svg(hub: str = "gold", small: bool = False) -> str:
 
 def _badge(p: QPainter, size: int, badge: str, tick: int) -> None:
     """A dot over the bottom-right corner, ringed in navy so it reads on any taskbar:
-    `need` red, `wait` orange, `turn` orange half-filled and turning like ◐ ◓ ◑ ◒, `run`
-    the same in gold (running, nothing waiting: 84)."""
+    `need` red, `wait` orange, `turn` orange half-filled and turning like ◐ ◓ ◑ ◒."""
     d = size * 0.56
     rect = QRectF(size - d - size * 0.02, size - d - size * 0.02, d, d)
     p.setPen(QPen(QColor(BADGE_RING), max(1.0, size * 0.06)))
-    p.setBrush(QColor(HUB[{"turn": "orange_dim", "run": "dim", "need": "red"}.get(badge, "orange")]))
+    p.setBrush(QColor(HUB[{"turn": "orange_dim", "need": "red"}.get(badge, "orange")]))
     p.drawEllipse(rect)
     if badge in TURNING:
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(HUB["gold" if badge == "run" else "orange"]))
+        p.setBrush(QColor(HUB["orange"]))
         inner = rect.adjusted(size * 0.03, size * 0.03, -size * 0.03, -size * 0.03)
         p.drawPie(inner, TURN_STARTS[tick % len(TURN_STARTS)] * 16, 180 * 16)
 

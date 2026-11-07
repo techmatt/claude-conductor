@@ -38,13 +38,14 @@ class Status:
     @property
     def badge(self) -> str | None:
         """The taskbar icon's mark: `need` (red), `wait` (orange, still), `turn` (orange,
-        turning: running and waiting), `run` (gold, turning: running alone; 84, after the
-        taskbar sat plain with fractals 033 running) or None (quiet)."""
+        turning: running and waiting) or None (running alone, or quiet: the title's
+        `◑ … N running` already shows running work in the taskbar label; 84's gold badge
+        was dropped in 85)."""
         if self.kind == "need":
             return "need"
         if self.waiting:
             return "turn" if self.running else "wait"
-        return "run" if self.running else None
+        return None
 
 
 def _needs(snap: Snapshot) -> tuple[int, int, int, int]:
