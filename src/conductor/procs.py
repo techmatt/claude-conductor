@@ -32,7 +32,26 @@ _PARENT_SESSION_VARS = {
 
 
 def child_env() -> dict[str, str]:
-    return {k: v for k, v in os.environ.items() if k not in _PARENT_SESSION_VARS}
+    """The environment a child gets: not the enclosing Claude Code session's, and not
+    conductor's own venv (`uv run` puts it first on PATH, so an executor's plain `python`
+    was conductor's, without the repo's Pillow or ruff: fractals 005, 84). Conductor's
+    own children name `sys.executable` outright."""
+    env = {k: v for k, v in os.environ.items() if k not in _PARENT_SESSION_VARS}
+    venv = Path(sys.prefix)
+    if venv != Path(sys.base_prefix):
+        env.pop("VIRTUAL_ENV", None)
+        env.pop("VIRTUAL_ENV_PROMPT", None)
+        key = next((k for k in env if k.upper() == "PATH"), None)
+        if key:
+            env[key] = os.pathsep.join(p for p in env[key].split(os.pathsep) if p and not _inside(p, venv))
+    return env
+
+
+def _inside(entry: str, root: Path) -> bool:
+    try:
+        return Path(entry).resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
 
 
 def allow_foreground() -> None:

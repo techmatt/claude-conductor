@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,6 +109,35 @@ def notes(cfg: Config, repo: str, finishes: dict[str, Event], used: dict[str, Ev
             continue
         out.append(Note(item_id, path, ev, used.get(item_id)))
     return sorted(out, key=lambda n: n.finish.id)
+
+
+# `templates/audit.md`'s headings, however an executor marks them up (`## X`, `- X:`, `**X**`).
+_HEAD = r"^[#*\-\s]*({})\b[^\n]*$"
+DECISION_HEADING = re.compile(_HEAD.format("needs a decision"), re.IGNORECASE)
+OTHER_HEADING = re.compile(_HEAD.format("poorly structured|slower than expected|refactor or clean ?up|"
+                                        "docs that would have saved time"), re.IGNORECASE)
+NOTHING = re.compile(r"\W*(nothing to note|none)\W*", re.IGNORECASE)
+
+
+def decisions(path: Path) -> list[str]:
+    """The bullets under a notes file's *Needs a decision* heading, up to the next heading:
+    the planner rules on them at review, rather than a cleanup deferring them back as
+    "planner's call" two hops later (aicomplete 123, 129; 84). "Nothing to note" isn't one."""
+    try:
+        lines = read_text(path).splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    out, inside = [], False
+    for line in lines:
+        if DECISION_HEADING.match(line):
+            inside = True
+            if ":" in line and (rest := line.split(":", 1)[1].strip(" *")):
+                out.append(rest)            # `- Needs a decision: X`, the note on its line
+        elif OTHER_HEADING.match(line) or line.startswith("#"):
+            inside = False
+        elif inside and (m := re.match(r"^\s*[-*]\s+(.*\S)", line)):
+            out.append(m.group(1))
+    return [n for n in out if not NOTHING.fullmatch(n)]
 
 
 def render_notes(cfg: Config, ids: list[str], finishes: dict[str, Event]) -> str:

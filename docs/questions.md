@@ -63,7 +63,9 @@ Options:
   the answer as a message (a `tell` with `answers: <id>`), an answer rather than an amendment;
   a finished item's stands in the log and inbox for the planner. Once its item has finished
   (a `finish` at or after the ask), the Questions tab and the inbox mark it "item finished:
-  an answer records a ruling" and sort it below live questions (83, `questions.item_done`);
+  an answer records a ruling" and sort it below live questions (83, `questions.item_done`),
+  and the item's *Unreviewed reports* line, `done` or `partial`, says `commit rests on open
+  design default: <id>` so the planner raises it at once (84, `inbox.md`);
   answering it works as before. Before 83, aicomplete 128's two read as blocking with 128 done.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it
   closed by the daemon (`question_closed`).

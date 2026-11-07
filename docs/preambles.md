@@ -39,7 +39,9 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   (schema inline, `picks.md`) when the body could produce candidates (`executor.PICK_RE`:
   picker, `pick:`, candidates, alternatives, an `art:` command, the art pipeline or an art
   template); *Servers*, carrying the port (*Port*, below) and the 10-minute background
-  limit (start detached, output to a log, stop before the end), when a run target's `cwd`
+  limit (start detached, output to a log, stop before the end) and, since 84, `npm ci` in a
+  package folder before its checks (a fresh worktree has no `node_modules`: aicomplete
+  135-138's `npm run check`, `cards:fit` and e2e silently went unrun), when a run target's `cwd`
   is in the repo or a `package.json` at its root or one folder down (aicomplete's `web/`;
   74) has a `dev…` or `preview…` script (`executor.has_servers`); the *calibration* line
   (frozen numbers posted against the prompt's before the gate, a missed band's SE gap
@@ -132,6 +134,10 @@ only in the environment (74). Stages and merge executors get none.
   one rendered at 385, its cap, paid for by the outline's done-marking, elevation,
   `~/.claude`, `friction:` and moved-command lines, and in light the design-ask, report-path
   and status lines.
+- **Telling time** (84, full, in *Progress*): remaining work is estimated in round trips
+  (~15 s, measured ~16 s; it said 20–40 s), never the clock: `progress` and `wait_for`
+  returns carry it and the time left to the cap (`progress.md`). Words held at 1,203, paid
+  for in the progress, outline and premises lines.
 - **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
   (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`).
 - **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the

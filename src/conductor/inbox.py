@@ -514,14 +514,30 @@ def _line(ev: Event, commit: Event | None = None) -> str:
     return f"- {clock(ev.ts)} #{ev.id} {describe(ev)}{paths}{folded}"
 
 
-def unreviewed_lines(view: View, finishes: list[Event], saved: dict[str, str] | None = None) -> list[str]:
+DESIGN_DEFAULT_NOTE = "commit rests on open design default"
+
+
+def unreviewed_lines(view: View, finishes: list[Event], saved: dict[str, str] | None = None,
+                     cfg: Config | None = None) -> list[str]:
     """The *Unreviewed reports* summary: one line per finish, with its report, carry,
     `slow:`, pick (and "picks saved <time>" from `saved`, `picks.saved_at`), a red item's
-    reasons and whether it was carried from before the checkpoint."""
+    reasons and whether it was carried from before the checkpoint. With `cfg`, also the
+    `design: true` questions still unanswered whose default its landed work took (fractals
+    017's was answered 5.4h later) and its audit notes that need a decision (84)."""
     saved = saved or {}
+    design_open: dict[str, list[str]] = {}
+    for q in (questions.scan(cfg.control) if cfg else []):
+        if q.design and q.is_open:
+            design_open.setdefault(q.item, []).append(q.id)
     out = []
     for ev in finishes:
         d = ev.detail
+        rests = ""
+        if (ids := design_open.get(ev.item)) and d.get("status") in ("done", "partial"):
+            rests = f" · **{DESIGN_DEFAULT_NOTE}: {', '.join(f'`{i}`' for i in ids)}** (raise it with Matt now)"
+        if cfg and ev.repo in cfg.repos and audits.writes_notes(d) and (
+                calls := audits.decisions(audits.note_path(cfg, ev.repo, ev.item.split("/", 1)[1]))):
+            rests += f" · **{len(calls)} audit note(s) need a decision**: " + "; ".join(c[:160] for c in calls)
         why = f" ({'; '.join(d['reasons'])})" if d.get("status") == "red" and d.get("reasons") else ""
         report = f" — {ev.paths[0]}" if ev.paths else ""
         carry = f" · carry: {d['carry']}" if d.get("carry") is not None else ""
@@ -533,7 +549,7 @@ def unreviewed_lines(view: View, finishes: list[Event], saved: dict[str, str] | 
         old = (" · **carried from before checkpoint "
                f"#{view.checkpoint.id}**") if view.checkpoint and ev.id < view.checkpoint.id else ""
         out.append(f"- {ev.item} **{d.get('status')}**{why}{resumed}, finished {clock(ev.ts)} (#{ev.id})"
-                   f"{report}{carry}{slow}{pick}{old}")
+                   f"{report}{rests}{carry}{slow}{pick}{old}")
     return out
 
 
@@ -647,7 +663,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     unreviewed, theirs = view.unreviewed(), session.conductor_reports(root)
     if unreviewed or theirs:
         # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
-        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed, picks.saved_at(cfg, view)), *theirs]
+        out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed, picks.saved_at(cfg, view), cfg), *theirs]
         if unreviewed:
             out.append("  Each stays unreviewed until Matt says process X (or process next / process all).")
         if theirs:

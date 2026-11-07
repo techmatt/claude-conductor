@@ -20,7 +20,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json; .log.gz once fi
                                .merge.prompt.md / .merge.stderr.log for a merge executor;
                                .audit.md (audit notes); .original.md (resume.md);
                                .amend.md (each amendment delivered, with times)
-requests/<stamp>/              planner → conductor: replacement files + request.md
+requests/<stamp>/              planner → conductor: request.md (+ replacement files, or edits)
 signals/                       planner/app → conductor: the verbs in signals.md
 receipts/                      conductor → planner: what became of each write (see receipts.md)
 backlog/<repo>/<name>.md       pre-approved items, drawn into an empty queue (see night-shift.md); ignores itself
@@ -201,10 +201,13 @@ in an earlier call, so nothing is applied until every target is there. Targets n
 yet are waited for, with no event, until 60s (`REQUEST_WAIT_SECONDS`) after `request.md`'s
 mtime (so the wait survives a restart; rewriting `request.md` starts it again); then the
 request fails (`targets missing: state.md (waited 60s); nothing was applied`). A request
-whose every target is byte for byte the control folder's copy (HEAD's) waits up to 30s
-(`SAME_WAIT_SECONDS`) for a changed copy to land, then applies as `identical` (the
+whose every target is byte for byte the control folder's copy (HEAD's) waits for a changed
+copy to land, re-read each tick, until nothing in its folder has been written for 30s
+(`SAME_WAIT_SECONDS`: since 84 the newest of `request.md`'s and the targets' mtimes, so a
+copy the bridge lands again restarts it), then applies as `identical` (the
 `request` event's field; receipt `nothing to commit: every target is identical to HEAD`),
-distinct from missing. Either
+distinct from missing. The six seen 2026-11-06/07 (aicomplete, fractals) cleared only when
+the planner re-sent from a fresh path: the bridge's stale copy, so edits (below) are the fix. Either
 wait past 2s gets a `pending` receipt saying which. Every other error fails, at once
 when `request.md` is 2s old (`FRESH_SECONDS`; younger, it may be half written and is
 looked at again): bad front-matter, no `targets:`, a target that is absolute, uses `..`
@@ -220,3 +223,16 @@ folder name), never stamp order: a stamp is its writer's guess at the clock (57'
 `requests/stale/<stamp>/` (`-2`, … if taken), logged `request_stale` with its files, so
 a stray copy the planner can't delete never waits forever. One whose message starts `closeout:` also moves the read mark
 (`inbox.md`). Applied or failed, a request's outcome is `receipts/requests/<stamp>.md` (`receipts.md`).
+
+**Edits** (84). A target may come as edit blocks in `request.md`'s body instead of a file
+in the folder: `<<<<<<< <target>`, its old lines, `=======`, the new lines, `>>>>>>>`, each
+marker on a line of its own (`request.parse_edits`). Both sides are whole lines; the old
+ones must occur exactly once in the control folder's current copy, an empty new side
+deletes them, and blocks for one file apply in order (`request.apply_edits`). A miss
+refuses the whole request (`edit 2 for state.md: its old lines are not found in the current
+file (first: '- 004'); nothing was applied`, or `found 3 times`). The body outside the
+blocks is the message when `message:` is absent. Edited targets are listed in `targets:`
+like any other; one sent both as a file and as edits, or edits for a path not listed, is
+refused. Edits are never `identical`-waited: they apply against the live copy. Why: a review
+took 6-8 planner calls (stage, copy, edit, copy to a fresh path, commit, receipt), and the
+whole-file form is where the bridge's stale copies came in.

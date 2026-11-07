@@ -558,7 +558,7 @@ class MainWindow(QMainWindow):
             idx = self.tabs.indexOf(view)
             if self.tabs.tabText(idx) != text:
                 self.tabs.setTabText(idx, text)
-        badge = (self.status.badge, self._tick % 4 if self.status.badge == "turn" else 0)
+        badge = (self.status.badge, self._tick % 4 if self.status.badge in icon.TURNING else 0)
         if badge != self._badge:            # the taskbar shows the window's icon (81)
             self._badge = badge
             self.setWindowIcon(icon.window_icon(*badge))

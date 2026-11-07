@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import memory, questions, talk, waitfor
-from .util import clock
+from .util import clock, duration, now, parse_stamp
 
 POLL_SECONDS = 1.0
 # Claude Code aborts a tool call that sends no response or progress for 30 minutes
@@ -149,7 +149,11 @@ WAIT_FOR_TOOL = {
         "properties": {
             "path": {"type": "string", "description": "A file or folder to wait for, absolute or relative to your working directory."},
             "pid": {"type": "integer", "description": "A process to wait out; beside `path` or `log`, the one doing the work."},
-            "log": {"type": "string", "description": "A log file to read, absolute or relative to your working directory; lines already in it count."},
+            "log": {"type": "string", "description": ("A log file to read, absolute or relative to your working directory; "
+                                                      "lines already in it count unless `fresh`.")},
+            "fresh": {"type": "boolean", "default": False, "description": (
+                "With `log`: only lines your earlier `wait_for` on this log hasn't read (on the first, lines written "
+                "after this call). For a relaunched job whose old done line is still in the log.")},
             "line": {"type": "string", "description": "With `log`: the regular expression a line must match."},
             "fail": {"type": "string", "description": ("With `log`: a line matching this regular expression ends the wait as "
                                                         f"a failure (default, any case: `{waitfor.FAIL_DEFAULT}`; \"\" for none).")},
@@ -193,6 +197,7 @@ class Server:
         self._running: list[str] | None = None  # what it last heard runs beside it
         self._load_said: str | None = None      # the load stretch it was last cautioned about
         self._amend_checked: set[tuple] = set() # (question, default) already refused once (`_amendment_check`)
+        self._log_read: dict[Path, int] = {}    # log → bytes its last `wait_for` read (`fresh`)
 
     def send(self, obj: dict) -> None:
         with self._lock:
@@ -278,9 +283,22 @@ class Server:
         return "Logged; carry on." + self._running_now(), False
 
     def _running_now(self) -> str:
-        """The preamble's *Running beside you now* line, when what runs beside it changed, and
-        the load caution once per sustained stretch (80: carried here, not messaged)."""
-        return self._beside() + self._load_note()
+        """The wall clock and the time left to the cap (84: executors that told time by
+        counting turns ran ~1.5h ahead), the preamble's *Running beside you now* line when
+        what runs beside it changed, and the load caution once per sustained stretch (80)."""
+        return self._clock() + self._beside() + self._load_note()
+
+    def _clock(self) -> str:
+        at = now()
+        rec = talk.run_record(self.control, self.item)
+        try:
+            left = (parse_stamp(rec["deadline"]) - at).total_seconds() if rec and rec.get("deadline") else None
+        except (TypeError, ValueError):
+            left = None
+        if left is None or rec.get("template") == "watch":
+            return f" Now {clock(at)}."
+        cap = f"{duration(left)} left to the cap" if left > 0 else "past the cap"
+        return f" Now {clock(at)}, {cap}{' (paused: the cap moves on)' if rec.get('paused_at') else ''}."
 
     def _load_note(self) -> str:
         high = memory.load_high(self.control / ".conductor")
@@ -415,9 +433,16 @@ class Server:
     def wait_for(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
         """Return when the target changes, a message waits (once per mail file, as `ask`: a
         helper's call must not spin on mail the hook won't give it), or after `minutes`."""
-        target, why = waitfor.target(args, self.workdir)
+        target, why = waitfor.target(args, self.workdir, self._log_read)
         if why:
             return why, True
+        try:
+            return self._wait_for(target, args, cancel, token)
+        finally:
+            if log := waitfor.log_of(target):       # a `fresh` wait on it later starts here
+                self._log_read[log.path.resolve()] = log.consumed
+
+    def _wait_for(self, target, args: dict, cancel: threading.Event, token) -> tuple[str | None, bool]:
         every, minutes = args.get("every", WAIT_FOR_EVERY), args.get("minutes", WAIT_MAX_MINUTES)
         for name, value in (("every", every), ("minutes", minutes)):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:

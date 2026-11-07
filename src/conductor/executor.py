@@ -40,18 +40,18 @@ carry on with the default, and his answer comes later as a message. Leave a step
 default can't be undone (a delete, an overwrite) until last.{leftover}
 
 Premises. A number or fact the prompt quotes was measured at some revision: re-read it from
-source before building on it; report any that had moved. A timing or speed read
+source before using it; report any that had moved. A timing or speed read
 runs on a quiet box; with anything running beside you, report only ratios.
 
 Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
-Call it at the start, with a first `eta` once you can estimate, at milestones, and
-when your estimate moves by over a third. Estimate in tool round trips
-(20–40 s each) plus the repo's measured run times (README), with an allowance per unknown;
-run `date` before every `eta` or outline time. An `eta` names its source in brackets:
+Call it at the start, with a first `eta` once you can, at milestones, and when your
+estimate moves over a third. Estimate remaining work in round trips (~15 s) plus the
+repo's measured run times (README), an allowance per unknown; never tell time by them:
+`progress` and `wait_for` returns give the clock and time left. An `eta` names its source in brackets:
 `5:40pm (by rate)`, `7:10pm (to the cap)`.{calibrate}
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
-report last, a few words a row, one row per done-when item of the prompt, each with a rough
+report last, a few words a row, one row per done-when item, each with a rough
 local finish time (11:05am). Mark a row `done` in the next progress call; post the outline
 again when a message asks. Staged, your plan ends with it: post it first thing.
 {servers}
@@ -197,7 +197,8 @@ may hold: pass it through (a flag, an environment variable) where the repo hard-
 port; for a second, bind to port 0. Claude Code stops a background command after 10
 minutes, so start a long-lived server detached, its output to a log (PowerShell
 `Start-Process -WindowStyle Hidden -RedirectStandardOutput <log>`, Python `subprocess.Popen`
-with `DETACHED_PROCESS`) or by a repo script, and stop it before you finish.
+with `DETACHED_PROCESS`) or by a repo script, and stop it before you finish. A fresh
+worktree has no `node_modules`: run `npm ci` in a package folder before its checks.
 """
 
 # The calibration line, for an item that names a gate, band, target or seed count, or bumps the rules.

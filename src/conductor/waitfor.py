@@ -5,6 +5,7 @@ happened or None, and `state()`, how it stands when the wait ends without that."
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from pathlib import Path
@@ -47,25 +48,37 @@ class PidTarget:
 
 
 class LogTarget:
-    def __init__(self, path: Path, pattern: re.Pattern, fail: re.Pattern | None = None):
+    def __init__(self, path: Path, pattern: re.Pattern, fail: re.Pattern | None = None, start: int = 0):
         self.path, self.pattern, self.fail = path, pattern, fail
-        self.offset = 0                 # bytes read so far; earlier lines count, so a line
-        self.partial = b""              # written before the call is still found
+        self.offset = start             # bytes read so far; by default earlier lines count, so
+        self.partial = b""              # a line written before the call is still found
         self.last = ""
+
+    @property
+    def consumed(self) -> int:
+        """Bytes through the last line looked at: where a `fresh` call on this log starts."""
+        return self.offset - len(self.partial)
 
     def check(self) -> str | None:
         try:
             with open(self.path, "rb") as fh:
+                if os.fstat(fh.fileno()).st_size < self.offset:     # truncated: a relaunch rewrote it
+                    self.offset, self.partial = 0, b""
                 fh.seek(self.offset)
                 while chunk := fh.read(READ_BYTES):
+                    base = self.consumed
                     self.offset += len(chunk)
                     *lines, self.partial = (self.partial + chunk).split(b"\n")
                     for raw in lines:
+                        base += len(raw) + 1
                         if hit := self._match(raw):
+                            self.offset, self.partial = base, b""   # lines after it are unread
                             return hit
         except OSError:
             return None
-        return self._match(self.partial)        # a last line with no newline yet
+        if hit := self._match(self.partial):    # a last line with no newline yet
+            self.partial = b""
+        return hit
 
     def _match(self, raw: bytes) -> str | None:
         # NULs and a BOM's bad bytes: a UTF-16 log, as a shell redirect can write on Windows.
@@ -111,8 +124,25 @@ def _pid(value) -> tuple[PidTarget | None, str | None]:
     return PidTarget(value), None
 
 
-def target(args: dict, cwd: Path):
-    """The target `wait_for`'s arguments name, and None; or None and what is wrong with them."""
+def log_of(target) -> LogTarget | None:
+    target = target.target if isinstance(target, Worker) else target
+    return target if isinstance(target, LogTarget) else None
+
+
+def fresh_start(path: Path, read: dict[Path, int]) -> int:
+    """Where a `fresh` wait on `path` starts: after the lines an earlier wait on it read
+    (`read`), else at its end now; from the top when it has shrunk since (rewritten)."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return 0
+    done = read.get(path)
+    return size if done is None else done if done <= size else 0
+
+
+def target(args: dict, cwd: Path, read: dict[Path, int] | None = None):
+    """The target `wait_for`'s arguments name, and None; or None and what is wrong with them.
+    `read`: per log, how far this session's earlier waits read it (for `fresh`)."""
     named = [k for k in ("path", "log") if args.get(k) not in (None, "")]
     worker = args.get("pid") not in (None, "")
     if len(named) > 1 or not (named or worker):
@@ -131,9 +161,13 @@ def target(args: dict, cwd: Path):
         return None, "`log` needs `line`, the regular expression to wait for"
     if fail is not None and not isinstance(fail, str):
         return None, "`fail` must be a string"
+    fresh = args.get("fresh", False)
+    if not isinstance(fresh, bool):
+        return None, "`fresh` must be true or false"
+    start = fresh_start(path.resolve(), read or {}) if fresh else 0
     try:
         found = LogTarget(path, re.compile(line), re.compile(FAIL_DEFAULT, re.IGNORECASE) if fail is None
-                          else re.compile(fail) if fail else None)
+                          else re.compile(fail) if fail else None, start)
     except re.error as exc:
         return None, f"`line` or `fail` is not a regular expression: {exc}"
     return (Worker(found, pid) if pid else found), None

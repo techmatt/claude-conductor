@@ -24,7 +24,8 @@ def test_title_ranks_needs_over_running_over_idle():
     run = status.summarize([snap(running=2), snap(running=1)])
     assert [run.title(t) for t in range(5)] == [f"{g} Conductor · 3 running" for g in "◐◓◑◒◐"]
     need = status.summarize([snap(asks=1, running=2), snap(reds=2, picks=1)])
-    assert need.kind == "need" and need.title(0) == need.title(3) == "● Conductor · 1 question · 2 red · pick"
+    # What runs shows beside what needs Matt (84: "pick · 1 to review" hid fractals 033 running).
+    assert need.kind == "need" and need.title(0) == need.title(3) == "● Conductor · 1 question · 2 red · pick · 2 running"
     assert status.summarize([snap(asks=2)]).title() == "● Conductor · 2 questions"
     assert status.summarize([snap(reds=1, picks=3)]).title() == "● Conductor · red · 3 picks"
     # A stage still staging has a live session; one waiting with its plan does not.
@@ -41,8 +42,8 @@ def test_something_waiting_for_review_marks_orange_whatever_else_holds():
     # Running too: the ticker turns, and so does the badge, orange.
     both = status.summarize([snap(running=1, unreviewed=1)])
     assert both.title(1) == "◓ Conductor · 1 running · 1 to review" and both.badge == "turn"
-    # Running alone, and quiet: no badge, as before.
-    assert status.summarize([snap(running=1)]).badge is None and status.summarize([snap()]).badge is None
+    # Running alone: a gold badge that turns (84); quiet: none.
+    assert status.summarize([snap(running=1)]).badge == "run" and status.summarize([snap()]).badge is None
     # Needs Matt stays red; a blocking question is waiting too, so it is counted once there.
     need = status.summarize([snap(asks=1, unreviewed=1)])
     assert need.title() == "● Conductor · 1 question · 1 to review" and need.badge == "need" and need.waiting == 2
@@ -86,7 +87,7 @@ def test_the_taskbar_turns_orange_while_a_report_waits_and_clears_on_review(qapp
     assert win._badge == ("turn", 1) and [tray_hub(win.status, t) for t in (0, 1)] == ["orange", "orange_dim"]
     env.d.log.append("reviewed", item="code/001_x", status="done", by="planner")
     win.refresh()
-    assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == (None, 0)
+    assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == ("run", 1)
     env.release()
     win._quitting = True
     win.close()
@@ -134,13 +135,13 @@ def test_the_window_title_follows_running_and_red(qapp, env, tmp_path):
     assert [tray_hub(win.status, t) for t in (0, 1)] == ["gold", "dim"]
     env.d.log.append("red", item="code/001_x", reasons=["boom"], after_red="stop")
     win.refresh()
-    assert win.windowTitle() == "● Conductor · red"
+    assert win.windowTitle() == "● Conductor · red · 1 running"     # what runs still shows (84)
     win._turn()                     # the title holds still; the item still runs, so its tab turns on
-    assert win.windowTitle() == "● Conductor · red" and win.turner.isActive()
+    assert win.windowTitle() == "● Conductor · red · 1 running" and win.turner.isActive()
     assert tray_hub(win.status, 1) == "red"
     env.d._lock_file.unlink()
     win.refresh()
-    assert win.windowTitle() == "● Conductor · red · daemon down"
+    assert win.windowTitle().startswith("● Conductor · red · daemon down")
     env.release()
     win._quitting = True
     win.close()

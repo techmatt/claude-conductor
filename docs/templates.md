@@ -30,9 +30,12 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   *Audit notes* paragraph (`audit.md`) naming an absolute path,
   `reports/<repo>__NNN_name.audit.md`, as the second file the executor may write
   outside its working directory. It keeps a running notes file there while it works,
-  covering every task, under four headings: what was poorly structured, what took
-  longer than expected and why, what should be refactored or cleaned up, and what
-  CLAUDE.md or README should say. Nobody reviews notes per item. Before finishing it
+  covering every task, under five headings: what was poorly structured, what took
+  longer than expected and why, what should be refactored or cleaned up, what
+  CLAUDE.md or README should say, and (84) what *needs a decision*, with options and a
+  pick: those bullets ride the report's inbox line (`audits.decisions`, `inbox.md`) so the
+  planner rules on them at review, where cleanups had deferred them back as "planner's
+  call" (aicomplete 123 deferred 2, 129 deferred 6). Nobody reviews the other notes per item. Before finishing it
   implements each obvious note (a small, safe fix, a doc line), leaving notes only for a
   decision or a large change, and its report lists those it implemented (`executor.AUDIT_FIX`;
   75, Matt: less churn for the cleanup; not in a readonly or template item). The item's `finish`

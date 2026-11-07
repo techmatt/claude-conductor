@@ -7,6 +7,9 @@ it survives a kill, and cover every task you perform, under these headings:
 - Refactor or clean up: what should be refactored, restructured or tidied, with the
   files involved.
 - Docs that would have saved time: what the repo's CLAUDE.md or README should say.
+- Needs a decision: a note only the planner can settle (a ruling, scope, a trade-off), one
+  `- ` line each with the options and your pick. The planner rules on these when it reads
+  your report, so a cleanup implements rulings instead of deferring them back.
 Each note names the files it is about and is concrete enough for someone who never saw
 this session to act on. "Nothing to note" under a heading is a fine answer. Never put
 the notes in the repo, and never commit them.

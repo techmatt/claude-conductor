@@ -26,6 +26,7 @@ class Status:
     parts: list[str]            # what needs Matt (`1 question`, `red`, `pick`), or `2 running`
     waiting: int = 0            # unreviewed reports plus open questions
     wait_parts: list[str] = field(default_factory=list)     # `2 to review`, `1 open question`
+    running: int = 0            # items with a live session, whatever `kind` is (84)
 
     def title(self, tick: int = 0) -> str:
         parts = self.parts + self.wait_parts
@@ -37,12 +38,13 @@ class Status:
     @property
     def badge(self) -> str | None:
         """The taskbar icon's mark: `need` (red), `wait` (orange, still), `turn` (orange,
-        turning: running and waiting) or None (running alone, or quiet: as before 81)."""
+        turning: running and waiting), `run` (gold, turning: running alone; 84, after the
+        taskbar sat plain with fractals 033 running) or None (quiet)."""
         if self.kind == "need":
             return "need"
         if self.waiting:
-            return "turn" if self.kind == "running" else "wait"
-        return None
+            return "turn" if self.running else "wait"
+        return "run" if self.running else None
 
 
 def _needs(snap: Snapshot) -> tuple[int, int, int, int]:
@@ -84,7 +86,8 @@ def tab_kind(snap: Snapshot) -> str:
 def summarize(snaps: list[Snapshot]) -> Status:
     asks, reds, picks, down = (sum(c) for c in zip((0, 0, 0, 0), *map(_needs, snaps)))
     reviews, held = (sum(c) for c in zip((0, 0), *map(_waits, snaps)))
-    wait = dict(waiting=reviews + held + asks,
+    n = sum(map(_running, snaps))
+    wait = dict(waiting=reviews + held + asks, running=n,
                 wait_parts=[f"{reviews} to review"] * bool(reviews)
                 + [f"{held} open question{'s' * (held != 1)}"] * bool(held))
     if asks or reds or picks or down:
@@ -92,7 +95,7 @@ def summarize(snaps: list[Snapshot]) -> Status:
         parts += [("red" if reds == 1 else f"{reds} red")] * bool(reds)
         parts += [("pick" if picks == 1 else f"{picks} picks")] * bool(picks)
         parts += ["daemon down"] * bool(down)
-        return Status("need", parts, **wait)
-    if n := sum(map(_running, snaps)):
+        return Status("need", parts + [f"{n} running"] * bool(n), **wait)
+    if n:
         return Status("running", [f"{n} running"], **wait)
     return Status("idle", [], **wait)

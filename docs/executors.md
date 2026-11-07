@@ -19,12 +19,16 @@ executor is told: `preambles.md`.
 aicomplete 009's 281 turns were 60-second polls, about a third of its cost.
 
 ```
-wait_for(path | pid | log + line [fail?], pid?, every?, minutes?)    # every: 50 s; minutes: at most and by default 20
+wait_for(path | pid | log + line [fail?, fresh?], pid?, every?, minutes?)    # every: 50 s; minutes: at most and by default 20
 ```
 
 It returns when `path` exists, `pid` exits, or a line matching the regular expression
 `line` is in `log` (lines already there count; a UTF-16 log reads fine), saying what
-changed; a relative path is the working directory's (`--workdir`). A `log` wait also ends on
+changed; a relative path is the working directory's (`--workdir`). With `fresh: true` only
+lines this session's earlier `wait_for` on that log hasn't read count (a hit stops reading
+just after its line), and on the first such call, only lines written after it: aicomplete
+130's relaunched job's stale `RUN_DONE` ended three waits at once (84). A log that shrank
+(rewritten) is read from its top again. A `log` wait also ends on
 a line matching `fail` (default `panicked|error`, any case; `""` turns it off), `line` winning
 on one line that matches both; the result says to narrow `fail` if the line is harmless, since
 the same call would stop on it again. A `pid` beside `path` or `log` is the process doing the
@@ -68,7 +72,11 @@ Conductor generates the session id and passes it with `--session-id`, so the id 
 known (in `.run.json` and the `start` event) before the executor writes a byte; phase 3
 resumes sessions with it. Variables that bind a process to an enclosing Claude Code
 session (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, …) are stripped from the executor's
-environment, so conductor can be started from inside a Claude Code terminal.
+environment, so conductor can be started from inside a Claude Code terminal. So is
+conductor's own venv (84, `procs.child_env`): `VIRTUAL_ENV` goes and PATH loses every
+entry inside `sys.prefix`, since `uv run` put it first and an executor's plain `python` was
+conductor's, without the repo's Pillow or ruff (fractal-website's `builder check` skipped
+four checks, website 002 and 005). Conductor's own children name `sys.executable` outright.
 
 stdout (stream-json, one JSON object per line, ending with a `"type": "result"` line)
 goes to `reports/<repo>__NNN_name.log`; stderr to `.stderr.log`. Stream-json rather

@@ -169,7 +169,9 @@ nothing running, leads with an orange dot. A window title can't be coloured, so 
 colour lives on the icon: the **taskbar** (the window's icon, `icon.window_icon`) gets a
 badge over its bottom-right corner, orange and still with nothing running, orange and
 turning (its bright half going round ◐ ◓ ◑ ◒ with the title) while items run too, red
-while something needs Matt, and none when merely running or quiet. A project tab's hub
+while something needs Matt, and none when quiet. Running alone (84) turns it gold, and the
+title's `N running` stays beside what needs Matt (`● Conductor · pick · 1 running · 1 to
+review`): fractals 033 had run under a plain icon and a title without it. A project tab's hub
 and name turn orange the same way (`status.tab_kind`). A `reviewed` event or the
 question's answer clears it on the next refresh (`Status.badge`, `status.summarize`).
 

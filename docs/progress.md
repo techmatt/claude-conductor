@@ -7,7 +7,13 @@ progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm (by
                                                     # outline: [{title, eta, done}], see Outline
 ```
 
-It returns at once (`Logged; carry on.`, plus *Running beside you now* when that changed; `wait_for` adds the same line, and either tool says a change once). The ask server appends a line (`seq`, `at`,
+It returns at once (`Logged; carry on.`, then the clock, `Now 11:03pm, 3h17m left to the cap.`,
+plus *Running beside you now* when that changed; every `wait_for` return carries the same tail,
+and either tool says a change once). The clock reads the run record's `deadline` (blocked and
+paused time already added), `past the cap` after it, `(paused: the cap moves on)` while
+paused, and only `Now <time>.` for a watch (84: aicomplete 130 told time by counting turns,
+ran ~1.5h ahead and stopped with 2h39m left; fractals 017 ~45 min, 2h17m left; calls
+averaged ~16 s, not the preamble's old 20–40 s). The ask server appends a line (`seq`, `at`,
 `note` — whitespace collapsed, 500 chars — and the rest) to
 `.conductor/progress/<repo>__<NNN_name>.jsonl`; the daemon logs one `progress` event
 per new line (`seq` dedupes across restarts). The latest line of a running item shows

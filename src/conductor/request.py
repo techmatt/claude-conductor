@@ -1,13 +1,15 @@
-"""Requests: `requests/<stamp>/` = whole replacement files + `request.md`.
+"""Requests: `requests/<stamp>/` = whole replacement files + `request.md`, or edit blocks
+in `request.md`'s body (old lines, new lines) applied to the control folder's own copy.
 
-The only way a tracked control file changes. Conductor copies the files in, commits
-exactly those paths, logs it, and removes the request.
+The only way a tracked control file changes. Conductor copies the files in (or applies the
+edits), commits exactly those paths, logs it, and removes the request.
 """
 
 from __future__ import annotations
 
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from . import git
@@ -48,6 +50,61 @@ class Request:
     message: str
     targets: list[str]
     identical: bool = False     # every target matched HEAD when it was applied
+    edits: dict[str, list[tuple[str, str]]] = field(default_factory=dict)   # target → (old, new) blocks
+    edited: dict[str, str] = field(default_factory=dict)    # target → its text once the edits apply
+
+    @property
+    def files(self) -> list[str]:
+        """The targets sent as whole files in the folder (the rest are edited in place)."""
+        return [t for t in self.targets if t not in self.edits]
+
+
+# An edit block in request.md's body: whole lines, git's conflict markers.
+EDIT_OPEN = re.compile(r"^<<<<<<< (\S.*?)\s*$")
+EDIT_MID, EDIT_CLOSE = "=======", ">>>>>>>"
+
+
+def parse_edits(body: str) -> tuple[dict[str, list[tuple[str, str]]], str]:
+    """Edit blocks (`<<<<<<< path`, old lines, `=======`, new lines, `>>>>>>>`) and the body
+    without them. Each side is whole lines: `old` must occur once in the file's current text,
+    and an empty `new` deletes it."""
+    edits: dict[str, list[tuple[str, str]]] = {}
+    rest, lines, i = [], body.split("\n"), 0
+    while i < len(lines):
+        m = EDIT_OPEN.match(lines[i])
+        if not m:
+            rest.append(lines[i])
+            i += 1
+            continue
+        path = _check_target(m.group(1))
+        n = len(edits.get(path, [])) + 1
+        try:
+            mid = lines.index(EDIT_MID, i + 1)
+            end = lines.index(EDIT_CLOSE, mid + 1)
+        except ValueError:
+            raise RequestError(f"edit {n} for {path}: needs a `{EDIT_MID}` line, then a `{EDIT_CLOSE}` line") from None
+        if (nested := next((j for j in range(i + 1, end) if EDIT_OPEN.match(lines[j])), None)) is not None:
+            raise RequestError(f"edit {n} for {path}: a new `<<<<<<<` (line {nested + 1}) before its `{EDIT_CLOSE}`")
+        old, new = lines[i + 1:mid], lines[mid + 1:end]
+        if not old:
+            raise RequestError(f"edit {n} for {path}: no old lines (an edit replaces lines the file holds)")
+        edits.setdefault(path, []).append(("\n".join(old) + "\n", "\n".join(new) + "\n" if new else ""))
+        i = end + 1
+    return edits, "\n".join(rest)
+
+
+def apply_edits(text: str, path: str, edits: list[tuple[str, str]]) -> str:
+    """`text` with each (old, new) applied in order, all or none: an `old` found no time or
+    more than once refuses the request, naming the edit."""
+    for n, (old, new) in enumerate(edits, 1):
+        count = text.count(old)
+        if count != 1:
+            first = old.split("\n", 1)[0][:80]
+            why = "not found" if not count else f"found {count} times (add a line to make it unique)"
+            raise RequestError(f"edit {n} for {path}: its old lines are {why} in the current file "
+                               f"(first: {first!r}); nothing was applied")
+        text = text.replace(old, new, 1)
+    return text
 
 
 @dataclass
@@ -146,17 +203,35 @@ def listed_targets(d: Path) -> set[str]:
 
 def parse(d: Path) -> Request:
     meta, body, targets = _read(d)
+    edits, body = parse_edits(body)
+    if stray := sorted(set(edits) - set(targets)):
+        raise RequestError(f"edits for files not listed as targets: {stray}")
     message = str(meta.get("message") or body).strip()
     if not message:
         raise RequestError("request.md needs a commit message (`message:` or the body)")
     present = {p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file()} - {"request.md"}
-    missing = sorted(set(targets) - present)
+    if both := sorted(present & set(edits)):
+        raise RequestError(f"targets sent both as a file and as edits: {both}; send one")
+    whole = set(targets) - set(edits)
+    missing = sorted(whole - present)
     if missing:
         raise MissingTargets(missing)
-    extra = sorted(present - set(targets))
+    extra = sorted(present - whole)
     if extra:
         raise RequestError(f"files in the request folder not listed as targets: {extra}")
-    return Request(d, message, targets)
+    return Request(d, message, targets, edits=edits)
+
+
+def _settled(d: Path, names: list[str]) -> float:
+    """Seconds since the last write to request.md or any of `names`: a target the bridge
+    lands again (a late copy) restarts the identical-to-HEAD wait."""
+    times = [_written(d)]
+    for n in names:
+        try:
+            times.append((d / n).stat().st_mtime)
+        except OSError:
+            pass
+    return time.time() - max(times)
 
 
 def ready(d: Path, control: Path | None = None) -> Request | Waiting:
@@ -164,10 +239,12 @@ def ready(d: Path, control: Path | None = None) -> Request | Waiting:
     what it still waits for. No settle timer: the planner writes request.md last.
 
     Missing targets are waited for until REQUEST_WAIT_SECONDS after request.md's mtime (so the
-    wait survives a restart), then fail (`targets missing: …`). With `control`, a request whose
-    every target is identical to HEAD there waits until SAME_WAIT_SECONDS for a changed copy
-    to land, then is ready with `identical` set. A request.md that does not parse is waited
-    for while it is younger than FRESH_SECONDS (half written); any other parse error fails at once.
+    wait survives a restart), then fail (`targets missing: …`). With `control`, edits are
+    applied to its copies here (a miss fails the request), and a request whose every target is
+    sent whole and identical to HEAD there waits for a changed copy to land until nothing in
+    the folder has been written for SAME_WAIT_SECONDS, re-reading it each tick, then is ready
+    with `identical` set. A request.md that does not parse is waited for while it is younger
+    than FRESH_SECONDS (half written); any other parse error fails at once.
     """
     waited = time.time() - _written(d)
     try:
@@ -182,22 +259,31 @@ def ready(d: Path, control: Path | None = None) -> Request | Waiting:
         if waited < FRESH_SECONDS:
             return Waiting("request.md to be complete", waited)
         raise
-    if not readable(d, req.targets):
+    if not readable(d, req.files):
         return Waiting("its targets to be readable", waited)
-    if control is not None and identical(control, req):
-        if waited < SAME_WAIT_SECONDS:
+    if control is None:
+        return req
+    for t, blocks in req.edits.items():
+        try:
+            current = read_text(control / t)
+        except (OSError, UnicodeDecodeError) as exc:
+            raise RequestError(f"edits for {t}: the control folder has no readable copy ({exc}); "
+                               "send it as a whole file") from None
+        req.edited[t] = apply_edits(current, t, blocks)
+    if not req.edits and identical(control, req):
+        if _settled(d, req.files) < SAME_WAIT_SECONDS:
             return Waiting(f"a changed copy: every target is identical to HEAD so far ({', '.join(req.targets)})", waited)
         req.identical = True
     return req
 
 
 def identical(control: Path, req: Request) -> bool:
-    """Every target, as `apply` would write it, matches the control folder's copy: HEAD's,
-    since the tamper guard keeps tracked files level with it. No git call: this runs on
-    every waiting request each tick."""
+    """Every whole-file target, as `apply` would write it, matches the control folder's copy:
+    HEAD's, since the tamper guard keeps tracked files level with it. No git call: this runs
+    on every waiting request each tick."""
     try:
         return all(_normalize((req.dir / t).read_bytes()) == _normalize((control / t).read_bytes())
-                   for t in req.targets)
+                   for t in req.files)
     except OSError:
         return False            # a new file, or one unreadable: not identical
 
@@ -213,11 +299,14 @@ def _normalize(data: bytes) -> bytes:
 
 def apply(cfg: Config, req: Request) -> str | None:
     """Copy and commit. Returns the new commit sha, or None when nothing changed."""
-    control = cfg.control
+    control = cfg.control          # `ready(d, control)` worked out `edited` against the live copies
     for t in req.targets:
         dest = control / t
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(_normalize((req.dir / t).read_bytes()))
+        if t in req.edited:
+            dest.write_bytes(req.edited[t].encode("utf-8"))
+        else:
+            dest.write_bytes(_normalize((req.dir / t).read_bytes()))
     git.run(control, "add", "--", *req.targets)
     staged = git.run(control, "diff", "--cached", "--name-only", "--", *req.targets).split()
     if not staged:

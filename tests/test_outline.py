@@ -90,7 +90,7 @@ def test_outline_refused_for_an_item_not_running(env):
 def test_progress_tool_takes_an_outline(env):
     server = ask_server.Server(env.control, "code/009_o", 10, None, out=io.StringIO())
     ok = server.progress({"outline": [{"title": "  Build   it ", "eta": "2pm"}, {"title": "Report", "eta": "3pm", "done": False}]})
-    assert ok == ("Logged; carry on.", False)
+    assert ok[0].startswith("Logged; carry on. Now ") and ok[1] is False
     [line] = talk.read_progress(env.control, "code/009_o")
     assert "note" not in line and line["outline"] == [{"title": "Build it", "eta": "2pm", "done": False},
                                                       {"title": "Report", "eta": "3pm", "done": False}]

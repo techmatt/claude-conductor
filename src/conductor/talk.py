@@ -124,6 +124,11 @@ def running_beside(control: Path, item: str) -> list[str]:
                   and r.get("template") != "watch" and not r.get("paused_at"))
 
 
+def run_record(control: Path, item: str) -> dict | None:
+    """`item`'s run record (`running/<repo>/*.run.json`), or None."""
+    return next((r for r in _run_records(control) if r.get("item") == item), None)
+
+
 def told_beside(control: Path, item: str) -> list[str] | None:
     """What `item`'s preamble said runs beside it; None for a watch, which isn't told."""
     return next((r.get("running_beside") for r in _run_records(control) if r.get("item") == item), None)

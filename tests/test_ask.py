@@ -132,7 +132,7 @@ def test_ask_server_protocol(env, tmp_path):
         got = c.request("tools/call", {"name": "progress", "arguments": {"note": "  reading   the code ",
                                                                          "eta": "25m", "done": 1, "remaining": 3}})
         text = got["content"][0]["text"]
-        assert not got["isError"] and text == "Logged; carry on." and "MESSAGE #41" not in text
+        assert not got["isError"] and text.startswith("Logged; carry on. Now ") and "MESSAGE #41" not in text
     finally:
         c.close()
     assert not questions.scan(env.control)

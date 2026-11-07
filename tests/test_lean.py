@@ -3,6 +3,7 @@ commits dated by their own time, and the retro triggers."""
 
 import io
 import json
+import re
 import subprocess
 from datetime import datetime, timedelta
 
@@ -95,19 +96,25 @@ def test_running_beside_counts_work_only(env):
 def test_progress_says_when_what_runs_beside_changed(env):
     record(env, "001_a", phase="exec", running_beside=[])
     server = ask_server.Server(env.control, "code/001_a", 10, None, out=io.StringIO())
-    assert server.progress({"note": "one"}) == ("Logged; carry on.", False)
+    assert unclocked(server.progress({"note": "one"})[0]) == "Logged; carry on."
     record(env, "002_b", phase="exec")
-    assert server.progress({"note": "two"})[0] == "Logged; carry on. Running beside you now: code/002_b."
-    assert server.progress({"note": "three"})[0] == "Logged; carry on."
+    assert unclocked(server.progress({"note": "two"})[0]) == "Logged; carry on. Running beside you now: code/002_b."
+    assert unclocked(server.progress({"note": "three"})[0]) == "Logged; carry on."
     (env.control / "running" / "code" / "002_b.run.json").unlink()
-    assert server.progress({"note": "four"})[0] == "Logged; carry on. Running beside you now: nothing."
+    assert unclocked(server.progress({"note": "four"})[0]) == "Logged; carry on. Running beside you now: nothing."
+
+
+def unclocked(text: str) -> str:
+    """A `progress` return without its clock (84: ` Now 10:21am, 1h59m left to the cap.`)."""
+    return re.sub(r" Now [^.]+\.", "", text)
 
 
 def test_a_watch_hears_nothing_from_progress(env):
     record(env, "W1_watch", phase="exec", template="watch")
     record(env, "001_a", phase="exec")
     server = ask_server.Server(env.control, "code/W1_watch", 10, None, out=io.StringIO())
-    assert server.progress({"note": "looking"})[0] == "Logged; carry on."
+    text = server.progress({"note": "looking"})[0]
+    assert unclocked(text) == "Logged; carry on." and "cap" not in text
 
 
 def clock12(at: datetime) -> str:
