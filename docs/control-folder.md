@@ -111,6 +111,7 @@ setup = ["uv sync"]           # shell commands run in a new worktree before laun
 prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]   # the default: exempt from `paths`, merged textually
 append_only = ["experiments/history.md"]            # logs only appended to: merged by union on landing (default none; worktrees.md)
 background = ["npm test*", "*playwright test*"]       # shell commands executors always background (default none; see progress.md)
+doc_budget_exempt = ["docs/cards.md"]                 # docs never listed as trim due (inbox.md)
 
 [executor]                    # optional
 command = ["claude"]          # the executable (resolved on PATH)

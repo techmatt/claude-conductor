@@ -8,15 +8,15 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 
 **start a new <project> session** is six calls. Steps 1–5 are the same in Matt's saved preference, so this file is first read at step 5.
 
-1. **Tool search**, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. It finds nothing: say "This chat isn't linked to the box: link it (the desktop app's Chat tab, not Code) and start again", then stop: no folder request, no other call, no workaround. Linked later: redo step 1 first. It returns only some of the four: load the rest in the same turn, before step 2.
-2. **Access**, one request for `C:\Code\<project>-control` and `C:\Code\claude-conductor`, as written: never a memory read or past-chat search for them. Code repos come after step 5.
+1. **Tool search**, exactly `select:mcp__remote-devices__device_request_folder_access,mcp__remote-devices__device_list_dir,mcp__remote-devices__device_stage_files,mcp__remote-devices__device_commit_files`. It finds nothing: say "This chat isn't linked to the box: link it (the desktop app's Chat tab, not Code) and start again", then stop: no folder request, no other call, no workaround. Linked later: redo step 1 first. Only some of the four: load the rest in the same turn, before step 2.
+2. **Access**, one request for `C:\Code\<project>-control`, `C:\Code\claude-conductor` and the repo `C:\Code\<project>`, as written, in the same turn as step 3: never a memory read or past-chat search for them. Refused (a missing path): the first two alone.
 3. **One shell command** in the workspace writes the signal and prints its stamp, local time:
    `s=$(TZ=America/Los_Angeles date +%Y%m%d-%H%M%S); mkdir -p /mnt/user-data/outputs; printf 'by: planner\nsession: start\n' > /mnt/user-data/outputs/planner-$s.signal; echo $s`
-   (`printf` gives LF line endings; the commit takes only paths under `/mnt/user-data/outputs/`). Never read it back.
+   (`printf`: LF endings; the commit takes only `/mnt/user-data/outputs/` paths). Never read it back.
 4. **Commit** it to `signals\planner-<stamp>.signal` in the control folder.
 5. **Stage** `session.md` and this file in one call, and read both. `session.md`'s header names the signal it was written for; an older one: stage it again, once.
 
-Steps 4 and 5 go out in the same turn. Then one access request for the paths on `session.md`'s `Repos:` line, copied, never guessed (one missing fails it). Nothing else at start: no memory reads, past-chat search, listings, other docs or receipt. `session.md` opens with the project's links (`[links]`: a design doc, opened only when the work needs it), then `state.md`'s due lines and *Planner habits* (follow them, never list them). Stage `state.md` only before a request that changes it.
+Steps 4 and 5 go out in the same turn. A refused guess or an ungranted repo: request `session.md`'s `Repos:` paths, copied. Nothing else at start: no memory reads, past-chat search, listings, other docs or receipt. `session.md` opens with the project's links (`[links]`: a design doc, opened only when needed), then `state.md`'s due lines and *Planner habits* (follow them, never list them). Stage `state.md` only before a request that changes it.
 
 **Then, from the digest**: open questions (*Every session*), *Waiting on Matt*, due pending fixes, unreviewed reports, pickers waiting, rejected signals (why each was refused), conductor's reports and maintenance recommendations (*Maintenance*), a line each. Routine watches: one count line; a flag, tell or answer only if it changed something. Then wait for Matt.
 

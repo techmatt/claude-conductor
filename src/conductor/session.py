@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-from . import git, inbox, nightshift, parked
+from . import git, globs, inbox, nightshift, parked
 from .audits import canonical
 from .config import Config
 from .events import Event, EventLog
@@ -199,7 +199,8 @@ def is_generated(path: Path) -> bool:
 
 def doc_sizes(cfg: Config) -> dict[str, int]:
     """Bytes of the control `state.md` (key `state.md`) and of each repo's tracked docs
-    (`is_doc`, not `is_generated`) in its main checkout (key `<repo>:<path>`)."""
+    (`is_doc`, not `is_generated`, not matching its `doc_budget_exempt` globs: aicomplete's
+    adversary cards say "written by" instead, 86) in its main checkout (key `<repo>:<path>`)."""
     out = {}
     if (state_md := cfg.control / "state.md").is_file():
         out["state.md"] = state_md.stat().st_size
@@ -208,7 +209,10 @@ def doc_sizes(cfg: Config) -> dict[str, int]:
             paths = git.ls_files(root)
         except (OSError, git.GitError):
             continue
+        exempt = cfg.opts(repo).doc_budget_exempt
         for rel in paths:
+            if any(globs.matches(rel, g) for g in exempt):
+                continue
             if is_doc(rel) and (p := root / rel).is_file() and not is_generated(p):
                 out[f"{repo}:{rel}"] = p.stat().st_size
     return out

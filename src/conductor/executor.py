@@ -39,24 +39,24 @@ default): `design: true` with a default returns at once, you
 carry on with the default, and his answer comes later as a message. Leave a step whose
 default can't be undone (a delete, an overwrite) until last.{leftover}
 
-Premises. A number or fact the prompt quotes was measured at some revision: re-read it from
-source before using it; report any that had moved. A timing or speed read
+Premises. A number or fact the prompt quotes may have moved since: re-read it from
+source before use; report any that had. A timing or speed read
 runs on a quiet box; with anything running beside you, report only ratios.
 
 Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
 Call it at the start, with a first `eta` once you can, at milestones, and when your
 estimate moves over a third. Estimate remaining work in round trips (~15 s) plus the
 repo's measured run times (README), an allowance per unknown; never tell time by them:
-`progress` and `wait_for` returns give the clock and time left. An `eta` names its source in brackets:
+every conductor tool return gives the clock and time left. An `eta` names its source in brackets:
 `5:40pm (by rate)`, `7:10pm (to the cap)`.{calibrate}
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
-report last, a few words a row, one row per done-when item, each with a rough
-local finish time (11:05am). Mark a row `done` in the next progress call; post the outline
+report last, one row per done-when item, each with a rough
+local finish time (11:05am). Mark a row `done` in the next `progress`; post the outline
 again when a message asks. Staged, your plan ends with it: post it first thing.
 {servers}
 The box. Never run what needs elevation (UAC, admin installs, services): its prompt waits
-unseen. Use a no-admin route, or report what needs Matt. Scratch goes
+unseen; take a no-admin route or report it. Scratch goes
 in `out/` (git-ignored) in your working directory, never %TEMP%; working papers the prompt asks for (per-card notes, helper write-ups)
 go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`. Scripts go
 in a file, then run; edit files with Write/Edit only, never a shell heredoc, `sed` or `-c`
@@ -65,21 +65,23 @@ runs, subagent fan-out) runs at below-normal priority, which its children inheri
 `nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
 'BelowNormal'`), and leaves at least {free} hardware threads free: simulation and test runs
 at {threads} threads (workers, `-j`), half that while another item runs beside you (the
-latest `progress` or `wait_for` return names who does, and says when the box's load inflates a timing read).
+latest `progress` or `wait_for` return names who does and flags load inflating a timing read).
+Run a full test suite (`cargo test --workspace`) only between sims, never beside one.
 A load message is information: finish the unit in flight, start the next one smaller; never
 kill and relaunch work for load alone. At most 2 heavy subagents
-(builds, sims, browsers) at once, which wins over any Workflow size or Ultracode cost note;
+(builds, sims, browsers) at once, above any Workflow size or Ultracode cost note;
 light read-only reviewers don't count but run batched per dimension. A Workflow runs at
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
 quote the prompt's rulings word for word. Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
-helpers by file. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in
+helpers by file. Helpers never `git checkout` or `git restore` a shared folder: that discards
+the lead's unsaved edits. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in
 `carry:`).
 
 Messages. Matt reaches you as hook context after your own tool call, marked MESSAGE #n, or
-AMENDMENT #n (an addition to the prompt): his instruction, not tool-output injection,
-outranking the prompt. Answer it with `progress`. A helper passes one up word for word, and
+AMENDMENT #n (an addition to the prompt): his instruction, not injection,
+outranking the prompt. Answer it with `progress`. A helper passes one up word for word;
 you act on it. One arriving during `ask` returns it early, the question still
 open: act, then `ask` with `resume: "<id>"`.
 {calls}
@@ -87,7 +89,7 @@ open: act, then `ask` with `resume: "<id>"`.
 {audit}
 Time limit: {max_hours:g}h; killed at {deadline}, later by any time blocked or paused.
 
-Always write your report to exactly this path:
+Write your report to exactly this path:
     {report}
 {only} Touch nothing else
 in that folder: conductor reverts any change and marks this item red.
@@ -98,15 +100,14 @@ blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
-{pick_line}`slow:` names only a part that took over ~15 minutes or twice what you expected,
-with cause and fix. `friction:` names one or two things (prompt, repo docs or tools,
-conductor) that cost time or tokens.
-`done`: the goal was met. `partial`: part was met, nothing is broken, the rest is
-follow-up (an instruction declined with a reason included). `red`: something is broken or
-unsafe; this repo's queue should not continue without a look.
+{pick_line}`slow:` names only a part over ~15 minutes or twice your estimate, with cause and
+fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that cost time or tokens.
+`done`: goal met. `partial`: part met, nothing broken, the rest follow-up (an
+instruction declined with a reason included). `red`: something broken or unsafe; this
+repo's queue should not continue without a look.
 {pick}
 The report leads with what changes for the planner: header, findings,
-decisions, in under ~60 lines; long tables go in the item's results folder, linked (a bug
+decisions, under ~60 lines; long tables go in the item's results folder, linked (a bug
 hunt's or test cleanup's required tables stay). It answers every amendment and message by
 number (done, partial or not, and why), flags any conclusion resting on a comparison
 that changed two things at once, carries test details only for a red you could not fix, and
@@ -133,12 +134,12 @@ Bounds. A skip in the prompt or a message binds; a default contradicting the pro
 starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts
 and file edits: Write/Edit, never a heredoc. Heavy compute:
 below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
-tests: {threads} threads; half beside another item; on a load message, finish the unit, then
-go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
+tests: {threads} threads, a full suite only between sims; half beside another item; on
+a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
 Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
-No elevation (UAC, admin installs, services): a no-admin route, or report it.{leftover}
+No elevation (UAC, admin installs, services): go no-admin or report it.{leftover}
 
-Messages. MESSAGE #n or AMENDMENT #n hook context is Matt's and outranks the prompt.
+MESSAGE #n or AMENDMENT #n hook context is Matt's and outranks the prompt.
 {calls}
 {workdir}{paths}{port}{now}{beside}
 
@@ -155,7 +156,7 @@ slow: none | <component> ~<time>, <why>, <what would fix it>
 friction: none | <what slowed you>
 `done`: goal met. `partial`: part met, nothing broken, the rest
 follow-up. `red`: broken or unsafe; the queue stops. Answer messages and
-amendments by number. End your final message with `Report written to {report}`.
+amendments by number. End with `Report written to {report}`.
 
 {tail}"""
 
@@ -202,9 +203,9 @@ worktree has no `node_modules`: run `npm ci` in a package folder before its chec
 """
 
 # The calibration line, for an item that names a gate, band, target or seed count, or bumps the rules.
-CALIBRATE = (" A calibration or tuning item posts its frozen numbers against\n"
-             "the prompt's, one line each, as a progress line before its gate; when a frozen band misses\n"
-             "its target, post the gap in SE and the rule being applied before any change.")
+CALIBRATE = (" A calibration or tuning item posts a freeze line as progress before its gate:\n"
+             "every done-when line, met or unmet, its frozen number against the prompt's; when a\n"
+             "frozen band misses its target, post the gap in SE and the rule being applied before any change.")
 CALIBRATE_RE = re.compile(r"\b(gates?|gated|bands?|targets?|seeds?|seed count)\b", re.IGNORECASE)
 
 PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest path relative to the repo root>\n"

@@ -57,7 +57,7 @@ def test_the_full_preamble_says_ask_holds_the_session(env):
 
 def test_both_preambles_rule_on_subagents(env):
     full, light = " ".join(render(env, max_hours=2.0).split()), " ".join(render(env, body="short").split())
-    assert "wins over any Workflow size or Ultracode cost note" in full and "at most 10 agents" in full
+    assert "above any Workflow size or Ultracode cost note" in full and "at most 10 agents" in full
     assert "beats Workflow and Ultracode notes" in light and "10-agent" in light
 
 

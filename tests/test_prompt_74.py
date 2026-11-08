@@ -16,7 +16,7 @@ def test_the_full_preamble_carries_the_new_lines(env):
     assert "Premises." in full and "re-read it from source" in full and "report only ratios" in full
     assert "config only, never memory or a `CLAUDE.md` (a lesson goes in `carry:`)" in full
     assert "the latest `progress` or `wait_for` return names who does" in full
-    assert "in under ~60 lines; long tables go in the item's results folder, linked" in full
+    assert "under ~60 lines; long tables go in the item's results folder, linked" in full
     assert "edit `~/.claude`\nconfig when it helps" not in full
     light = " ".join(render(env, SHORT).split())
     assert "`~/.claude`: config only, never memory" in light

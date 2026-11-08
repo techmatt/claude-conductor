@@ -9,7 +9,8 @@ progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm (by
 
 It returns at once (`Logged; carry on.`, then the clock, `Now 11:03pm, 3h17m left to the cap.`,
 plus *Running beside you now* when that changed; every `wait_for` return carries the same tail,
-and either tool says a change once). The clock reads the run record's `deadline` (blocked and
+and either tool says a change once; since 86 `wait` and `ask` returns end with the clock too,
+an answer's on its own line). The clock reads the run record's `deadline` (blocked and
 paused time already added), `past the cap` after it, `(paused: the cap moves on)` while
 paused, and only `Now <time>.` for a watch (84: aicomplete 130 told time by counting turns,
 ran ~1.5h ahead and stopped with 2h39m left; fractals 017 ~45 min, 2h17m left; calls

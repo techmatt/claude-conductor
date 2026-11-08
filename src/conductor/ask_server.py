@@ -385,7 +385,7 @@ class Server:
                 return None, False
             q = questions.load(q.path) or q
             if q.result:
-                return self._text(q), q.result.get("outcome") not in ("answered", "default")
+                return f"{self._text(q)}\n{self._clock().strip()}", q.result.get("outcome") not in ("answered", "default")
             answer = questions.read_answer(q)
             if answer is not None:
                 questions.resolve(q, "answered", answer, "server", **away)
@@ -408,7 +408,7 @@ class Server:
                 if q.deadline else "it blocks until answered")
         return (f"{q.id} is still open: nobody has answered it. A message from conductor is waiting and "
                 f"reaches you as this call returns. Act on it (it is not the answer), then call `ask` with "
-                f"`resume: \"{q.id}\"` to wait for the answer again; {when}.")
+                f"`resume: \"{q.id}\"` to wait for the answer again; {when}.{self._clock()}")
 
     def wait(self, args: dict, cancel: threading.Event, token=None) -> tuple[str | None, bool]:
         """Return once a message waits in the item's mailbox (the PostToolUse hook right
@@ -420,9 +420,11 @@ class Server:
         end = started + min(minutes, WAIT_MAX_MINUTES) * 60
         while not cancel.is_set():
             if talk.pending(self.control, self.item):
-                return "A message from conductor is waiting: it reaches you as this call returns. Do what it says.", False
+                return ("A message from conductor is waiting: it reaches you as this call returns. Do what it says."
+                        + self._clock()), False
             if time.time() >= end:
-                return "No message yet. If conductor told you to wait, call `wait` again; do nothing else.", False
+                return ("No message yet. If conductor told you to wait, call `wait` again; do nothing else."
+                        + self._clock()), False
             if token is not None and time.time() - last_progress >= PROGRESS_SECONDS:
                 last_progress = time.time()
                 self.send({"jsonrpc": "2.0", "method": "notifications/progress", "params": {

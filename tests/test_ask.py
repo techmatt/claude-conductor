@@ -160,7 +160,7 @@ def test_ask_server_sends_progress_while_waiting(env, monkeypatch):
     msgs = [json.loads(ln) for ln in out.getvalue().splitlines()]
     progress = [m for m in msgs if m.get("method") == "notifications/progress"]
     assert len(progress) >= 2 and all(m["params"]["progressToken"] == "tok" for m in progress)
-    assert msgs[-1]["result"]["content"][0]["text"].endswith("go")
+    assert msgs[-1]["result"]["content"][0]["text"].split("\nNow ")[0].endswith("go")   # the clock follows (86)
 
 
 @pytest.mark.slow

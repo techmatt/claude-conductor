@@ -44,8 +44,8 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   135-138's `npm run check`, `cards:fit` and e2e silently went unrun), when a run target's `cwd`
   is in the repo or a `package.json` at its root or one folder down (aicomplete's `web/`;
   74) has a `dev…` or `preview…` script (`executor.has_servers`); the *calibration* line
-  (frozen numbers posted against the prompt's before the gate, a missed band's SE gap
-  first) when the item is `rules: true` or names a gate, band, target or seed count
+  (a freeze line posted before the gate, every done-when line met or unmet against the
+  prompt's number since 86, a missed band's SE gap first) when the item is `rules: true` or names a gate, band, target or seed count
   (`executor.wants_calibrate`, 74).
 
 Template texts follow the preamble unchanged; a template item but a watch always gets the
@@ -138,6 +138,13 @@ only in the environment (74). Stages and merge executors get none.
   (~15 s, measured ~16 s; it said 20–40 s), never the clock: `progress` and `wait_for`
   returns carry it and the time left to the cap (`progress.md`). Words held at 1,203, paid
   for in the progress, outline and premises lines.
+- **Aicomplete's notes of 11-07 to 11-08** (86): every conductor tool return gives the clock
+  (143 froze early, believing 1 h of 2h40m was left); a full test suite (`cargo test
+  --workspace`) runs only between sims, never beside one (142 saturated 12 threads; both
+  preambles); helpers never `git checkout` or `git restore` a shared folder (144's discarded
+  the lead's doc edits; full only: an ultracode item never draws light). Words held: full
+  1,203, light rendered at 385, paid for in the premises, elevation, report-header, status,
+  outline and messages lines.
 - **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
   (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`).
 - **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the
