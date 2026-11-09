@@ -161,3 +161,33 @@ def test_a_new_fingerprint_for_a_key_drops_old_gates(tmp_path):
     gated(b, "w")
     job(b, fp="fp2")
     assert b.poll("w")["task"] == "gate"
+
+
+def test_each_kind_is_gated_against_its_own_reference(tmp_path):
+    b, _ = board(tmp_path)
+    jid = job(b, fp="native-fp")
+    b.set_bundle("k1", "ready", wasm="wasm-fp")
+    b.hello("tab", "browser")
+    b.hello("lr", "local-remote")
+    assert b.poll("tab")["task"] == "gate" and b.poll("lr")["task"] == "gate"
+    assert not b.gate("tab", "k1", "native-fp")        # a browser reproducing the native answer is wrong
+    assert b.gate("lr", "k1", "native-fp")
+    note = b.state(jid)["gate_failures"][0]
+    assert (note["reference"], note["expected"]) == ("wasm", "wasm-fp")
+    b.hello("tab2", "browser")
+    assert b.poll("tab2")["task"] == "gate" and b.gate("tab2", "k1", "wasm-fp")
+    assert b.poll("tab2")["task"] == "shard"
+    assert b.state(jid)["fingerprints"] == {"native": "native-fp", "wasm": "wasm-fp"}
+    job(b, fp="native-fp2")                            # a new native answer keeps the bundle's
+    assert b.state(jid)["fingerprints"]["wasm"] == "wasm-fp"
+    b.set_bundle("k1", "ready", wasm="wasm-fp3")       # a new wasm answer re-gates browsers only
+    assert b.poll("tab2")["task"] == "gate"
+
+
+def test_without_a_wasm_reference_a_browser_meets_the_native_one(tmp_path):
+    b, _ = board(tmp_path)
+    jid = job(b)
+    b.set_bundle("k1", "ready")
+    b.hello("tab", "browser")
+    assert b.poll("tab")["task"] == "gate" and b.gate("tab", "k1", "fp")
+    assert b.state(jid)["fingerprints"] == {"native": "fp", "wasm": None}

@@ -2,11 +2,12 @@
 It leaves at `<out>` exactly what the project's native command leaves for that seed
 range (bytes, never re-encoded); where the shards ran is its business, never the executor's.
 
-Placement: no broker or no worker heard from recently, or a job estimated under
-`local_below_seconds`, runs the native command at once over the whole range. Otherwise
-the range is split into shards; the main box claims them too and, once none is left
-unleased, re-runs one still out on a worker (the first copy back wins). A broker that
-dies part-way costs only speed: the shards not yet in run here."""
+Placement: no broker, or a job estimated under `local_below_seconds`, runs the native
+command at once over the whole range. Otherwise the range is split into shards whether or
+not a worker is connected, so one that joins mid-job takes those still pending; the main
+box claims shards too (`main_slots` at once) and, once none is left unleased, re-runs one
+still out on a worker (the first copy back wins). A broker that dies part-way costs only
+speed: the shards not yet in run here."""
 
 from __future__ import annotations
 
@@ -160,14 +161,48 @@ def build_bundle(r: settings.Remote, key: str, cwd: Path) -> int:
         lock.unlink(missing_ok=True)
 
 
+def wasm_reference(r: settings.Remote, key: str) -> tuple[str, str]:
+    """The bundle's own `fingerprint()`, run on the main box in Node: what a browser must
+    reproduce. Cached beside the bundle. Returns (value, "") or ("", why not)."""
+    folder = r.state / "bundles" / key
+    cached = folder / "wasm.fingerprint"
+    try:
+        return cached.read_text(encoding="utf-8").strip(), ""
+    except OSError:
+        pass
+    node = shutil.which("node")
+    if node is None:
+        return "", "node is not on PATH"
+    try:
+        out = subprocess.run([node, str(Path(__file__).with_name("wasm_fingerprint.mjs")), str(folder), r.bundle_js],
+                             cwd=str(folder), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=120, **NO_WINDOW)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return "", f"node: {exc}"
+    value = out.stdout.strip()
+    if out.returncode != 0 or not value:
+        lines = out.stderr.strip().splitlines()
+        err = next((x for x in lines if "Error" in x and not x.lstrip().startswith("at ")), lines[-1] if lines else "")
+        return "", f"node exited {out.returncode}: {err.strip()[:300]}"
+    tmp = cached.with_name(f"wasm.fingerprint.{os.getpid()}.tmp")
+    tmp.write_text(value + "\n", encoding="utf-8", newline="\n")
+    os.replace(tmp, cached)
+    return value, ""
+
+
 def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended: threading.Event) -> None:
-    """Tell the broker when this commit's bundle is ready, starting its build if none is
-    running. Returns when ready, failed, or the job ends."""
+    """Tell the broker when this commit's bundle is ready, with its wasm reference. A bundle
+    not yet built is built only once a browser is connected, so a job no browser joins never
+    shares the main box with a build. Returns when ready, failed, or the job ends."""
     from .. import procs
     bundles = r.state / "bundles"
     final, failed = bundles / key / ".ok", bundles / f"{key}.failed"
     try:
         if not final.exists():
+            while not ended.is_set() and not broker.call("status", {"key": key}).get("browsers"):
+                ended.wait(BEAT_SECONDS)
+            if ended.is_set():
+                return
             failed.unlink(missing_ok=True)
             broker.call("bundle", {"key": key, "state": "building"})
             # Detached: out of the executor's job object, so its end never kills a build.
@@ -175,7 +210,10 @@ def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended
                                  cwd, bundles / f"{key}.spawn.log")
         while not ended.is_set():
             if final.exists():
-                broker.call("bundle", {"key": key, "state": "ready"})
+                wasm, why = wasm_reference(r, key)
+                if why:
+                    say(f"no wasm reference ({why}); browsers are gated against the native fingerprint")
+                broker.call("bundle", {"key": key, "state": "ready", "wasm": wasm})
                 return
             if failed.exists():
                 broker.call("bundle", {"key": key, "state": "failed", "error": failed.read_text(encoding="utf-8")})
@@ -329,8 +367,13 @@ def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: P
     shards = [s if s.get("worker") else {"first": a, "count": k, "worker": "main", "kind": "main", "engine": "native"}
               for (a, k), s in zip(ranges, state.get("shards") or [{}] * len(ranges))]
     engines = sorted({s["engine"] for s in shards})
+    fps = state.get("fingerprints") or {}
+    differ = bool(fps.get("wasm")) and fps.get("wasm") != fps.get("native")
     rec = {"key": key, "args": args, "out": str(out), "seconds": round(wall, 2), "engines": engines,
-           "mixed": len(engines) > 1, "shards": shards, "gate_failures": state.get("gate_failures", [])}
+           "mixed": len(engines) > 1, "shards": shards, "gate_failures": state.get("gate_failures", []),
+           "references": {"native": fps.get("native"), "wasm": fps.get("wasm"), "differ": differ}}
+    if rec["mixed"] and differ:
+        rec["mixed_note"] = "native and wasm references differ: this output need not equal a local run's"
     (folder / "job.json").write_text(json.dumps(rec, indent=1) + "\n", encoding="utf-8", newline="\n")
     by: dict[tuple[str, str], int] = {}
     for s in shards:
@@ -338,7 +381,9 @@ def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: P
         by[(name, s["engine"])] = by.get((name, s["engine"]), 0) + 1
     parts = ", ".join(f"{name} {n} ({eng})" for (name, eng), n in sorted(by.items()))
     say(f"{sum(s['count'] for s in shards)} seeds in {len(shards)} shards, {wall:.1f}s: {parts}"
-        + ("; mixed native and wasm" if rec["mixed"] else "") + f"; record {folder / 'job.json'}")
+        + ("; mixed native and wasm" if rec["mixed"] else "")
+        + (", whose references differ (not what a local run gives)" if rec["mixed"] and differ else "")
+        + f"; record {folder / 'job.json'}")
     for g in rec["gate_failures"]:
         say(f"{g['kind']} worker {g['worker']} failed the fingerprint gate (expected {g['expected']}, got {g['got']}); "
             "it was given no shards")
@@ -382,11 +427,10 @@ def main(argv: list[str] | None = None) -> int:
     if broker is None:
         return run_local(r, cwd, first, count, out, args, "no broker")
     try:
-        live = broker.call("status", {"key": key}, timeout=STATUS_TIMEOUT)["live"]
+        broker.call("status", {"key": key}, timeout=STATUS_TIMEOUT)["live"]
     except (BrokerDown, KeyError) as exc:
         return run_local(r, cwd, first, count, out, args, f"broker unreachable ({exc})")
-    if not live:
-        return run_local(r, cwd, first, count, out, args, "no worker connected")
+    # Sharded even with no worker connected: one that joins mid-job takes the shards still pending.
     return farm(r, cwd, key, broker, first, count, out, args)
 
 

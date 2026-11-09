@@ -67,9 +67,14 @@ class Job:
 
 @dataclass
 class Key:
-    fingerprint: str
+    fingerprint: str             # the native reference: the `fingerprint` command on the main box
     bundle: str = "none"         # none | building | ready | failed
     error: str = ""
+    wasm: str = ""               # the wasm reference: the bundle's own fingerprint() on the main box
+
+    def reference(self, engine: str) -> str:
+        """What a worker of this engine must reproduce (without a wasm reference, the native one)."""
+        return self.wasm if engine == "wasm" and self.wasm else self.fingerprint
 
 
 class Board:
@@ -159,11 +164,13 @@ class Board:
             w, k = self.workers.get(wid), self.keys.get(key)
             if w is None or k is None:
                 return False
-            ok = str(value).strip() == k.fingerprint
+            expected = k.reference(w.engine)
+            ok = str(value).strip() == expected
             w.gates[key] = ("pass" if ok else "fail", self.clock())
             if not ok:
                 note = {"worker": wid, "kind": w.kind, "label": w.label, "key": key,
-                        "expected": k.fingerprint, "got": str(value)[:200]}
+                        "reference": "wasm" if w.engine == "wasm" and k.wasm else "native",
+                        "expected": expected, "got": str(value)[:200]}
                 for job in self.jobs.values():
                     if job.key == key:
                         job.gate_failures.append(note)
@@ -208,7 +215,7 @@ class Board:
         with self.lock:
             k = self.keys.setdefault(key, Key(fingerprint))
             if k.fingerprint != fingerprint:   # the same commit, another answer: trust neither old gate
-                self.keys[key] = Key(fingerprint, k.bundle, k.error)
+                self.keys[key] = Key(fingerprint, k.bundle, k.error, k.wasm)
                 for w in self.workers.values():
                     w.gates.pop(key, None)
             self._n += 1
@@ -222,10 +229,19 @@ class Board:
                                  native, now, folder, seen=now)
             return jid
 
-    def set_bundle(self, key: str, state: str, error: str = "") -> None:
+    def set_bundle(self, key: str, state: str, error: str = "", wasm: str = "") -> None:
+        """A bundle's state; once ready, with its own fingerprint (the wasm reference). A
+        changed wasm reference unsets every browser's gate for the key."""
         with self.lock:
-            if key in self.keys:
-                self.keys[key].bundle, self.keys[key].error = state, error[:300]
+            k = self.keys.get(key)
+            if k is None:
+                return
+            k.bundle, k.error = state, error[:300]
+            if state == "ready" and wasm.strip() != k.wasm:
+                k.wasm = wasm.strip()[:200]
+                for w in self.workers.values():
+                    if w.engine == "wasm":
+                        w.gates.pop(key, None)
 
     def claim(self, job_id: str, rerun: bool = True) -> dict:
         """The main box's next shard: an unleased one, else (with `rerun`) the oldest still
@@ -257,7 +273,8 @@ class Board:
             job.seen = self.clock()
             return {"complete": job.complete, "done": [s.id for s in job.shards if s.done],
                     "shards": [{"first": s.first, "count": s.count, **(s.done or {})} for s in job.shards],
-                    "gate_failures": list(job.gate_failures)}
+                    "gate_failures": list(job.gate_failures),
+                    "fingerprints": {"native": self.keys[job.key].fingerprint, "wasm": self.keys[job.key].wasm or None}}
 
     def close(self, job_id: str) -> None:
         with self.lock:

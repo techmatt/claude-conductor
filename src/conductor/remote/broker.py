@@ -156,7 +156,7 @@ class Handler(BaseHTTPRequestHandler):
             return {"job": board.add_job(str(b["key"]), str(b["fingerprint"]), [str(x) for x in b.get("args", [])],
                                          ranges, str(cwd) if cwd else None)}
         if op == "bundle":
-            board.set_bundle(str(b["key"]), str(b["state"]), str(b.get("error", "")))
+            board.set_bundle(str(b["key"]), str(b["state"]), str(b.get("error", "")), str(b.get("wasm", "")))
             return {"ok": True}
         if op == "claim":
             return board.claim(str(b["job"]), bool(b.get("rerun", True)))
@@ -166,7 +166,8 @@ class Handler(BaseHTTPRequestHandler):
             board.close(str(b["job"]))
             return {"ok": True}
         if op == "status":
-            return {"live": len(board.live(b.get("key"))), **board.summary()}
+            live = board.live(b.get("key"))
+            return {"live": len(live), "browsers": sum(w.kind == "browser" for w in live), **board.summary()}
         raise ValueError(f"unknown op {op}")
 
 

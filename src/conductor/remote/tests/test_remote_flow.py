@@ -99,14 +99,22 @@ def test_an_argument_with_a_space_stays_local(farm, capsys):
     assert "holds a space" in capsys.readouterr().err
 
 
-def test_no_worker_runs_locally_at_once(farm, capsys):
-    farm.setup()
-    t = time.time()
+def test_with_no_worker_the_main_box_runs_every_shard(farm, capsys):
+    farm.setup(main_slots="3")
     code, out = farm.run(0, 50)
-    assert time.time() - t < 1.0
     assert (code, out) == (0, farm.local(0, 50))
-    assert "running locally (no worker connected)" in capsys.readouterr().err
-    assert not (farm.r.state / "jobs").exists()
+    rec = farm.record()
+    assert len(rec["shards"]) == 5 and {s["worker"] for s in rec["shards"]} == {"main"}
+    assert rec["references"] == {"native": "fp-1234", "wasm": None, "differ": False}
+    assert "main box 5 (native)" in capsys.readouterr().err
+
+
+def test_a_worker_joining_mid_job_takes_pending_shards(farm):
+    farm.setup()
+    threading.Timer(0.5, farm.worker, args=("late",), kwargs={"cores": 2}).start()
+    code, out = farm.run(0, 120, "--sleep", "0.01")    # 12 shards of 0.1 s; the main box alone: ~1.2 s
+    assert (code, out) == (0, farm.local(0, 120))
+    assert "late" in {s["worker"] for s in farm.record()["shards"]}
 
 
 def test_a_small_job_and_a_dead_broker_stay_local(farm, capsys):
@@ -227,3 +235,33 @@ def test_a_build_runs_once_per_key_and_is_cached(farm, tmp_path):
     (tmp_path / "code" / "README.md").write_text("changed\n")
     assert client.repo_key(tmp_path / "code")[1].startswith(key + "-")      # a dirty tree is its own key
     git(tmp_path / "code", "checkout", "README.md")
+
+
+def test_no_build_starts_while_no_browser_is_connected(farm, tmp_path):
+    import sys
+    count = tmp_path / "builds.txt"
+    farm.setup(build=f'["{sys.executable.replace(chr(92), "/")}", "-c", '
+                     f'"open(r\'{count.as_posix()}\', \'a\').write(\'built\')", "{{bundle}}"]')
+    farm.worker("lr1")
+    assert farm.run(0, 60, "--sleep", "0.01")[0] == 0
+    time.sleep(0.5)
+    assert not count.exists() and not (farm.r.state / "bundles").exists()
+
+
+@pytest.mark.skipif(not __import__("shutil").which("node"), reason="node is not installed")
+def test_the_wasm_reference_is_the_bundles_own_fingerprint_run_in_node(farm):
+    farm.setup()
+    bundle = farm.r.state / "bundles" / "k1"
+    bundle.mkdir(parents=True)
+    (bundle / "x_bg.wasm").write_bytes(b"\0asm\1\0\0\0")
+    (bundle / "bundle.js").write_text(
+        "let got;\nexport default async function init(o) { got = o.module_or_path.length; }\n"
+        "export function fingerprint() { return `wasm-${got}`; }\n", encoding="utf-8")
+    assert client.wasm_reference(farm.r, "k1") == ("wasm-8", "")
+    (bundle / "bundle.js").write_text("export default 1", encoding="utf-8")
+    assert client.wasm_reference(farm.r, "k1") == ("wasm-8", "")          # cached beside the bundle
+    other = farm.r.state / "bundles" / "k2"
+    other.mkdir()
+    (other / "bundle.js").write_text("export default async () => {};\nthrow new Error('boom');\n", encoding="utf-8")
+    value, why = client.wasm_reference(farm.r, "k2")
+    assert value == "" and "boom" in why
