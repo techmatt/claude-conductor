@@ -250,7 +250,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
     ranges = split(first, count, r.shard_seeds)
     try:
         jid = broker.call("job", {"key": key, "fingerprint": expected, "args": args, "ranges": ranges,
-                                  "cwd": str(cwd)})["job"]
+                                  "cwd": str(cwd), "item": os.environ.get(settings.ITEM_VAR, "")})["job"]
     except (BrokerDown, KeyError) as exc:
         return run_local(r, cwd, first, count, out, args, f"broker refused the job: {exc}")
     folder = r.state / "jobs" / jid

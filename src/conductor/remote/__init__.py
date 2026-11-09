@@ -67,17 +67,17 @@ def _start_broker(control: Path, warn) -> None:
                          r.state / "broker.log")
 
 
-def item_launch(control: Path, prompt: Path) -> dict[str, str]:
+def item_launch(control: Path, prompt: Path, item: str = "") -> dict[str, str]:
     """For a `remote: true` item: its extra environment (the `farm-seeds` folder first on
-    PATH), with the paragraph added to its prompt. Nothing at all without `[remote]`, and
-    nothing on any error: the item then runs as an ordinary one."""
+    PATH, and its id for the worker page), with the paragraph added to its prompt. Nothing
+    at all without `[remote]`, and nothing on any error: the item then runs as an ordinary one."""
     try:
-        return _item_launch(control, prompt)
+        return _item_launch(control, prompt, item)
     except Exception:                            # noqa: BLE001 - never in the way of a launch
         return {}
 
 
-def _item_launch(control: Path, prompt: Path) -> dict[str, str]:
+def _item_launch(control: Path, prompt: Path, item: str) -> dict[str, str]:
     from . import settings
     try:
         r = settings.load(control)
@@ -97,7 +97,8 @@ def _item_launch(control: Path, prompt: Path) -> dict[str, str]:
     os.chmod(bin_dir / settings.COMMAND, 0o755)
     env = procs.child_env()
     path_key = next((k for k in env if k.upper() == "PATH"), "PATH")
-    extra = {path_key: os.pathsep.join([str(bin_dir), env.get(path_key, "")]), settings.CONTROL_VAR: str(r.control)}
+    extra = {path_key: os.pathsep.join([str(bin_dir), env.get(path_key, "")]), settings.CONTROL_VAR: str(r.control),
+             settings.ITEM_VAR: item}
     with open(prompt, "a", encoding="utf-8", newline="\n") as f:
         f.write(PARAGRAPH.format(native=f"`{' '.join(r.native)}`", folder=r.dir or "."))
     return extra

@@ -184,6 +184,33 @@ def test_each_kind_is_gated_against_its_own_reference(tmp_path):
     assert b.poll("tab2")["task"] == "gate"
 
 
+def test_the_page_view_counts_the_job_and_compares_rates(tmp_path):
+    b, clock = board(tmp_path)
+    tab = "tab"
+    assert b.view(tab)["job"] is None
+    jid = b.add_job("k1", "fp", [], [(i * 10, 10) for i in range(4)], ".", item="code/160_sim")
+    b.set_bundle("k1", "ready", wasm="wasm-fp")
+    b.hello(tab, "browser", cores=3, label="Edge on Win32")
+    b.hello("lr", "local-remote", cores=2)
+    assert b.poll(tab)["task"] == "gate" and b.gate(tab, "k1", "wasm-fp")
+    t = b.poll(tab)
+    clock.t += 10
+    assert b.result(tab, jid, t["shard"], True, b"x\n", ms=600.0)          # 60 ms a seed
+    c = b.claim(jid)
+    assert b.result("main", jid, c["shard"], True, b"y\n", ms=500.0)       # 50 ms a seed
+    b.poll(tab)                                                           # one shard out on the tab
+    b.hello("lr", "local-remote", cores=2)                               # still heard from
+    v = b.view(tab)
+    j = v["job"]
+    assert (j["item"], j["shards"], j["done"], j["mine"], j["out"], j["pending"]) == ("code/160_sim", 4, 2, 1, 1, 1)
+    assert (j["seeds"], j["seeds_done"], j["eta"]) == (40, 20, 10.0)
+    assert v["gate"] == {"key": "k1", "state": "pass", "reference": "wasm", "value": "wasm-fp"}
+    assert v["main"]["ms_seed"] == 50.0
+    assert [(w["id"], w["cores"]) for w in v["workers"]] == [("lr", 2)]  # the others, not the asker
+    b.load = {"cpu": 40, "top": [], "text": "CPU 40%", "high": False}
+    assert b.view(tab)["load"]["cpu"] == 40
+
+
 def test_without_a_wasm_reference_a_browser_meets_the_native_one(tmp_path):
     b, _ = board(tmp_path)
     jid = job(b)

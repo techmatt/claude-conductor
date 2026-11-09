@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 import shlex
 import tomllib
@@ -15,11 +16,14 @@ CONFIG_NAME = "conductor.toml"
 STATE = (".conductor", "remote")        # everything this module keeps, under the control folder
 COMMAND = "farm-seeds"                  # the one command a `remote: true` item gets on its PATH
 CONTROL_VAR = "CONDUCTOR_REMOTE_CONTROL"
+ITEM_VAR = "CONDUCTOR_REMOTE_ITEM"      # the item's id, for the worker page
+ACCENT = "#7c9cff"                      # the worker page's accent colour unless `accent` sets one
+ACCENT_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 NOW_LINE = (".conductor", "now", "remote.line")   # the inbox's *Now* line while a worker is connected
 
 KEYS = {"dir","native", "native_build", "build", "bundle_js", "fingerprint", "merge", "port", "bind",
         "token", "shard_seeds", "seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds",
-        "main_slots"}
+        "main_slots", "accent"}
 
 
 class RemoteError(ValueError):
@@ -45,6 +49,8 @@ class Remote:
     lease_seconds: float = 60.0            # a shard not back in this long is leased again
     fresh_seconds: float = 10.0            # a worker not heard from in this long is gone
     main_slots: int = 1                    # shards the main box runs at once
+    accent: str = ACCENT                   # the worker page's accent colour (#rgb or #rrggbb)
+    project: str = ""                      # conductor.toml's `project` (else the control folder's name)
 
     @property
     def state(self) -> Path:
@@ -82,21 +88,25 @@ def _argv(where: str, value, required: bool) -> list[str]:
     raise RemoteError(f"{CONFIG_NAME}: remote.{where} must be a command (a list of strings)")
 
 
+def _toml(control: Path) -> dict:
+    try:
+        return tomllib.loads((Path(control) / CONFIG_NAME).read_text(encoding="utf-8-sig"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
 def raw_section(control: Path) -> dict | None:
     """The `[remote]` table, or None when absent (or the file unreadable: never in the daemon's way)."""
-    try:
-        data = tomllib.loads((Path(control) / CONFIG_NAME).read_text(encoding="utf-8-sig"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return None
-    table = data.get("remote")
+    table = _toml(control).get("remote")
     return table if isinstance(table, dict) else None
 
 
 def load(control: Path) -> Remote | None:
     """The project's remote settings, or None when it has no `[remote]` section."""
     control = Path(control).resolve()
-    table = raw_section(control)
-    if table is None:
+    data = _toml(control)
+    table = data.get("remote")
+    if not isinstance(table, dict):
         return None
     if unknown := set(table) - KEYS:
         raise RemoteError(f"{CONFIG_NAME}: remote: unknown keys {sorted(unknown)}")
@@ -104,13 +114,17 @@ def load(control: Path) -> Remote | None:
                fingerprint=_argv("fingerprint", table.get("fingerprint"), True),
                build=_argv("build", table.get("build"), False),
                native_build=_argv("native_build", table.get("native_build"), False))
-    for key in ("dir", "merge", "bind", "token", "bundle_js"):
+    project = data.get("project")
+    r.project = project if isinstance(project, str) and project else control.name.removesuffix("-control")
+    for key in ("dir", "merge", "bind", "token", "bundle_js", "accent"):
         if key in table:
             if not isinstance(table[key], str):
                 raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a string")
             setattr(r, key, table[key])
     if Path(r.dir).is_absolute() or ".." in Path(r.dir).parts:
         raise RemoteError(f"{CONFIG_NAME}: remote.dir must be a folder inside the repo")
+    if not ACCENT_RE.match(r.accent):
+        raise RemoteError(f"{CONFIG_NAME}: remote.accent must be a colour like \"#7c9cff\"")
     if r.merge != "concat":
         raise RemoteError(f"{CONFIG_NAME}: remote.merge: only \"concat\" (by seed) is supported")
     for key in ("port", "shard_seeds", "main_slots"):

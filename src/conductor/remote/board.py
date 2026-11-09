@@ -59,6 +59,8 @@ class Job:
     folder: Path
     seen: float = 0.0            # the main box's last call: a job it stopped calling is abandoned
     gate_failures: list[dict] = field(default_factory=list)
+    item: str = ""               # the item that ran `farm-seeds`, for the worker page
+    rates: dict[str, float] = field(default_factory=dict)   # worker id -> its ms a seed in this job (moving average)
 
     @property
     def complete(self) -> bool:
@@ -89,6 +91,7 @@ class Board:
         self.workers: dict[str, Worker] = {}
         self.jobs: dict[str, Job] = {}
         self.keys: dict[str, Key] = {}
+        self.load: dict | None = None    # the main box's load ({cpu, top, text}), set by the broker's loop
         self._n = 0
 
     # ------------------------------------------------------------ workers
@@ -193,9 +196,12 @@ class Board:
             s.leases.pop(wid, None)
             if log:
                 self._append(job.folder / "logs" / f"{wid}.log", log[-LOG_CHARS:], cap=LOG_FILE_CAP)
+            ms = ms if isinstance(ms, (int, float)) and math.isfinite(ms) and ms >= 0 else 0.0
+            if ok and ms > 0:                      # per job: another job's args may cost more a seed
+                per, old = ms / s.count, job.rates.get(wid)
+                job.rates[wid] = per if old is None else 0.7 * old + 0.3 * per
             if s.done or not ok:
                 return False
-            ms = ms if isinstance(ms, (int, float)) and math.isfinite(ms) and ms >= 0 else 0.0
             done = {"worker": wid, "kind": w.kind, "engine": w.engine, "label": w.label, "ms": round(ms)}
             path = job.folder / "shards" / f"{s.first:012d}.out"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -209,7 +215,7 @@ class Board:
 
     # ------------------------------------------------------------ the main box
     def add_job(self, key: str, fingerprint: str, args: list[str], ranges: list[tuple[int, int]],
-                cwd: str | None) -> str:
+                cwd: str | None, item: str = "") -> str:
         if not ID_RE.match(key) or not ranges or any(a < 0 or n < 1 for a, n in ranges):
             raise ValueError("bad key or ranges")
         with self.lock:
@@ -226,7 +232,7 @@ class Board:
             self.workers.setdefault("main", Worker("main", "main", label="main box", first_seen=now))
             native = {"cwd": cwd, "argv": self.native_argv} if cwd and self.native_argv else None
             self.jobs[jid] = Job(jid, key, list(args), [Shard(i, a, n) for i, (a, n) in enumerate(ranges)],
-                                 native, now, folder, seen=now)
+                                 native, now, folder, seen=now, item=str(item)[:80])
             return jid
 
     def set_bundle(self, key: str, state: str, error: str = "", wasm: str = "") -> None:
@@ -288,6 +294,45 @@ class Board:
             return {"workers": [{"id": w.id, "kind": w.kind, "cores": w.cores, "label": w.label, "shards": w.shards,
                                  "gates": {k: v[0] for k, v in w.gates.items()}} for w in live],
                     "jobs": len([j for j in self.jobs.values() if not j.complete])}
+
+    def view(self, wid: str) -> dict:
+        """What the worker page shows beside its own measurements, sent with each hello (no
+        polling of its own): the current job as counts, this worker's gate, the other
+        workers, the main box's native rate and load."""
+        with self.lock:
+            now = self.clock()
+            me = self.workers.get(wid)
+            jobs = self._active(now)
+            job = None
+            if jobs:
+                j = jobs[0]
+                done = [s for s in j.shards if s.done]
+                out = [s for s in j.shards if not s.done and self._leased(s, now)]
+                seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in done)
+                elapsed = max(0.001, now - j.created)
+                eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None
+                job = {"id": j.id, "item": j.item, "key": j.key, "shards": len(j.shards), "done": len(done),
+                       "mine": sum(1 for s in done if s.done["worker"] == wid), "out": len(out),
+                       "pending": len(j.shards) - len(done) - len(out), "seeds": seeds, "seeds_done": seeds_done,
+                       "elapsed": round(elapsed, 1), "eta": None if eta is None else round(eta, 1),
+                       "jobs": len(jobs)}
+            gate = None
+            if me and me.gates:
+                key = job["key"] if job and job["key"] in me.gates else max(me.gates, key=lambda k: me.gates[k][1])
+                k = self.keys.get(key)
+                wasm_ref = me.engine == "wasm" and bool(k and k.wasm)
+                gate = {"key": key, "state": me.gates[key][0], "reference": "wasm" if wasm_ref else "native",
+                        "value": (k.reference(me.engine) if k else "")[:16]}
+            bundle = None
+            if job and (k := self.keys.get(job["key"])):
+                bundle = {"state": k.bundle, "error": k.error}
+            rates = jobs[0].rates if jobs else {}
+            others = [{"id": w.id, "kind": w.kind, "cores": w.cores, "label": w.label, "shards": w.shards,
+                       "ms_seed": round(rates[w.id], 1) if w.id in rates else None}
+                      for w in self.workers.values() if w.kind != "main" and w.id != wid and self._fresh(w, now)]
+            return {"job": job, "gate": gate, "bundle": bundle, "workers": others,
+                    "main": {"ms_seed": round(rates["main"], 1) if "main" in rates else None},
+                    "load": self.load}
 
     def now_line(self) -> str | None:
         """The inbox's *Now* line, or None while no worker is connected."""

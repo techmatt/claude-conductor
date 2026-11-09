@@ -5,63 +5,169 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Conductor worker</title>
 <style>
-  :root { --bg: #fafaf8; --fg: #1d1d1b; --muted: #6b6b66; --line: #deded8; --ok: #2f7d4f; --bad: #b3261e; --accent: #3a5ba0; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #161615; --fg: #ececea; --muted: #9a9a94; --line: #34342f; --ok: #6cc08b; --bad: #f2867e; --accent: #8fa8e0; }
+  /* Dark by default; light only when the system asks for it. One accent, set per project ([remote] accent). */
+  :root { --bg: #0f1115; --panel: #161920; --panel2: #1c2029; --fg: #e6e8ee; --muted: #8b91a1; --line: #262b36;
+          --ok: #5cc88a; --warn: #e6b450; --bad: #f07178; --accent: #7c9cff; color-scheme: dark; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f5f6f8; --panel: #ffffff; --panel2: #f0f2f5; --fg: #1b1e24; --muted: #69707e; --line: #e2e5ea;
+            --ok: #23854f; --warn: #a86f00; --bad: #c62f37; color-scheme: light; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
-         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 760px; margin: 0 auto; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .muted { color: var(--muted); }
-  .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
-  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-width: 120px; }
-  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
-  input[type=range] { width: 220px; accent-color: var(--accent); }
-  button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line);
-           background: transparent; color: var(--fg); cursor: pointer; }
-  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
-  th { font-weight: 600; color: var(--muted); font-size: 13px; }
-  .ok { color: var(--ok); } .bad { color: var(--bad); }
-  #slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 8px 0 20px; }
-  #slots div { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; overflow: hidden;
-               white-space: nowrap; text-overflow: ellipsis; }
-  .scroll { overflow-x: auto; }
+  body { margin: 0; padding: 18px 16px 40px; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; display: grid; gap: 14px; }
+  .num, .mono { font-variant-numeric: tabular-nums; }
+  .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); } .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  h2 { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  /* header strip */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+  .where { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; min-width: 0; }
+  .where span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .where .sep { color: var(--muted); font-weight: 400; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .dot.lost { background: var(--warn); }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--line); background: var(--panel2); border-radius: 999px; padding: 3px 11px; font-size: 12.5px;
+          white-space: nowrap; }
+
+  /* core grid */
+  .ctl { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  input[type=range] { width: 160px; accent-color: var(--accent); }
+  button, .toggle { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--line);
+                    background: var(--panel2); color: var(--fg); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; }
+  .toggle input { accent-color: var(--accent); margin: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tile { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+  .tile .t1 { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .tile .t2 { font-weight: 600; margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .t3 { font-size: 12px; color: var(--muted); }
+  .tile.run { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); animation: pulse 2.4s ease-in-out infinite; }
+  .tile.run .t1 b { color: var(--accent); }
+  .tile.err { border-color: color-mix(in srgb, var(--bad) 60%, var(--line)); }
+  @keyframes pulse { 0%, 100% { background: var(--panel2); }
+                     50% { background: color-mix(in srgb, var(--accent) 11%, var(--panel2)); } }
+  @media (prefers-reduced-motion: reduce) { .tile.run { animation: none; } }
+
+  /* throughput, cluster */
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .big { font-size: 30px; font-weight: 650; line-height: 1.1; }
+  .big small { font-size: 14px; font-weight: 400; color: var(--muted); }
+  svg.spark { width: 100%; height: 54px; display: block; margin: 8px 0 6px; }
+  .note { border-left: 3px solid var(--warn); padding: 6px 10px; margin: 8px 0; background: color-mix(in srgb, var(--warn) 9%, transparent);
+          border-radius: 0 8px 8px 0; }
+  .fine { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--panel2); border: 1px solid var(--line); margin: 8px 0 6px; }
+  .bar i { display: block; height: 100%; transition: width .6s ease; }
+  .b-mine { background: var(--accent); } .b-done { background: color-mix(in srgb, var(--accent) 45%, var(--panel2)); }
+  .b-out { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--warn) 55%, transparent) 0 5px, transparent 5px 9px); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .rows { margin-top: 12px; display: grid; gap: 4px; }
+  .rows div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .rows div span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 16px 0 4px; }
+  .cpu { height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden; margin: 4px 0 6px; }
+  .cpu i { display: block; height: 100%; background: var(--accent); transition: width .6s ease; }
+
+  /* event log */
+  details summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary h2::before { content: "▸ "; } details[open] summary h2::before { content: "▾ "; }
+  #log { margin: 10px 0 0; padding: 0; list-style: none; max-height: 320px; overflow: auto; }
+  #log li { display: flex; gap: 10px; padding: 2px 0; border-bottom: 1px solid var(--line); }
+  #log li time { color: var(--muted); flex: none; }
+  #diag { width: 100%; height: 140px; margin-top: 10px; background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+          border-radius: 8px; display: none; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Conductor worker</h1>
-  <div class="muted">This tab runs simulation shards for conductor on this machine's cores. Close it to stop; its unfinished shards run elsewhere.</div>
-  <div class="row">
-    <div class="stat"><span class="muted">Status</span><b id="status">starting</b></div>
-    <div class="stat"><span class="muted">Shards run</span><b id="count">0</b></div>
-    <div class="stat"><span class="muted">Fingerprint</span><b id="gate">—</b></div>
+  <header class="panel top">
+    <div class="where"><div class="dot" id="dot"></div><span id="project">conductor</span><span class="sep">·</span><span id="item" class="muted">waiting for a job</span></div>
+    <div class="chips">
+      <span class="chip" id="conn">connecting</span>
+      <span class="chip mono" id="commit" title="the code this job runs">commit —</span>
+      <span class="chip" id="gate">no fingerprint gate yet</span>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="head">
+      <h2>Cores</h2>
+      <div class="ctl">
+        <label><input id="cores" type="range" min="1" step="1"> <b id="coresOut" class="num"></b> <span class="muted">of <span id="coresMax"></span></span></label>
+        <button id="toggle">Pause</button>
+        <label class="toggle" id="wakeBox" hidden title="Stops this screen sleeping or locking while the toggle is on; a locked screen cost ~40% a core on a laptop"><input type="checkbox" id="wake"> Keep screen awake</label>
+      </div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="head"><h2>Throughput</h2><span class="muted num" id="shardsRun">0 shards</span></div>
+      <div class="big num"><span id="rate">0</span> <small>seeds / min</small></div>
+      <svg class="spark" id="spark" viewBox="0 0 240 54" preserveAspectRatio="none" aria-label="seeds a minute over the last two minutes"></svg>
+      <div class="num" id="perCore">—</div>
+      <div class="num muted" id="vsMain"></div>
+      <div class="note" id="slow" hidden></div>
+      <div class="fine">This page sees only its own timings. Other programs' CPU use on this machine isn't visible to it, so a slowdown is inferred by comparing against this tab's own best.</div>
+    </section>
+
+    <section class="panel">
+      <div class="head"><h2>Cluster</h2><span class="muted num" id="eta"></span></div>
+      <div id="jobLine">No job is running.</div>
+      <div class="bar" id="bar"><i class="b-mine" id="bMine" style="width:0"></i><i class="b-done" id="bDone" style="width:0"></i><i class="b-out" id="bOut" style="width:0"></i></div>
+      <div class="legend"><span><i class="b-mine"></i><span id="lMine">0</span> this tab</span><span><i class="b-done"></i><span id="lDone">0</span> others</span><span><i class="b-out"></i><span id="lOut">0</span> out</span><span><i style="background:var(--panel2);border:1px solid var(--line)"></i><span id="lPend">0</span> pending</span></div>
+      <h3>Other workers</h3>
+      <div class="rows" id="workers"><div class="muted">none connected</div></div>
+      <h3>Main box</h3>
+      <div id="loadLine" class="muted">load not reported</div>
+      <div class="cpu"><i id="cpuBar" style="width:0"></i></div>
+      <div class="rows" id="loadTop"></div>
+    </section>
   </div>
-  <div class="row">
-    <label for="cores">Cores <b id="coresOut"></b> of <span id="coresMax"></span></label>
-    <input id="cores" type="range" min="1" step="1">
-    <button id="toggle">Pause</button>
-  </div>
-  <div id="slots"></div>
-  <div class="scroll">
-    <table>
-      <thead><tr><th>Time</th><th>Job</th><th>Seeds</th><th>ms</th><th>Result</th></tr></thead>
-      <tbody id="ran"></tbody>
-    </table>
-  </div>
+
+  <section class="panel">
+    <details id="logBox">
+      <summary><h2>Event log <span class="num" id="logCount"></span></h2><button id="copy" type="button">Copy diagnostics</button></summary>
+      <textarea id="diag" class="mono" readonly></textarea>
+      <ol id="log" class="mono"></ol>
+    </details>
+  </section>
 </main>
 <script>
   const base = location.pathname.endsWith("/") ? location.pathname : location.pathname.replace(/[^/]*$/, "");
   const wid = "b" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
   const max = navigator.hardwareConcurrency || 2;
   const $ = (id) => document.getElementById(id);
+  const started = Date.now();
   const slider = $("cores");
   slider.max = max; slider.value = Math.max(1, max - 1);
   $("coresMax").textContent = max;
-  let workers = [], paused = false, count = 0;
+
+  let workers = [], paused = false, project = "conductor", view = null;
+  let lastOk = 0, everOk = false, failing = false, connState = "connecting";
+  const tiles = {};                 // slot -> {state, first, count, shard, at, msSeed, text}
+  const done = [];                  // {t, seeds} for every good shard, 2.5 min kept
+  const perSeed = [];               // {rk, v, t} ms a seed, a shard each
+  const best = {};                  // rk -> this tab's best ms a seed for that code and args
+  const shards = [];                // the last 60 shard results, for diagnostics
+  const events = [];
+  let ran = 0, wake = null, wakeWanted = false, firstWork = 0;
+
+  const fmtN = (n) => n >= 10000 ? (n / 1000).toFixed(1) + "k" : String(Math.round(n));
+  const fmtS = (s) => s < 60 ? `${s.toFixed(s < 10 ? 1 : 0)} s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, "0")}s` : `${(s / 3600).toFixed(1)} h`;
+  const clock = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+  const short = (v, n = 6) => v ? String(v).slice(0, n) + "…" : "—";
 
   function label() {
     const ua = navigator.userAgent;
@@ -69,63 +175,280 @@
     return `${name} on ${navigator.platform || "?"}`;
   }
 
+  function log(text, cls = "") {
+    events.push({ at: new Date().toISOString(), text });
+    if (events.length > 300) events.shift();
+    const li = document.createElement("li");
+    const time = document.createElement("time"); time.textContent = clock();
+    const span = document.createElement("span"); span.textContent = text; if (cls) span.className = cls;
+    li.append(time, span);
+    $("log").prepend(li);
+    while ($("log").children.length > 300) $("log").lastChild.remove();
+    $("logCount").textContent = `(${events.length})`;
+  }
+
+  // ---------------------------------------------------------------- the broker
   async function hello() {
     try {
       const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label() }) });
-      $("status").textContent = r.ok ? (paused ? "paused" : "connected") : `refused (${r.status})`;
+        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label(), view: true }) });
+      if (!r.ok) throw new Error(`refused (HTTP ${r.status})`);
+      const reply = await r.json();
+      lastOk = Date.now();
+      if (!everOk) log(`joined as ${wid} (${label()}, ${workers.length} of ${max} cores)`);
+      else if (failing) log("rejoined the broker", "ok");
+      everOk = true; failing = false;
+      if (reply.page) {
+        project = reply.page.project || project;
+        if (/^#[0-9a-f]{3,6}$/i.test(reply.page.accent || "")) document.documentElement.style.setProperty("--accent", reply.page.accent);
+      }
+      view = reply.view || null;
     } catch (e) {
-      $("status").textContent = "no broker";
+      if (!failing) log(everOk ? `lost the broker: ${e.message || e}` : `no broker yet: ${e.message || e}`, "bad");
+      failing = true;
+      if (!everOk) connState = "no broker";
     }
+    draw();
   }
 
-  function slotDiv(i) {
-    let d = $("slot" + i);
-    if (!d) { d = document.createElement("div"); d.id = "slot" + i; $("slots").appendChild(d); }
-    return d;
-  }
-
+  // ---------------------------------------------------------------- worker messages
   function onMessage(e) {
-    const m = e.data, d = slotDiv(m.slot);
-    if (m.type === "busy") d.textContent = `${m.slot}: ${m.text}`;
-    else if (m.type === "idle") d.textContent = `${m.slot}: idle`;
-    else if (m.type === "error") d.textContent = `${m.slot}: ${m.text}`;
+    const m = e.data, t = tiles[m.slot] || (tiles[m.slot] = { state: "idle" });
+    if (everOk && !failing && ["idle", "busy", "gating", "gate"].includes(m.type)) lastOk = Date.now();   // a worker's poll got through
+    if (m.type === "busy") firstWork ||= m.at;
+    if (m.type === "busy") Object.assign(t, { state: "run", first: m.first, count: m.count, shard: m.shard, at: m.at, text: "" });
+    else if (m.type === "idle") { if (t.state !== "idle") Object.assign(t, { state: "idle", text: "" }); }
+    else if (m.type === "loading") Object.assign(t, { state: "run", text: "loading bundle", at: Date.now(), first: null });
+    else if (m.type === "gating") Object.assign(t, { state: "run", text: "fingerprint", at: Date.now(), first: null });
+    else if (m.type === "error") { Object.assign(t, { state: "err", text: m.text }); log(`core ${m.slot + 1}: ${m.text}`, "bad"); }
+    else if (m.type === "back") log(`core ${m.slot + 1}: reaching the broker again`);
     else if (m.type === "hello") hello();
     else if (m.type === "gate") {
-      $("gate").textContent = m.pass ? "passed" : "FAILED";
-      $("gate").className = m.pass ? "ok" : "bad";
+      t.state = "idle";
+      log(m.pass ? `fingerprint gate passed for ${m.key} (${short(m.value, 12)})` : `fingerprint gate FAILED for ${m.key}: got ${short(m.value, 24)}`, m.pass ? "ok" : "bad");
+      hello();
     } else if (m.type === "shard") {
-      if (m.accepted) $("count").textContent = ++count;
-      const tr = document.createElement("tr");
-      const res = !m.ok ? `<span class="bad">failed</span>` : m.accepted ? `<span class="ok">kept</span>` : "duplicate";
-      tr.innerHTML = `<td>${new Date().toLocaleTimeString()}</td><td>${m.job}</td><td>${m.first}..${m.first + m.count - 1}</td>` +
-        `<td>${m.ms.toFixed(0)}</td><td>${res}</td>`;
-      $("ran").prepend(tr);
-      while ($("ran").children.length > 200) $("ran").lastChild.remove();
+      t.state = "idle"; t.first = null;
+      const s = m.ms / 1000;
+      shards.push({ at: new Date().toISOString(), slot: m.slot, job: m.job, shard: m.shard, first: m.first, count: m.count,
+                    ms: Math.round(m.ms), ok: m.ok, accepted: m.accepted, err: m.err || undefined });
+      if (shards.length > 60) shards.shift();
+      if (!m.ok) { t.state = "err"; t.text = "shard failed"; log(`shard ${m.shard} failed: ${m.err}`, "bad"); }
+      else {
+        const rk = m.key + "|" + m.args.join(" "), v = m.ms / m.count;
+        t.msSeed = v;
+        perSeed.push({ rk, v, t: Date.now() }); if (perSeed.length > 400) perSeed.shift();
+        best[rk] = Math.min(best[rk] ?? Infinity, v);
+        done.push({ t: Date.now(), seeds: m.count });
+        if (m.accepted) { ran++; log(`shard ${m.shard} (seeds ${m.first}–${m.first + m.count - 1}) done in ${fmtS(s)}`); }
+        else log(`shard ${m.shard} lost the race: another copy got in first (re-run elsewhere)`, "warn");
+      }
     }
+    draw();
   }
 
   function resize() {
     const want = paused ? 0 : Number(slider.value);
-    $("coresOut").textContent = slider.value;
+    $("coresOut").textContent = paused ? 0 : slider.value;
     while (workers.length < want) {
       const w = new Worker(base + "worker.js", { type: "module" });
       w.onmessage = onMessage;
       w.postMessage({ type: "start", base, wid, slot: workers.length });
+      tiles[workers.length] = { state: "idle" };
       workers.push(w);
     }
     while (workers.length > want) {
       workers.pop().terminate();
-      const d = $("slot" + workers.length);
-      if (d) d.remove();
+      delete tiles[workers.length];
     }
     hello();
   }
 
-  slider.addEventListener("input", resize);
-  $("toggle").addEventListener("click", () => { paused = !paused; $("toggle").textContent = paused ? "Resume" : "Pause"; resize(); });
+  // ---------------------------------------------------------------- measurements
+  function seedsPerMin(at = Date.now(), win = 60000) {
+    let n = 0;
+    for (const d of done) if (d.t > at - win && d.t <= at) n += d.seeds;
+    if (!firstWork) return 0;
+    const span = Math.min(win, Math.max(at - firstWork, 5000));   // from the first shard, not page load
+    return n * 60000 / span;
+  }
+
+  function rateNow() {
+    if (!perSeed.length) return null;
+    const rk = perSeed[perSeed.length - 1].rk;
+    const recent = perSeed.filter((p) => p.rk === rk).slice(-6).map((p) => p.v);
+    return { rk, recent: median(recent), best: best[rk], n: perSeed.filter((p) => p.rk === rk).length };
+  }
+
+  function busyCount() { return Object.values(tiles).filter((t) => t.state === "run").length; }
+
+  // ---------------------------------------------------------------- drawing
+  function draw() {
+    const now = Date.now();
+    connState = paused ? "paused" : !everOk ? connState : !failing && now - lastOk < 7000 ? "live" : "reconnecting";
+    $("dot").className = "dot " + (connState === "live" ? "live" : everOk ? "lost" : "");
+    $("conn").textContent = connState;
+    $("conn").className = "chip " + (connState === "live" ? "ok" : connState === "paused" ? "muted" : "warn");
+    $("project").textContent = project;
+    const job = view?.job, gate = view?.gate;
+    $("item").textContent = job ? (job.item || job.id) : "waiting for a job";
+    const key = job?.key || gate?.key;
+    $("commit").textContent = key ? "commit " + key.slice(0, 7) + (key.includes("-") ? " +changes" : "") : "commit —";
+    $("commit").title = key ? `the code this job runs: ${key}` : "";
+    if (gate) {
+      const sym = gate.state === "pass" ? "✓" : gate.state === "fail" ? "✗" : "◌";
+      $("gate").textContent = gate.state === "pending" ? `${sym} checking the ${gate.reference} reference` :
+        `${sym} ${gate.reference} reference ${short(gate.value)}` + (gate.state === "fail" ? " failed" : "");
+      $("gate").className = "chip " + (gate.state === "pass" ? "ok" : gate.state === "fail" ? "bad" : "warn");
+    }
+
+    // tiles
+    const box = $("tiles"), slots = Object.keys(tiles).map(Number).sort((a, b) => a - b);
+    while (box.children.length > slots.length) box.lastChild.remove();
+    slots.forEach((i, n) => {
+      let d = box.children[n];
+      if (!d) { d = document.createElement("div"); d.innerHTML = `<div class="t1"><span></span><b></b></div><div class="t2 num"></div><div class="t3 num"></div>`; box.appendChild(d); }
+      const t = tiles[i];
+      d.className = "tile " + (t.state === "run" ? "run" : t.state === "err" ? "err" : "");
+      d.children[0].children[0].textContent = `core ${i + 1}`;
+      d.children[0].children[1].textContent = t.state === "run" ? "running" : t.state === "err" ? "error" : "idle";
+      d.children[1].textContent = t.state === "run" && t.first != null ? `seeds ${t.first}–${t.first + t.count - 1}` : t.text || (t.state === "idle" ? "waiting for work" : "");
+      d.children[1].title = t.text || "";
+      const el = t.state === "run" && t.at ? fmtS((now - t.at) / 1000) : "";
+      const last = t.msSeed ? `${t.msSeed.toFixed(0)} ms a seed` : "";
+      d.children[2].textContent = [el, last].filter(Boolean).join(" · ") || "—";
+    });
+
+    // throughput
+    const rate = seedsPerMin(now);
+    $("rate").textContent = fmtN(rate);
+    $("shardsRun").textContent = `${ran} shard${ran === 1 ? "" : "s"} kept`;
+    drawSpark(now);
+    const r = rateNow();
+    if (r) {
+      $("perCore").textContent = `${r.recent.toFixed(0)} ms a seed per core (best ${r.best.toFixed(0)})`;
+      const main = view?.main?.ms_seed;
+      $("vsMain").textContent = main ? `${(main / r.recent).toFixed(2)}× the main box per core (native ${main.toFixed(0)} ms a seed)` : "";
+      const gap = r.recent / r.best - 1;
+      const working = now - perSeed[perSeed.length - 1].t < 20000;     // an idle tab has no slowdown to explain
+      $("slow").hidden = !(working && r.n >= 6 && gap >= 0.25);
+      $("slow").textContent = `~${Math.round(gap * 100)}% slower than its best: background tab, power saving or other load?`;
+    } else {
+      $("perCore").textContent = "no shard run yet"; $("vsMain").textContent = ""; $("slow").hidden = true;
+    }
+
+    // cluster
+    if (job) {
+      const pct = (n) => (100 * n / job.shards).toFixed(2) + "%";
+      $("jobLine").innerHTML = "";
+      $("jobLine").append(`${job.seeds_done} of ${job.seeds} seeds, ${job.done} of ${job.shards} shards` + (job.jobs > 1 ? ` (${job.jobs - 1} more job${job.jobs > 2 ? "s" : ""} queued)` : ""));
+      $("bMine").style.width = pct(job.mine); $("bDone").style.width = pct(job.done - job.mine); $("bOut").style.width = pct(job.out);
+      $("lMine").textContent = job.mine; $("lDone").textContent = job.done - job.mine; $("lOut").textContent = job.out; $("lPend").textContent = job.pending;
+      $("eta").textContent = job.eta != null ? `ETA ${fmtS(job.eta)}` : `${fmtS(job.elapsed)} in`;
+      if (view.bundle?.state === "building") $("jobLine").append(" · building the wasm bundle…");
+      if (view.bundle?.state === "failed") $("jobLine").append(" · the wasm build failed");
+    } else {
+      $("jobLine").textContent = "No job is running.";
+      for (const id of ["bMine", "bDone", "bOut"]) $(id).style.width = "0";
+      for (const id of ["lMine", "lDone", "lOut", "lPend"]) $(id).textContent = "0";
+      $("eta").textContent = "";
+    }
+    const ws = view?.workers || [];
+    rows($("workers"), ws.length ? ws.map((w) => [`${w.kind === "browser" ? "◍" : "▣"} ${w.label || w.kind}`,
+      `${w.cores} core${w.cores === 1 ? "" : "s"} · ${w.shards} shards` + (w.ms_seed ? ` · ${w.ms_seed.toFixed(0)} ms` : "")]) : [["none connected", ""]]);
+    const ld = view?.load;
+    $("loadLine").textContent = ld ? `CPU ${ld.cpu}%` + (ld.high ? " · high for a while" : "") : "load not reported (the daemon's memory sampling is off or stale)";
+    $("loadLine").className = ld ? (ld.high ? "warn" : "") : "muted";
+    $("cpuBar").style.width = ld ? Math.min(100, ld.cpu) + "%" : "0";
+    rows($("loadTop"), (ld?.top || []).map((t) => [t.who + (t.item ? "" : " (outside)"), `${t.cpu}%`]));
+
+    // the tab title: readable from the tab strip, kept current while hidden (worker messages drive it)
+    const lead = connState === "paused" ? "❚❚ paused" : connState !== "live" ? `… ${connState}` :
+      busyCount() ? `▶ ${busyCount()}/${workers.length} · ${fmtN(rate)}/min` : `◦ idle · ${workers.length} cores`;
+    document.title = `${lead} · ${project}`;
+  }
+
+  function rows(el, list) {
+    el.replaceChildren(...list.map(([a, b]) => {
+      const d = document.createElement("div"), x = document.createElement("span"), y = document.createElement("span");
+      x.textContent = a; y.textContent = b; y.className = "num muted"; d.append(x, y); return d;
+    }));
+  }
+
+  function drawSpark(now) {
+    const N = 40, step = 3000, pts = [];
+    for (let i = 0; i < N; i++) pts.push(seedsPerMin(now - (N - 1 - i) * step, 30000));
+    const top = Math.max(1, ...pts) * 1.15;
+    const xy = pts.map((v, i) => [(i / (N - 1)) * 240, 52 - (v / top) * 48]);
+    const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
+    $("spark").innerHTML = `<path d="${line}L240,54L0,54Z" fill="var(--accent)" opacity=".12"/>` +
+      `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // ---------------------------------------------------------------- wake lock, visibility, diagnostics
+  async function setWake(on) {
+    wakeWanted = on;
+    try {
+      if (on && !wake && document.visibilityState === "visible") {
+        wake = await navigator.wakeLock.request("screen");
+        log("keeping the screen awake");
+        wake.addEventListener("release", () => { wake = null; if (wakeWanted) log("wake lock released (tab hidden); taken again when visible"); });
+      } else if (!on && wake) {
+        await wake.release(); wake = null; log("screen may sleep again");
+      }
+    } catch (e) {
+      log(`wake lock refused: ${e.message || e}`, "bad"); $("wake").checked = false; wakeWanted = false;
+    }
+  }
+  if ("wakeLock" in navigator) {
+    $("wakeBox").hidden = false;
+    $("wake").addEventListener("change", (e) => setWake(e.target.checked));
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    log(document.visibilityState === "visible" ? "tab visible" : "tab hidden");
+    if (document.visibilityState === "visible" && wakeWanted && !wake) setWake(true);
+  });
+
+  function diagnostics() {
+    const r = rateNow();
+    return {
+      at: new Date().toISOString(), worker: wid, browser: label(), userAgent: navigator.userAgent,
+      cores: { hardware: max, used: workers.length, paused }, deviceMemoryGB: navigator.deviceMemory ?? null,
+      secureContext: window.isSecureContext, visibility: document.visibilityState,
+      wakeLock: !("wakeLock" in navigator) ? "unavailable" : wake ? "held" : "off",
+      connection: { state: connState, lastHelloMsAgo: lastOk ? Date.now() - lastOk : null },
+      project, uptimeSeconds: Math.round((Date.now() - started) / 1000),
+      throughput: { seedsPerMin: Math.round(seedsPerMin()), shardsKept: ran,
+                    msPerSeed: r ? { recent: +r.recent.toFixed(1), best: +r.best.toFixed(1), samples: r.n } : null,
+                    mainMsPerSeed: view?.main?.ms_seed ?? null },
+      tiles: Object.entries(tiles).map(([i, t]) => ({ core: +i + 1, state: t.state, msPerSeed: t.msSeed ? +t.msSeed.toFixed(1) : null, text: t.text || undefined })),
+      broker: view, recentShards: shards.slice(-40), events: events.slice(-100),
+    };
+  }
+  window.diagnostics = diagnostics;
+
+  $("copy").addEventListener("click", async (e) => {
+    e.preventDefault();                       // a button inside <summary> would also toggle the log
+    const text = JSON.stringify(diagnostics(), null, 1);
+    const ta = $("diag");
+    ta.value = text; ta.style.display = "block";
+    $("logBox").open = true;
+    let ok = false;
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch { }
+    if (!ok) { ta.select(); try { ok = document.execCommand("copy"); } catch { } }
+    $("copy").textContent = ok ? "Copied ✓" : "Select and copy below";
+    setTimeout(() => { $("copy").textContent = "Copy diagnostics"; }, 2500);
+  });
+
+  slider.addEventListener("input", () => { resize(); log(`cores set to ${slider.value}`); });
+  $("toggle").addEventListener("click", () => {
+    paused = !paused; $("toggle").textContent = paused ? "Resume" : "Pause";
+    log(paused ? "paused" : "resumed"); resize();
+  });
   resize();
   setInterval(hello, 2000);
+  setInterval(() => { if (document.visibilityState === "visible") draw(); }, 1000);
 </script>
 </body>
 </html>

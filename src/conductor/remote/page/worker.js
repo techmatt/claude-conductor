@@ -1,6 +1,7 @@
 // One Web Worker per core: it pulls tasks from the broker itself (the page only says hello).
 // A task is a fingerprint gate or a shard; both run the project's wasm bundle, an ES module
-// exporting `default` (init), `fingerprint()` and `run(first, count, args)`.
+// exporting `default` (init), `fingerprint()` and `run(first, count, args)`. Every step is
+// posted to the page, which draws its tile, throughput and event log from these messages.
 let base = "", wid = "", slot = 0, running = true;
 let mod = null, modKey = null;
 
@@ -16,6 +17,7 @@ async function api(op, body) {
 
 async function load(t) {
   if (modKey === t.key) return mod;
+  postMessage({ type: "loading", slot, key: t.key });
   const m = await import(base + t.bundle + t.module);
   await m.default();
   mod = m; modKey = t.key;
@@ -23,27 +25,36 @@ async function load(t) {
 }
 
 async function loop() {
+  let failing = false;
   while (running) {
     let t;
     try {
       t = await api("poll", { worker: wid });
+      if (failing) postMessage({ type: "back", slot });
+      failing = false;
     } catch (e) {
-      postMessage({ type: "error", slot, text: String(e) });
+      if (!failing) postMessage({ type: "error", slot, text: String(e) });
+      failing = true;
       await sleep(2000);
       continue;
     }
     if (t.task === "gate") {
-      postMessage({ type: "busy", slot, text: `fingerprint for ${t.key}` });
+      postMessage({ type: "gating", slot, key: t.key });
       let value;
       try {
         value = String((await load(t)).fingerprint());
       } catch (e) {
         value = "load failed: " + String(e);
       }
-      const r = await api("gate", { worker: wid, key: t.key, value });
-      postMessage({ type: "gate", slot, key: t.key, pass: r.pass, value });
+      try {
+        const r = await api("gate", { worker: wid, key: t.key, value });
+        postMessage({ type: "gate", slot, key: t.key, pass: r.pass, value });
+      } catch (e) {
+        postMessage({ type: "error", slot, text: String(e) });
+      }
     } else if (t.task === "shard") {
-      postMessage({ type: "busy", slot, text: `seeds ${t.first}..${t.first + t.count - 1}` });
+      const info = { slot, job: t.job, shard: t.shard, key: t.key, args: t.args, first: t.first, count: t.count };
+      postMessage({ type: "busy", ...info, at: Date.now() });
       const t0 = performance.now();
       let output = "", ok = true, err = "";
       try {
@@ -61,7 +72,7 @@ async function loop() {
       } catch (e) {
         postMessage({ type: "error", slot, text: String(e) });
       }
-      postMessage({ type: "shard", slot, job: t.job, first: t.first, count: t.count, ms, ok, accepted, err });
+      postMessage({ type: "shard", ...info, ms, ok, accepted, err });
     } else if (t.task === "hello") {
       postMessage({ type: "hello", slot });
       await sleep(500);

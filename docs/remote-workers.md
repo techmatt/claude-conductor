@@ -50,12 +50,14 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
 | `dir` | The commands' folder inside the repo (relative paths in commands resolve there). |
 | `port`, `bind`, `token` | The broker's address and token (above). |
 | `shard_seeds` (25), `seed_seconds` (0.05), `local_below_seconds` (10) | Shard size, and the size check: a job of `count × seed_seconds` under `local_below_seconds` stays local. |
+| `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so each project's tabs are told apart. The page's title is the top-level `project`. |
 | `lease_seconds` (60), `fresh_seconds` (10), `main_slots` (1) | A shard not back in this long is leased again; a worker not heard from in this long is gone; shards the main box runs at once. A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
 
 ## The executor interface
 
 A `remote: true` item gets `farm-seeds` first on its PATH (`.conductor/remote/bin/`,
-a `sh` shim and a `.cmd` one), `CONDUCTOR_REMOTE_CONTROL` in its environment, and one
+a `sh` shim and a `.cmd` one), `CONDUCTOR_REMOTE_CONTROL` and `CONDUCTOR_REMOTE_ITEM`
+(its id, which the worker page shows) in its environment, and one
 paragraph at the end of its prompt naming the command:
 
     farm-seeds <first seed> <count> <out file> [args…]
@@ -95,9 +97,9 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 ## Workers
 
 - **The browser page** (`page/`): one Web Worker per core, a core slider defaulting to all
-  but one, the fingerprint result and the shards it ran. Closing the tab costs nothing but
-  the shards it held, which run elsewhere. It reports itself as `<browser> on <platform>`
-  (`Chrome on Win32`), not the full user agent.
+  but one. Closing the tab costs nothing but the shards it held, which run elsewhere. It
+  reports itself as `<browser> on <platform>` (`Chrome on Win32`), not the full user agent.
+  What it shows is under *The worker page*.
 - **On a real laptop over Wi-Fi** (88: Chrome, 8 logical cores, the tab at 7): the tab
   keeps working in the background, minimised and on a locked screen. Chrome doesn't
   throttle Web Workers. Per core it ran wasm at 58 ms a seed in front, 64 behind another
@@ -111,6 +113,39 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   tests and failure injection (`--bad-fingerprint`, `--die-after N`, `--fail-every N`,
   `--hang-after N`). A native worker for other PCs is not built; the protocol allows one
   (it would fetch the code instead of using the main box's folder).
+
+## The worker page
+
+A status console (90), dark unless the system asks for light, in the project's `accent`.
+Broker facts ride the hello it already sends every 2 s (`"view": true`; the reply's `page`
+and `view`, from `Board.view`); its own come from its Web Workers' messages.
+
+- **Header:** live / reconnecting / paused, `project · item`, the short commit
+  (`+changes` when the key carries a diff hash), and the gate with its kind
+  (`✓ wasm reference ba4ec8…`).
+- **Cores:** a tile per Web Worker (idle or running, its seed range, elapsed, its last ms a
+  seed; running tiles pulse softly), the slider, Pause, and *Keep screen awake*.
+- **Throughput:** seeds a minute (the last 60 s) with a 2-minute sparkline; ms a seed per
+  core (the median of the last six shards for this commit and arguments) against the main
+  box's native rate in this job (`0.95× the main box per core`; per main slot, so per core
+  only for a single-threaded native command). **Inferred slowdown:** at 25% or more over
+  the tab's own best for the same commit and arguments (six shards in), it says
+  `~35% slower than its best: background tab, power saving or other load?`. The page says
+  that other programs' CPU use isn't visible to it.
+- **Cluster:** the oldest open job as one bar (this tab / others / out / pending) with an
+  ETA from its rate so far, the other workers (kind, cores, shards, ms a seed in this job),
+  and the main box's load: CPU % and top consumers from the daemon's latest memory sample
+  while fresh (what the inbox's load line shows; none while no daemon samples).
+- **Event log** (collapsed): joined, gated, shard N done, lost the race, tab hidden /
+  visible, lost / rejoined the broker, errors. **Copy diagnostics** copies a JSON snapshot
+  (browser, cores, timings, the broker's last view, recent shards and events; never the
+  token), shown selected in a text box too, where the clipboard API is missing.
+- **Tab title** is a status line: `▶ 4/4 · 980/min · sandbox`, `◦ idle · 4 cores · sandbox`,
+  `… reconnecting · sandbox`. Worker messages redraw it, so it stays current in a hidden tab.
+- **Keep screen awake** uses the Screen Wake Lock API, off by default, retaken when the tab
+  shows again. It needs a secure context: on `http://127.0.0.1` it works; on the LAN URL
+  it is hidden. On a laptop, use a power plan that doesn't lock while plugged in, or allow
+  the URL in `chrome://flags/#unsafely-treat-insecure-origin-as-secure` (Edge alike).
 
 ## Trust, builds, provenance
 

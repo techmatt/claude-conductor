@@ -211,6 +211,10 @@ def test_the_page_and_bundles_need_the_token_and_main_box_calls_need_loopback(fa
     assert post("status", b"{}", "text/plain") == 415                  # no simple cross-origin POST
     assert post("job", b"{}", Origin="http://evil.example") == 403     # a page on this box can't drive it
     assert post("hello", b"[1]") == 400
+    req = urllib.request.Request(base + "api/hello", method="POST", headers={"Content-Type": "application/json"},
+                                 data=json.dumps({"worker": "tab", "kind": "browser", "view": True}).encode())
+    reply = json.loads(urllib.request.urlopen(req, timeout=5).read())
+    assert reply["page"] == {"project": "t", "accent": settings.ACCENT} and reply["view"]["job"] is None
     assert post("result", b'{"worker": "x", "job": "j", "shard": 0, "ok": true}') == 400   # no output
     import socket
     with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as s:   # a negative length

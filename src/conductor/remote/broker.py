@@ -55,6 +55,7 @@ class Handler(BaseHTTPRequestHandler):
     board: Board
     token: str
     bundles: Path
+    page: dict                   # the worker page's fixed facts: project, accent
 
     def log_message(self, fmt, *args):     # quiet: the broker log keeps only what matters
         pass
@@ -133,7 +134,10 @@ class Handler(BaseHTTPRequestHandler):
         if op == "hello":
             if b.get("kind") == "local-remote" and not self._local():
                 raise ValueError("a local-remote worker runs on the main box")
-            return board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")))
+            reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")))
+            if b.get("view"):                    # the worker page: what it shows, with the hello it already sends
+                reply |= {"page": self.page, "view": board.view(str(b["worker"]))}
+            return reply
         if op == "poll":
             return board.poll(str(b["worker"]))
         if op == "gate":
@@ -154,7 +158,7 @@ class Handler(BaseHTTPRequestHandler):
             ranges = [(int(a), int(n)) for a, n in b["ranges"]]
             cwd = b.get("cwd")
             return {"job": board.add_job(str(b["key"]), str(b["fingerprint"]), [str(x) for x in b.get("args", [])],
-                                         ranges, str(cwd) if cwd else None)}
+                                         ranges, str(cwd) if cwd else None, str(b.get("item", "")))}
         if op == "bundle":
             board.set_bundle(str(b["key"]), str(b["state"]), str(b.get("error", "")), str(b.get("wasm", "")))
             return {"ok": True}
@@ -172,7 +176,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def make_server(r: settings.Remote, board: Board, port: int | None = None, bind: str | None = None) -> ThreadingHTTPServer:
-    handler = type("H", (Handler,), {"board": board, "token": r.secret(), "bundles": r.state / "bundles"})
+    handler = type("H", (Handler,), {"board": board, "token": r.secret(), "bundles": r.state / "bundles",
+                                     "page": {"project": r.project, "accent": r.accent}})
     server = ThreadingHTTPServer((bind if bind is not None else r.bind, r.port if port is None else port), handler)
     server.daemon_threads = True
     return server
@@ -196,6 +201,22 @@ def _write_now(r: settings.Remote, line: str | None) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(line + "\n", encoding="utf-8", newline="\n")
     os.replace(tmp, path)
+
+
+def main_load(control: Path) -> dict | None:
+    """The main box's load from the daemon's latest memory sample while it is fresh (what
+    the inbox's load line shows): `{cpu, top, text}`, else None. One small file read."""
+    from .. import config, load, memory
+    try:
+        cfg = config.load(control)
+        rec = memory.latest(cfg.state_dir)
+        if not (memory.fresh(rec, cfg) and rec.get("load")):
+            return None
+        sample = rec["load"]
+        return {"cpu": sample.get("cpu"), "top": sample.get("top") or [], "text": load.text(sample),
+                "high": bool(sample.get("high"))}
+    except Exception:                            # noqa: BLE001 - a page nicety, never the broker's end
+        return None
 
 
 def serve(control: Path, stay: bool = False) -> int:
@@ -229,6 +250,7 @@ def serve(control: Path, stay: bool = False) -> int:
         while True:
             time.sleep(2)
             _write_now(r, board.now_line())
+            board.load = main_load(r.control)
             if stay or _daemon_alive(r.control):
                 gone_since = None
             elif gone_since is None:

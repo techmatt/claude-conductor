@@ -228,7 +228,7 @@ class SetupMixin:
         env = {executor.PORT_VAR: str(rec["port"])}
         if item.remote:   # opt-in remote workers: `farm-seeds` (docs/remote-workers.md)
             from . import remote
-            env |= remote.item_launch(cfg.control, paths.prompt)
+            env |= remote.item_launch(cfg.control, paths.prompt, item.id)
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
                                                      settings=paths.settings, fork_of=rec.get("resume_session")),
