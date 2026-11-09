@@ -78,6 +78,8 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 - A lease past `lease_seconds`, or held by a worker no longer heard from, is leased again.
 - A broker that stops answering mid-job, or a main-box slot that fails: the job is closed
   and the shards not yet in run locally.
+- Placement is decided once, when the job starts: a job begun with no worker connected
+  runs wholly local, and a worker that joins later is not used for it (field test, 88).
 - `farm-seeds` calls the broker every 2 s while its job runs; a job not heard from in
   `fresh_seconds` is no longer served (a killed item's job never starves the next) and is
   dropped after `lease_seconds`.
@@ -86,7 +88,16 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 
 - **The browser page** (`page/`): one Web Worker per core, a core slider defaulting to all
   but one, the fingerprint result and the shards it ran. Closing the tab costs nothing but
-  the shards it held, which run elsewhere.
+  the shards it held, which run elsewhere. It reports itself as `<browser> on <platform>`
+  (`Chrome on Win32`), not the full user agent.
+- **On a real laptop over Wi-Fi** (88: Chrome, 8 logical cores, the tab at 7): the tab
+  keeps working in the background, minimised and on a locked screen. Chrome doesn't
+  throttle Web Workers. Per core it ran wasm at 58 ms a seed in front, 64 behind another
+  tab, 66 minimised and a flat 81 locked (power throttling), against the main box's
+  native 61. A closed lid sleeps it: it is dropped `fresh_seconds` later and its leased
+  shards run on the main box. On lid open it rejoins within seconds, with no new gate
+  for the same commit. A 5,000-seed job took 34–46 s (laptop in front or hidden) and about
+  50 s (locked), against 303 s local-only. Every output was byte-identical.
 - **The local-remote worker** (`python -m conductor.remote.worker <control> [--cores N]`): a
   second process on the main box speaking the same protocol with the native command, for
   tests and failure injection (`--bad-fingerprint`, `--die-after N`, `--fail-every N`,
@@ -107,7 +118,8 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   join when the bundle is ready.
 - **Provenance.** Each shard's result carries the worker's id and kind;
   `.conductor/remote/jobs/<job>/job.json` records who ran each shard, the engines used and
-  whether native and wasm mixed. Workers' logs come back with their results
+  whether native and wasm mixed; `jobs/<job>/main.log` has a `rerun shard N` line for each
+  shard the main box ran while a worker still held it. Workers' logs come back with their results
   (`jobs/<job>/logs/<worker>.log`).
 - **Determinism is the project's.** Native and wasm agree bit for bit only where the
   project's math does: in the `sim` test workload, the `libm` crate agrees and Rust's

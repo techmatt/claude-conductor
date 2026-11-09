@@ -244,6 +244,9 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
                     continue
                 return
             a, k, sid = c["first"], c["count"], c["shard"]
+            if c.get("rerun"):                   # provenance: a shard re-run here while a worker held it
+                log.write(f"{time.strftime('%H:%M:%S')} rerun shard {sid} seeds {a}+{k}\n".encode())
+                log.flush()
             tmp = folder / "main" / f"{a:012d}.{n}.out"
             t = time.time()
             code = run_native(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
