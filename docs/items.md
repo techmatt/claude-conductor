@@ -23,6 +23,7 @@ template: cleanup        # a conductor-owned prompt (templates.md): cleanup, gen
 resume: sandbox/001_x    # ask a finished item's own session, forked; always readonly (resume.md)
 rules: true              # it bumps the rules revision: it also carries `[rules]` parked edits (parked.md)
 needs_pick: card_fonts   # a picker's name: waits for its saved choices, then carries them (picks.md, *Items that need a pick*)
+remote: true             # `farm-seeds` on its PATH, in a project with `[remote]` (remote-workers.md); ignored without
 ---
 Prompt body.
 ```

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conductor worker</title>
+<style>
+  :root { --bg: #fafaf8; --fg: #1d1d1b; --muted: #6b6b66; --line: #deded8; --ok: #2f7d4f; --bad: #b3261e; --accent: #3a5ba0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --fg: #ececea; --muted: #9a9a94; --line: #34342f; --ok: #6cc08b; --bad: #f2867e; --accent: #8fa8e0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-width: 120px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 220px; accent-color: var(--accent); }
+  button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line);
+           background: transparent; color: var(--fg); cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; color: var(--muted); font-size: 13px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  #slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 8px 0 20px; }
+  #slots div { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13px; overflow: hidden;
+               white-space: nowrap; text-overflow: ellipsis; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Conductor worker</h1>
+  <div class="muted">This tab runs simulation shards for conductor on this machine's cores. Close it to stop; its unfinished shards run elsewhere.</div>
+  <div class="row">
+    <div class="stat"><span class="muted">Status</span><b id="status">starting</b></div>
+    <div class="stat"><span class="muted">Shards run</span><b id="count">0</b></div>
+    <div class="stat"><span class="muted">Fingerprint</span><b id="gate">—</b></div>
+  </div>
+  <div class="row">
+    <label for="cores">Cores <b id="coresOut"></b> of <span id="coresMax"></span></label>
+    <input id="cores" type="range" min="1" step="1">
+    <button id="toggle">Pause</button>
+  </div>
+  <div id="slots"></div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Job</th><th>Seeds</th><th>ms</th><th>Result</th></tr></thead>
+      <tbody id="ran"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const base = location.pathname.endsWith("/") ? location.pathname : location.pathname.replace(/[^/]*$/, "");
+  const wid = "b" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const max = navigator.hardwareConcurrency || 2;
+  const $ = (id) => document.getElementById(id);
+  const slider = $("cores");
+  slider.max = max; slider.value = Math.max(1, max - 1);
+  $("coresMax").textContent = max;
+  let workers = [], paused = false, count = 0;
+
+  function label() {
+    const ua = navigator.userAgent;
+    const name = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "browser";
+    return `${name} on ${navigator.platform || "?"}`;
+  }
+
+  async function hello() {
+    try {
+      const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label() }) });
+      $("status").textContent = r.ok ? (paused ? "paused" : "connected") : `refused (${r.status})`;
+    } catch (e) {
+      $("status").textContent = "no broker";
+    }
+  }
+
+  function slotDiv(i) {
+    let d = $("slot" + i);
+    if (!d) { d = document.createElement("div"); d.id = "slot" + i; $("slots").appendChild(d); }
+    return d;
+  }
+
+  function onMessage(e) {
+    const m = e.data, d = slotDiv(m.slot);
+    if (m.type === "busy") d.textContent = `${m.slot}: ${m.text}`;
+    else if (m.type === "idle") d.textContent = `${m.slot}: idle`;
+    else if (m.type === "error") d.textContent = `${m.slot}: ${m.text}`;
+    else if (m.type === "hello") hello();
+    else if (m.type === "gate") {
+      $("gate").textContent = m.pass ? "passed" : "FAILED";
+      $("gate").className = m.pass ? "ok" : "bad";
+    } else if (m.type === "shard") {
+      if (m.accepted) $("count").textContent = ++count;
+      const tr = document.createElement("tr");
+      const res = !m.ok ? `<span class="bad">failed</span>` : m.accepted ? `<span class="ok">kept</span>` : "duplicate";
+      tr.innerHTML = `<td>${new Date().toLocaleTimeString()}</td><td>${m.job}</td><td>${m.first}..${m.first + m.count - 1}</td>` +
+        `<td>${m.ms.toFixed(0)}</td><td>${res}</td>`;
+      $("ran").prepend(tr);
+      while ($("ran").children.length > 200) $("ran").lastChild.remove();
+    }
+  }
+
+  function resize() {
+    const want = paused ? 0 : Number(slider.value);
+    $("coresOut").textContent = slider.value;
+    while (workers.length < want) {
+      const w = new Worker(base + "worker.js", { type: "module" });
+      w.onmessage = onMessage;
+      w.postMessage({ type: "start", base, wid, slot: workers.length });
+      workers.push(w);
+    }
+    while (workers.length > want) {
+      workers.pop().terminate();
+      const d = $("slot" + workers.length);
+      if (d) d.remove();
+    }
+    hello();
+  }
+
+  slider.addEventListener("input", resize);
+  $("toggle").addEventListener("click", () => { paused = !paused; $("toggle").textContent = paused ? "Resume" : "Pause"; resize(); });
+  resize();
+  setInterval(hello, 2000);
+</script>
+</body>
+</html>

@@ -14,7 +14,8 @@ from .util import FrontMatterError, read_text, split_front_matter
 NAME_RE = re.compile(r"^(\d{3,}|W\d+)_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 WATCH_RE = re.compile(r"^W(\d+)_")     # a watch's own series (`W12_watch`): never a queue number
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
-          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules", "needs_pick"}
+          "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules", "needs_pick",
+          "remote"}
 GIST_CHARS = 160
 
 
@@ -35,6 +36,7 @@ class Item:
     ultracode: bool = False                             # launch with Claude Code's ultracode on
     audit: bool = False                                 # keep audit notes beside the report
     rules: bool = False                                 # bumps the rules revision: carries `[rules]` parked edits
+    remote: bool = False                                # `farm-seeds` on its PATH, with `[remote]` (conductor.remote)
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     alongside: str | None = None                        # what it touches: may start beside running items
     resume_of: str | None = None                        # `resume:` the finished item whose session it forks
@@ -103,7 +105,7 @@ def parse(path: Path, repo: str) -> Item:
     item.after_red = str(meta.get("after_red", "stop"))
     if item.after_red not in ("stop", "continue"):
         item.errors.append("`after_red` must be stop or continue")
-    for flag in ("needs_planner", "readonly", "ultracode", "audit", "rules"):
+    for flag in ("needs_planner", "readonly", "ultracode", "audit", "rules", "remote"):
         value = meta.get(flag, False)
         if not isinstance(value, bool):
             item.errors.append(f"`{flag}` must be true or false")

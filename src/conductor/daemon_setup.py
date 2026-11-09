@@ -225,10 +225,14 @@ class SetupMixin:
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"], rec.get("worktree") or cfg.repos[item.repo]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
+        env = {executor.PORT_VAR: str(rec["port"])}
+        if item.remote:   # opt-in remote workers: `farm-seeds` (docs/remote-workers.md)
+            from . import remote
+            env |= remote.item_launch(cfg.control, paths.prompt)
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
                                                      settings=paths.settings, fork_of=rec.get("resume_session")),
-                                    cwd, paths.prompt, paths.log, paths.stderr, env={executor.PORT_VAR: str(rec["port"])})
+                                    cwd, paths.prompt, paths.log, paths.stderr, env=env)
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
                             pid=None, error=str(exc))

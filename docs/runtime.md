@@ -24,5 +24,7 @@ write.
 - `landing/<repo>__NNN_name.json`: a `land:` still landing, resumed after a restart (`worktrees.md`).
 - `run-<name>.log`, `run-<name>.json`: run targets (`run-targets.md`).
 - `tool-<name>.log`, `tool-<name>.json`: project tools (`app.md`).
+- `remote/`: remote workers' broker, bundles and jobs, in a project with `[remote]` (`remote-workers.md`).
+- `now/<name>.line`: a *Now* line another process keeps fresh (the remote broker's; `inbox.md`).
 - `setup/<repo>__NNN_name.run.json` or `.stage.json`, and their `.result.json`: a setup
   runner's spec and result, removed once setup ends (`executors.md`, *Setup*).

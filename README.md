@@ -64,13 +64,13 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
-| `docs/push.md` | Pushing main after each merge and the control folder after its commits, `push:`, closeout; failures |
+| `docs/push.md` | Pushing main and the control folder, `push:`, closeout; failures |
 | `docs/executors.md` | Launching an executor: MCP and settings files, `wait_for`, message delivery, long calls, setup |
 | `docs/preambles.md` | What it is told: the full, light or watch preamble, its port, scope, scratch and load |
 | `docs/reports.md` | The report's header and an item's outcome |
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |
-| `docs/templates.md` | Audit notes and the conductor-owned templates (cleanup, general cleanup, test cleanup, disk cleanup, claude.md cleanup, content cleanup, bug hunt, self audit, watch) |
+| `docs/templates.md` | Audit notes and the conductor-owned templates (the cleanups, bug hunt, self audit, watch) |
 | `docs/night-shift.md` | The stall check, the watch item, autopilot, the backlog and its draws, the nightly budget |
 | `docs/resume.md` | Resume items: asking a finished item's own session (forked), and its self-audit |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
@@ -81,6 +81,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
+| `docs/remote-workers.md` | Opt-in remote workers: `[remote]`, `farm-seeds`, the broker, removal |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory and load sampling, pressure levels, the launch guard, the leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, project tools, tray |

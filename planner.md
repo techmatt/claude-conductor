@@ -76,7 +76,7 @@ message: "state: v0.2"
 
 ## Every session
 
-- **Open questions first** whenever the planner reads the inbox, a digest or a report: blocking ones, then each default and when it is taken.
+- **Open questions first** on reading the inbox, a digest or a report: blocking ones, then each default and when it is taken.
 - **Rejected signals** (`invalid`, *Red* in the inbox) show until a checkpoint or `ack:`: once the cause is addressed (resent, fixed, moot), signal `ack: invalid #<event>` unasked.
 - Matt raises every next step: answer what is asked, never schedule the next leg.
 - **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`), or the rejected-signal rule (`ack:`). One instruction, one signal file; nothing rides along.
@@ -148,7 +148,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, process all, defaults all, post-audit, art round, review cards / tool X, park / resume project, rename repo) are in `planner-vocab.md`: read it only for one of those or a phrase not here.
+`NNN_name` may be shortened to `NNN` unless its receipt says it's shared; a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, open, ping me, ultracode X, process all, defaults all, post-audit, art round, review cards / tool X, park / resume project, rename repo, use remote workers) are in `planner-vocab.md`: read it only for those, or a phrase not here.
 
 **Session and inbox**
 

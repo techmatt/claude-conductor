@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~85-130s; 426 tests; 2026-11-07)
+uv run pytest            # the fast lane, after every change (~85-130s; 458 tests; 2026-11-09)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~215-235s; 562 tests); run this before committing
+uv run pytest -m ""      # everything (~215-300s; 598 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -31,6 +31,8 @@ waiting; `FAKE subagent <tool>` is a helper subagent's call, its hook input carr
 subagent progress <json>` a helper's `progress` call followed by that hook. A conftest fixture turns the self-restart's code probe off, so a commit to
 conductor during a run never restarts a test's daemon; `tests/test_restart.py` swaps
 `code_probe`, `head_probe`, `import_check` and `restart_spawner` for stand-ins.
+The remote workers' tests live in their module (`src/conductor/remote/tests/`, a second
+`testpaths` entry, their own small conftest) so deleting it takes them too (`remote-workers.md`).
 `tests/test_setup.py` covers setup runners (a slow one waits on a file, like
 `env.hold()`), `tests/test_review.py` the `review:` bundle.
 

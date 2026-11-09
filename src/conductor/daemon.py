@@ -272,6 +272,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
         elif self.snapshot is None:
             self.snapshot = guard.take(self.cfg.control, self.cfg.state_dir, stamp())
+        from . import remote        # opt-in remote workers: a no-op without `[remote]` (docs/remote-workers.md)
+        remote.start_broker(self.cfg.control, lambda note: self.log.append("warning", note=note))
 
     def _check_ignores(self) -> None:
         probes = [n if "." in n and n != ".conductor" else f"{n}/probe" for n in RUNTIME]

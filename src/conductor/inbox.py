@@ -593,6 +593,25 @@ def fold_commits(evs: list[Event]) -> tuple[list[Event], dict[int, Event]]:
     return out, folded
 
 
+NOW_FILE_SECONDS = 30.0
+
+
+def now_files(cfg: Config) -> list[str]:
+    """*Now* lines a process outside the daemon keeps in `.conductor/now/<name>.line`
+    (today the remote-workers broker), each shown only while rewritten in the last 30s."""
+    folder = cfg.state_dir / "now"
+    if not folder.is_dir():
+        return []
+    out, cutoff = [], now().timestamp() - NOW_FILE_SECONDS
+    for path in sorted(folder.glob("*.line")):
+        try:
+            if path.stat().st_mtime >= cutoff and (text := path.read_text(encoding="utf-8").strip()):
+                out.append(text.splitlines()[0])
+        except (OSError, UnicodeDecodeError):
+            continue
+    return out
+
+
 def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, root: Path | None = None) -> str:
     """The inbox; with `heading` (the session digest's), that replaces its title and
     the mark-read hint, since the digest moves the read mark itself. `root` is conductor's
@@ -686,6 +705,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     out.append(f"- {'**' + mem + '**' if level != 'ok' else mem}")
     if busy := memory.load_line(cfg):
         out.append(f"- {busy}")
+    out += [f"- {line}" for line in now_files(cfg)]
     decisions = decide(cfg, view)
     for repo in cfg.repos:
         d = decisions[repo]
