@@ -400,7 +400,9 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
             + f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
             f"The read mark moves to #{top} as this is written; no `read:` is needed.\n\n"
             # Start step 6's access request copies these: guessed, one missing path fails it (84).
-            f"Repos: {', '.join(f'`{p}`' for p in cfg.repos.values()) or 'none'}")
+            f"Repos: {', '.join(f'`{p}`' for p in cfg.repos.values()) or 'none'}"
+            # Until a repo has a remote, every digest says so (91); nothing about push or sync.
+            + "".join(f"\n\n**{git.NO_REMOTE.format(repo=r)}**" for r in git.remote_missing(cfg.repos, ttl=0)))
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
     habits = planner_habits(cfg.control)
     out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]

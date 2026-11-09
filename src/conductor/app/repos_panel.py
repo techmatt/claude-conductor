@@ -25,6 +25,9 @@ def finished_note(f: Finished, when) -> str:
             + (f" · carry: {f.carry}" if f.carry not in (None, "none") else "") + (f" · slow: {f.slow}" if f.slow else ""))
 
 
+NO_REMOTE = "no remote: create its GitHub repo"     # a repo header's marker until it has one (91)
+
+
 class ReposPanel(Panel):
     COLS = ["Repo / item", "State", "Elapsed", "Note", ""]
     FITTED = (0, 1, 2)      # sized to their contents until Matt drags one
@@ -216,7 +219,8 @@ class ReposPanel(Panel):
                               if p.item.split("/", 1)[0] == rs.name and p.state != "saved"):
                 parts.append(f"{waiting} to pick")
             # The audit marker last, so it reads as its own: time for a cleanup when convenient.
-            head = " · ".join(parts + ([audits.pending(rs.audit_notes)] if rs.audit_notes else []))
+            head = " · ".join(parts + ([audits.pending(rs.audit_notes)] if rs.audit_notes else [])
+                              + ([NO_REMOTE] if rs.no_remote else []))
             out.append((rs.name, head, str(rs.path), rows))
         return out
 
@@ -244,7 +248,9 @@ class ReposPanel(Panel):
             top = self._rows[("repo", repo)]
             top.setText(3, note)
             # An audit pending marker draws the header note amber; it clears with the notes.
-            top.setForeground(3, QBrush(QColor(theme.AMBER if "audit pending" in note else theme.MUTED)))
+            # So does a missing remote: both clear once dealt with.
+            top.setForeground(3, QBrush(QColor(theme.AMBER if "audit pending" in note or NO_REMOTE in note
+                                               else theme.MUTED)))
             for key, texts, _, _, _ in rows:
                 w = self._rows[key]
                 for col, t in enumerate(texts):

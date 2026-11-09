@@ -4,6 +4,7 @@ import json
 
 from conductor.app import model, theme
 from conductor.app.model import Project
+from conductor.app.repos_panel import NO_REMOTE
 from test_app import _settings
 
 
@@ -67,7 +68,7 @@ def test_pick_button_in_the_repos_tab(qapp, env, tmp_path):
     panel = view.repos_panel
     row = panel._rows[("done", "code/001_x")]
     assert row.text(3).endswith(" · pick: waiting for Matt")
-    assert any(head.endswith(" · 1 to pick") for _, head, _, _ in panel._plan(view.snap))
+    assert any(head.removesuffix(" · " + NO_REMOTE).endswith(" · 1 to pick") for _, head, _, _ in panel._plan(view.snap))
     holder = panel.tree.itemWidget(row, 4)
     assert list(holder.buttons) == ["Mark reviewed", "Pick…", "Terminal"]
     # The widest row's buttons fit their column, labels whole.

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from conductor.app import model, theme
 from conductor.app.model import Project
+from conductor.app.repos_panel import NO_REMOTE
 from conductor.items import Item
 from test_app import _settings, bare_control
 
@@ -358,7 +359,7 @@ def test_repos_header_counts_unused_audit_notes(qapp, env, tmp_path):
     view = win.views[env.control.resolve()]
     win.refresh()
     assert [rs.audit_notes for rs in view.snap.repos] == [1]
-    assert any(head.endswith(" · audit pending: 1 audit note") for _, head, _, _ in view.repos_panel._plan(view.snap))
+    assert any(head.endswith(" · audit pending: 1 audit note · " + NO_REMOTE) for _, head, _, _ in view.repos_panel._plan(view.snap))
     top = view.repos_panel._rows[("repo", "code")]
     assert top.foreground(3).color().name().lower() == theme.AMBER.lower()
     win._quitting = True

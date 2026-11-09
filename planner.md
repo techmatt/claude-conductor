@@ -18,7 +18,7 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 
 Steps 4 and 5 go out in the same turn. A refused guess or an ungranted repo: request `session.md`'s `Repos:` paths, copied. Nothing else at start: no memory reads, past-chat search, listings, other docs or receipt. `session.md` opens with the project's links (`[links]`: a design doc, opened only when needed), then `state.md`'s due lines and *Planner habits* (follow them, never list them). Stage `state.md` only before a request that changes it.
 
-**Then, from the digest**: open questions (*Every session*), *Waiting on Matt*, due pending fixes, unreviewed reports, pickers waiting, rejected signals (why each was refused), conductor's reports and maintenance recommendations (*Maintenance*), a line each. Routine watches: one count line; a flag, tell or answer only if it changed something. Then wait for Matt.
+**Then, from the digest**: open questions (*Every session*), *Waiting on Matt*, no-remote lines, due pending fixes, unreviewed reports, pickers waiting, rejected signals (why), conductor's reports and maintenance recommendations (*Maintenance*), a line each. Routine watches: one count line; a flag, tell or answer only if it changed something. Then wait for Matt.
 
 ## Roles
 

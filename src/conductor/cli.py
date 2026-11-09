@@ -388,12 +388,12 @@ def cmd_pick(args) -> int:
 def cmd_init(args) -> int:
     from .scaffold import InitError, init
     try:
-        sha, warnings = init(Path(args.folder), args.project, args.repo or [])
+        sha, notes = init(Path(args.folder), args.project, args.repo or [])
     except InitError as exc:
         print(f"conductor: {exc}", file=sys.stderr)
         return 1
-    for w in warnings:
-        print(f"warning: {w}")
+    for note in notes:
+        print(note)
     print(f"created {Path(args.folder).resolve()} ({sha[:10]}); start it with: conductor run {args.folder}")
     return 0
 

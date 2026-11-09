@@ -20,13 +20,20 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
 
 ## Starting a new project
 
-1. Matt names the project and its code repos. Nothing is authored before every name is fixed.
+1. Matt names the project and its code repos. Nothing is authored before every name is fixed. Recommend naming the main code repo after the project (`C:\Code\<project>`): session start's access request guesses it, so a different name costs a fallback each start.
 2. The planner gives Matt the one command that creates the control folder, and Matt runs it in `C:\Code\claude-conductor`:
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
-   It writes the layout, `conductor.toml`, a stub `state.md`, `.gitignore` (every runtime path, `review.md` and `session.md` included) and `.gitattributes`, then makes the first commit. It refuses a folder that already has files in it. Matt creates any code repo that doesn't exist yet.
-3. Matt starts conductor for the project, before the planner writes anything: only a running daemon handles a write, so one made earlier gets no receipt and pending looks the same as lost. The app's **Start daemon**, `uv run conductor run --detach C:\Code\<project>-control` (from anywhere, Claude Code included; then `uv run conductor app C:\Code\<project>-control` adds it to the app), or `uv run conductor run C:\Code\<project>-control` in a plain terminal. Never plain `run` as a Claude Code background command, which takes the daemon and every executor down with it (`docs/restart.md`).
-4. The planner asks for folder access to the control folder and each repo (and to `C:\Code\gdrive-sync` if the project will home files on Drive: *Storage*). Access can only be granted to a folder that exists, and one missing path fails the whole request (*The bridge* in `planner.md`).
-5. The planner writes the first real `state.md` (with *Waiting on Matt*, *Open questions*, *Paged* and *Maintenance* sections: `planner.md`), plus any `conductor.toml` change, as one request (one bridge call). That covers locks, `max_hours`, `ask_default_minutes`, `open_roots` (the project's Drive folder, so **open X** reaches it), and per repo: the `shared` untracked folders and `setup` commands its worktrees need (setup runs off the daemon loop: `docs/executors.md`, *Setup*); its `prose` globs if the default doesn't fit (`docs/items.md`); its `append_only` logs (`docs/worktrees.md`); its `background` globs (`docs/progress.md`); `push = true` once it has a remote Matt wants backed up (`docs/push.md`); or `worktrees = false`. A repo needing large untracked state (build outputs, venvs, per-checkout config) or a sibling repo by relative path starts with `worktrees = false` and `stage = false`; its contract item also reports what a worktree would need (folders to link, files to copy, setup, sibling paths); switching later is a request. A `[run.<name>]` target comes once there is something to run (*Run targets*). `[links]` (name = URL: the design doc, boards) prints first in every `session.md`, so no session links them by hand. It also writes each code repo's `CLAUDE.md` standing contract as a first queued prompt for that repo. The contract holds:
+   It writes the layout, `conductor.toml`, a stub `state.md` with every section, `.gitignore` and `.gitattributes`, and commits; it refuses a folder with files in it. It makes a missing code repo (`git init -b main`, an empty commit, no remote) and prints what it did (`docs/control-folder.md`). Until a repo has a remote, `session.md` says `<repo> has no remote: create its GitHub repo`; relay it.
+3. Matt starts conductor before the planner writes anything: only a running daemon handles a write, so an earlier one gets no receipt. The app's **Start daemon**, `uv run conductor run --detach C:\Code\<project>-control` (from anywhere; `conductor app <control>` adds it to the app), or `uv run conductor run C:\Code\<project>-control` in a plain terminal. Never plain `run` as a Claude Code background command (`docs/restart.md`).
+4. The planner asks for folder access to the control folder, `C:\Code\claude-conductor` and each repo (and to `C:\Code\gdrive-sync` if the project will home files on Drive: *Storage*). One missing path fails the whole request (*The bridge* in `planner.md`).
+5. The planner's first request (one bridge call) edits the stub `state.md` and `conductor.toml`, and queues the contract items. **Day one:**
+   - `locks`, `max_hours`, `ask_default_minutes`; `open_roots` (the project's Drive folder, for **open X**); `[links]` (name = URL: design doc, boards; first in every `session.md`).
+   - Per repo: `shared` untracked folders and `setup` commands its worktrees need (setup runs off the daemon loop: `docs/executors.md`, *Setup*); `worktrees` / `stage`. **Cue for `worktrees = false`:** for an existing repo, one names-only listing of its root decides it: a `.venv`, build outputs, per-checkout config or sibling paths mean `worktrees = false` and `stage = false`, and its contract item reports what a worktree would need; switching later is a request. A new repo starts with worktrees on.
+   - Each code repo's `CLAUDE.md` standing contract, as a first queued prompt for that repo (below).
+
+   **Later**, as needed: a `[run.<name>]` target once there is something to run (*Run targets*); `[tools.<name>]` (`docs/app.md`, *Project tools*); `push = true` once the repo has a remote Matt wants backed up (`docs/push.md`); `prose` globs if the default doesn't fit (`docs/items.md`); `append_only` logs (`docs/worktrees.md`); `background` globs (`docs/progress.md`).
+
+   The contract holds:
    - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
    - "commit to the branch you are on";
    - local 12-hour clock times;
@@ -34,7 +41,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
    - LF line endings (`.gitattributes` `* text=auto eol=lf`);
    - operational facts learned while working promoted into the repo's README, never left only in a report.
 
-   Each write gets its receipt as usual. From then on, work flows through the queue, and each session starts with **start a new <project> session**.
+   From then on, work flows through the queue; each session starts with **start a new <project> session**.
 
 Matt can watch and act without the planner in the desktop app (`uv run conductor app C:\Code\<project>-control`, run in `C:\Code\claude-conductor`).
 

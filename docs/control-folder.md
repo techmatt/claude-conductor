@@ -41,9 +41,8 @@ with `pid: null` until its staging executor spawns. A run record from a staged r
 carries `resume` (old, new, landed).
 
 Conductor creates the runtime folders on start and logs a `warning` event if any of
-them is not git-ignored (a folder made before a runtime path existed, e.g. `review.md`,
-warns `not git-ignored in the control folder: ['review.md']` until a request adds the
-line). `conductor init` (below) writes all of this. A suitable `.gitignore`:
+them is not git-ignored (`not git-ignored in the control folder: ['review.md']`) until
+a request adds it. `conductor init` (below) writes all of this. A suitable `.gitignore`:
 
 ```
 queue/
@@ -130,15 +129,17 @@ the previous config stays in force.
 conductor init C:\Code\<project>-control --project <project> --repo app=C:\Code\app [--repo …]
 ```
 
-creates the folder with the layout above: `conductor.toml` (the project, a `[repos.<name>]`
-table per repo with `push = false` and its path — relative like `../app` when beside or
-under the control folder, else absolute —, `max_hours = 2`,
-`ask_default_minutes = 10`), a stub `state.md`, `.gitignore` covering every runtime
-path, `.gitattributes` (`* text=auto eol=lf`), the runtime folders and a queue folder
-per repo; then `git init -b main` and a first commit of the four tracked files. An
-existing empty folder is fine (Matt may create it first to grant access); a non-empty
-one is refused, never overwritten. A repo path that is not a git repo yet is a warning,
-not an error: its queue holds until it is one.
+creates the folder: `conductor.toml` (the project; per repo a `[repos.<name>]` table, its
+path (relative, `../app`, beside it), `push = false`; `max_hours = 2`,
+`ask_default_minutes = 10`), a stub `state.md` (every section `planner.md` expects, in
+order; *Maintenance* `never` per template and repo), `.gitignore`,
+`.gitattributes`, the runtime and queue folders; then `git init -b main` and a first
+commit. A non-empty folder is refused (an empty one, made to grant access, is fine).
+
+Each repo first (`scaffold.prepare_repo`, printed): missing or not a repo of its own:
+`git init -b main`, an empty commit, no remote; no commits: one on `main`; on another
+branch, no `main`: `main = "<branch>"`. Until a repo has a remote, `session.md` (under
+`Repos:`) and the app's repo header say `<repo> has no remote: create its GitHub repo`.
 
 ## Control-folder guard
 
@@ -171,8 +172,7 @@ tamper or reverted.
 - Tamper is the first entry of the inbox's Red section.
 
 The guard is the backstop: the preamble forbids touching the control folder, and in
-the sandbox executors refused even when told to (edit `state.md`, run a script that
-does, commit through a hook that does). So executor tamper is exercised in the
+the sandbox executors refused even when told to. So executor tamper is exercised in the
 fake-executor tests; end to end, with a change from outside during a live run.
 
 ## Requests

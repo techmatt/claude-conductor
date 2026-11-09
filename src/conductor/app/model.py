@@ -179,6 +179,7 @@ class RepoState:
     earlier: list[Finished] = field(default_factory=list)      # settled by a checkpoint, newest first
     earlier_total: int = 0
     audit_notes: int = 0        # audit notes no cleanup has used yet
+    no_remote: bool = False     # the repo has no git remote yet (91)
 
     @property
     def unreviewed(self) -> int:
@@ -554,6 +555,7 @@ class Project:
         pending = self.scan_picks(view)
         # An item whose picker waits stays current and shown, however old or settled.
         waiting = {item for item, ps in pending.items() if any(p.state != "saved" for p in ps)}
+        no_remote = set(git.remote_missing(cfg.repos))     # asked at most once a minute
         for repo, path in cfg.repos.items():
             aside = {i.id: view.set_aside[i.id] for i in view.queued.get(repo, []) if i.id in view.set_aside}
             rs = RepoState(repo, path, queued=view.queue(repo) + [i for i in view.queued.get(repo, []) if i.id in aside],
@@ -586,6 +588,7 @@ class Project:
             rs.finished, rs.finished_total = finished_items(view, repo, keep=waiting)
             rs.earlier, rs.earlier_total = earlier_items(view, repo, skip=waiting)
             rs.audit_notes = len(view.unused_notes(cfg, repo))
+            rs.no_remote = repo in no_remote
             repos.append(rs)
         st, why = self._state(daemon, repos, open_qs)
         run = {name: self.probe.status(cfg, t) for name, t in cfg.targets.items()}

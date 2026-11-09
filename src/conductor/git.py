@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # git is a console program: started from a process with no console (the app, or a
@@ -41,6 +42,37 @@ def head(repo: Path) -> str | None:
 def symbolic_head(repo: Path) -> str | None:
     out = run(repo, "symbolic-ref", "-q", "HEAD", check=False).strip()
     return out or None
+
+
+def toplevel(path: Path) -> Path | None:
+    """The work tree `path` belongs to, or None outside one."""
+    out = run(path, "rev-parse", "--show-toplevel", check=False).strip() if path.is_dir() else ""
+    return Path(out).resolve() if out else None
+
+
+def has_remote(repo: Path) -> bool | None:
+    """Whether the repo has any git remote; None when it can't be asked (not a repo)."""
+    proc = subprocess.run(["git", "-C", str(repo), "remote"], capture_output=True, **NO_WINDOW) \
+        if repo.is_dir() else None
+    return None if proc is None or proc.returncode != 0 else bool(proc.stdout.strip())
+
+
+NO_REMOTE = "{repo} has no remote: create its GitHub repo"
+_REMOTE_TTL = 60.0
+_remote_seen: dict[Path, tuple[float, bool | None]] = {}
+
+
+def remote_missing(repos: dict[str, Path], ttl: float = _REMOTE_TTL) -> list[str]:
+    """Names of repos with no git remote (a repo git can't read is left out). Each answer is
+    kept `ttl` seconds: the app asks on every refresh."""
+    at, out = time.monotonic(), []
+    for name, path in repos.items():
+        seen = _remote_seen.get(path)
+        if seen is None or at - seen[0] >= ttl:
+            seen = _remote_seen[path] = (at, has_remote(path))
+        if seen[1] is False:
+            out.append(name)
+    return out
 
 
 def refs(repo: Path) -> dict[str, str]:

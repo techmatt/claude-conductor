@@ -7,7 +7,9 @@ an item's detail in `trail.py`.
 - *Repos* — a tree: each repo row, then up to three group rows, each item under its
   group. The repo row's note is a summary in the same words as the items' State
   cells, each item counted once (`1 running · 1 staged · 2 queued · 1 unreviewed`,
-  then `N to pick` and the *audit pending* marker; `held` / `held after red` first
+  then `N to pick`, the *audit pending* marker and, for a repo with no git remote,
+  `no remote: create its GitHub repo` (amber, like the audit marker; `control-folder.md`,
+  *conductor init*); `held` / `held after red` first
   while held; `idle` when there is nothing). Group rows are muted bold labels with
   their count (`In flight (3)`, `Finished since checkpoint (1 unreviewed)` — plain
   `Finished` before any checkpoint — and `Earlier checkpoints (29)`), and nothing in

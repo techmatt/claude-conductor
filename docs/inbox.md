@@ -43,7 +43,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    names the signal file it answers and the checkpoint (number, label, time), so a
    planner that staged it too early sees it is the previous one and stages again, then
    `Repos:`, each repo's path, copied only when *Start*'s guessed `C:\Code\<project>` (86)
-   was refused or a repo is ungranted. Under
+   was refused or a repo is ungranted, then any no-remote line (`control-folder.md`). Under
    the title, `conductor.toml`'s `[links]` (`## Links`, `- name: URL`) when it has any
    (`control-folder.md`). The body is the inbox exactly as it stood after the checkpoint (questions, unreviewed
    reports with conductor's own among them, picks, every unsettled event since the
@@ -80,8 +80,8 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
 3. a `read` event through the last event the digest shows (detail `session`: the
    checkpoint's id), so the next inbox and the next digest start after it.
 
-The digest stays as written until the next `session:`; `inbox.md` carries on as
-before. The planner decides what to recommend from the facts.
+The digest stays until the next `session:`; the planner decides what to recommend
+from the facts.
 
 ## Review bundle
 
