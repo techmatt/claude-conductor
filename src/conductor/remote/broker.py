@@ -129,11 +129,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):     # quiet: the broker log keeps only what matters
         pass
 
-    def _send(self, code: int, body: bytes, ctype: str = "application/json") -> None:
+    def _send(self, code: int, body: bytes, ctype: str = "application/json", cache: str = "no-store") -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         self.wfile.write(body)
 
@@ -161,17 +161,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(PAGE / rest[0])
         if (len(rest) == 3 and rest[0] == "bundle" and all(FILE_RE.match(x) and not RESERVED.match(x)
                                                             for x in rest[1:])):
-            return self._file(self.bundles / rest[1] / rest[2])
+            # A bundle's folder is its key (the commit and any diff hash) and is never rewritten
+            # once there: a browser keeps it, so a tab's cores and a reload fetch it once.
+            return self._file(self.bundles / rest[1] / rest[2], cache="public, max-age=604800, immutable")
         if rest == ["api", "status"] and self._local():
             return self._json(self.board.summary())
         self._send(404, b"not found", "text/plain")
 
-    def _file(self, path: Path) -> None:
+    def _file(self, path: Path, cache: str = "no-store") -> None:
         try:
             data = path.read_bytes()
         except OSError:
             return self._send(404, b"not found", "text/plain")
-        self._send(200, data, TYPES.get(path.suffix, "application/octet-stream"))
+        self._send(200, data, TYPES.get(path.suffix, "application/octet-stream"), cache)
 
     def do_POST(self):
         rest = self._route()
@@ -208,14 +210,14 @@ class Handler(BaseHTTPRequestHandler):
             if b.get("kind") == "local-remote" and not self._local():
                 raise ValueError("a local-remote worker runs on the main box")
             reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")),
-                                fresh=b.get("fresh") is True)
+                                fresh=b.get("fresh") is True, report=b.get("report"))
             board.renew(str(b["worker"]), b.get("running"))
             if b.get("view"):                    # the worker page: what it shows, with the hello it already sends
                 reply |= {"page": {**self.page, "version": page_version()},
                           "view": board.view(str(b["worker"]), b.get("running"))}
             return reply
         if op == "poll":
-            return board.poll(str(b["worker"]))
+            return board.poll(str(b["worker"]), str(b.get("label") or "") or None)
         if op == "gate":
             wid, key = str(b["worker"]), str(b["key"])
             return {"pass": board.gate(wid, key, str(b["value"])), "reference": board.reference_kind(wid, key)}
@@ -299,6 +301,16 @@ def main_load(control: Path) -> dict | None:
                 "high": bool(sample.get("high"))}
     except Exception:                            # noqa: BLE001 - a page nicety, never the broker's end
         return None
+
+
+def running_items(control: Path) -> list[str]:
+    """The items running on the main box now (`running/<repo>/<name>.run.json`), as
+    `<repo>/<name>`: the Cluster panel names them while no farm job is out yet."""
+    try:
+        return sorted(f"{p.parent.name}/{p.name[:-len('.run.json')]}"
+                      for p in (control / "running").glob("*/*.run.json"))
+    except OSError:
+        return []
 
 
 def write_status(r: settings.Remote, info: dict, board: Board) -> None:
@@ -420,6 +432,7 @@ def serve(control: Path, stay: bool = False, after: int | None = None, watch: Co
             time.sleep(2)
             _write_now(r, board.now_line())
             board.load = main_load(r.control)
+            board.items = running_items(r.control)
             write_status(r, info, board)
             try:
                 board.save(r.state / BOARD)

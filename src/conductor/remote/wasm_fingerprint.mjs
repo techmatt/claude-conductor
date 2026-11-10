@@ -20,10 +20,17 @@ for (const [n, input] of tries.entries()) {
   try {
     const m = await import(`${href}?try=${n}`);
     await (input === undefined ? m.default() : m.default(input));
-    process.stdout.write(String(m.fingerprint()).trim() + "\n");
-    process.exit(0);
+    // Let Node exit on its own once stdout is written: process.exit() while its wasm threads
+    // wind down crashed Node on Windows (97: `!(handle->flags & UV_HANDLE_CLOSING)`, exit
+    // 0xC0000409) and lost the reference. A bundle that keeps the loop alive still ends at 2 s.
+    process.stdout.write(String(m.fingerprint()).trim() + "\n", () => {
+      process.exitCode = 0;
+      setTimeout(() => process.exit(0), 2000).unref();
+    });
+    first = null;
+    break;
   } catch (e) {
     first ??= e;
   }
 }
-throw first;
+if (first) throw first;

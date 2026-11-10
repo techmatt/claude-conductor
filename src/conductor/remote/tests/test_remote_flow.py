@@ -82,7 +82,7 @@ def test_a_job_splits_across_the_main_box_and_a_worker_and_merges_byte_identical
     assert {s["worker"] for s in rec["shards"]} == {"main", "lr1"}
     assert rec["engines"] == ["native"] and rec["mixed"] is False
     assert "lr1" in "".join(p.name for p in (farm.r.state / "jobs").glob("*/logs/*.log"))
-    assert "local-remote lr1" in capsys.readouterr().err
+    assert "(lr1) " in capsys.readouterr().err                # the worker's name, then its id
 
 
 def test_output_bytes_are_kept_exactly(farm):
@@ -197,6 +197,7 @@ def test_the_page_and_bundles_need_the_token_and_main_box_calls_need_loopback(fa
     (bundle / "b.wasm").write_bytes(b"\0asm")
     resp = urllib.request.urlopen(base + "bundle/k1/b.wasm")
     assert resp.headers["Content-Type"] == "application/wasm"
+    assert "immutable" in resp.headers["Cache-Control"]        # a key's bundle never changes: fetched once a tab
     for name in ("farm.mjs", "farm.cjs", "farm.js"):          # a module script of another type won't load
         (bundle / name).write_text("export {}\n", encoding="utf-8")
         assert urllib.request.urlopen(base + f"bundle/k1/{name}").headers["Content-Type"].startswith("text/javascript")

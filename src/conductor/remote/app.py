@@ -62,6 +62,46 @@ def plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
+def span(s: float) -> str:
+    s = max(0.0, s)
+    return f"{int(s)} s" if s < 60 else f"{int(s // 60)}m {int(s % 60):02d}s" if s < 3600 else f"{s / 3600:.1f} h"
+
+
+def state_text(w: dict, status: dict, now: float) -> str:
+    """A worker's state in words, as the worker page's header says it (`Board._state`):
+    `preparing · the broker is building the bundle for 810ce37 · 40 s`. Elapsed is on the
+    broker's clock (`status.now`), carried forward by how old the file is."""
+    state, detail = w.get("state", "idle"), w.get("detail", "")
+    if state == "working":
+        return f"working · {plural(w.get('out', 0), 'shard')} out" if w["kind"] != "main" else f"working · {detail}"
+    if state == "idle":
+        return "idle · paused" if detail == "paused" else "idle"
+    words = f"{state} · {detail}" if detail else state
+    if w.get("since") and state in ("preparing", "draining"):
+        words += f" · {span(status.get('now', now) - w['since'] + now - status.get('at', now))}"
+    return words
+
+
+def job_line(status: dict | None, now: float) -> str:
+    """What is happening on the main box, as the worker page's Cluster panel says it: no
+    item running; an item running with no farm work out yet; or the farm job."""
+    job = (status or {}).get("job")
+    items = (status or {}).get("items") or []
+    if not job:
+        return (f"{', '.join(items)} running on the main box; no farm work out yet." if items
+                else "No item is running.")
+    text = (f"Job: {job.get('item') or job['id']} · {job['done']} done · {job['out']} out · "
+            f"{job['pending']} pending of {job['shards']}" + (f" · {eta(job['eta'])}" if job.get("eta") is not None else ""))
+    b = job.get("bundle") or {}
+    if b.get("state") == "building":
+        text += f" · building the wasm bundle for {job.get('key', '')[:7]}"
+        if b.get("since"):
+            text += f" ({span(status.get('now', now) - b['since'] + now - status.get('at', now))})"
+    elif b.get("state") == "failed":
+        text += " · the wasm build failed" + (f": {b.get('error')}" if b.get("error") else "")
+    return text
+
+
 def summarize(status: dict | None, alive: bool, daemon_started: str | None, now: float) -> Chip:
     """The chip's dot and words, the tab's problem line and each farming item's suffix.
     Red: the broker isn't serving. Amber: a connected worker failed its gate, or in the last
@@ -93,17 +133,25 @@ def summarize(status: dict | None, alive: bool, daemon_started: str | None, now:
                         "(a worker dropped or was slow)")
     job = status.get("job")
     farming = {}
+    states = [w.get("state", "idle") for w in live]
+    preparing = states.count("preparing")
     if job:
         text = (f"remote: farming {job['done']}/{job['shards']} shards · "
                 + (plural(len(helping), "worker") if (helping := [w for w in live if w["gate"] != "fail"])
                    else "main box only")
+                + (f" · {preparing} preparing" if preparing else "")
                 + (f" · {eta(job['eta'])}" if job.get("eta") is not None else ""))
         if job.get("item"):
             farming[job["item"]] = f"farming {job['done']}/{job['shards']}"
     elif live:
-        text = f"remote: {plural(len(live), 'worker')} · {plural(sum(w['cores'] for w in live), 'core')} · idle"
+        # the workers' one state (Board._state): the most telling of theirs
+        word = next((s for s in ("error", "preparing", "draining", "working") if s in states), "idle")
+        text = f"remote: {plural(len(live), 'worker')} · {plural(sum(w['cores'] for w in live), 'core')} · {word}"
     else:
         text = "remote: no workers"
+    for w in live:
+        if w.get("state") == "error" and w["id"] not in failed and w.get("detail"):
+            problems.append(f"{w.get('label') or w['id']}: {w['detail']}")
     colour = "amber" if problems else "green" if live else "grey"
     return Chip(colour, text, problems, farming)
 
@@ -167,10 +215,13 @@ class WorkersPanel(QWidget):
         top.addStretch(1)
         lay.addLayout(top)
         self.job = QLabel()
+        self.job.setTextFormat(Qt.TextFormat.PlainText)
+        self.job.setWordWrap(True)
         self.bar = JobBar()
         lay.addWidget(self.job)
         lay.addWidget(self.bar)
         self.problem = QLabel()
+        self.problem.setTextFormat(Qt.TextFormat.PlainText)    # worker names are typed on the page
         self.problem.setWordWrap(True)
         self.problem.setStyleSheet(f"color: {theme.AMBER}")
         lay.addWidget(self.problem)
@@ -197,26 +248,26 @@ class WorkersPanel(QWidget):
         self.problem.setText(" · ".join(chip.problems))
         self.problem.setVisible(bool(chip.problems))
         job = status.get("job") if status else None
+        self.job.setText(job_line(status, now) if chip.colour != "red" else "")
         if job:
-            self.job.setText(f"Job: <b>{job.get('item') or job['id']}</b> · {job['done']} done · {job['out']} out · "
-                             f"{job['pending']} pending of {job['shards']}" + (f" · {eta(job['eta'])}" if job.get("eta") is not None else ""))
             self.bar.set(job["done"], job["out"], job["pending"])
-        else:
-            self.job.setText("No job running.")
         self.bar.setVisible(bool(job))
         rows = status["workers"] if status and chip.colour != "red" else []
         self.table.setRowCount(len(rows))
         for r, w in enumerate(rows):
             main = w["kind"] == "main"
-            state = f"working · {w['out']} out" if w["state"] == "working" else w["state"]
+            state = state_text(w, status, now)
             cells = ["main box" if main else w["label"], w["engine"] if main else f"{w['kind']} · {w['engine']}",
                      plural(status.get("main_slots", 1), "slot") if main else str(w["cores"]), state,
-                     ago(w["last_seen"], now), str(w["today"])]
-            colour = {"working": theme.ACCENT, "gate failed": theme.RED, "stale": theme.MUTED}.get(w["state"])
+                     "local" if main else ago(w["last_seen"], now), str(w["today"])]
+            colour = {"working": theme.ACCENT, "error": theme.RED, "preparing": theme.AMBER, "draining": theme.AMBER,
+                      "offline": theme.MUTED}.get(w.get("state", ""))
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(text)
-                if c == 3 and colour:
-                    item.setForeground(QColor(colour))
+                if c == 3:
+                    item.setToolTip(text)
+                    if colour:
+                        item.setForeground(QColor(colour))
                 self.table.setItem(r, c, item)
 
 

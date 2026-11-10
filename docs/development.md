@@ -8,7 +8,7 @@ in parallel (`pytest-xdist`, up to 8 workers):
 ```
 uv run pytest            # the fast lane, after every change (~85-130s; 483 tests; 2026-11-09)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~215-300s; 624 tests); run this before committing
+uv run pytest -m ""      # everything (~215-300s; 634 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 

@@ -34,6 +34,18 @@
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .chip { border: 1px solid var(--line); background: var(--panel2); border-radius: 999px; padding: 3px 11px; font-size: 12.5px;
           white-space: nowrap; }
+  .state { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 320px; }
+  .state span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { border-radius: 6px; padding: 2px 9px; font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+           background: var(--panel2); border: 1px solid var(--line); color: var(--muted); flex: none; }
+  .badge.s-working { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .badge.s-preparing, .badge.s-draining { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+  .badge.s-error { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 60%, var(--line)); }
+  .badge.s-idle { color: var(--ok); }
+  .namebox { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .namebox input { font: inherit; color: var(--fg); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+                   padding: 3px 8px; width: 170px; }
+  .namebox input:focus { outline: none; border-color: var(--accent); }
 
   /* core grid */
   .ctl { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -50,6 +62,9 @@
   .tile .t3 { font-size: 12px; color: var(--muted); }
   .tile.run { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); animation: pulse 2.4s ease-in-out infinite; }
   .tile.run .t1 b { color: var(--accent); }
+  .tile.prep { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+  .tile.prep .t1 b { color: var(--warn); }
+  .tile.err .t1 b { color: var(--bad); }
   .tile.err { border-color: color-mix(in srgb, var(--bad) 60%, var(--line)); }
   @keyframes pulse { 0%, 100% { background: var(--panel2); }
                      50% { background: color-mix(in srgb, var(--accent) 11%, var(--panel2)); } }
@@ -90,12 +105,14 @@
 <body>
 <main>
   <header class="panel top">
-    <div class="where"><div class="dot" id="dot"></div><span id="project">conductor</span><span class="sep">·</span><span id="item" class="muted">waiting for a job</span></div>
+    <div class="where"><div class="dot" id="dot"></div><span id="project">conductor</span><span class="sep">·</span><span id="item" class="muted">no item running</span></div>
     <div class="chips">
       <span class="chip" id="conn">connecting</span>
-      <span class="chip mono" id="commit" title="the code this job runs">commit —</span>
+      <span class="chip mono" id="commit" title="the bundle this tab has loaded">no bundle</span>
       <span class="chip" id="gate">no fingerprint gate yet</span>
     </div>
+    <div class="state"><span class="badge" id="state">connecting</span><span id="stateText" class="num"></span></div>
+    <label class="namebox" title="This worker's name in the Workers tab, other tabs and the job records; kept in this browser">Name <input id="name" maxlength="40" spellcheck="false"></label>
   </header>
 
   <section class="panel">
@@ -113,7 +130,7 @@
   <div class="cols">
     <section class="panel">
       <div class="head"><h2>Throughput</h2><span class="muted num" id="shardsRun">0 shards</span></div>
-      <div class="big num"><span id="rate">0</span> <small>seeds / min</small></div>
+      <div class="big num"><span id="rate">—</span> <small>seeds / min</small></div>
       <svg class="spark" id="spark" viewBox="0 0 240 54" preserveAspectRatio="none" aria-label="seeds a minute over the last two minutes"></svg>
       <div class="num" id="perCore">—</div>
       <div class="num muted" id="vsMain"></div>
@@ -123,12 +140,13 @@
 
     <section class="panel">
       <div class="head"><h2>Cluster</h2><span class="muted num" id="eta"></span></div>
-      <div id="jobLine">No job is running.</div>
+      <div id="jobLine">No item is running.</div>
       <div class="bar" id="bar"><i class="b-mine" id="bMine" style="width:0"></i><i class="b-done" id="bDone" style="width:0"></i><i class="b-out" id="bOut" style="width:0"></i></div>
       <div class="legend"><span><i class="b-mine"></i><span id="lMine">0</span> this tab</span><span><i class="b-done"></i><span id="lDone">0</span> others</span><span><i class="b-out"></i><span id="lOut">0</span> out</span><span><i style="background:var(--panel2);border:1px solid var(--line)"></i><span id="lPend">0</span> pending</span></div>
       <h3>Other workers</h3>
       <div class="rows" id="workers"><div class="muted">none connected</div></div>
       <h3>Main box</h3>
+      <div id="mainState"></div>
       <div id="loadLine" class="muted">load not reported</div>
       <div class="cpu"><i id="cpuBar" style="width:0"></i></div>
       <div class="rows" id="loadTop"></div>
@@ -167,9 +185,16 @@
   // The page's hello and its cores' polls both prove the broker answers: the header goes by
   // either (an idle tab whose hello stalled read "no broker" while its cores gated, 96).
   let polled = 0, helloAt = 0, helloBusy = false, lastGate = null;
-  const tiles = {};                 // slot -> {state, first, count, shard, at, msSeed, text}
+  // slot -> {state: idle|prep|run|err, step, key, job, shard, first, count, at, text} plus the
+  // last shard's {msSeed, msJob}. Every change replaces the state fields (`setTile`), so no
+  // word outlives its step (97: "loading bundle" stuck under "idle" for 45 min).
+  const tiles = {};
   const done = [];                  // {t, seeds} for every good shard, 2.5 min kept
-  const perSeed = [];               // {rk, v, t} ms a seed, a shard each
+  const perSeed = [];               // {rk, v, t, job} ms a seed, a shard each
+  const compiled = {};              // key -> {step, at, promise}: the bundle's .wasm, fetched and compiled once a tab
+  let have = null;                  // the bundle key this tab's cores last loaded
+  let viewAt = 0;                   // when `view` arrived (its `now` is the broker's clock)
+  const loadTimes = [];             // per key: download, compile, first core ready (diagnostics)
   const best = {};                  // rk -> this tab's best ms a seed for that code and args
   const shards = [];                // the last 60 shard results, for diagnostics
   const events = [];
@@ -181,11 +206,14 @@
   const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
   const short = (v, n = 6) => v ? String(v).slice(0, n) + "…" : "—";
 
-  function label() {
+  function autoLabel() {
     const ua = navigator.userAgent;
     const name = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "browser";
     return `${name} on ${navigator.platform || "?"}`;
   }
+  // The name in the header's box, kept in this browser; empty: the browser and OS.
+  let myName = (store(localStorage, "name") || "").trim().slice(0, 40);
+  const label = () => myName || autoLabel();
 
   function log(text, cls = "") {
     events.push({ at: new Date().toISOString(), text });
@@ -204,11 +232,12 @@
     if (helloBusy) return;
     helloBusy = true; helloAt = Date.now();
     // What the cores are running, so the broker can say which of it nobody needs any more.
-    const running = Object.values(tiles).filter((t) => t.state === "run" && t.job && t.first != null).map((t) => [t.job, t.shard]);
+    const running = Object.values(tiles).filter((t) => (t.state === "run" || t.state === "prep") && t.job && t.first != null).map((t) => [t.job, t.shard]);
     try {
       const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(10000),          // a stalled call fails and is retried, never hangs the loop
-        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label(), view: true, fresh, running }) });
+        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length, label: label(), view: true, fresh,
+                               running, report: report() }) });
       if (!r.ok) throw new Error(`refused (HTTP ${r.status})`);
       const reply = await r.json();
       fresh = false;
@@ -223,6 +252,7 @@
         else if (reply.page.version && reply.page.version !== version && !reloading) reloadForNewPage();
       }
       view = reply.view || null;
+      viewAt = Date.now();
       misses = 0;
       for (const [job, shard] of view?.drop || []) dropShard(job, shard);
     } catch (e) {
@@ -235,17 +265,70 @@
     draw();
   }
 
+  // What this tab says it is doing that the broker can't see (Board._report): draining for a
+  // reload, paused, a core's error, or fetching / compiling / starting a bundle.
+  function report() {
+    const ts = Object.values(tiles), now = Date.now();
+    if (reloading) return { state: "draining", for: (now - reloading) / 1000 };
+    if (paused) return { state: "paused" };
+    const prep = ts.filter((t) => t.state === "prep" && t.step !== "gating");
+    if (prep.length) {
+      const t = prep.reduce((a, b) => (a.at <= b.at ? a : b));
+      const c = compiled[t.key];
+      return { state: "preparing", step: t.step === "waiting" && c ? c.step : t.step, key: t.key, for: (now - t.at) / 1000 };
+    }
+    const err = ts.find((t) => t.state === "err");
+    if (err) return { state: "error", error: `core ${ts.indexOf(err) + 1}: ${err.text}`, for: (now - err.at) / 1000 };
+    return null;
+  }
+
+  // A core's tile, its state fields replaced whole; its last shard's timing kept.
+  function setTile(slot, fields) {
+    const old = tiles[slot] || {};
+    tiles[slot] = { msSeed: old.msSeed, msJob: old.msJob, at: Date.now(), ...fields };
+  }
+
   // A core still running a shard of a closed job, or one another copy already won: a wasm
-  // run can't be interrupted, so the core is replaced (its bundle loads again on next use).
+  // run can't be interrupted, so the core is replaced (its bundle loads again on next use,
+  // from the module this tab already compiled).
   function dropShard(job, shard) {
     for (const [slot, t] of Object.entries(tiles)) {
       const i = Number(slot);
-      if (t.state !== "run" || t.job !== job || t.shard !== shard || !workers[i]) continue;
+      if (!["run", "prep"].includes(t.state) || t.job !== job || t.shard !== shard || !workers[i]) continue;
       workers[i].terminate();
       workers[i] = startCore(i);
-      tiles[i] = { state: "idle" };
+      setTile(i, { state: "idle" });
       log(`core ${i + 1}: dropped shard ${shard} (seeds ${t.first}–${t.first + t.count - 1}): its job closed or another copy is in`, "warn");
     }
+  }
+
+  // The bundle's .wasm for a key, fetched and compiled once for every core of this tab.
+  function compile(key, url) {
+    if (compiled[key]) return compiled[key];
+    for (const k of Object.keys(compiled)) if (k !== have) delete compiled[k];   // two kept at most
+    const c = compiled[key] = { step: "downloading", at: Date.now(), started: Date.now() };
+    hello();
+    c.promise = (async () => {
+      const t0 = performance.now();
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`fetching ${url.split("/").pop()}: HTTP ${r.status}`);
+      const bytes = await r.arrayBuffer();
+      const t1 = performance.now();
+      c.step = "compiling"; c.at = Date.now(); hello(); draw();
+      const module = await WebAssembly.compile(bytes);
+      const t2 = performance.now();
+      c.step = "starting"; c.at = Date.now();
+      c.times = { key, mb: +(bytes.byteLength / 1048576).toFixed(2), download: +((t1 - t0) / 1000).toFixed(2),
+                  compile: +((t2 - t1) / 1000).toFixed(2) };
+      loadTimes.push(c.times); if (loadTimes.length > 10) loadTimes.shift();
+      log(`bundle ${key.slice(0, 7)}: ${c.times.mb} MB fetched in ${fmtS(c.times.download)}, compiled in ${fmtS(c.times.compile)}, once for all cores`);
+      return module;
+    })();
+    c.promise.catch((e) => {
+      delete compiled[key];
+      log(`bundle ${key.slice(0, 7)}: ${e.message || e}; each core loads it itself`, "bad");
+    });
+    return c;
   }
 
   // Every 2 s while the broker answers; backing off to 30 s (with jitter) while it doesn't.
@@ -271,42 +354,63 @@
 
   // ---------------------------------------------------------------- worker messages
   function onMessage(e) {
-    const m = e.data, t = tiles[m.slot] || (tiles[m.slot] = { state: "idle" });
-    if (["idle", "busy", "gating", "gate"].includes(m.type)) {
+    const m = e.data, t = tiles[m.slot] || {};
+    const task = m.job ? { job: m.job, shard: m.shard, first: m.first, count: m.count } : {};
+    if (["idle", "busy", "gating", "gate", "need"].includes(m.type)) {
       polled = Date.now();                       // a core's poll got through
       // Worker messages aren't throttled in a hidden tab, the page's timers are: an idle
       // core's poll also keeps the hello (and its drop list) going.
       if (polled - helloAt > 2500) hello();
     }
-    if (m.type === "busy") firstWork ||= m.at;
-    if (m.type === "busy") Object.assign(t, { state: "run", job: m.job, first: m.first, count: m.count, shard: m.shard, at: m.at, text: "" });
-    else if (m.type === "idle") { if (t.state !== "idle") Object.assign(t, { state: "idle", text: "" }); }
-    else if (m.type === "loading") Object.assign(t, { state: "run", text: "loading bundle", at: Date.now(), first: null });
-    else if (m.type === "gating") Object.assign(t, { state: "run", text: "fingerprint", at: Date.now(), first: null });
-    else if (m.type === "error") { Object.assign(t, { state: "err", text: m.text }); log(`core ${m.slot + 1}: ${m.text}`, "bad"); }
+    if (m.type === "busy") {
+      firstWork ||= m.at;
+      setTile(m.slot, { state: "run", key: m.key, ...task, at: m.at });
+      hello();
+    } else if (m.type === "idle") { if (t.state !== "idle") { setTile(m.slot, { state: "idle" }); hello(); } }
+    else if (m.type === "need") {               // a core wants this key's module: the tab compiles it once
+      const c = compile(m.key, m.url);
+      setTile(m.slot, { state: "prep", step: "waiting", key: m.key, ...task });
+      const w = e.target;
+      c.promise.then((module) => w.postMessage({ type: "module", key: m.key, module }),
+                     () => w.postMessage({ type: "module", key: m.key, module: null }));
+    } else if (m.type === "loading") setTile(m.slot, { state: "prep", step: m.step, key: m.key, ...task });
+    else if (m.type === "loaded") {
+      if (have !== m.key) {
+        const c = compiled[m.key];
+        if (c?.times && !c.times.ready) {
+          c.times.ready = +((Date.now() - c.started) / 1000).toFixed(2);
+          log(`bundle ${m.key.slice(0, 7)}: first core ready ${fmtS(c.times.ready)} after it was asked for`);
+        }
+        log(`now running bundle ${m.key.slice(0, 7)}` + (m.shared ? "" : " (the bundle loaded itself: no shared module)"));
+      }
+      have = m.key;                              // the tile moves on with the core's next message
+    }
+    else if (m.type === "gating") setTile(m.slot, { state: "prep", step: "gating", key: m.key });
+    else if (m.type === "error") { setTile(m.slot, { state: "err", text: m.text }); log(`core ${m.slot + 1}: ${m.text}`, "bad"); hello(); }
     else if (m.type === "back") log(`core ${m.slot + 1}: reaching the broker again`);
     else if (m.type === "hello") hello();
     else if (m.type === "gate") {
-      t.state = "idle";
+      setTile(m.slot, { state: "idle" });
       lastGate = { key: m.key, state: m.pass ? "pass" : "fail", reference: m.reference || "native", value: m.pass ? m.value : "" };
       log(m.pass ? `fingerprint gate passed for ${m.key} (${short(m.value, 12)})` : `fingerprint gate FAILED for ${m.key}: got ${short(m.value, 24)}`, m.pass ? "ok" : "bad");
       hello();
     } else if (m.type === "shard") {
-      t.state = "idle"; t.first = null;
       const s = m.ms / 1000;
       shards.push({ at: new Date().toISOString(), slot: m.slot, job: m.job, shard: m.shard, first: m.first, count: m.count,
                     ms: Math.round(m.ms), ok: m.ok, accepted: m.accepted, err: m.err || undefined });
       if (shards.length > 60) shards.shift();
-      if (!m.ok) { t.state = "err"; t.text = "shard failed"; log(`shard ${m.shard} failed: ${m.err}`, "bad"); }
+      if (!m.ok) { setTile(m.slot, { state: "err", text: `shard ${m.shard} failed` }); log(`shard ${m.shard} failed: ${m.err}`, "bad"); }
       else {
         const rk = m.key + "|" + m.args.join(" "), v = m.ms / m.count;
-        t.msSeed = v;
-        perSeed.push({ rk, v, t: Date.now() }); if (perSeed.length > 400) perSeed.shift();
+        setTile(m.slot, { state: "idle" });
+        Object.assign(tiles[m.slot], { msSeed: v, msJob: m.job });
+        perSeed.push({ rk, v, t: Date.now(), job: m.job }); if (perSeed.length > 400) perSeed.shift();
         best[rk] = Math.min(best[rk] ?? Infinity, v);
         done.push({ t: Date.now(), seeds: m.count });
         if (m.accepted) { ran++; log(`shard ${m.shard} (seeds ${m.first}–${m.first + m.count - 1}) done in ${fmtS(s)}`); }
         else log(`shard ${m.shard} lost the race: another copy got in first (re-run elsewhere)`, "warn");
       }
+      hello();
     }
     draw();
   }
@@ -314,7 +418,7 @@
   function startCore(slot) {
     const w = new Worker(base + "worker.js", { type: "module" });
     w.onmessage = onMessage;
-    w.postMessage({ type: "start", base, wid, slot });
+    w.postMessage({ type: "start", base, wid, slot, label: label() });
     return w;
   }
 
@@ -322,7 +426,7 @@
     const want = paused ? 0 : Number(slider.value);
     $("coresOut").textContent = paused ? 0 : slider.value;
     while (workers.length < want) {
-      tiles[workers.length] = { state: "idle" };
+      setTile(workers.length, { state: "idle" });
       workers.push(startCore(workers.length));
     }
     while (workers.length > want) {
@@ -345,7 +449,8 @@
     if (!perSeed.length) return null;
     const rk = perSeed[perSeed.length - 1].rk;
     const recent = perSeed.filter((p) => p.rk === rk).slice(-6).map((p) => p.v);
-    return { rk, recent: median(recent), best: best[rk], n: perSeed.filter((p) => p.rk === rk).length };
+    return { rk, recent: median(recent), best: best[rk], n: perSeed.filter((p) => p.rk === rk).length,
+             job: perSeed[perSeed.length - 1].job };
   }
 
   function busyCount() { return Object.values(tiles).filter((t) => t.state === "run").length; }
@@ -359,11 +464,29 @@
     $("conn").textContent = connState;
     $("conn").className = "chip " + (connState === "live" ? "ok" : connState === "paused" ? "muted" : "warn");
     $("project").textContent = project;
-    const job = view?.job, gate = view?.gate || lastGate;
-    $("item").textContent = job ? (job.item || job.id) : "waiting for a job";
-    const key = job?.key || gate?.key;
-    $("commit").textContent = key ? "commit " + key.slice(0, 7) + (key.includes("-") ? " +changes" : "") : "commit —";
-    $("commit").title = key ? `the code this job runs: ${key}` : "";
+    const job = view?.job, gate = view?.gate || lastGate, items = view?.items || [];
+    const live = connState === "live" || connState === "paused" || connState === "reloading";
+    $("item").textContent = job ? (job.item || job.id) : items.length ? `${items.join(", ")} · no farm work yet` : "no item running";
+
+    // the one state (Board._state), as the app's Workers tab shows it; offline while unheard
+    const me = live && view?.me ? view.me : { state: "offline", detail: everOk ? "reconnecting to the broker" : "connecting to the broker" };
+    const since = (s) => s ? Math.max(0, view.now - s + (now - viewAt) / 1000) : null;
+    const el = since(me.since);
+    const busy = busyCount();
+    const words = me.state === "working" ? `${busy} of ${workers.length} cores running · ${me.out} shard${me.out === 1 ? "" : "s"} out`
+      : me.state === "idle" ? (me.detail === "paused" ? "paused" : job ? "waiting for work" : "no farm job out")
+      : me.detail + (el != null && ["preparing", "draining"].includes(me.state) ? ` · ${fmtS(el)}` : "");
+    $("state").textContent = me.state;
+    $("state").className = `badge s-${me.state}`;
+    $("stateText").textContent = words;
+    $("stateText").title = words;
+
+    // the bundle this tab has, and the one it is getting ready, if another
+    const target = me.state === "preparing" && me.key ? me.key : null;
+    const s7 = (k) => k.slice(0, 7) + (k.includes("-") ? " +changes" : "");
+    $("commit").textContent = (have ? "bundle " + s7(have) : "no bundle") + (target && target !== have ? ` → ${s7(target)}` : "");
+    $("commit").title = (have ? `this tab's cores run the bundle for ${have}` : "no bundle loaded yet") +
+      (target && target !== have ? `; getting ${target} ready` : "");
     if (gate) {
       const sym = gate.state === "pass" ? "✓" : gate.state === "fail" ? "✗" : "◌";
       $("gate").textContent = gate.state === "pending" ? `${sym} checking the ${gate.reference} reference` :
@@ -378,23 +501,36 @@
       let d = box.children[n];
       if (!d) { d = document.createElement("div"); d.innerHTML = `<div class="t1"><span></span><b></b></div><div class="t2 num"></div><div class="t3 num"></div>`; box.appendChild(d); }
       const t = tiles[i];
-      d.className = "tile " + (t.state === "run" ? "run" : t.state === "err" ? "err" : "");
+      const c = t.key && compiled[t.key];
+      // an idle core while the broker builds this worker's bundle is waiting on that, not idle
+      const building = t.state === "idle" && me.state === "preparing" && me.step === "building";
+      const step = t.state === "prep" ? (t.step === "waiting" ? c?.step || "starting" : t.step) : building ? "building" : null;
+      const badge = t.state === "run" ? "working" : t.state === "prep" || building ? "preparing" : t.state === "err" ? "error"
+        : reloading ? "draining" : "idle";
+      d.className = "tile " + ({ working: "run", preparing: "prep", error: "err" }[badge] || "");
       d.children[0].children[0].textContent = `core ${i + 1}`;
-      d.children[0].children[1].textContent = t.state === "run" ? "running" : t.state === "err" ? "error" : "idle";
-      d.children[1].textContent = t.state === "run" && t.first != null ? `seeds ${t.first}–${t.first + t.count - 1}` : t.text || (t.state === "idle" ? "waiting for work" : "");
-      d.children[1].title = t.text || "";
-      const el = t.state === "run" && t.at ? fmtS((now - t.at) / 1000) : "";
-      const last = t.msSeed ? `${t.msSeed.toFixed(0)} ms a seed` : "";
-      d.children[2].textContent = [el, last].filter(Boolean).join(" · ") || "—";
+      d.children[0].children[1].textContent = badge;
+      const k7 = t.key ? " " + t.key.slice(0, 7) : "";
+      d.children[1].textContent = t.state === "run" ? `seeds ${t.first}–${t.first + t.count - 1}`
+        : building ? `bundle building ${(me.key || "").slice(0, 7)}`
+        : step ? { downloading: "downloading bundle", compiling: "compiling bundle", starting: "starting bundle", gating: "fingerprint check" }[step] + k7
+        : t.state === "err" ? t.text : reloading ? "taking no new work" : paused ? "paused" : "waiting for work";
+      d.children[1].title = d.children[1].textContent;
+      const at = step && t.step === "waiting" && c ? c.at : t.at;
+      const tEl = building && el != null ? fmtS(el) : (t.state === "run" || t.state === "prep") && at ? fmtS((now - at) / 1000) : "";
+      // the last shard's timing only while it is this job's: an older job's would mislead
+      const last = t.msSeed && job && t.msJob === job.id ? `${t.msSeed.toFixed(0)} ms a seed` : "";
+      d.children[2].textContent = [tEl, last].filter(Boolean).join(" · ") || "—";
     });
 
-    // throughput
+    // throughput: "—" while nothing is out here
     const rate = seedsPerMin(now);
-    $("rate").textContent = fmtN(rate);
+    $("rate").textContent = busy || (job && rate) ? fmtN(rate) : "—";
     $("shardsRun").textContent = `${ran} shard${ran === 1 ? "" : "s"} kept`;
     drawSpark(now);
     const r = rateNow();
-    if (r) {
+    $("perCore").className = "num";
+    if (r && job && r.job === job.id) {
       $("perCore").textContent = `${r.recent.toFixed(0)} ms a seed per core (best ${r.best.toFixed(0)})`;
       const main = view?.main?.ms_seed;
       $("vsMain").textContent = main ? `${(main / r.recent).toFixed(2)}× the main box per core (native ${main.toFixed(0)} ms a seed)` : "";
@@ -403,28 +539,34 @@
       $("slow").hidden = !(working && r.n >= 6 && gap >= 0.25);
       $("slow").textContent = `~${Math.round(gap * 100)}% slower than its best: background tab, power saving or other load?`;
     } else {
-      $("perCore").textContent = "no shard run yet"; $("vsMain").textContent = ""; $("slow").hidden = true;
+      $("perCore").textContent = r ? `last job: ${r.recent.toFixed(0)} ms a seed per core` : job ? "no shard of this job run here yet" : "no shard run yet";
+      $("perCore").className = "num muted";
+      $("vsMain").textContent = ""; $("slow").hidden = true;
     }
 
-    // cluster
+    // cluster: no item running; an item but no farm work; a farm job preparing or running
+    const bar = (j) => {
+      const pct = (n) => (j ? 100 * n / j.shards : 0).toFixed(2) + "%";
+      $("bMine").style.width = pct(j?.mine || 0); $("bDone").style.width = pct(j ? j.done - j.mine : 0); $("bOut").style.width = pct(j?.out || 0);
+      $("lMine").textContent = j?.mine || 0; $("lDone").textContent = j ? j.done - j.mine : 0; $("lOut").textContent = j?.out || 0; $("lPend").textContent = j?.pending || 0;
+    };
+    bar(job);
     if (job) {
-      const pct = (n) => (100 * n / job.shards).toFixed(2) + "%";
-      $("jobLine").innerHTML = "";
-      $("jobLine").append(`${job.seeds_done} of ${job.seeds} seeds, ${job.done} of ${job.shards} shards` + (job.jobs > 1 ? ` (${job.jobs - 1} more job${job.jobs > 2 ? "s" : ""} queued)` : ""));
-      $("bMine").style.width = pct(job.mine); $("bDone").style.width = pct(job.done - job.mine); $("bOut").style.width = pct(job.out);
-      $("lMine").textContent = job.mine; $("lDone").textContent = job.done - job.mine; $("lOut").textContent = job.out; $("lPend").textContent = job.pending;
-      $("eta").textContent = job.eta != null ? `ETA ${fmtS(job.eta)}` : `${fmtS(job.elapsed)} in`;
-      if (view.bundle?.state === "building") $("jobLine").append(" · building the wasm bundle…");
-      if (view.bundle?.state === "failed") $("jobLine").append(" · the wasm build failed");
+      const b = job.bundle, bEl = since(b?.since);
+      $("jobLine").textContent = `${job.seeds_done} of ${job.seeds} seeds, ${job.done} of ${job.shards} shards` +
+        (job.jobs > 1 ? ` (${job.jobs - 1} more job${job.jobs > 2 ? "s" : ""} queued)` : "") +
+        (b?.state === "building" ? ` · the broker is building the wasm bundle for ${s7(job.key)}${bEl != null ? ` (${fmtS(bEl)})` : ""}` : "") +
+        (b?.state === "failed" ? ` · the wasm build failed${b.error ? ": " + b.error : ""}` : "");
+      $("eta").textContent = job.eta != null ? `ETA ${fmtS(job.eta)}` : `${fmtS(job.elapsed + (now - viewAt) / 1000)} in`;
     } else {
-      $("jobLine").textContent = "No job is running.";
-      for (const id of ["bMine", "bDone", "bOut"]) $(id).style.width = "0";
-      for (const id of ["lMine", "lDone", "lOut", "lPend"]) $(id).textContent = "0";
+      $("jobLine").textContent = items.length ? `${items.join(", ")} running on the main box; no farm work out yet.` : "No item is running.";
       $("eta").textContent = "";
     }
     const ws = view?.workers || [];
     rows($("workers"), ws.length ? ws.map((w) => [`${w.kind === "browser" ? "◍" : "▣"} ${w.label || w.kind}`,
-      `${w.cores} core${w.cores === 1 ? "" : "s"} · ${w.shards} shards` + (w.ms_seed ? ` · ${w.ms_seed.toFixed(0)} ms` : "")]) : [["none connected", ""]]);
+      `${w.state}${w.state === "working" ? ` · ${w.out} out` : ""} · ${w.cores} core${w.cores === 1 ? "" : "s"} · ${w.shards} shards` + (w.ms_seed ? ` · ${w.ms_seed.toFixed(0)} ms` : "")]) : [["none connected", ""]]);
+    const mb = view?.main;
+    $("mainState").textContent = mb ? (mb.state === "working" ? `working · ${mb.detail} running` : "idle: no shard running here") : "";
     const ld = view?.load;
     $("loadLine").textContent = ld ? `CPU ${ld.cpu}%` + (ld.high ? " · high for a while" : "") : "load not reported (the daemon's memory sampling is off or stale)";
     $("loadLine").className = ld ? (ld.high ? "warn" : "") : "muted";
@@ -432,8 +574,10 @@
     rows($("loadTop"), (ld?.top || []).map((t) => [t.who + (t.item ? "" : " (outside)"), `${t.cpu}%`]));
 
     // the tab title: readable from the tab strip, kept current while hidden (worker messages drive it)
-    const lead = connState === "paused" ? "❚❚ paused" : connState !== "live" ? `… ${connState}` :
-      busyCount() ? `▶ ${busyCount()}/${workers.length} · ${fmtN(rate)}/min` : `◦ idle · ${workers.length} cores`;
+    // (the same state as the badge, so the tab strip never says idle while a bundle loads)
+    const lead = me.state === "offline" ? `… ${connState}` : me.state === "working" ? `▶ ${busy}/${workers.length} · ${fmtN(rate)}/min`
+      : me.state === "preparing" ? `◌ preparing${el != null ? " " + fmtS(el) : ""}` : me.state === "draining" ? "⏏ draining"
+      : me.state === "error" ? "✗ error" : me.detail === "paused" ? "❚❚ paused" : `◦ idle · ${workers.length} cores`;
     document.title = `${lead} · ${project}`;
   }
 
@@ -491,7 +635,9 @@
       throughput: { seedsPerMin: Math.round(seedsPerMin()), shardsKept: ran,
                     msPerSeed: r ? { recent: +r.recent.toFixed(1), best: +r.best.toFixed(1), samples: r.n } : null,
                     mainMsPerSeed: view?.main?.ms_seed ?? null },
-      tiles: Object.entries(tiles).map(([i, t]) => ({ core: +i + 1, state: t.state, msPerSeed: t.msSeed ? +t.msSeed.toFixed(1) : null, text: t.text || undefined })),
+      name: myName || null, bundle: have, bundleLoads: loadTimes,
+      tiles: Object.entries(tiles).map(([i, t]) => ({ core: +i + 1, state: t.state, step: t.step, key: t.key,
+                                                      msPerSeed: t.msSeed ? +t.msSeed.toFixed(1) : null, text: t.text || undefined })),
       broker: view, recentShards: shards.slice(-40), events: events.slice(-100),
     };
   }
@@ -510,6 +656,17 @@
     setTimeout(() => { $("copy").textContent = "Copy diagnostics"; }, 2500);
   });
 
+  $("name").value = myName;
+  $("name").placeholder = autoLabel();
+  $("name").addEventListener("change", (e) => {
+    const was = label();
+    myName = e.target.value.trim().slice(0, 40);
+    e.target.value = myName;
+    store(localStorage, "name", myName);
+    for (const w of workers) w.postMessage({ type: "label", label: label() });
+    if (label() !== was) log(`renamed from "${was}" to "${label()}": shards run from now on carry it`);
+    hello();
+  });
   slider.addEventListener("input", () => { resize(); savePrefs(); log(`cores set to ${slider.value}`); });
   $("toggle").addEventListener("click", () => {
     paused = !paused; $("toggle").textContent = paused ? "Resume" : "Pause";

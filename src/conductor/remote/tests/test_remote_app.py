@@ -44,9 +44,11 @@ def test_panel_rows_states_today_and_reruns(tmp_path):
     rows = {w["id"]: w for w in p["workers"]}
     assert p["workers"][0]["id"] == "main" and rows["main"]["state"] == "working" and rows["main"]["out"] == 2
     assert rows["good"]["state"] == "working" and rows["good"]["out"] == 1 and rows["good"]["today"] == 1
-    assert rows["bad"]["state"] == "gate failed" and rows["gone"]["state"] == "stale"
-    assert p["job"] | {"eta": None} == {"id": jid, "item": "code/001_sim", "shards": 4, "done": 1, "out": 3,
-                                        "pending": 0, "eta": None, "started": B + 1000}
+    assert rows["bad"]["state"] == "error" and "failed the fingerprint gate for k1" in rows["bad"]["detail"]
+    assert rows["gone"]["state"] == "offline"
+    assert rows["main"]["last_seen"] is None                 # the broker's own machine: shown as local
+    assert {k: p["job"][k] for k in ("id", "item", "shards", "done", "out", "pending", "started")} == \
+        {"id": jid, "item": "code/001_sim", "shards": 4, "done": 1, "out": 3, "pending": 0, "started": B + 1000}
     assert p["gate_fails"][0]["label"] == "bad box" and p["gate_fails"][0]["at"] == B + 1000
 
 
@@ -154,3 +156,33 @@ def test_a_handover_for_a_code_change_is_not_amber(tmp_path):
     status = {"at": now, "started": now - 30, "workers": [], "gate_fails": [], "reruns": [], "job": None}
     assert "restarted" in " ".join(app.summarize(status, True, d0, now).problems)
     assert not app.summarize({**status, "handover": True}, True, d0, now).problems
+
+
+def test_the_tab_says_each_state_as_the_page_does():
+    from conductor.remote.app import job_line, state_text
+    now = B + 5001
+    st = status(now=B + 5000, at=B + 5000, items=["code/163_reread"])
+    assert job_line(st, now) == "code/163_reread running on the main box; no farm work out yet."
+    assert job_line(status(), now) == "No item is running."
+    job = {"id": "j1", "item": "code/163_reread", "key": "810ce372c7a6", "shards": 12, "done": 0, "out": 0,
+           "pending": 12, "eta": None, "bundle": {"state": "building", "error": "", "since": B + 4960}}
+    assert job_line(status(now=B + 5000, at=B + 5000, job=job), now).endswith(
+        "building the wasm bundle for 810ce37 (41 s)")
+    w = worker() | {"state": "preparing", "detail": "compiling the bundle for 810ce37", "since": B + 4990}
+    assert state_text(w, st, now) == "preparing · compiling the bundle for 810ce37 · 11 s"
+    assert state_text(worker() | {"state": "working", "out": 2}, st, now) == "working · 2 shards out"
+    assert state_text(worker() | {"state": "idle", "detail": "paused"}, st, now) == "idle · paused"
+    main = st["workers"][0] | {"state": "working", "detail": "3 shards", "out": 3}
+    assert state_text(main, st, now) == "working · 3 shards"
+
+
+def test_the_chip_names_a_preparing_or_failing_worker():
+    from conductor.remote.app import summarize
+    now = B + 5001
+    prep = worker() | {"state": "preparing", "detail": "the broker is building the bundle for 810ce37"}
+    assert summarize(status(workers=[status()["workers"][0], prep]), True, None, now).text == \
+        "remote: 1 worker · 7 cores · preparing"
+    bad = worker() | {"state": "error", "detail": "the wasm build failed for 810ce37: build exit 1: error: x"}
+    chip = summarize(status(workers=[status()["workers"][0], bad]), True, None, now)
+    assert chip.text.endswith("· error") and chip.colour == "amber"
+    assert chip.problems == ["Edge on w1: the wasm build failed for 810ce37: build exit 1: error: x"]

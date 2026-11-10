@@ -26,7 +26,9 @@ import urllib.request
 from pathlib import Path
 
 from . import settings
+from .board import who_path, write_who
 
+MAIN_DONE = {"worker": "main", "kind": "main", "engine": "native", "label": "main box"}
 STATUS_TIMEOUT = 0.5        # a dead broker never delays a local start past a second
 CALL_TIMEOUT = 10.0
 BEAT_SECONDS = 2.0          # the job's heartbeat: a job the broker stops hearing about is dropped
@@ -160,7 +162,9 @@ def build_bundle(r: settings.Remote, key: str, cwd: Path) -> int:
             done = run_simple(settings.fill(r.build, bundle=str(tmp)), cwd, log=log)
             log.write(f"\nexit {done.returncode} after {time.time() - t0:.1f}s\n")
         if done.returncode != 0 or not (tmp / r.bundle_js).exists():
-            (bundles / f"{key}.failed").write_text(f"build exit {done.returncode}\n", encoding="utf-8")
+            why = f"exit {done.returncode}" if done.returncode != 0 else f"no {r.bundle_js} in the bundle"
+            (bundles / f"{key}.failed").write_text(f"build {why}: {failure_line(bundles / f'{key}.build.log')}\n",
+                                                   encoding="utf-8")
             return 1
         (tmp / ".ok").write_text("ok\n", encoding="utf-8")
         os.replace(tmp, final)
@@ -168,6 +172,17 @@ def build_bundle(r: settings.Remote, key: str, cwd: Path) -> int:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         lock.unlink(missing_ok=True)
+
+
+def failure_line(log: Path) -> str:
+    """The line of a build log that says what went wrong: the first `error` line, else the
+    last line before the exit note. Shown with a failed build on the page and in the app."""
+    try:
+        lines = [x.strip() for x in log.read_text(encoding="utf-8", errors="replace").splitlines() if x.strip()]
+    except OSError:
+        return ""
+    lines = [x for x in lines if not x.startswith("exit ")]
+    return next((x for x in lines if x.lower().startswith(("error", "[error]"))), lines[-1] if lines else "")[:240]
 
 
 def wasm_reference(r: settings.Remote, key: str) -> tuple[str, str]:
@@ -225,8 +240,8 @@ def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended
                 broker.call("bundle", {"key": key, "state": "ready", "wasm": wasm}, patience=PATIENCE)
                 return
             if failed.exists():
-                broker.call("bundle", {"key": key, "state": "failed", "error": failed.read_text(encoding="utf-8")},
-                            patience=PATIENCE)
+                broker.call("bundle", {"key": key, "state": "failed",
+                                       "error": failed.read_text(encoding="utf-8").strip()}, patience=PATIENCE)
                 say(f"the wasm build failed; see {bundles / (key + '.build.log')}")
                 return
             ended.wait(0.5)
@@ -350,6 +365,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
                 return code
             shard_path(folder, a).parent.mkdir(parents=True, exist_ok=True)
             try:
+                write_who(shard_path(folder, a), MAIN_DONE)
                 os.replace(tmp, shard_path(folder, a))
             except OSError:
                 if not shard_path(folder, a).exists():
@@ -372,10 +388,20 @@ def _close(broker: Broker, jid: str) -> None:
         pass
 
 
+def kept_by(folder: Path, a: int, k: int, state_shard: dict) -> dict:
+    """Who ran the copy of a shard that is in the output: the note written beside it when it
+    was kept (`board.write_who`), else the broker's state, else the main box (a shard run here
+    after the broker went away). The first finish that was kept, never a re-run that lost."""
+    try:
+        who = json.loads(who_path(shard_path(folder, a)).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        who = state_shard if state_shard.get("worker") else MAIN_DONE
+    return {"first": a, "count": k, **{x: who.get(x) for x in ("worker", "kind", "engine", "label", "ms") if x in who}}
+
+
 def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: Path, wall: float) -> None:
     """Provenance: who ran each shard, whether native and wasm mixed, any gate failure."""
-    shards = [s if s.get("worker") else {"first": a, "count": k, "worker": "main", "kind": "main", "engine": "native"}
-              for (a, k), s in zip(ranges, state.get("shards") or [{}] * len(ranges))]
+    shards = [kept_by(folder, a, k, s) for (a, k), s in zip(ranges, state.get("shards") or [{}] * len(ranges))]
     engines = sorted({s["engine"] for s in shards})
     fps = state.get("fingerprints") or {}
     differ = bool(fps.get("wasm")) and fps.get("wasm") != fps.get("native")
@@ -387,7 +413,9 @@ def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: P
     (folder / "job.json").write_text(json.dumps(rec, indent=1) + "\n", encoding="utf-8", newline="\n")
     by: dict[tuple[str, str], int] = {}
     for s in shards:
-        name = "main box" if s["worker"] == "main" else f"{s['kind']} {s['worker']}"
+        label = s.get("label") or ""
+        name = ("main box" if s["worker"] == "main" else f"{s['kind']} {label} ({s['worker']})"
+                if label and label != s["worker"] else f"{s['kind']} {s['worker']}")
         by[(name, s["engine"])] = by.get((name, s["engine"]), 0) + 1
     parts = ", ".join(f"{name} {n} ({eng})" for (name, eng), n in sorted(by.items()))
     say(f"{sum(s['count'] for s in shards)} seeds in {len(shards)} shards, {wall:.1f}s: {parts}"

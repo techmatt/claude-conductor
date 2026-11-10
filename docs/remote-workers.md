@@ -82,12 +82,9 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   mid-job takes those still pending. Once none is left unleased, the main box re-runs the
   oldest still out on a worker. The first copy back wins, and a shard the main box is
   running is killed when a worker's copy lands.
-- Sharding costs the main box little: on the sandbox (500 seeds, 20 shards, no worker,
-  `main_slots` 1) a sharded `farm-seeds` took 28.5 s against 27.3 s for one bare native run
-  over the range (1.045; prompt 89). That is ~0.5 s fixed (Python, `native_build`, git, the
-  fingerprint) plus ~30 ms a shard, 17 ms of it Windows building a hidden console for the
-  child (`CREATE_NO_WINDOW`). `DETACHED_PROCESS` would save that but lets a native command's
-  own console children open visible windows, so it is not used.
+- Sharding costs the main box little (89, sandbox, no worker): 28.5 s against 27.3 s bare,
+  ~0.5 s fixed plus ~30 ms a shard, 17 ms of it a hidden console (`CREATE_NO_WINDOW`;
+  `DETACHED_PROCESS` would let a native command's own children open windows).
 - A worker that joins mid-job is used at once (89: 600 seeds begun with none, a local-remote
   worker joining 8 s in took 15 of 24 shards; 15.1 s against 33.2 s local, identical).
 - **Leases** (96). A worker no longer heard from (`fresh_seconds`) loses its shards at once.
@@ -112,16 +109,13 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 
 - **The browser page** (`page/`): one Web Worker per core, a core slider (remembered) defaulting to all
   but one. Closing the tab costs nothing but the shards it held, which run elsewhere. It
-  reports itself as `<browser> on <platform>` (`Chrome on Win32`), not the full user agent.
-  What it shows: `remote-status.md`.
-- **On a real laptop over Wi-Fi** (88: Chrome, 8 logical cores, the tab at 7): the tab
-  keeps working in the background, minimised and on a locked screen. Chrome doesn't
-  throttle Web Workers. Per core it ran wasm at 58 ms a seed in front, 64 behind another
-  tab, 66 minimised and a flat 81 locked (power throttling), against the main box's
-  native 61. A closed lid sleeps it: it is dropped `fresh_seconds` later and its leased
-  shards run on the main box. On lid open it rejoins within seconds, with no new gate
-  for the same commit. A 5,000-seed job took 34–46 s (laptop in front or hidden) and about
-  50 s (locked), against 303 s local-only. Every output was byte-identical.
+  is named in its Name box, else `Chrome on Win32` and the like; it compiles a bundle once
+  for all its cores. What it shows: `remote-status.md`.
+- **On a real laptop over Wi-Fi** (88: Chrome, 7 of 8 cores): it works in the background,
+  minimised and locked (Web Workers aren't throttled): wasm 58 ms a seed in front, 64
+  behind a tab, 66 minimised, 81 locked, against native 61. A closed lid sleeps it (its
+  shards go to the main box); it rejoins on open, no new gate. 5,000 seeds: 34–50 s against
+  303 s local, byte-identical.
 - **The local-remote worker** (`python -m conductor.remote.worker <control> [--cores N] [--id ID]`, id `lr<pid>` by default): a
   second process on the main box speaking the same protocol with the native command, for
   tests and failure injection (`--bad-fingerprint`, `--die-after N`, `--fail-every N`,
@@ -172,9 +166,14 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
   browser is connected (a job no browser joins never shares the main box with a build), in its
   own detached process (a job or item that ends first never cuts it short), one per commit at a time, and
   cached in `.conductor/remote/bundles/<commit>/`. Native shards start at once; browsers
-  join when the bundle is ready and its wasm reference known.
-- **Provenance.** Each shard's result carries the worker's id and kind;
-  `.conductor/remote/jobs/<job>/job.json` records who ran each shard, the engines used,
+  join when the bundle is ready and its wasm reference known. A commit outside a job builds
+  nothing. A failed build (with its log's error line: `client.failure_line`) or one over 20
+  minutes is the browsers' `error` state (`remote-status.md`, *One state*).
+- **Provenance.** Who ran the kept copy of each shard is noted beside it
+  (`shards/<first>.who.json`: the broker's, or `farm-seeds`' for a shard it ran after the
+  broker went away), and `.conductor/remote/jobs/<job>/job.json` is built from those notes,
+  so it matches the output's engines even without the broker (97: 162's read "main box 8"
+  for 6 native and 2 wasm shards). The summary names a worker `<kind> <name> (<id>)`. The record also has the engines used,
   whether native and wasm mixed, and both references (`references`: `native`, `wasm`, `differ`); `jobs/<job>/main.log` has a `rerun shard N` line for each
   shard the main box ran while a worker still held it. Workers' logs come back with their results
   (`jobs/<job>/logs/<worker>.log`).

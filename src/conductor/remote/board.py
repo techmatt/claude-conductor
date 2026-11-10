@@ -23,6 +23,10 @@ LOG_FILE_CAP = 2_000_000        # a worker's log file per job stops growing here
 WORKER_FORGET_SECONDS = 3600.0
 LEASE_FLOOR = 60.0              # a derived lease is never shorter than this
 LEASE_FACTOR = 4.0              # a derived lease: this many times a shard's expected time
+BUILD_STUCK_SECONDS = 20 * 60   # a bundle building this long is shown as an error (client.BUILD_STALE_SECONDS)
+STATES = ("offline", "idle", "preparing", "working", "draining", "error")   # a worker's state (`Board.state_of`)
+STEPS = {"downloading": "downloading the bundle", "compiling": "compiling the bundle",
+         "starting": "starting the bundle"}   # what a page may say it is preparing (its hello's `report`)
 
 
 @dataclass
@@ -37,6 +41,7 @@ class Worker:
     shards: int = 0             # shards it won
     day: str = ""               # the local date `today` counts for
     today: int = 0              # shards it won that day (the app's Workers tab)
+    report: dict = field(default_factory=dict)   # what the worker says it is doing (its hello), with `at`
 
     @property
     def engine(self) -> str:
@@ -77,6 +82,7 @@ class Key:
     bundle: str = "none"         # none | building | ready | failed
     error: str = ""
     wasm: str = ""               # the wasm reference: the bundle's own fingerprint() on the main box
+    since: float = 0.0           # when `bundle` last changed (a build's elapsed time)
 
     def reference(self, engine: str) -> str:
         """What a worker of this engine must reproduce (without a wasm reference, the native one)."""
@@ -87,6 +93,42 @@ def _drop_failed(w: Worker) -> None:
     """Forget the keys this worker failed, so its next poll gates them again."""
     for key in [k for k, (state, _) in w.gates.items() if state == "fail"]:
         del w.gates[key]
+
+
+def _report(report, now: float) -> dict:
+    """A worker's own word on what it is doing (the page's hello), kept only in this shape:
+    `{state: preparing|draining|error|paused, step, key, for (seconds in), error}`; `since`
+    is put on the broker's clock, so a skewed laptop clock costs nothing."""
+    if not isinstance(report, dict) or report.get("state") not in ("preparing", "draining", "error", "paused"):
+        return {}
+    out = {"state": report["state"], "at": now}
+    if report["state"] == "preparing":
+        out["step"] = report.get("step") if report.get("step") in STEPS else "starting"
+    key = report.get("key")
+    if isinstance(key, str) and ID_RE.match(key):
+        out["key"] = key
+    try:
+        out["since"] = now - max(0.0, min(float(report.get("for", 0)), 86400.0))
+    except (TypeError, ValueError):
+        out["since"] = now
+    if report["state"] == "error":
+        out["error"] = str(report.get("error", ""))[:200]
+    return out
+
+
+def _short(key: str) -> str:
+    return key[:7] + (" +changes" if "-" in key else "")
+
+
+def who_path(out: Path) -> Path:
+    return out.with_suffix(".who.json")
+
+
+def write_who(out: Path, done: dict) -> None:
+    """Who ran the kept copy of a shard (`shards/<first>.who.json` beside `<first>.out`)."""
+    tmp = out.with_suffix(f".who.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(done) + "\n", encoding="utf-8", newline="\n")
+    os.replace(tmp, who_path(out))
 
 
 class Board:
@@ -106,12 +148,16 @@ class Board:
         self.load: dict | None = None    # the main box's load ({cpu, top, text}), set by the broker's loop
         self.gate_fails: list[dict] = []   # recent gate failures, with `at` (the app's problem line)
         self.reruns: list[float] = []      # when the main box re-ran a shard still out on a worker
+        self.items: list[str] = []         # items running on the main box (the broker's loop: `running_items`)
+        self._wasm: dict[str, str] = {}    # key -> its bundle's one .wasm file (the page compiles it once)
         self._n = 0
 
     # ------------------------------------------------------------ workers
-    def hello(self, wid: str, kind: str, cores: int = 1, label: str = "", fresh: bool = False) -> dict:
+    def hello(self, wid: str, kind: str, cores: int = 1, label: str = "", fresh: bool = False,
+              report=None) -> dict:
         """`fresh`: the first hello of a page load or a worker start, which re-gates every key
-        this worker failed (a fix needs no new tab or worker id)."""
+        this worker failed (a fix needs no new tab or worker id). `report`: what the worker
+        says it is doing that the broker can't see (`_report`), for `state_of`."""
         if not ID_RE.match(wid) or kind not in KINDS or kind == "main":
             raise ValueError("bad worker id or kind")
         with self.lock:
@@ -122,7 +168,8 @@ class Board:
             w = self.workers.get(wid)
             if w is None or w.kind != kind:
                 w = self.workers[wid] = Worker(wid, kind, first_seen=now)
-            w.cores, w.label, w.last_seen = max(1, min(int(cores), 1024)), str(label)[:80], now
+            w.cores, w.label, w.last_seen = max(0, min(int(cores), 1024)), str(label)[:80], now
+            w.report = _report(report, now)
             if fresh:
                 _drop_failed(w)
             return {"ok": True, "poll_ms": 500}
@@ -173,13 +220,17 @@ class Board:
         return sorted((j for j in self.jobs.values() if not j.complete and now - j.seen <= self.fresh_seconds),
                       key=lambda j: j.created)
 
-    def poll(self, wid: str) -> dict:
+    def poll(self, wid: str, label: str | None = None) -> dict:
+        """A worker asks for work (a lease); `label`, its name as it stands now, so a rename
+        is in the records of the shards it runs from then on."""
         with self.lock:
             w = self.workers.get(wid)
             if w is None:
                 return {"task": "hello"}          # unknown (a broker restart): say hello again
             now = self.clock()
             w.last_seen = now
+            if label:
+                w.label = str(label)[:80]
             for job in self._active(now):
                 k = self.keys[job.key]
                 if (w.engine == "wasm" and k.bundle != "ready") or (w.engine == "native" and not job.native):
@@ -199,8 +250,19 @@ class Board:
 
     def _payload(self, job: Job, w: Worker) -> dict:
         if w.engine == "wasm":
-            return {"bundle": f"bundle/{job.key}/", "module": self.bundle_js}
+            return {"bundle": f"bundle/{job.key}/", "module": self.bundle_js, "wasm": self._wasm_file(job.key)}
         return {"native": job.native}
+
+    def _wasm_file(self, key: str) -> str:
+        """The bundle's one `.wasm` file, which the page fetches and compiles once for all its
+        cores; "" when there is none or several (each core then lets init() fetch its own)."""
+        if key not in self._wasm:
+            try:
+                names = [p.name for p in (self.root / "bundles" / key).iterdir() if p.suffix == ".wasm"]
+            except OSError:
+                return ""
+            self._wasm[key] = names[0] if len(names) == 1 else ""
+        return self._wasm[key]
 
     def gate(self, wid: str, key: str, value: str) -> bool:
         with self.lock:
@@ -246,6 +308,9 @@ class Board:
             done = {"worker": wid, "kind": w.kind, "engine": w.engine, "label": w.label, "ms": round(ms)}
             path = job.folder / "shards" / f"{s.first:012d}.out"
             path.parent.mkdir(parents=True, exist_ok=True)
+            # Who ran the copy that is kept, beside it: the job's record reads these, so it
+            # matches the output even when the broker is gone by the end (162's did not).
+            write_who(path, done)
             tmp = path.with_suffix(f".{wid}.tmp")
             tmp.write_bytes(output)
             os.replace(tmp, path)
@@ -285,7 +350,10 @@ class Board:
             k = self.keys.get(key)
             if k is None:
                 return
+            if state != k.bundle:
+                k.since = self.clock()
             k.bundle, k.error = state, error[:300]
+            self._wasm.pop(key, None)
             if state == "ready" and wasm.strip() != k.wasm:
                 k.wasm = wasm.strip()[:200]
                 for w in self.workers.values():
@@ -384,16 +452,8 @@ class Board:
             job = None
             if jobs:
                 j = jobs[0]
-                done = [s for s in j.shards if s.done]
-                out = [s for s in j.shards if not s.done and self._leased(j, s, now)]
-                seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in done)
-                elapsed = max(0.001, now - j.created)
-                eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None
-                job = {"id": j.id, "item": j.item, "key": j.key, "shards": len(j.shards), "done": len(done),
-                       "mine": sum(1 for s in done if s.done["worker"] == wid), "out": len(out),
-                       "pending": len(j.shards) - len(done) - len(out), "seeds": seeds, "seeds_done": seeds_done,
-                       "elapsed": round(elapsed, 1), "eta": None if eta is None else round(eta, 1),
-                       "jobs": len(jobs)}
+                job = self._job_view(j, now)
+                job |= {"mine": sum(1 for s in j.shards if s.done and s.done["worker"] == wid), "jobs": len(jobs)}
             gate = None
             if me and me.gates:
                 key = job["key"] if job and job["key"] in me.gates else max(me.gates, key=lambda k: me.gates[k][1])
@@ -401,16 +461,108 @@ class Board:
                 wasm_ref = me.engine == "wasm" and bool(k and k.wasm)
                 gate = {"key": key, "state": me.gates[key][0], "reference": "wasm" if wasm_ref else "native",
                         "value": (k.reference(me.engine) if k else "")[:16]}
-            bundle = None
-            if job and (k := self.keys.get(job["key"])):
-                bundle = {"state": k.bundle, "error": k.error}
             rates = jobs[0].rates if jobs else {}
+            out_by = self._out_by(jobs, now)
             others = [{"id": w.id, "kind": w.kind, "cores": w.cores, "label": w.label, "shards": w.shards,
-                       "ms_seed": round(rates[w.id], 1) if w.id in rates else None}
+                       "ms_seed": round(rates[w.id], 1) if w.id in rates else None,
+                       **self._state(w, now, jobs, out_by.get(w.id, 0))}
                       for w in self.workers.values() if w.kind != "main" and w.id != wid and self._fresh(w, now)]
-            return {"job": job, "gate": gate, "bundle": bundle, "workers": others,
-                    "main": {"ms_seed": round(rates["main"], 1) if "main" in rates else None},
-                    "load": self.load, "drop": drop}
+            main = self.workers.get("main")
+            return {"now": now, "job": job, "gate": gate, "bundle": job and job["bundle"], "workers": others,
+                    "me": self._state(me, now, jobs, out_by.get(wid, 0)) if me else {"state": "offline"},
+                    "main": {"ms_seed": round(rates["main"], 1) if "main" in rates else None,
+                             **(self._state(main, now, jobs, out_by.get("main", 0)) if main else {"state": "idle"})},
+                    "items": list(self.items), "load": self.load, "drop": drop}
+
+    # ------------------------------------------------------------ one state model
+    def _out_by(self, jobs: list[Job], now: float) -> dict[str, int]:
+        """Shards each worker holds a live lease on, over the open jobs."""
+        out: dict[str, int] = {}
+        for job in jobs:
+            for s in job.shards:
+                if not s.done:
+                    for wid, at in s.leases.items():
+                        if self._live(job, s, wid, at, now):
+                            out[wid] = out.get(wid, 0) + 1
+        return out
+
+    def _job_view(self, j: Job, now: float) -> dict:
+        """An open job as counts, with its bundle's state (the wasm side's preparation)."""
+        done = [s for s in j.shards if s.done]
+        out = [s for s in j.shards if not s.done and self._leased(j, s, now)]
+        seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in done)
+        elapsed = max(0.001, now - j.created)
+        eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None
+        k = self.keys.get(j.key)
+        return {"id": j.id, "item": j.item, "key": j.key, "shards": len(j.shards), "done": len(done),
+                "out": len(out), "pending": len(j.shards) - len(done) - len(out), "seeds": seeds,
+                "seeds_done": seeds_done, "elapsed": round(elapsed, 1), "started": j.created,
+                "eta": None if eta is None else round(eta, 1),
+                "bundle": {"state": k.bundle, "error": k.error, "since": k.since or None} if k else None}
+
+    def state_of(self, wid: str) -> dict:
+        """One worker's state (`_state`), for a test or a caller outside the views."""
+        with self.lock:
+            now = self.clock()
+            jobs = self._active(now)
+            w = self.workers.get(wid)
+            return self._state(w, now, jobs, self._out_by(jobs, now).get(wid, 0)) if w else {"state": "offline"}
+
+    def _state(self, w: Worker, now: float, jobs: list[Job], out: int) -> dict:
+        """The one state every view shows for a worker (STATES): the page and its tab title
+        (`view`'s `me`), the app's chip and Workers tab (`panel`). `{state, detail, key,
+        since, out}`: `detail` is the words after the state, `since` when it began (broker
+        clock), `key` the commit it concerns. The main box is working while it holds a shard,
+        else idle. A worker: offline unheard; draining when it says so; working while it holds
+        a shard; else what its first open job it can serve waits on (the bundle building or
+        failed, its gate pending or failed); else what it says (downloading or compiling the
+        bundle, a core's error); else idle (paused, when it is)."""
+        if w.kind == "main":
+            return {"state": "working", "out": out, "detail": f"{out} shard{'s' * (out != 1)}"} if out \
+                else {"state": "idle", "detail": ""}
+        if not self._fresh(w, now):
+            return {"state": "offline", "detail": ""}
+        rep = w.report if now - w.report.get("at", 0) <= self.fresh_seconds else {}
+        if rep.get("state") == "draining":
+            return {"state": "draining", "out": out, "since": rep["since"],
+                    "detail": "finishing its shards, then reloading for a new page version"}
+        if out:
+            return {"state": "working", "out": out, "detail": f"{out} shard{'s' * (out != 1)}"}
+        for job in jobs:
+            k = self.keys[job.key]
+            if w.engine == "native" and not job.native:
+                continue
+            gate = w.gates.get(job.key, ("", 0.0))
+            base = {"key": job.key}
+            if gate[0] == "fail":
+                return {**base, "state": "error", "since": gate[1],
+                        "detail": f"failed the fingerprint gate for {_short(job.key)}"}
+            if w.engine == "wasm":
+                if k.bundle == "failed":
+                    return {**base, "state": "error", "since": k.since,
+                            "detail": f"the wasm build failed for {_short(job.key)}" + (f": {k.error}" if k.error else "")}
+                if k.bundle == "building" and now - k.since > BUILD_STUCK_SECONDS:
+                    return {**base, "state": "error", "since": k.since,
+                            "detail": f"the wasm build for {_short(job.key)} has run over {BUILD_STUCK_SECONDS // 60} min"}
+                if k.bundle in ("none", "building"):
+                    return {**base, "state": "preparing", "since": k.since or job.created, "step": "building",
+                            "detail": f"the broker is building the bundle for {_short(job.key)}"
+                            if k.bundle == "building" else f"waiting for the bundle build for {_short(job.key)}"}
+            if gate[0] == "pending":
+                return {**base, "state": "preparing", "since": gate[1], "step": "gating",
+                        "detail": f"checking the fingerprint for {_short(job.key)}"}
+            if rep.get("state") == "preparing":
+                key = rep.get("key", job.key)
+                return {"key": key, "state": "preparing", "since": rep["since"], "step": rep["step"],
+                        "detail": f"{STEPS[rep['step']]} for {_short(key)}"}
+            break
+        if rep.get("state") == "error":
+            return {"state": "error", "since": rep["since"], "key": rep.get("key"), "detail": rep.get("error", "")}
+        if rep.get("state") == "preparing":          # loading ahead of any job (a gate's bundle)
+            key = rep.get("key", "")
+            return {"key": key, "state": "preparing", "since": rep["since"], "step": rep["step"],
+                    "detail": f"{STEPS[rep['step']]}" + (f" for {_short(key)}" if key else "")}
+        return {"state": "idle", "detail": "paused" if rep.get("state") == "paused" or not w.cores else ""}
 
     def reference_kind(self, wid: str, key: str) -> str:
         """Which reference this worker is gated against for `key`: wasm or native."""
@@ -426,23 +578,8 @@ class Board:
             now = self.clock()
             jobs = self._active(now)
             j = jobs[0] if jobs else None
-            out_by: dict[str, int] = {}
-            for job in jobs:
-                for s in job.shards:
-                    if not s.done:
-                        for wid, at in s.leases.items():
-                            if self._live(job, s, wid, at, now):
-                                out_by[wid] = out_by.get(wid, 0) + 1
-            job = None
-            if j:
-                done = sum(1 for s in j.shards if s.done)
-                out = sum(1 for s in j.shards if not s.done and self._leased(j, s, now))
-                seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in j.shards if s.done)
-                elapsed = max(0.001, now - j.created)
-                eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None
-                job = {"id": j.id, "item": j.item, "shards": len(j.shards), "done": done, "out": out,
-                       "pending": len(j.shards) - done - out, "eta": None if eta is None else round(eta, 1),
-                       "started": j.created}
+            out_by = self._out_by(jobs, now)
+            job = self._job_view(j, now) if j else None
             today = time.strftime("%Y-%m-%d", time.localtime(now))
             main = self.workers.get("main") or Worker("main", "main", label="main box")
             rows = []
@@ -451,13 +588,14 @@ class Board:
                 gate = w.gates[key][0] if key else ""
                 fresh = w.kind == "main" or self._fresh(w, now)
                 n = out_by.get(w.id, 0)
-                state = ("working" if n else "gate failed" if gate == "fail" else "stale" if not fresh
-                         else "gate pending" if gate == "pending" else "idle")
                 rows.append({"id": w.id, "kind": w.kind, "engine": w.engine, "label": w.label or w.id,
-                             "cores": w.cores, "state": state, "out": n, "gate": gate, "fresh": fresh,
-                             "last_seen": w.last_seen or None, "today": w.today if w.day == today else 0})
-            return {"job": job, "workers": rows, "gate_fails": [dict(g) for g in self.gate_fails],
-                    "reruns": list(self.reruns)}
+                             "cores": w.cores, "out": n, "gate": gate, "fresh": fresh,
+                             # the main box is the broker's own machine: never "seen", always local
+                             "last_seen": None if w.kind == "main" else w.last_seen or None,
+                             "today": w.today if w.day == today else 0,
+                             **self._state(w, now, jobs, n)})
+            return {"now": now, "job": job, "workers": rows, "items": list(self.items),
+                    "gate_fails": [dict(g) for g in self.gate_fails], "reruns": list(self.reruns)}
 
     def now_line(self) -> str | None:
         """The inbox's *Now* line, or None while no worker is connected."""

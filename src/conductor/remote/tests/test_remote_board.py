@@ -302,3 +302,105 @@ def test_the_page_is_told_to_drop_a_closed_jobs_shard_or_one_done_elsewhere(tmp_
     b.close(jid)
     assert b.view("tab", running)["drop"] == [[jid, s0], [jid, s1]]
     assert b.view("tab")["drop"] == []
+
+
+def test_one_state_for_a_browser_from_commit_to_job_end(tmp_path):
+    """A farm job from the start, as every view sees one worker (97): the bundle waited for,
+    built, the gate, the page's own download and compile, working, and idle again."""
+    b, clock = board(tmp_path, fresh=10)
+    b.hello("tab", "browser", cores=4, label="Matt's laptop")
+    b.items = ["code/163_reread"]
+    v = b.view("tab")
+    assert (v["me"]["state"], v["job"], v["items"]) == ("idle", None, ["code/163_reread"])
+    assert v["main"]["state"] == "idle"
+    jid = job(b, key="abcdef1234")
+    assert b.state_of("tab")["state"] == "preparing" and "waiting for the bundle" in b.state_of("tab")["detail"]
+    clock.t += 1
+    b.set_bundle("abcdef1234", "building")
+    s = b.state_of("tab")
+    assert (s["state"], s["step"], s["since"], s["key"]) == ("preparing", "building", 1001, "abcdef1234")
+    assert s["detail"] == "the broker is building the bundle for abcdef1"
+    assert b.view("tab")["job"]["bundle"] == {"state": "building", "error": "", "since": 1001}
+    clock.t += 40
+    b.hello("tab", "browser", cores=4, label="Matt's laptop")
+    b.claim(jid, rerun=False)                                   # the main box's job stays alive (and runs a shard)
+    b.set_bundle("abcdef1234", "ready", wasm="fp")
+    assert b.state_of("tab")["state"] == "idle"                 # until it polls: the gate is next
+    assert b.poll("tab")["task"] == "gate"
+    assert (b.state_of("tab")["state"], b.state_of("tab")["step"]) == ("preparing", "gating")
+    b.gate("tab", "abcdef1234", "fp")
+    clock.t += 1
+    b.hello("tab", "browser", cores=4, label="Matt's laptop",
+            report={"state": "preparing", "step": "compiling", "key": "abcdef1234", "for": 3})
+    s = b.state_of("tab")
+    assert (s["state"], s["step"], s["since"]) == ("preparing", "compiling", 1039)
+    assert s["detail"] == "compiling the bundle for abcdef1"
+    sid = b.poll("tab", label="Matt's laptop")["shard"]
+    assert b.state_of("tab") | {"detail": ""} == {"state": "working", "out": 1, "detail": ""}
+    b.claim(jid, rerun=False)
+    assert b.view("tab")["main"]["state"] == "working"
+    rows = {w["id"]: w for w in b.panel()["workers"]}
+    assert rows["tab"]["state"] == "working" and rows["main"]["state"] == "working"
+    b.hello("tab", "browser", cores=4, label="Matt's laptop")   # the report clears with the next hello
+    assert b.result("tab", jid, sid, True, b"x", ms=100)
+    assert b.jobs[jid].shards[sid].done["label"] == "Matt's laptop"
+    b.close(jid)
+    assert b.state_of("tab")["state"] == "idle" and b.view("tab")["main"]["state"] == "idle"
+    clock.t += 11
+    assert b.state_of("tab")["state"] == "offline"
+
+
+def test_a_failed_build_a_stuck_build_and_a_core_error_are_errors(tmp_path):
+    b, clock = board(tmp_path)
+    job(b, key="k1")
+    b.hello("tab", "browser")
+    b.set_bundle("k1", "failed", error="build exit 101: error[E0425]: cannot find value `x`")
+    s = b.state_of("tab")
+    assert s["state"] == "error" and s["detail"].endswith("cannot find value `x`")
+    b.set_bundle("k1", "building")
+    clock.t += 20 * 60 + 1
+    b.hello("tab", "browser")
+    b.claim(next(iter(b.jobs)))                         # the main box keeps its job alive
+    assert b.state_of("tab")["state"] == "error" and "over 20 min" in b.state_of("tab")["detail"]
+    b2, _ = board(tmp_path / "b2")
+    b2.hello("tab", "browser", report={"state": "error", "error": "core 2: load failed", "for": 1})
+    assert b2.state_of("tab") | {"since": 0} == {"state": "error", "since": 0, "key": None, "detail": "core 2: load failed"}
+    b2.hello("tab", "browser", report={"state": "draining", "for": 5})
+    assert b2.state_of("tab")["state"] == "draining"
+    b2.hello("tab", "browser", cores=0, report={"state": "paused"})
+    assert b2.state_of("tab") == {"state": "idle", "detail": "paused"}
+    b2.hello("tab", "browser", report={"state": "nonsense", "step": "x"})
+    assert b2.state_of("tab")["state"] == "idle"
+
+
+def test_a_kept_shard_names_who_ran_it_beside_its_output(tmp_path):
+    import json
+    b, _ = board(tmp_path)
+    jid = job(b, n=2)
+    gated(b, "lr", kind="local-remote")
+    sid = b.poll("lr", label="spare box")["shard"]
+    assert b.result("lr", jid, sid, True, b"w")
+    assert not b.result("main", jid, sid, True, b"m")   # a re-run that lost is not the kept copy
+    who = json.loads((b.jobs[jid].folder / "shards" / f"{sid * 10:012d}.who.json").read_text(encoding="utf-8"))
+    assert (who["worker"], who["engine"], who["label"]) == ("lr", "native", "spare box")
+
+
+def test_the_job_record_counts_the_kept_copies_even_with_the_broker_gone(tmp_path, capsys):
+    """162: the broker went away before the end, so the record had no state and called every
+    shard the main box's (1080 native and 360 wasm games read "main box 8"). It now reads the
+    note kept beside each shard's output."""
+    import json
+    from conductor.remote import client
+    from conductor.remote.board import write_who
+    folder = tmp_path / "j1"
+    ranges = [(0, 4), (4, 4), (8, 4)]
+    for a, _ in ranges:
+        (folder / "shards").mkdir(parents=True, exist_ok=True)
+        client.shard_path(folder, a).write_bytes(b"x")
+    write_who(client.shard_path(folder, 0), {"worker": "b1", "kind": "browser", "engine": "wasm", "label": "laptop", "ms": 9})
+    write_who(client.shard_path(folder, 4), client.MAIN_DONE)
+    client._record(folder, "k", [], ranges, {}, tmp_path / "out", 1.0)    # no state: the broker was gone
+    rec = json.loads((folder / "job.json").read_text(encoding="utf-8"))
+    assert [s["worker"] for s in rec["shards"]] == ["b1", "main", "main"]
+    assert rec["engines"] == ["native", "wasm"] and rec["mixed"]
+    assert "browser laptop (b1) 1 (wasm), main box 2 (native)" in capsys.readouterr().err
