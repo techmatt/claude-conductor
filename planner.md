@@ -98,8 +98,7 @@ message: "state: v0.2"
 - **Replacing a module**: list every job the old one did and what takes each over.
 - **Say what the executor may change**: e.g. may a measurement or tuning prompt patch content?
 - **Room to adapt**: where interactions are hard to foresee, the executor may adapt adjacent pieces (numbers, small rules, content; no redesigns), each recorded as a candidate.
-- **The goal is the authority.** When the planned route runs out, the executor advances the goal another way and says how; idling to a deadline or re-running an exhausted step is a failure. A skip in a prompt binds; write "lower priority" unless Matt meant a skip.
-- **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. A prompt pre-names a question only when Matt must decide it.
+- **Rulings, goal, bars; method suggested.** State locked rulings, the goal, done-when bars; method is a suggestion unless `(required)`. No "which wins" or read-budget lines: the preamble's *Latitude* (rulings > goal > bars > method; `docs/preambles.md`) covers both. Gates branch, never stop; pre-name a question only when Matt must decide it. A skip binds; write "lower priority" unless Matt meant a skip.
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors', never your own.
 - **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests and builds over 10 min need `background` globs. The preamble holds load budget, elevation, premises, done-when check, report budget: restate one only if an item's differs. A gate inside a time limit: its measured run time beside it, and which checks may drop.

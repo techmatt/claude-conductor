@@ -28,8 +28,7 @@ where one is reasonable: unanswered, it returns after {ask_minutes:g} minutes an
 you carry on. A call holds this whole session, so start any background work first. Block
 (`block: true`) only when every default is worse than waiting; blocked time doesn't count
 toward your limit. A skip in the prompt binds, as does one in a message: the goal decides only
-routes the prompt didn't rule out. Decide anything you don't ask about as fits the goal, record what you
-didn't do, and continue; the only hard stop is a prompt's wrong-repo guard. A default never un-skips a route (say in the
+routes the prompt didn't rule out. A default never un-skips a route (say in the
 report that you'd take it, or ask) and never contradicts a prompt line or amendment unless
 the question's first line says `default overrides prompt: <line>`. A question touching a
 stated design principle is Matt's, as are a lever reversing a direction the brief or an
@@ -38,6 +37,20 @@ side (ask its meaning before acting on all); and a fix changing play beyond its 
 default): `design: true` with a default returns at once, you
 carry on with the default, and his answer comes later as a message. Leave a step whose
 default can't be undone (a delete, an overwrite) until last.{leftover}
+
+Latitude. When lines conflict, this order wins: the project's locked rulings (CLAUDE.md, docs,
+the prompt), the goal, the done-when bars, the method. Say in the report which line gave way
+and why, and continue; never ask about such a conflict. Method (read counts, screen order,
+which tables) is a suggested route: size it to the time budget, deviate when the data says
+so and say why; lines marked required, and what keeps measurement honest (paired seeds, fresh
+seeds for a final read), bind. Score each bar strictly as written (outside a band is unmet)
+but don't chase one: once evidence shows it can't be reached within the rules and allowed
+changes, report it unmet with that evidence and its driver and spend the rest on the goal. A
+numeric target (tuning, calibration, a gate) starts with a cheap reachability check, ~30 min
+or less on a small budget: put back what the new rules changed, or push the strongest allowed
+lever to its limit; if out of reach, post that as progress and go straight to explaining the
+gap. Decide anything else as fits the goal, record it, and continue; the only hard stop is a
+prompt's wrong-repo guard.
 
 Premises. A number or fact the prompt quotes may have moved since: re-read it from
 source before use; report any that had. A timing or speed read
@@ -138,6 +151,10 @@ tests: {threads} threads, a full suite only between sims; half beside another it
 a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
 Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
 No elevation (UAC, admin installs, services): go no-admin or report it.{leftover}
+
+Latitude. Conflicts: locked rulings, then goal, then done-when bars, then method (a suggestion
+unless required); report what gave way, don't ask. Bars are scored strictly, not chased: check
+a numeric target is reachable first; one shown not is reported unmet with its evidence.
 
 MESSAGE #n or AMENDMENT #n hook context is Matt's and outranks the prompt.
 {calls}
@@ -274,8 +291,8 @@ LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time
 LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of the time limit left you may stop, or "
                   "run a further check on the goal, writing only to scratch and inside the load budget.\n")
 LEFTOVER_FULL = (" Before finishing with over an hour of the time limit left, list each done-when item\n"
-                 "against its measured result (a band met is not a target met); for one unmet, take the next\n"
-                 "step that advances it, in scope, and say what it was.")
+                 "against its measured result (a band met is not a target met); for one unmet and not shown\n"
+                 "unreachable, take the next step that advances it, in scope, and say what it was.")
 AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (a small, safe fix, a doc line),\n"
              "even if it takes a little longer: a later cleanup re-reading it costs more. Leave a note\n"
              "only for what needs a decision or is large; the report lists the notes you implemented.\n")

@@ -19,7 +19,7 @@ def test_both_preambles_carry_the_new_lines(env):
     assert "Scripts and file edits: Write/Edit, never a heredoc" in light
     assert "on a load message, finish the unit, then go smaller" in light
     assert "`timeout` sized to the estimate" in light
-    assert len(render(env, SHORT).split()) <= 385
+    assert len(render(env, SHORT).split()) <= 430
 
 
 def test_the_load_message_is_information_not_an_order(env, monkeypatch):

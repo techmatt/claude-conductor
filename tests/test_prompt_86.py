@@ -80,4 +80,4 @@ def test_the_preambles_carry_the_new_lines_inside_their_caps(env):
     calibrating = " ".join(render(env, SHORT * 3 + " Freeze the band at 45-85.").split())
     assert "posts a freeze line as progress before its gate: every done-when line, met or unmet" in calibrating
     light = render(env, SHORT)
-    assert "a full suite only between sims" in " ".join(light.split()) and len(light.split()) <= 385
+    assert "a full suite only between sims" in " ".join(light.split()) and len(light.split()) <= 430

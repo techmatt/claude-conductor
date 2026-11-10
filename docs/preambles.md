@@ -9,7 +9,7 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   `progress` line, scratch, short calls and `wait_for`, messages, the readonly line, the time
   limit and the report rules. No asking, outline, ETAs, port,
   load rules or leftover step.
-- **Light** (`LIGHT`, ~385 words) for a small item (`executor.is_light`): a body under
+- **Light** (`LIGHT`, ~430 words) for a small item (`executor.is_light`): a body under
   150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
   explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
   short art round needs the picker schema). It keeps only what a
@@ -19,7 +19,7 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   `foreground_seconds`, never end the turn to wait); the worktree, `paths`, readonly
   and *Beside you* rules (a shorter worktree text), and a one-line port rule where the
   repo can serve (`has_servers`, below); *Bounds*, one short
-  paragraph of the rules below; the time limit; the report path, its header lines and
+  paragraph of the rules below; *Latitude* in three lines (below); the time limit; the report path, its header lines and
   what each status means. Progress is one line
   at the start, another only past ~15 minutes. No outline, ETAs, pickers or servers:
   an item that proves bigger may still use them, but nothing asks it to.
@@ -27,7 +27,7 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   (one section since 74: when to ask, always with a default; a call holds the session; block
   only when every default is worse; a skip binds; what isn't asked is decided and recorded;
   question defaults, `design: true` and an undoable step last, each said once; the leftover
-  step); *Premises* and *The box* (below); progress and *Outline* (`progress.md`);
+  step); *Latitude* (below); *Premises* and *The box* (below); progress and *Outline* (`progress.md`);
   *Messages* (`executors.md`, *Delivery*); *Short calls*; where it works, `paths`, *Beside you*
   (`scheduling.md`); the time limit; the **absolute report path** (the only file it may
   write outside its repo); the header and what each status means; the report budget (74:
@@ -152,3 +152,17 @@ only in the environment (74). Stages and merge executors get none.
   advances an unmet one, in scope, saying which (aicomplete 090 stopped 3 of 4 hours early
   on its band alone, two targets unmet). `max_hours` is a kill time, not a budget. A
   template's plainer form has no goal condition (`templates.md`).
+- **Latitude** (102, both; aicomplete 167 spent ~3 h tuning toward a ±8 gate its locked
+  rulings put out of reach, then stopped to ask before reporting why). One paragraph after
+  *Asking and scope*, replacing its "decide what you don't ask, the only hard stop" sentence:
+  conflicts resolve in the order locked rulings (CLAUDE.md, docs, the prompt), goal, done-when
+  bars, method, the line that gave way named in the report, never asked about; method (read
+  counts, screen order, tables) is a suggested route sized to the time budget, while lines
+  marked required and what keeps measurement honest (paired seeds, fresh seeds for a final
+  read) bind; each bar is scored strictly as written (outside a band is unmet) but not chased
+  once evidence shows it out of reach, reported unmet with its evidence and driver; a numeric
+  target (tuning, calibration, a gate) starts with a ~30 min reachability check (put back what
+  the new rules changed, or the strongest allowed lever to its limit), posting a miss as
+  progress. The leftover check skips a bar shown unreachable. Light gets the same in three
+  lines. Words: full template 1,055 → 1,228; light rendered 385 → 428, its cap raised to 430
+  (cutting 43 more words would have cost existing rules).
