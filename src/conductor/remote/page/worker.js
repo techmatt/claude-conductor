@@ -25,17 +25,17 @@ async function load(t) {
 }
 
 async function loop() {
-  let failing = false;
+  let misses = 0;
   while (running) {
     let t;
     try {
       t = await api("poll", { worker: wid });
-      if (failing) postMessage({ type: "back", slot });
-      failing = false;
+      if (misses) postMessage({ type: "back", slot });
+      misses = 0;
     } catch (e) {
-      if (!failing) postMessage({ type: "error", slot, text: String(e) });
-      failing = true;
-      await sleep(2000);
+      if (!misses) postMessage({ type: "error", slot, text: String(e) });
+      misses++;      // the broker is down or restarting: 2 s, 4, 8, 16, then every 30 s, jittered
+      await sleep(Math.min(30000, 2000 * 2 ** Math.min(misses - 1, 4)) * (0.8 + Math.random() * 0.4));
       continue;
     }
     if (t.task === "gate") {
@@ -67,10 +67,14 @@ async function loop() {
       const line = `${new Date().toISOString()} slot ${slot} shard ${t.shard} seeds ${t.first}+${t.count} ` +
         `${ok ? "ok" : "failed: " + err} in ${ms.toFixed(0)} ms`;
       let accepted = false;
-      try {
-        accepted = (await api("result", { worker: wid, job: t.job, shard: t.shard, ok, output, log: line, ms })).accepted;
-      } catch (e) {
-        postMessage({ type: "error", slot, text: String(e) });
+      for (let tries = 0; ; tries++) {    // a broker restarting takes the result once it is back (~45 s kept trying)
+        try {
+          accepted = (await api("result", { worker: wid, job: t.job, shard: t.shard, ok, output, log: line, ms })).accepted;
+          break;
+        } catch (e) {
+          if (tries >= 15 || /HTTP 4/.test(String(e))) { postMessage({ type: "error", slot, text: String(e) }); break; }
+          await sleep(3000);
+        }
       }
       postMessage({ type: "shard", ...info, ms, ok, accepted, err });
     } else if (t.task === "hello") {
@@ -87,7 +91,7 @@ onmessage = (e) => {
   if (e.data.type === "start") {
     ({ base, wid, slot } = e.data);
     loop();
-  } else if (e.data.type === "stop") {
-    running = false;
+  } else if (e.data.type === "stop" || e.data.type === "drain") {
+    running = false;                   // drain: the task under way finishes, no new one is taken
   }
 };

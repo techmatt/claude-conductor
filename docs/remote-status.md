@@ -17,11 +17,13 @@ adding the section brings the chip and tab, removing it takes them.
   `● remote: farming 18/36 shards · 2 workers · ETA 4 min` while a job runs (workers that
   failed its gate aren't counted; none left reads `main box only`);
   `● remote: no workers`; `● remote: broker down`. A click opens the Workers tab; the
-  tooltip lists any problem. **Copy worker link** beside it copies `url` (the LAN one).
+  tooltip lists any problem. **Copy worker link** beside it copies `url` (by this PC's name;
+  `remote-url.md`).
 - **The dot**: red when the broker isn't serving (no `status.json`, its pid gone, or the
   file over 10 s old); amber when a connected worker failed its gate, or in the last
   5 minutes a gate failed, the broker restarted under a running daemon (it started over a
-  minute after the daemon: one started with its daemon doesn't count), or the main box
+  minute after the daemon: one started with its daemon, or a handover for a code change,
+  doesn't count), or the main box
   re-ran a shard still out on a worker (`Board.reruns`); grey with no worker connected;
   green otherwise. The Workers tab's label goes amber or red with it.
 - **The Workers tab** (after Proposed): the broker (up since, port, Copy worker link); the
@@ -41,7 +43,8 @@ A status console (90), dark unless the system asks for light, in the project's `
 Broker facts ride the hello it already sends every 2 s (`"view": true`; the reply's `page`
 and `view`, from `Board.view`); its own come from its Web Workers' messages.
 
-- **Header:** live / reconnecting / paused, `project · item`, the short commit
+- **Header:** live / reconnecting (backing off while the broker is away) / paused /
+  reloading (a new page version: `remote-url.md`), `project · item`, the short commit
   (`+changes` when the key carries a diff hash), and the gate with its kind
   (`✓ wasm reference ba4ec8…`).
 - **Cores:** a tile per Web Worker (idle or running, its seed range, elapsed, its last ms a
@@ -63,7 +66,7 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
   token), shown selected in a text box too, where the clipboard API is missing.
 - **Tab title** is a status line: `▶ 4/4 · 980/min · sandbox`, `◦ idle · 4 cores · sandbox`,
   `… reconnecting · sandbox`. Worker messages redraw it, so it stays current in a hidden tab.
-- **Keep screen awake** uses the Screen Wake Lock API, off by default, retaken when the tab
+- **Keep screen awake** uses the Screen Wake Lock API, off by default and remembered, retaken when the tab
   shows again. It needs a secure context: on `http://127.0.0.1` it works; on the LAN URL
   it is hidden. On a laptop, use a power plan that doesn't lock while plugged in, or allow
   the URL in `chrome://flags/#unsafely-treat-insecure-origin-as-secure` (Edge alike).

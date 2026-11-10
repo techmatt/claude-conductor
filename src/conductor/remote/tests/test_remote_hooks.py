@@ -117,9 +117,13 @@ def test_the_daemon_starts_one_broker_and_keeps_it_across_a_restart(project):
     info_path = p.control / ".conductor" / "remote" / "broker.json"
     try:
         end = time.time() + 30
-        while not info_path.exists() and time.time() < end:
+        info = {}
+        while "local" not in info and time.time() < end:      # its pid at once, its address once it serves
             time.sleep(0.1)
-        info = json.loads(info_path.read_text(encoding="utf-8"))
+            try:
+                info = json.loads(info_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
         assert psutil.pid_exists(info["pid"])
         from conductor.remote.client import Broker
         assert Broker(info["local"]).call("status", {})["live"] == 0
@@ -179,3 +183,30 @@ def test_the_now_line_shows_only_while_fresh(project):
     old = time.time() - 60
     os.utime(line, (old, old))
     assert inbox.now_files(p.d.cfg) == []
+
+
+def test_a_generated_token_is_pinned_into_remote_through_a_request(project, no_broker):
+    section = remote_section(token=None).replace("[remote]", "[remote]   # a comment stays")
+    p = project("pin", section)
+    secret = (p.control / ".conductor" / "remote" / "token").read_text(encoding="utf-8").strip()
+    p.tick_until(lambda: p.d.log.last("config_reload"))
+    assert settings.load(p.control).token == secret
+    assert "[remote]   # a comment stays\ntoken = " in (p.control / "conductor.toml").read_text(encoding="utf-8")
+    assert "remote: pin the worker page's token" in subprocess.run(
+        ["git", "-C", str(p.control), "log", "-1", "--format=%s"], capture_output=True, text=True).stdout
+    remote.start_broker(p.control, lambda n: None)                       # pinned: no second request
+    assert not list((p.control / "requests").glob("*"))
+
+
+def test_a_broker_that_died_is_started_again_with_one_warning(project, no_broker):
+    p = project("keep", remote_section())
+    assert len(no_broker) == 1
+    warns: list[str] = []
+    remote._watch[str(p.control)] = (0.0, True)
+    remote.keep_broker(p.control, warns.append)                          # the stand-in's pid isn't a broker
+    assert len(no_broker) == 2 and len(warns) == 1 and "started it again" in warns[0]
+    remote._watch[str(p.control)] = (0.0, remote._watch[str(p.control)][1])
+    remote.keep_broker(p.control, warns.append)                          # it never came up: no new warning
+    assert len(no_broker) == 3 and len(warns) == 1
+    remote.keep_broker(p.control, warns.append)                          # not due yet
+    assert len(no_broker) == 3

@@ -145,15 +145,23 @@
 </main>
 <script>
   const base = location.pathname.endsWith("/") ? location.pathname : location.pathname.replace(/[^/]*$/, "");
-  const wid = "b" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
+  // Storage can be missing or throw (private window, blocked site data): the page works without it.
+  const store = (s, k, v) => { try { if (v === undefined) return s.getItem(k); s.setItem(k, v); } catch { } return null; };
+  const newId = () => "b" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const wid = store(sessionStorage, "wid") || newId();          // the same worker across a reload of this tab
+  store(sessionStorage, "wid", wid);
+  let prefs = {};                                                // the slider, pause and wake choices, kept for good
+  try { prefs = JSON.parse(store(localStorage, "prefs") || "{}") || {}; } catch { }
+  const savePrefs = () => store(localStorage, "prefs", JSON.stringify({ cores: Number(slider.value), paused, wake: wakeWanted }));
   const max = navigator.hardwareConcurrency || 2;
   const $ = (id) => document.getElementById(id);
   const started = Date.now();
   const slider = $("cores");
-  slider.max = max; slider.value = Math.max(1, max - 1);
+  slider.max = max; slider.value = Math.min(max, Math.max(1, prefs.cores || max - 1));
   $("coresMax").textContent = max;
 
-  let workers = [], paused = false, project = "conductor", view = null;
+  let workers = [], paused = !!prefs.paused, project = "conductor", view = null;
+  let version = null, reloading = 0, misses = 0;       // the page's code as first served; a reload under way since
   let lastOk = 0, everOk = false, failing = false, connState = "connecting";
   const tiles = {};                 // slot -> {state, first, count, shard, at, msSeed, text}
   const done = [];                  // {t, seeds} for every good shard, 2.5 min kept
@@ -201,14 +209,38 @@
       if (reply.page) {
         project = reply.page.project || project;
         if (/^#[0-9a-f]{3,6}$/i.test(reply.page.accent || "")) document.documentElement.style.setProperty("--accent", reply.page.accent);
+        if (reply.page.version && version === null) version = reply.page.version;
+        else if (reply.page.version && reply.page.version !== version && !reloading) reloadForNewPage();
       }
       view = reply.view || null;
+      misses = 0;
     } catch (e) {
       if (!failing) log(everOk ? `lost the broker: ${e.message || e}` : `no broker yet: ${e.message || e}`, "bad");
-      failing = true;
+      failing = true; misses++;
       if (!everOk) connState = "no broker";
     }
     draw();
+  }
+
+  // Every 2 s while the broker answers; backing off to 30 s (with jitter) while it doesn't.
+  function helloLoop() {
+    hello().finally(() => {
+      const wait = misses ? Math.min(30000, 2000 * 2 ** Math.min(misses - 1, 4)) * (0.8 + Math.random() * 0.4) : 2000;
+      setTimeout(helloLoop, wait);
+    });
+  }
+
+  // A new page version (conductor's code changed): let each core finish its shard, then reload.
+  // The slider, pause and wake choices are in localStorage and this worker's id in sessionStorage.
+  function reloadForNewPage() {
+    reloading = Date.now();
+    savePrefs();
+    log("a new version of this page is served: finishing running shards, then reloading", "warn");
+    for (const w of workers) w.postMessage({ type: "drain" });
+    const check = setInterval(() => {
+      const busy = Object.values(tiles).some((t) => t.state === "run");
+      if (!busy || Date.now() - reloading > 300000) { clearInterval(check); location.reload(); }
+    }, 250);
   }
 
   // ---------------------------------------------------------------- worker messages
@@ -285,7 +317,7 @@
   // ---------------------------------------------------------------- drawing
   function draw() {
     const now = Date.now();
-    connState = paused ? "paused" : !everOk ? connState : !failing && now - lastOk < 7000 ? "live" : "reconnecting";
+    connState = reloading ? "reloading" : paused ? "paused" : !everOk ? connState : !failing && now - lastOk < 7000 ? "live" : "reconnecting";
     $("dot").className = "dot " + (connState === "live" ? "live" : everOk ? "lost" : "");
     $("conn").textContent = connState;
     $("conn").className = "chip " + (connState === "live" ? "ok" : connState === "paused" ? "muted" : "warn");
@@ -402,7 +434,7 @@
   }
   if ("wakeLock" in navigator) {
     $("wakeBox").hidden = false;
-    $("wake").addEventListener("change", (e) => setWake(e.target.checked));
+    $("wake").addEventListener("change", (e) => setWake(e.target.checked).then(savePrefs));
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -418,7 +450,7 @@
       secureContext: window.isSecureContext, visibility: document.visibilityState,
       wakeLock: !("wakeLock" in navigator) ? "unavailable" : wake ? "held" : "off",
       connection: { state: connState, lastHelloMsAgo: lastOk ? Date.now() - lastOk : null },
-      project, uptimeSeconds: Math.round((Date.now() - started) / 1000),
+      project, pageVersion: version, uptimeSeconds: Math.round((Date.now() - started) / 1000),
       throughput: { seedsPerMin: Math.round(seedsPerMin()), shardsKept: ran,
                     msPerSeed: r ? { recent: +r.recent.toFixed(1), best: +r.best.toFixed(1), samples: r.n } : null,
                     mainMsPerSeed: view?.main?.ms_seed ?? null },
@@ -441,13 +473,15 @@
     setTimeout(() => { $("copy").textContent = "Copy diagnostics"; }, 2500);
   });
 
-  slider.addEventListener("input", () => { resize(); log(`cores set to ${slider.value}`); });
+  slider.addEventListener("input", () => { resize(); savePrefs(); log(`cores set to ${slider.value}`); });
   $("toggle").addEventListener("click", () => {
     paused = !paused; $("toggle").textContent = paused ? "Resume" : "Pause";
-    log(paused ? "paused" : "resumed"); resize();
+    savePrefs(); log(paused ? "paused" : "resumed"); resize();
   });
+  $("toggle").textContent = paused ? "Resume" : "Pause";
+  if (prefs.wake && "wakeLock" in navigator) { $("wake").checked = true; setWake(true); }
   resize();
-  setInterval(hello, 2000);
+  setTimeout(helloLoop, 2000);
   setInterval(() => { if (document.visibilityState === "visible") draw(); }, 1000);
 </script>
 </body>

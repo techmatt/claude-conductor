@@ -39,7 +39,8 @@ def remote_section(**over) -> str:
     keys = {"native": f'["{py}", "{sim}", "{{first}}", "{{count}}", "{{out}}", "{{args}}"]',
             "fingerprint": f'["{py}", "{sim}", "fingerprint"]', "port": "0", "bind": '"127.0.0.1"',
             "shard_seeds": "10", "seed_seconds": "1", "local_below_seconds": "5", "lease_seconds": "30",
-            "fresh_seconds": "5", **over}
+            "fresh_seconds": "5", "token": '"tok-test"', **over}
+    keys = {k: v for k, v in keys.items() if v is not None}          # None: leave the key out
     return "\n[remote]\n" + "".join(f"{k} = {v}\n" for k, v in keys.items())
 
 

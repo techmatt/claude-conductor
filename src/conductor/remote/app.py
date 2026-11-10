@@ -65,7 +65,8 @@ def plural(n: int, word: str) -> str:
 def summarize(status: dict | None, alive: bool, daemon_started: str | None, now: float) -> Chip:
     """The chip's dot and words, the tab's problem line and each farming item's suffix.
     Red: the broker isn't serving. Amber: a connected worker failed its gate, or in the last
-    few minutes a gate failed, the broker restarted under a running daemon, or the main box
+    few minutes a gate failed, the broker restarted under a running daemon (not a handover
+    for a code change: that is expected), or the main box
     re-ran shards a worker dropped. Grey: no worker connected. Green otherwise."""
     if not status or not alive or now - status.get("at", 0) > STALE_SECONDS:
         return Chip("red", "remote: broker down",
@@ -84,7 +85,7 @@ def summarize(status: dict | None, alive: bool, daemon_started: str | None, now:
         d0 = parse_stamp(daemon_started).timestamp() if daemon_started else None
     except (ValueError, TypeError):
         d0 = None
-    if d0 and started - d0 > RESTART_GAP and now - started < RECENT_SECONDS:
+    if d0 and started - d0 > RESTART_GAP and now - started < RECENT_SECONDS and not status.get("handover"):
         problems.append(f"the broker restarted at {when(started)}")
     reruns = [t for t in status.get("reruns", []) if now - t < RECENT_SECONDS]
     if reruns:

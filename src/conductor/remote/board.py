@@ -13,7 +13,7 @@ import os
 import re
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -396,6 +396,38 @@ class Board:
         failed = sum(1 for w in live if "fail" in w["gates"].values())
         return (f"remote workers: {len(live)} connected ({', '.join(f'{n} {k}' for k, n in sorted(kinds.items()))}), "
                 f"{sum(w['cores'] for w in live)} cores" + (f"; {failed} failed the fingerprint gate" if failed else ""))
+
+    # ------------------------------------------------------------ across a broker restart
+    def save(self, path: Path) -> None:
+        """Everything above as JSON (the broker's loop, every 2 s, and its last act on a
+        handover), so a new broker carries on: jobs, shards done and leased, workers and
+        their gates. A worker mid-shard posts its result to the new broker and it counts."""
+        with self.lock:
+            data = {"at": self.clock(), "n": self._n, "gate_fails": self.gate_fails, "reruns": self.reruns,
+                    "workers": [asdict(w) for w in self.workers.values()],
+                    "keys": {k: asdict(v) for k, v in self.keys.items()},
+                    "jobs": [asdict(j) | {"folder": str(j.folder)} for j in self.jobs.values()]}
+        tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data) + "\n", encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
+
+    def restore(self, path: Path) -> bool:
+        """Take up a saved board (`save`); False, and nothing changed, if there is none or it
+        doesn't read. Jobs the main box stopped calling drop out as ever (`_active`)."""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            workers = {w["id"]: Worker(**{**w, "gates": {k: tuple(v) for k, v in w["gates"].items()}})
+                       for w in data["workers"]}
+            keys = {k: Key(**v) for k, v in data["keys"].items()}
+            jobs = {j["id"]: Job(**{**j, "folder": Path(j["folder"]), "shards": [Shard(**s) for s in j["shards"]]})
+                    for j in data["jobs"] if j["key"] in keys}
+            n = int(data["n"])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return False
+        with self.lock:
+            self.workers, self.keys, self.jobs, self._n = workers, keys, jobs, n
+            self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])
+        return True
 
     @staticmethod
     def _append(path: Path, text: str, cap: int | None = None) -> None:

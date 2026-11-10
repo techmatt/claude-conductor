@@ -218,3 +218,20 @@ def test_without_a_wasm_reference_a_browser_meets_the_native_one(tmp_path):
     b.hello("tab", "browser")
     assert b.poll("tab")["task"] == "gate" and b.gate("tab", "k1", "fp")
     assert b.state(jid)["fingerprints"] == {"native": "fp", "wasm": None}
+
+
+def test_a_saved_board_carries_jobs_leases_and_gates_to_a_new_broker(tmp_path):
+    b, clock = board(tmp_path)
+    jid = job(b)
+    gated(b, "w1")
+    s0 = b.poll("w1")["shard"]
+    assert b.result("w1", jid, s0, True, b"x", ms=100)
+    out = b.poll("w1")["shard"]                        # out on w1 when the broker restarts
+    b.save(tmp_path / "board.json")
+    b2 = Board(tmp_path, lease_seconds=30, fresh_seconds=5, native_argv=["sim"], clock=clock)
+    assert b2.restore(tmp_path / "board.json")
+    assert b2.result("w1", jid, out, True, b"y", ms=100)    # the shard in flight lands on the new one
+    assert b2.state(jid)["done"] == [s0, out]
+    assert b2.poll("w1")["task"] == "shard"            # gate kept: straight to the last shard
+    assert b2.add_job("k1", "fp", [], [(0, 1)], ".") != jid  # ids never repeat
+    assert not Board(tmp_path).restore(tmp_path / "missing.json")

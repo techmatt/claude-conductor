@@ -6,8 +6,9 @@ Placement: no broker, or a job estimated under `local_below_seconds`, runs the n
 command at once over the whole range. Otherwise the range is split into shards whether or
 not a worker is connected, so one that joins mid-job takes those still pending; the main
 box claims shards too (`main_slots` at once) and, once none is left unleased, re-runs one
-still out on a worker (the first copy back wins). A broker that dies part-way costs only
-speed: the shards not yet in run here."""
+still out on a worker (the first copy back wins). A broker that restarts part-way is waited
+for (`PATIENCE`) and the job carries on; one that stays gone costs only speed: the shards not
+yet in run here."""
 
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ STATUS_TIMEOUT = 0.5        # a dead broker never delays a local start past a se
 CALL_TIMEOUT = 10.0
 BEAT_SECONDS = 2.0          # the job's heartbeat: a job the broker stops hearing about is dropped
 BUILD_STALE_SECONDS = 20 * 60
+PATIENCE = 45.0             # a broker restarting (a handover, or the daemon starting one that died) is waited this long
 WIN = sys.platform == "win32"
 NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if WIN else {}
 
@@ -95,15 +97,22 @@ class Broker:
         except (OSError, ValueError, KeyError, TypeError):
             return None
 
-    def call(self, op: str, body: dict | None = None, timeout: float = CALL_TIMEOUT) -> dict:
+    def call(self, op: str, body: dict | None = None, timeout: float = CALL_TIMEOUT, patience: float = 0.0) -> dict:
+        """One call; with `patience`, a broker that isn't answering (or says it is restarting)
+        is tried again for that long first: a broker restart is a gap, not the job's end."""
+        end = time.monotonic() + patience
         data = json.dumps(body or {}).encode()
-        req = urllib.request.Request(self.url + "api/" + op, data=data, method="POST",
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return json.loads(resp.read())
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            raise BrokerDown(f"{op}: {exc}") from exc
+        while True:
+            req = urllib.request.Request(self.url + "api/" + op, data=data, method="POST",
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    return json.loads(resp.read())
+            except (urllib.error.URLError, OSError, ValueError) as exc:
+                answered = isinstance(exc, urllib.error.HTTPError) and exc.code != 503
+                if answered or time.monotonic() >= end:
+                    raise BrokerDown(f"{op}: {exc}") from exc
+                time.sleep(0.5)
 
 
 # ------------------------------------------------------------------ the job
@@ -199,12 +208,12 @@ def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended
     final, failed = bundles / key / ".ok", bundles / f"{key}.failed"
     try:
         if not final.exists():
-            while not ended.is_set() and not broker.call("status", {"key": key}).get("browsers"):
+            while not ended.is_set() and not broker.call("status", {"key": key}, patience=PATIENCE).get("browsers"):
                 ended.wait(BEAT_SECONDS)
             if ended.is_set():
                 return
             failed.unlink(missing_ok=True)
-            broker.call("bundle", {"key": key, "state": "building"})
+            broker.call("bundle", {"key": key, "state": "building"}, patience=PATIENCE)
             # Detached: out of the executor's job object, so its end never kills a build.
             procs.spawn_detached([sys.executable, "-P", "-m", "conductor.remote.client", "--build", key, str(cwd)],
                                  cwd, bundles / f"{key}.spawn.log")
@@ -213,10 +222,11 @@ def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended
                 wasm, why = wasm_reference(r, key)
                 if why:
                     say(f"no wasm reference ({why}); browsers are gated against the native fingerprint")
-                broker.call("bundle", {"key": key, "state": "ready", "wasm": wasm})
+                broker.call("bundle", {"key": key, "state": "ready", "wasm": wasm}, patience=PATIENCE)
                 return
             if failed.exists():
-                broker.call("bundle", {"key": key, "state": "failed", "error": failed.read_text(encoding="utf-8")})
+                broker.call("bundle", {"key": key, "state": "failed", "error": failed.read_text(encoding="utf-8")},
+                            patience=PATIENCE)
                 say(f"the wasm build failed; see {bundles / (key + '.build.log')}")
                 return
             ended.wait(0.5)
@@ -272,7 +282,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
     def slot(n: int) -> None:
         while not down.is_set():
             try:
-                c = broker.call("claim", {"job": jid})
+                c = broker.call("claim", {"job": jid}, patience=PATIENCE)
             except BrokerDown:
                 down.set()
                 return
@@ -296,7 +306,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
             try:
                 broker.call("result", {"worker": "main", "job": jid, "shard": sid, "ok": ok,
                                        "output_b64": base64.b64encode(tmp.read_bytes()).decode() if ok else "",
-                                       "ms": (time.time() - t) * 1000})
+                                       "ms": (time.time() - t) * 1000}, patience=PATIENCE)
             except BrokerDown:
                 down.set()
             if not ok:
@@ -323,7 +333,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
     state = {}
     if not down.is_set() and not errors:
         try:
-            state = broker.call("state", {"job": jid})
+            state = broker.call("state", {"job": jid}, patience=PATIENCE)
         except BrokerDown:
             down.set()
     missing = [(a, k) for a, k in ranges if not shard_path(folder, a).exists()]

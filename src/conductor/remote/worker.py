@@ -18,7 +18,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import settings
+from . import client, settings
 from .client import Broker, BrokerDown, resolve, run_native
 
 
@@ -53,11 +53,14 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
                 time.sleep(1)
                 continue
             task = t.get("task")
-            if task == "hello":
-                broker.call("hello", {"worker": wid, "kind": "local-remote", "cores": cores})
-            elif task == "gate":
-                value = "not-the-fingerprint" if bad_fingerprint else _fingerprint(t["native"], fp_argv)
-                broker.call("gate", {"worker": wid, "key": t["key"], "value": value})
+            if task in ("hello", "gate"):            # hello: a broker that restarted without its board
+                value = "" if task == "hello" else (
+                    "not-the-fingerprint" if bad_fingerprint else _fingerprint(t["native"], fp_argv))
+                try:
+                    broker.call(task, {"worker": wid, "kind": "local-remote", "cores": cores} if task == "hello"
+                                else {"worker": wid, "key": t["key"], "value": value})
+                except BrokerDown:
+                    pass
             elif task == "shard":
                 with lock:
                     ran[0] += 1
@@ -77,7 +80,8 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
                       f"exit {code} in {(time.time() - t0) * 1000:.0f} ms" + ("" if ok else " (failed)")
                 try:
                     broker.call("result", {"worker": wid, "job": t["job"], "shard": t["shard"], "ok": ok,
-                                           "output_b64": data, "log": log, "ms": (time.time() - t0) * 1000})
+                                           "output_b64": data, "log": log, "ms": (time.time() - t0) * 1000},
+                                patience=client.PATIENCE)      # lands on a restarted broker
                 except BrokerDown:
                     pass
             else:

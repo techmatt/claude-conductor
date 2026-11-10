@@ -20,7 +20,7 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
 - **The broker** (`broker.py`, its state in `board.py`) is its own process, started by the
   daemon at its start for a project with `[remote]`, and kept across a daemon restart
   unless the section changed. It exits once the daemon has been gone a minute. If it
-  crashes, the daemon and its items carry on and jobs run locally.
+  dies, the daemon starts it again within 10 s (one warning); its jobs carry on (`remote-url.md`).
 - **LAN only, one shared token.** It binds `bind:port` (default `0.0.0.0:8770`) and serves
   every path under `/w/<token>/`: the worker page, the wasm bundles and the job API.
   Workers pull: they poll for shards and post results; a worker never listens. The main
@@ -28,8 +28,8 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
   `Origin` header, and so is a local-remote worker; every POST must be `application/json`,
   so a web page open on the main box can't forge one. Bodies are capped at 16 MB and a
   stalled connection drops after 30 s. The native command is the section's, never a
-  request's. The token is `token` in the section, else generated once into
-  `.conductor/remote/token`. The join URL is `url` in `.conductor/remote/broker.json`.
+  request's. The token is `token` in the section (`remote-url.md`). The join URL is `url`
+  in `.conductor/remote/broker.json`.
 - **Trust.** Anyone holding the token is trusted: the fingerprint gate catches a worker
   that computes differently, not one that lies (it is served the bundle, so it can pass the
   gate and post anything). Share the URL only on a LAN you trust.
@@ -48,7 +48,8 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
 | `fingerprint` | A command whose stdout (stripped) is the native reference: what a native worker must reproduce before it gets shards. The wasm reference is the bundle's own `fingerprint()` (*Trust gate*). |
 | `merge` | `concat` (the default and only one): shard outputs in seed order. |
 | `dir` | The commands' folder inside the repo (relative paths in commands resolve there). |
-| `port`, `bind`, `token` | The broker's address and token (above). |
+| `port`, `bind`, `token` | The broker's address and token (above). A missing `token` is pinned by conductor (`remote-url.md`). |
+| `host` | The join URL's host: this PC's name unless set (an IP, when other machines can't resolve the name). |
 | `shard_seeds` (25), `seed_seconds` (0.05), `local_below_seconds` (10) | Shard size, and the size check: a job of `count × seed_seconds` under `local_below_seconds` stays local. |
 | `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so each project's tabs are told apart. The page's title is the top-level `project`. |
 | `lease_seconds` (60), `fresh_seconds` (10), `main_slots` (1) | A shard not back in this long is leased again; a worker not heard from in this long is gone; shards the main box runs at once. A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
@@ -88,15 +89,16 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 - A worker that joins mid-job is used at once (89: 600 seeds begun with none, a local-remote
   worker joining 8 s in took 15 of 24 shards; 15.1 s against 33.2 s local, identical).
 - A lease past `lease_seconds`, or held by a worker no longer heard from, is leased again.
-- A broker that stops answering mid-job, or a main-box slot that fails: the job is closed
-  and the shards not yet in run locally.
+- A broker that stops answering mid-job is waited for 45 s (`client.PATIENCE`: a restart
+  takes a few); one still gone then, or a main-box slot that fails: the job is closed and
+  the shards not yet in run locally.
 - `farm-seeds` calls the broker every 2 s while its job runs; a job not heard from in
   `fresh_seconds` is no longer served (a killed item's job never starves the next) and is
   dropped after `lease_seconds`.
 
 ## Workers
 
-- **The browser page** (`page/`): one Web Worker per core, a core slider defaulting to all
+- **The browser page** (`page/`): one Web Worker per core, a core slider (remembered) defaulting to all
   but one. Closing the tab costs nothing but the shards it held, which run elsewhere. It
   reports itself as `<browser> on <platform>` (`Chrome on Win32`), not the full user agent.
   What it shows: `remote-status.md`.
@@ -113,6 +115,11 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   tests and failure injection (`--bad-fingerprint`, `--die-after N`, `--fail-every N`,
   `--hang-after N`). A native worker for other PCs is not built; the protocol allows one
   (it would fetch the code instead of using the main box's folder).
+
+## One URL for good
+
+The join URL never changes and an open tab survives restarts, commits and new page
+versions: `remote-url.md`.
 
 ## Status views
 
@@ -157,15 +164,18 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
 
 ## Runtime files (`.conductor/remote/`)
 
-`broker.json` (pid, port, URL, settings digest), `status.json` (the app's view, every 2 s), `broker.log` (a port already taken
-shows here: give each project its own `port`), `token`, `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
+`broker.json` (pid, port, `url`, `url_ip`, `local`, settings digest, `handover`; just its pid and
+`starting` until it serves), `status.json` (the app's view, every 2 s), `board.json` (the board,
+every 2 s, for the next broker), `broker.log` (a port already taken
+shows here: give each project its own `port`), `token` (the generated one, before it is pinned), `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
 `<commit>.build.log`), `jobs/<job>/` (shards, logs capped at 2 MB per worker, `job.json`;
 removed after 7 days), `gates.log`.
 
 ## Removing it
 
-Delete `src/conductor/remote/`, the two hooks (the end of `Daemon.startup` in
-`daemon.py`; the `if item.remote:` lines in `daemon_setup._start_exec`), the app's
+Delete `src/conductor/remote/`, the three hooks (the end of `Daemon.startup` and the
+`keep_broker` lines in `Daemon.tick`, in `daemon.py`; the `if item.remote:` lines in
+`daemon_setup._start_exec`), the app's
 optional import of `remote.app` in `app/window.py` (with `self.remote` and its refresh line), `remote` from
 `items.FIELDS` and `Item`, the `src/conductor/remote/tests` entry of `pytest.ini`'s
 `testpaths`, every project's `[remote]` section, and this file with its index lines.

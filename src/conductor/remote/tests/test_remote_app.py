@@ -143,3 +143,14 @@ def test_chip_tab_and_copy_link_only_with_remote(qapp, project, tmp_path, monkey
     win.refresh()
     assert rv.tabs.count() == 4 and rv.remote.chip.isHidden()
     win.close()
+
+
+def test_a_handover_for_a_code_change_is_not_amber(tmp_path):
+    from conductor.remote import app
+    from conductor.util import stamp
+    from datetime import datetime
+    now = B + 5000
+    d0 = stamp(datetime.fromtimestamp(B))
+    status = {"at": now, "started": now - 30, "workers": [], "gate_fails": [], "reruns": [], "job": None}
+    assert "restarted" in " ".join(app.summarize(status, True, d0, now).problems)
+    assert not app.summarize({**status, "handover": True}, True, d0, now).problems

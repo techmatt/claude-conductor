@@ -81,7 +81,7 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
-| `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, removal; status: `remote-status.md` |
+| `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, removal; `remote-status`, `remote-url` |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory and load sampling, pressure levels, the launch guard, the leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, project tools, tray |

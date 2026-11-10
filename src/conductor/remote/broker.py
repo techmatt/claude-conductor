@@ -4,15 +4,23 @@ behind a shared token in every path (`/w/<token>/…`); the main box's own calls
 claims, bundles) are taken from loopback only. It exits once the daemon has been gone a
 minute, and a crash costs nothing but speed: `farm-seeds` runs whatever is left locally.
 
-    python -m conductor.remote.broker <control folder> [--stay]
+    python -m conductor.remote.broker <control folder> [--stay] [--after <pid>]
 
 `--stay` (tests, a manual run): serve until killed, whether a daemon runs or not.
+`--after <pid>`: a handover; wait for that broker to exit, then take its port and board.
+
+The join URL stays one URL for good: this PC's name (not its LAN IP), the port, and a token
+pinned in `[remote]`. The board is saved every 2 s and taken up at start, so a restart —
+a handover when conductor's own code changes (`CODE_CHECK_SECONDS`, as the daemon does),
+or the daemon starting a broker that died — loses no job: a worker's shard in flight lands
+on the new broker, and `farm-seeds` waits out the gap (`client.PATIENCE`).
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import hmac
 import json
 import os
@@ -37,6 +45,10 @@ TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=u
          ".json": "application/json", ".css": "text/css; charset=utf-8"}
 DAEMON_GONE_SECONDS = 60.0
 LOCAL_ONLY = {"job", "bundle", "claim", "state", "close", "status"}
+CODE_CHECK_SECONDS = 10.0
+CODE_RETRY_SECONDS = 300.0       # a version that won't import is tried again after this
+AFTER_WAIT_SECONDS = 30.0        # `--after`: the old broker has this long to let go of the port
+BOARD = "board.json"             # the saved board, in .conductor/remote/
 
 
 def lan_ip() -> str:
@@ -49,6 +61,61 @@ def lan_ip() -> str:
         return "127.0.0.1"
 
 
+def join_host(r: settings.Remote) -> str:
+    """`host` if set; else this PC's name when it resolves to a LAN address (it survives an
+    IP change: other machines ask the router or LLMNR for it); else the LAN IP."""
+    if r.host:
+        return r.host
+    name = socket.gethostname()
+    try:
+        if any(not a.startswith("127.") for a in socket.gethostbyname_ex(name)[2]):
+            return name
+    except OSError:
+        pass
+    return lan_ip()
+
+
+class Door:
+    """POSTs in flight. A handover closes it (new calls get 503 and retry) and waits for the
+    ones inside, so the board it saves holds every call answered."""
+
+    def __init__(self):
+        self.cv, self.inside, self.closed = threading.Condition(), 0, False
+
+    def enter(self) -> bool:
+        with self.cv:
+            if self.closed:
+                return False
+            self.inside += 1
+            return True
+
+    def leave(self) -> None:
+        with self.cv:
+            self.inside -= 1
+            self.cv.notify_all()
+
+    def close(self, timeout: float = 15.0) -> None:
+        with self.cv:
+            self.closed = True
+            self.cv.wait_for(lambda: self.inside == 0, timeout)
+
+
+_versions: dict[tuple, str] = {}
+
+
+def page_version() -> str:
+    """The worker page's files as served now: an open tab that sees this change reloads."""
+    files = [PAGE / "index.html", PAGE / "worker.js"]
+    try:
+        stat = tuple((p.stat().st_mtime_ns, p.stat().st_size) for p in files)
+    except OSError:
+        return ""
+    if stat not in _versions:
+        _versions.clear()
+        _versions[stat] = hashlib.sha256(b"".join(p.read_bytes() for p in files)).hexdigest()[:12]
+    return _versions[stat]
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "conductor-remote"
     timeout = 30                 # a slow or stalled client loses its connection, not a thread forever
@@ -56,6 +123,7 @@ class Handler(BaseHTTPRequestHandler):
     token: str
     bundles: Path
     page: dict                   # the worker page's fixed facts: project, accent
+    door: Door
 
     def log_message(self, fmt, *args):     # quiet: the broker log keeps only what matters
         pass
@@ -117,6 +185,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(415, b"application/json only", "text/plain")
         if op in LOCAL_ONLY and (not self._local() or self.headers.get("Origin")):
             return self._send(403, b"main box only", "text/plain")
+        if not self.door.enter():
+            return self._send(503, b"restarting: try again", "text/plain")
         try:
             n = int(self.headers.get("Content-Length", "0"))
             if not 0 <= n <= MAX_BODY:
@@ -128,6 +198,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(self._op(op, body))
         except (ValueError, KeyError, TypeError, binascii.Error) as exc:
             self._json({"error": str(exc)[:200]}, 400)
+        finally:
+            self.door.leave()
 
     def _op(self, op: str, b: dict):
         board = self.board
@@ -136,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("a local-remote worker runs on the main box")
             reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")))
             if b.get("view"):                    # the worker page: what it shows, with the hello it already sends
-                reply |= {"page": self.page, "view": board.view(str(b["worker"]))}
+                reply |= {"page": {**self.page, "version": page_version()}, "view": board.view(str(b["worker"]))}
             return reply
         if op == "poll":
             return board.poll(str(b["worker"]))
@@ -177,7 +249,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def make_server(r: settings.Remote, board: Board, port: int | None = None, bind: str | None = None) -> ThreadingHTTPServer:
     handler = type("H", (Handler,), {"board": board, "token": r.secret(), "bundles": r.state / "bundles",
-                                     "page": {"project": r.project, "accent": r.accent}})
+                                     "page": {"project": r.project, "accent": r.accent}, "door": Door()})
     server = ThreadingHTTPServer((bind if bind is not None else r.bind, r.port if port is None else port), handler)
     server.daemon_threads = True
     return server
@@ -225,7 +297,8 @@ def write_status(r: settings.Remote, info: dict, board: Board) -> None:
     the app reads it at its own refresh, so nothing new polls."""
     try:
         status = {"at": time.time(), "pid": info["pid"], "port": info["port"], "url": info["url"],
-                  "started": info["started"], "main_slots": r.main_slots, **board.panel()}
+                  "url_ip": info.get("url_ip"), "started": info["started"], "handover": info.get("handover", False),
+                  "main_slots": r.main_slots, **board.panel()}
         tmp = r.state / "status.json.tmp"
         tmp.write_text(json.dumps(status) + "\n", encoding="utf-8", newline="\n")
         os.replace(tmp, r.state / "status.json")
@@ -233,58 +306,139 @@ def write_status(r: settings.Remote, info: dict, board: Board) -> None:
         pass
 
 
-def serve(control: Path, stay: bool = False) -> int:
+def say(text: str) -> None:
+    print(f"{time.strftime('%H:%M:%S')} {text}", flush=True)
+
+
+def _write_info(r: settings.Remote, info: dict) -> None:
+    tmp = r.state / "broker.json.tmp"
+    tmp.write_text(json.dumps(info, indent=1) + "\n", encoding="utf-8", newline="\n")
+    os.replace(tmp, r.state / "broker.json")
+
+
+class CodeWatch:
+    """Conductor's own code, read as the daemon reads it (`daemon_restart`): `due()` gives a
+    changed version that is committed, checked out cleanly and imports, else None."""
+
+    def __init__(self, probe=None, blockers=None, imports=None):
+        from .. import daemon_restart as dr
+        self.probe = probe or dr.code_version
+        self.blockers = blockers or dr.checkout_blockers
+        self.imports = imports or (lambda cwd: dr.imports_ok(cwd, "import conductor.remote.broker"))
+        self.running = self.probe()              # None (not a git checkout): never restarts
+        self.at = time.monotonic()
+        self.refused: dict[str, float] = {}
+
+    def due(self, cwd: Path) -> str | None:
+        if self.running is None or time.monotonic() - self.at < CODE_CHECK_SECONDS:
+            return None
+        self.at = time.monotonic()
+        v = self.probe()
+        if v is None or v == self.running or time.monotonic() - self.refused.get(v, -1e9) < CODE_RETRY_SECONDS:
+            return None
+        if self.blockers():
+            return None                          # uncommitted or mid-rebase: the next check
+        if error := self.imports(cwd):
+            self.refused[v] = time.monotonic()
+            say(f"conductor's code changed but does not import ({error}); keeping this broker")
+            return None
+        return v
+
+
+def handover(r: settings.Remote, server: ThreadingHTTPServer, board: Board, info: dict, stay: bool) -> bool:
+    """Start the next broker (it waits for this one to exit), stop taking calls, wait for
+    those inside, save the board and name the new pid in `broker.json`. False, and still
+    serving, if the new one can't be started."""
+    from .. import procs
+    cmd = [sys.executable, "-P", "-m", "conductor.remote.broker", str(r.control), "--after", str(os.getpid())]
+    # Said before the spawn: the new broker's handle on the log starts at its end as it is then,
+    # so a line written here afterwards would be overwritten by the new broker's first.
+    say("conductor's code changed: handing over to a new broker")
+    try:
+        new = procs.spawn_detached(cmd + (["--stay"] if stay else []), r.control, r.state / "broker.log")
+    except OSError as exc:
+        say(f"the new broker did not start ({exc}); keeping this one")
+        return False
+    server.RequestHandlerClass.door.close()
+    server.shutdown()
+    server.server_close()
+    board.save(r.state / BOARD)
+    _write_info(r, {**info, "pid": new.pid, "starting": True})
+    return True
+
+
+def _wait_gone(pid: int) -> None:
+    import psutil
+    end = time.time() + AFTER_WAIT_SECONDS
+    while psutil.pid_exists(pid) and time.time() < end:
+        time.sleep(0.1)
+
+
+def serve(control: Path, stay: bool = False, after: int | None = None, watch: CodeWatch | None = None) -> int:
     r = settings.load(control)
     if r is None:
         print("no [remote] section: nothing to serve", file=sys.stderr)
         return 2
+    if after:
+        _wait_gone(after)
     r.state.mkdir(parents=True, exist_ok=True)
     cutoff = time.time() - JOB_KEEP_DAYS * 86400
     for old in (r.state / "jobs").glob("j*") if (r.state / "jobs").is_dir() else []:
         if old.stat().st_mtime < cutoff:
             shutil.rmtree(old, ignore_errors=True)
     board = Board(r.state, r.lease_seconds, r.fresh_seconds, r.bundle_js, native_argv=r.native)
+    restored = board.restore(r.state / BOARD)
     try:
         server = make_server(r, board)
     except OSError as exc:
-        print(f"{time.strftime('%H:%M:%S')} cannot serve on {r.bind}:{r.port}: {exc} (another project's broker? "
-              "give each project its own `port`)", flush=True)
+        say(f"cannot serve on {r.bind}:{r.port}: {exc} (another project's broker? give each project its own `port`)")
         return 1
-    port = server.server_address[1]
-    url = f"http://{lan_ip()}:{port}/w/{r.secret()}/"
-    info = {"pid": os.getpid(), "port": port, "url": url, "local": f"http://127.0.0.1:{port}/w/{r.secret()}/",
-            "digest": r.digest(), "started": time.time()}
-    tmp = r.state / "broker.json.tmp"
-    tmp.write_text(json.dumps(info, indent=1) + "\n", encoding="utf-8", newline="\n")
-    os.replace(tmp, r.state / "broker.json")
-    print(f"{time.strftime('%H:%M:%S')} broker pid {os.getpid()} serving {url}", flush=True)
+    port, token = server.server_address[1], r.secret()
+    url = f"http://{join_host(r)}:{port}/w/{token}/"
+    info = {"pid": os.getpid(), "port": port, "url": url, "url_ip": f"http://{lan_ip()}:{port}/w/{token}/",
+            "local": f"http://127.0.0.1:{port}/w/{token}/", "digest": r.digest(), "started": time.time(),
+            "handover": bool(after)}
+    _write_info(r, info)
+    say(f"broker pid {os.getpid()} serving {url}" + (f" (after {after})" if after else "")
+        + (f"; carried on {len(board.jobs)} job(s) from the saved board" if restored and board.jobs else ""))
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    gone_since = None
+    watch = watch or CodeWatch()
+    gone_since, handed = None, False
     try:
         while True:
             time.sleep(2)
             _write_now(r, board.now_line())
             board.load = main_load(r.control)
             write_status(r, info, board)
+            try:
+                board.save(r.state / BOARD)
+            except OSError:
+                pass
+            if watch.due(r.control) and handover(r, server, board, info, stay):
+                handed = True
+                break
             if stay or _daemon_alive(r.control):
                 gone_since = None
             elif gone_since is None:
                 gone_since = time.time()
             elif time.time() - gone_since > DAEMON_GONE_SECONDS:
-                print(f"{time.strftime('%H:%M:%S')} daemon gone; broker exits", flush=True)
+                say("daemon gone; broker exits")
                 break
     finally:
-        _write_now(r, None)
-        (r.state / "status.json").unlink(missing_ok=True)
-        server.shutdown()
-        try:
-            if json.loads((r.state / "broker.json").read_text(encoding="utf-8")).get("pid") == os.getpid():
-                (r.state / "broker.json").unlink()
-        except (OSError, ValueError):
-            pass
+        if not handed:                           # a handover leaves these to the new broker
+            _write_now(r, None)
+            (r.state / "status.json").unlink(missing_ok=True)
+            server.shutdown()
+            try:
+                if json.loads((r.state / "broker.json").read_text(encoding="utf-8")).get("pid") == os.getpid():
+                    (r.state / "broker.json").unlink()
+            except (OSError, ValueError):
+                pass
     return 0
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    sys.exit(serve(Path(next((a for a in args if a != "--stay"), ".")), stay="--stay" in args))
+    after = int(args[args.index("--after") + 1]) if "--after" in args else None
+    rest = [a for i, a in enumerate(args) if a != "--stay" and a != "--after" and (i == 0 or args[i - 1] != "--after")]
+    sys.exit(serve(Path(rest[0] if rest else "."), stay="--stay" in args, after=after))

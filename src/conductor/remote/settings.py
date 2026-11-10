@@ -23,7 +23,8 @@ NOW_LINE = (".conductor", "now", "remote.line")   # the inbox's *Now* line while
 
 KEYS = {"dir","native", "native_build", "build", "bundle_js", "fingerprint", "merge", "port", "bind",
         "token", "shard_seeds", "seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds",
-        "main_slots", "accent"}
+        "main_slots", "accent", "host"}
+TOKEN_REQUEST = "remote-token"          # the request folder's suffix that pins a generated token (`pin_token`)
 
 
 class RemoteError(ValueError):
@@ -50,6 +51,7 @@ class Remote:
     fresh_seconds: float = 10.0            # a worker not heard from in this long is gone
     main_slots: int = 1                    # shards the main box runs at once
     accent: str = ACCENT                   # the worker page's accent colour (#rgb or #rrggbb)
+    host: str = ""                         # the join URL's host: this PC's name unless set (an IP, say)
     project: str = ""                      # conductor.toml's `project` (else the control folder's name)
 
     @property
@@ -57,9 +59,10 @@ class Remote:
         return self.control.joinpath(*STATE)
 
     def digest(self) -> str:
-        """Settings identity: a broker started under other settings is replaced."""
+        """Settings identity: a broker started under other settings is replaced. The token
+        counts as the one in effect, so pinning a generated one changes nothing."""
         d = asdict(self)
-        d["control"] = str(self.control)
+        d["control"], d["token"] = str(self.control), self.secret()
         return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:16]
 
     def secret(self) -> str:
@@ -116,7 +119,7 @@ def load(control: Path) -> Remote | None:
                native_build=_argv("native_build", table.get("native_build"), False))
     project = data.get("project")
     r.project = project if isinstance(project, str) and project else control.name.removesuffix("-control")
-    for key in ("dir", "merge", "bind", "token", "bundle_js", "accent"):
+    for key in ("dir", "merge", "bind", "token", "bundle_js", "accent", "host"):
         if key in table:
             if not isinstance(table[key], str):
                 raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a string")

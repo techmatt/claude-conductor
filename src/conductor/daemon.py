@@ -363,6 +363,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_merges()
         self.process_pushes()
         self.sample_memory()
+        from . import remote        # a broker that died starts again: a no-op without `[remote]`
+        remote.keep_broker(self.cfg.control, lambda note: self.log.append("warning", note=note))
         self.night_shift()
         self.schedule()
         self.write_inbox()

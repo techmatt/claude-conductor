@@ -165,7 +165,8 @@ def test_a_native_failure_fails_the_job(farm, capsys):
 
 
 @pytest.mark.slow           # a call caught mid-shutdown waits out its socket timeout
-def test_the_broker_dying_mid_job_finishes_the_rest_locally(farm, capsys):
+def test_the_broker_dying_mid_job_finishes_the_rest_locally(farm, capsys, monkeypatch):
+    monkeypatch.setattr(client, "PATIENCE", 1.0)        # a broker that stays gone, after the wait for a restart
     farm.setup()
     farm.worker("lr1")
     server = farm.servers[-1]
@@ -214,7 +215,7 @@ def test_the_page_and_bundles_need_the_token_and_main_box_calls_need_loopback(fa
     req = urllib.request.Request(base + "api/hello", method="POST", headers={"Content-Type": "application/json"},
                                  data=json.dumps({"worker": "tab", "kind": "browser", "view": True}).encode())
     reply = json.loads(urllib.request.urlopen(req, timeout=5).read())
-    assert reply["page"] == {"project": "t", "accent": settings.ACCENT} and reply["view"]["job"] is None
+    assert reply["page"] == {"project": "t", "accent": settings.ACCENT, "version": broker.page_version()} and reply["view"]["job"] is None
     assert post("result", b'{"worker": "x", "job": "j", "shard": 0, "ok": true}') == 400   # no output
     import socket
     with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as s:   # a negative length
@@ -269,3 +270,63 @@ def test_the_wasm_reference_is_the_bundles_own_fingerprint_run_in_node(farm):
     (other / "bundle.js").write_text("export default async () => {};\nthrow new Error('boom');\n", encoding="utf-8")
     value, why = client.wasm_reference(farm.r, "k2")
     assert value == "" and "boom" in why
+
+
+def test_a_broker_restarting_mid_job_loses_nothing(farm, capsys):
+    """A handover in miniature: the old broker stops taking calls, saves its board and lets go
+    of the port; a new one takes both up. `farm-seeds` and the worker wait out the gap."""
+    farm.setup()
+    farm.worker("lr1")
+    old = farm.servers[-1]
+    port = old.server_address[1]
+    carried = []
+
+    def restart():
+        old.RequestHandlerClass.door.close()
+        old.shutdown()
+        old.server_close()
+        farm.board.save(farm.r.state / broker.BOARD)
+        time.sleep(1.0)                                   # the gap
+        b2 = Board(farm.r.state, farm.r.lease_seconds, farm.r.fresh_seconds, farm.r.bundle_js,
+                   native_argv=farm.r.native)
+        carried.append(b2.restore(farm.r.state / broker.BOARD) and len(b2.jobs))
+        new = broker.make_server(farm.r, b2, port=port)
+        threading.Thread(target=new.serve_forever, daemon=True).start()
+        farm.servers.append(new)
+    threading.Timer(0.5, restart).start()
+    code, out = farm.run(0, 300, "--sleep", "0.01")
+    assert (code, out) == (0, farm.local(0, 300))
+    err = capsys.readouterr().err
+    assert carried == [1]                                 # the job was open, and the new broker took it up
+    assert "broker went away" not in err and "running locally" not in err
+    assert len(farm.record()["shards"]) == 30
+
+
+def test_the_code_watch_hands_over_only_on_committed_code_that_imports(tmp_path):
+    v = ["a"]
+    blockers, broken = [], []
+    w = broker.CodeWatch(probe=lambda: v[0], blockers=lambda: blockers, imports=lambda cwd: broken[0] if broken else None)
+    w.at -= 60
+    assert w.due(tmp_path) is None                        # unchanged
+    v[0], w.at = "b", w.at - 60
+    blockers.append("uncommitted")
+    assert w.due(tmp_path) is None
+    blockers.clear()
+    broken.append("SyntaxError")
+    w.at -= 60
+    assert w.due(tmp_path) is None and "b" in w.refused   # refused for a while
+    broken.clear()
+    w.at -= 60
+    assert w.due(tmp_path) is None
+    w.refused.clear()
+    w.at -= 60
+    assert w.due(tmp_path) == "b"
+    assert broker.CodeWatch(probe=lambda: None).due(tmp_path) is None   # not a checkout: never
+
+
+def test_the_join_url_names_this_pc_unless_host_is_set(farm):
+    import socket
+    farm.setup()
+    assert broker.join_host(farm.r) in (socket.gethostname(), broker.lan_ip())
+    farm.setup(host='"192.168.9.9"')
+    assert broker.join_host(farm.r) == "192.168.9.9"
