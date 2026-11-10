@@ -58,7 +58,9 @@ Name box. The newest 100 names are kept.
 - Under the tiles: `4 cores chosen by the broker · no cap · 7 → 4: shards lost to the main
   box 3 of 4` (or `· cap 3: running 3`). Each change is in the event log, with the reason.
 
-An older page (no `hw` in its hello) gets no plan and runs its slider as before.
+An older page (no `hw` in its hello) gets no plan and runs its slider as before. A newer page
+under an older broker (no `cores` in the reply) runs all cores but one, under its cap: the
+page is served from the working tree, so this happens before a commit hands the broker over.
 
 ## Where a change shows
 

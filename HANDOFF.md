@@ -100,6 +100,6 @@ Still not live:
 - **Inbox sections read twice** (aicomplete 11-03): one writer, atomic replace; likely a read spliced across a rewrite. Next copy: save it with its read time.
 - **98's diagnostics** (aicomplete): its `.gitignore` needs `remote-diag.md` (its planner's request). Why the laptop's cores never answered two gates (10:17, 10:25pm) is unseen. Does a farmed read beat local (161: 1325 s against 1126 s)?
 - **99's core counts** (aicomplete): unseen in a live job. Where does the laptop settle; do its tail losses stop? Is a 20% per-core fall too strict for an all-core clock? The cap: tests only.
-- `farm-seeds` imports conductor from the working checkout, so a conductor prompt's uncommitted code reaches live jobs before its commit (98: aicomplete's 10:48pm job ran an uncommitted `client.py`).
+- `farm-seeds` and the worker page come from the working checkout, so a prompt's uncommitted code reaches live jobs and tabs before its commit (98: a job's `client.py`; 99: the laptop's page).
 - **Remote workers** (87–89): the laptop joined over *Public* only via an older Allow rule for uv's `python.exe`; *Keep screen awake* is hidden on the LAN URL (no secure context).
 - **A repo with a remote but `push = false`** (workbench, 92: GitHub sat empty through three merges): init should set `push = true` when the repo has a reachable remote (first push `-u origin main`), and the digest flag a remote with `push = false`.
