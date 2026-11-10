@@ -33,7 +33,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import settings
+from . import diag, settings
 from .board import Board
 
 PAGE = Path(__file__).with_name("page")
@@ -212,6 +212,9 @@ class Handler(BaseHTTPRequestHandler):
             reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")),
                                 fresh=b.get("fresh") is True, report=b.get("report"))
             board.renew(str(b["worker"]), b.get("running"))
+            if b.get("log"):                     # the page's own log since its last hello (diag.py)
+                reply["log_taken"] = diag.page_lines(board.root, str(b["worker"]), str(b.get("label") or b["worker"]),
+                                                     b["log"], b.get("clock"))
             if b.get("view"):                    # the worker page: what it shows, with the hello it already sends
                 reply |= {"page": {**self.page, "version": page_version()},
                           "view": board.view(str(b["worker"]), b.get("running"))}
@@ -239,7 +242,8 @@ class Handler(BaseHTTPRequestHandler):
             return {"job": board.add_job(str(b["key"]), str(b["fingerprint"]), [str(x) for x in b.get("args", [])],
                                          ranges, str(cwd) if cwd else None, str(b.get("item", "")))}
         if op == "bundle":
-            board.set_bundle(str(b["key"]), str(b["state"]), str(b.get("error", "")), str(b.get("wasm", "")))
+            board.set_bundle(str(b["key"]), str(b["state"]), str(b.get("error", "")), str(b.get("wasm", "")),
+                             str(b.get("note", "")))
             return {"ok": True}
         if op == "claim":
             return board.claim(str(b["job"]), bool(b.get("rerun", True)))
@@ -326,6 +330,23 @@ def write_status(r: settings.Remote, info: dict, board: Board) -> None:
         os.replace(tmp, r.state / "status.json")
     except OSError:                              # the app's view, never the broker's end
         pass
+
+
+_swept, _diag_error = [0.0], [""]
+
+
+def write_diag(r: settings.Remote, board: Board) -> None:
+    """`remote-diag.md` at the control folder's root, when its text changes (`diag.render`),
+    and once an hour the page logs past their week. A planner's read, never the broker's end."""
+    try:
+        if time.time() - _swept[0] > 3600:
+            _swept[0] = time.time()
+            diag.sweep(r.state)
+        diag.write_digest(r.control, diag.render(r.project, board.panel(r.main_slots), r.state))
+    except Exception as exc:                     # noqa: BLE001
+        if repr(exc) != _diag_error[0]:          # once, not every 2 s
+            _diag_error[0] = repr(exc)
+            say(f"remote-diag.md not written: {exc!r}")
 
 
 def say(text: str) -> None:
@@ -434,6 +455,7 @@ def serve(control: Path, stay: bool = False, after: int | None = None, watch: Co
             board.load = main_load(r.control)
             board.items = running_items(r.control)
             write_status(r, info, board)
+            write_diag(r, board)
             try:
                 board.save(r.state / BOARD)
             except OSError:

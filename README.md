@@ -69,24 +69,25 @@ command (`docs/restart.md`).
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (the cleanups, bug hunt, self audit, watch) |
-| `docs/night-shift.md` | The stall check, the watch item, autopilot, the backlog and its draws, the nightly budget |
-| `docs/resume.md` | Resume items: asking a finished item's own session (forked), and its self-audit |
+| `docs/night-shift.md` | Stall check, watch item, autopilot, the backlog and its draws, nightly budget |
+| `docs/resume.md` | Resume items: asking a finished item's own session (forked); self-audit |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
-| `docs/progress.md` | `progress` and outlines, messages (`tell:`), short calls, amendments, opening a finished session |
-| `docs/signals.md` | Every signal verb and how a signal file is applied |
-| `docs/open.md` | Desktop actions: `open:` (checked paths and URLs) and `notify:` toasts |
-| `docs/receipts.md` | The receipt each planner write gets: where, what it says, how long it lives |
+| `docs/progress.md` | `progress`, outlines, messages (`tell:`), short calls, amendments, opening a finished session |
+| `docs/signals.md` | Every signal verb; how a signal file applies |
+| `docs/open.md` | Desktop actions: `open:` (checked paths, URLs) and `notify:` toasts |
+| `docs/receipts.md` | Each planner write's receipt: where, what it says, how long it lives |
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
-| `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
-| `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, the local-remote worker, removal |
-| `docs/remote-status.md` | The worker page; the app's remote chip and Workers tab |
+| `docs/picks.md` | Picker manifests, picker server and page, saved choices |
+| `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, local-remote worker, removal |
+| `docs/remote-status.md` | The worker page; the app's remote chip, Workers tab |
 | `docs/remote-url.md` | The one worker URL: PC name, pinned token, broker handover |
+| `docs/remote-diag.md` | `remote-diag.md`, steps and page logs, deadlines |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
-| `docs/memory.md` | Memory and load sampling, pressure levels, the launch guard, the leftover reaper, a daemon's death |
-| `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, project tools, tray |
+| `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
+| `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
 | `docs/events.md` | `events.db` and every event kind with its detail |
-| `docs/restart.md` | The restart rule, the self-restart on a code change; platform notes (process groups, detached launches) |
+| `docs/restart.md` | The restart rule, self-restart on a code change; platform notes (process groups, detached launches) |
 | `docs/development.md` | The test suite, its lanes and the fake executor |
 | `docs/known-limits.md` | Accepted gaps, by area |

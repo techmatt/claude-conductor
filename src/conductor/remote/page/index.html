@@ -215,7 +215,35 @@
   let myName = (store(localStorage, "name") || "").trim().slice(0, 40);
   const label = () => myName || autoLabel();
 
+  // The rolling log the broker keeps for this worker (98): every event below, every core's
+  // steps, hello latency and failures, errors and memory. Uploaded with each hello; the lines
+  // not yet taken wait here (the newest 1000).
+  const upload = [];
+  let uploadDropped = 0, lastSaid = null;
+  function plog(src, text) {
+    upload.push({ t: Date.now(), s: src, m: String(text).slice(0, 400) });
+    if (upload.length > 1000) { upload.shift(); uploadDropped++; }
+  }
+  window.addEventListener("error", (e) => plog("page", `uncaught: ${e.message} (${(e.filename || "").split("/").pop()}:${e.lineno})`));
+  window.addEventListener("unhandledrejection", (e) => plog("page", `unhandled rejection: ${e.reason}`));
+  for (const level of ["error", "warn"]) {
+    const orig = console[level].bind(console);
+    console[level] = (...a) => { plog("page", `console.${level}: ${a.map(String).join(" ")}`); orig(...a); };
+  }
+  // Hello latency and failures, with memory where the browser reports it, once a minute.
+  const hellos = { n: 0, fail: 0, times: [], since: Date.now() };
+  function helloStats() {
+    if (Date.now() - hellos.since < 60000) return;
+    const s = [...hellos.times].sort((a, b) => a - b);
+    const mem = performance.memory ? `, page heap ${(performance.memory.usedJSHeapSize / 1048576).toFixed(0)} MB` : "";
+    const dev = navigator.deviceMemory ? `, device ${navigator.deviceMemory} GB` : "";
+    plog("page", `hellos: ${hellos.n} ok, median ${s[Math.floor(s.length / 2)] ?? "-"} ms, max ${s[s.length - 1] ?? "-"} ms, ` +
+      `${hellos.fail} failed${mem}${dev}; ${document.hidden ? "hidden" : "visible"}` + (uploadDropped ? `; ${uploadDropped} log lines dropped` : ""));
+    Object.assign(hellos, { n: 0, fail: 0, times: [], since: Date.now() });
+  }
+
   function log(text, cls = "") {
+    plog("page", text);
     events.push({ at: new Date().toISOString(), text });
     if (events.length > 300) events.shift();
     const li = document.createElement("li");
@@ -233,13 +261,18 @@
     helloBusy = true; helloAt = Date.now();
     // What the cores are running, so the broker can say which of it nobody needs any more.
     const running = Object.values(tiles).filter((t) => (t.state === "run" || t.state === "prep") && t.job && t.first != null).map((t) => [t.job, t.shard]);
+    helloStats();
+    watchdog();                                      // a hidden tab's interval is throttled; hellos ride core messages
+    const sent = upload.slice(0, 200);
     try {
       const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(10000),          // a stalled call fails and is retried, never hangs the loop
         body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length, label: label(), view: true, fresh,
-                               running, report: report() }) });
+                               running, report: report(), log: sent, clock: Date.now() }) });
       if (!r.ok) throw new Error(`refused (HTTP ${r.status})`);
       const reply = await r.json();
+      upload.splice(0, upload.indexOf(sent[sent.length - 1]) + 1);      // taken: those lines and any before
+      hellos.n++; hellos.times.push(Date.now() - helloAt);
       fresh = false;
       lastOk = Date.now();
       if (!everOk) log(`joined as ${wid} (${label()}, ${workers.length} of ${max} cores)`);
@@ -253,9 +286,14 @@
       }
       view = reply.view || null;
       viewAt = Date.now();
+      // A change of state or step, not of a working count (that would crowd the 500 lines).
+      const me = view?.me, said = me ? `${me.state}${me.detail && me.state !== "working" ? " · " + me.detail : ""}` : "";
+      if (said !== lastSaid) { plog("page", `state: ${said || "unknown"} (the broker's view)`); lastSaid = said; }
       misses = 0;
       for (const [job, shard] of view?.drop || []) dropShard(job, shard);
     } catch (e) {
+      hellos.fail++;
+      plog("page", `hello failed after ${Date.now() - helloAt} ms: ${e.message || e}`);
       if (!failing) log(everOk ? `lost the broker: ${e.message || e}` : `no broker yet: ${e.message || e}`, "bad");
       failing = true; misses++;
       if (!everOk) connState = "no broker";
@@ -285,7 +323,9 @@
   // A core's tile, its state fields replaced whole; its last shard's timing kept.
   function setTile(slot, fields) {
     const old = tiles[slot] || {};
-    tiles[slot] = { msSeed: old.msSeed, msJob: old.msJob, at: Date.now(), ...fields };
+    // When this core began preparing this key: kept across its steps, for the watchdog.
+    const prepSince = fields.state === "prep" ? (old.state === "prep" && old.key === fields.key && old.prepSince) || Date.now() : null;
+    tiles[slot] = { msSeed: old.msSeed, msJob: old.msJob, at: Date.now(), prepSince, ...fields };
   }
 
   // A core still running a shard of a closed job, or one another copy already won: a wasm
@@ -310,7 +350,8 @@
     hello();
     c.promise = (async () => {
       const t0 = performance.now();
-      const r = await fetch(url);
+      plog("page", `bundle ${key.slice(0, 7)}: fetching ${url.split("/").pop()}`);
+      const r = await fetch(url, { signal: AbortSignal.timeout(60000) });     // a stalled fetch fails; cores then load it themselves
       if (!r.ok) throw new Error(`fetching ${url.split("/").pop()}: HTTP ${r.status}`);
       const bytes = await r.arrayBuffer();
       const t1 = performance.now();
@@ -371,8 +412,13 @@
       const c = compile(m.key, m.url);
       setTile(m.slot, { state: "prep", step: "waiting", key: m.key, ...task });
       const w = e.target;
-      c.promise.then((module) => w.postMessage({ type: "module", key: m.key, module }),
-                     () => w.postMessage({ type: "module", key: m.key, module: null }));
+      // A module that can't be handed over (DataCloneError) must still answer the core: 97's
+      // `.then` would throw, and the core waited for good.
+      const answer = (module) => {
+        try { w.postMessage({ type: "module", key: m.key, module }); }
+        catch (err) { plog("page", `core ${m.slot + 1}: handing over the compiled module failed: ${err}`); w.postMessage({ type: "module", key: m.key, module: null }); }
+      };
+      c.promise.then(answer, () => answer(null));
     } else if (m.type === "loading") setTile(m.slot, { state: "prep", step: m.step, key: m.key, ...task });
     else if (m.type === "loaded") {
       if (have !== m.key) {
@@ -388,6 +434,7 @@
     else if (m.type === "gating") setTile(m.slot, { state: "prep", step: "gating", key: m.key });
     else if (m.type === "error") { setTile(m.slot, { state: "err", text: m.text }); log(`core ${m.slot + 1}: ${m.text}`, "bad"); hello(); }
     else if (m.type === "back") log(`core ${m.slot + 1}: reaching the broker again`);
+    else if (m.type === "log") { plog(`core${m.slot + 1}`, m.text); return; }
     else if (m.type === "hello") hello();
     else if (m.type === "gate") {
       setTile(m.slot, { state: "idle" });
@@ -418,9 +465,30 @@
   function startCore(slot) {
     const w = new Worker(base + "worker.js", { type: "module" });
     w.onmessage = onMessage;
+    // A core that fails to load or throws at the top shows nothing else: log it.
+    w.onerror = (e) => { log(`core ${slot + 1}: worker error: ${e.message || "failed to load worker.js"}`, "bad"); };
+    w.onmessageerror = () => plog(`core${slot + 1}`, "a message could not be read (messageerror)");
     w.postMessage({ type: "start", base, wid, slot, label: label() });
     return w;
   }
+
+  // No preparing step sits open-ended (98): a core preparing (a gate, or a shard's bundle) for
+  // PREP_DEADLINE_MS is replaced, and the broker hands its gate out again. The broker's own gate
+  // deadline (60 s) comes first; this one catches a core that never polls again.
+  const PREP_DEADLINE_MS = 75000;
+  function watchdog() {
+    const now = Date.now();
+    for (const [slot, t] of Object.entries(tiles)) {
+      const i = Number(slot);
+      if (t.state !== "prep" || !t.prepSince || now - t.prepSince < PREP_DEADLINE_MS || !workers[i]) continue;
+      log(`core ${i + 1}: ${t.step || "preparing"} for ${t.key ? t.key.slice(0, 7) : "?"} passed its ${PREP_DEADLINE_MS / 1000} s deadline; core replaced`, "bad");
+      workers[i].terminate();
+      workers[i] = startCore(i);
+      setTile(i, { state: "idle" });
+      hello();
+    }
+  }
+  setInterval(watchdog, 5000);
 
   function resize() {
     const want = paused ? 0 : Number(slider.value);
@@ -639,6 +707,7 @@
       tiles: Object.entries(tiles).map(([i, t]) => ({ core: +i + 1, state: t.state, step: t.step, key: t.key,
                                                       msPerSeed: t.msSeed ? +t.msSeed.toFixed(1) : null, text: t.text || undefined })),
       broker: view, recentShards: shards.slice(-40), events: events.slice(-100),
+      notUploaded: upload.slice(-150).map((x) => `${new Date(x.t).toISOString()} ${x.s} ${x.m}`),
     };
   }
   window.diagnostics = diagnostics;

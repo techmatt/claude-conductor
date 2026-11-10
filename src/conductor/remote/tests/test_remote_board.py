@@ -320,7 +320,7 @@ def test_one_state_for_a_browser_from_commit_to_job_end(tmp_path):
     s = b.state_of("tab")
     assert (s["state"], s["step"], s["since"], s["key"]) == ("preparing", "building", 1001, "abcdef1234")
     assert s["detail"] == "the broker is building the bundle for abcdef1"
-    assert b.view("tab")["job"]["bundle"] == {"state": "building", "error": "", "since": 1001}
+    assert b.view("tab")["job"]["bundle"] == {"state": "building", "error": "", "since": 1001, "note": ""}
     clock.t += 40
     b.hello("tab", "browser", cores=4, label="Matt's laptop")
     b.claim(jid, rerun=False)                                   # the main box's job stays alive (and runs a shard)

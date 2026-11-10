@@ -83,8 +83,8 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   oldest still out on a worker. The first copy back wins, and a shard the main box is
   running is killed when a worker's copy lands.
 - Sharding costs the main box little (89, sandbox, no worker): 28.5 s against 27.3 s bare,
-  ~0.5 s fixed plus ~30 ms a shard, 17 ms of it a hidden console (`CREATE_NO_WINDOW`;
-  `DETACHED_PROCESS` would let a native command's own children open windows).
+  ~0.5 s fixed plus ~30 ms a shard, 17 ms of it a hidden console (`CREATE_NO_WINDOW`,
+  not `DETACHED_PROCESS`: its children could open windows).
 - A worker that joins mid-job is used at once (89: 600 seeds begun with none, a local-remote
   worker joining 8 s in took 15 of 24 shards; 15.1 s against 33.2 s local, identical).
 - **Leases** (96). A worker no longer heard from (`fresh_seconds`) loses its shards at once.
@@ -129,7 +129,8 @@ versions: `remote-url.md`.
 
 ## Status views
 
-The worker page, the inbox's *Now* line and the app's chip and Workers tab: `remote-status.md`.
+The page, the *Now* line, the app's chip and Workers tab: `remote-status.md`; the
+planner's digest and the deadlines: `remote-diag.md`.
 
 ## Trust, builds, provenance
 
@@ -141,12 +142,12 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
     `{module_or_path}`, then bare (an `init(input)` that wraps its argument itself, 95), then
     nothing, each try on a fresh import of the module: aicomplete's `init` keeps its first
     promise, so a second call on the same module only repeated the first try's rejection, 96)
-    once the bundle is built, cached as `bundles/<commit>/wasm.fingerprint` (a failure is
-    not cached: the next job tries again).
+    once the bundle is built, cached as `bundles/<commit>/wasm.fingerprint` (2 min a try,
+    two tries; then `wasm.fallback`: `remote-diag.md`).
     The bundle may be `.js`, `.mjs` or `.cjs`: all are served as `text/javascript`.
 
-  So a project that keeps its fastest math (Matt, 2026-11-09), whose wasm build never
-  reproduces its native answer, still gets browsers. Without Node, or if the bundle's
+  So a project that keeps its fastest math (Matt, 2026-11-09; wasm never reproducing
+  native) still gets browsers. Without Node, or if the bundle's
   fingerprint fails there, browsers are gated against the native reference (and
   `farm-seeds` says so). A worker that fails gets no shards for the commit; the failure,
   with the reference it missed, is in `.conductor/remote/gates.log`, the job's record and
@@ -168,7 +169,7 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
   cached in `.conductor/remote/bundles/<commit>/`. Native shards start at once; browsers
   join when the bundle is ready and its wasm reference known. A commit outside a job builds
   nothing. A failed build (with its log's error line: `client.failure_line`) or one over 20
-  minutes is the browsers' `error` state (`remote-status.md`, *One state*).
+  minutes (killed, tried once more: `remote-diag.md`) is the browsers' `error` state.
 - **Provenance.** Who ran the kept copy of each shard is noted beside it
   (`shards/<first>.who.json`: the broker's, or `farm-seeds`' for a shard it ran after the
   broker went away), and `.conductor/remote/jobs/<job>/job.json` is built from those notes,
@@ -188,7 +189,7 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
 every 2 s, for the next broker), `broker.log` (a port already taken
 shows here: give each project its own `port`), `token` (the generated one, before it is pinned), `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
 `<commit>.build.log`), `jobs/<job>/` (shards, logs capped at 2 MB per worker, `job.json`;
-removed after 7 days), `gates.log`.
+removed after 7 days), `gates.log`, `steps.log` and `workers/` (`remote-diag.md`).
 
 ## Removing it
 
@@ -197,8 +198,8 @@ Delete `src/conductor/remote/`, the three hooks (the end of `Daemon.startup` and
 `daemon_setup._start_exec`), the app's
 optional import of `remote.app` in `app/window.py` (with `self.remote` and its refresh line), `remote` from
 `items.FIELDS` and `Item`, the `src/conductor/remote/tests` entry of `pytest.ini`'s
-`testpaths`, every project's `[remote]` section, and this file with its index lines.
-`inbox.now_files` reads a folder nothing else writes and may stay; so may `ReposPanel.note_suffix`, empty without the module. The suite passes
+`testpaths`, every project's `[remote]` section, and these docs with their index lines.
+`inbox.now_files`, `ReposPanel.note_suffix` and `remote-diag.md` in `config.RUNTIME` may stay. The suite passes
 without the module (checked when it landed, prompt 87).
 
 ## The test project

@@ -15,9 +15,8 @@ done/<repo>/NNN_name.md        finished items, plus their .run.json
 reports/<repo>__NNN_name.md    the executor's report
 reports/<repo>__NNN_name.log   raw executor output (stream-json; .log.gz once finished, as are
                                .stage.log and .merge.log, logs.md); also .stderr.log, .prompt.md,
-                               .mcp.json, .settings.json, .setup.log, and .stage.log /
-                               .stage.prompt.md / .stage.stderr.log for a stage; .merge.log /
-                               .merge.prompt.md / .merge.stderr.log for a merge executor;
+                               .mcp.json, .settings.json, .setup.log, and .stage / .merge
+                               .log, .prompt.md, .stderr.log for a stage or merge executor;
                                .audit.md (audit notes); .original.md (resume.md);
                                .amend.md (each amendment delivered, with times)
 requests/<stamp>/              planner → conductor: request.md (+ replacement files, or edits)
@@ -30,6 +29,7 @@ picks/                         Matt's saved picker choices: <name>.choices.json 
 inbox.md                       generated digest since the read mark
 session.md                     the start digest the last `session:` wrote (see inbox.md)
 review.md                      the review bundle the last `review:` wrote (see inbox.md)
+remote-diag.md                 remote workers' diagnostics, with `[remote]` (remote-diag.md)
 events.db                      append-only event log (SQLite, WAL)
 .conductor/                    the daemon's own state: lock, heartbeat, journals (see runtime.md)
 ```
@@ -59,6 +59,7 @@ backlog/
 inbox.md
 session.md
 review.md
+remote-diag.md
 events.db*
 .conductor/
 ```

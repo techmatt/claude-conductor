@@ -16,6 +16,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import diag
+
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 KINDS = {"browser": "wasm", "local-remote": "native", "main": "native"}   # worker kind -> engine
 LOG_CHARS = 64_000              # a worker's log, per result
@@ -24,6 +26,8 @@ WORKER_FORGET_SECONDS = 3600.0
 LEASE_FLOOR = 60.0              # a derived lease is never shorter than this
 LEASE_FACTOR = 4.0              # a derived lease: this many times a shard's expected time
 BUILD_STUCK_SECONDS = 20 * 60   # a bundle building this long is shown as an error (client.BUILD_STALE_SECONDS)
+GATE_SECONDS = diag.DEADLINES["gate"]   # a gate unanswered this long is late: handed out again, once
+GATE_TRIES = 2                  # the second late gate fails (the worker's error, until it reloads)
 STATES = ("offline", "idle", "preparing", "working", "draining", "error")   # a worker's state (`Board.state_of`)
 STEPS = {"downloading": "downloading the bundle", "compiling": "compiling the bundle",
          "starting": "starting the bundle"}   # what a page may say it is preparing (its hello's `report`)
@@ -42,6 +46,8 @@ class Worker:
     day: str = ""               # the local date `today` counts for
     today: int = 0              # shards it won that day (the app's Workers tab)
     report: dict = field(default_factory=dict)   # what the worker says it is doing (its hello), with `at`
+    tries: dict[str, int] = field(default_factory=dict)   # key -> gates handed out for it (GATE_TRIES)
+    why: dict[str, str] = field(default_factory=dict)     # key -> why its gate failed, when not a wrong value
 
     @property
     def engine(self) -> str:
@@ -79,20 +85,24 @@ class Job:
 @dataclass
 class Key:
     fingerprint: str             # the native reference: the `fingerprint` command on the main box
-    bundle: str = "none"         # none | building | ready | failed
-    error: str = ""
+    bundle: str = "none"         # none | building | referencing (the Node wasm reference) | ready | failed
+    error: str = ""              # a failed build's line; while referencing, a try past its deadline
     wasm: str = ""               # the wasm reference: the bundle's own fingerprint() on the main box
     since: float = 0.0           # when `bundle` last changed (a build's elapsed time)
+    note: str = ""               # ready without a wasm reference: why browsers gate against the native one
 
     def reference(self, engine: str) -> str:
         """What a worker of this engine must reproduce (without a wasm reference, the native one)."""
         return self.wasm if engine == "wasm" and self.wasm else self.fingerprint
 
 
-def _drop_failed(w: Worker) -> None:
-    """Forget the keys this worker failed, so its next poll gates them again."""
-    for key in [k for k, (state, _) in w.gates.items() if state == "fail"]:
+def _drop_failed(w: Worker, pending: bool = False) -> None:
+    """Forget the keys this worker failed (and, with `pending`, those it never answered: a
+    reloaded page's cores are new ones), so its next poll gates them again."""
+    for key in [k for k, (state, _) in w.gates.items() if state == "fail" or (pending and state == "pending")]:
         del w.gates[key]
+        w.tries.pop(key, None)
+        w.why.pop(key, None)
 
 
 def _report(report, now: float) -> dict:
@@ -150,6 +160,7 @@ class Board:
         self.reruns: list[float] = []      # when the main box re-ran a shard still out on a worker
         self.items: list[str] = []         # items running on the main box (the broker's loop: `running_items`)
         self._wasm: dict[str, str] = {}    # key -> its bundle's one .wasm file (the page compiles it once)
+        self._handed: set[tuple[str, str]] = set()   # (job, worker): its first shard is in the steps log
         self._n = 0
 
     # ------------------------------------------------------------ workers
@@ -171,7 +182,7 @@ class Board:
             w.cores, w.label, w.last_seen = max(0, min(int(cores), 1024)), str(label)[:80], now
             w.report = _report(report, now)
             if fresh:
-                _drop_failed(w)
+                _drop_failed(w, pending=True)
             return {"ok": True, "poll_ms": 500}
 
     def _fresh(self, w: Worker, now: float) -> bool:
@@ -185,7 +196,8 @@ class Board:
 
     @property
     def _patience(self) -> float:
-        """How long a job's main box or a pending gate is waited for."""
+        """How long a job's main box is waited for. A gate has its own deadline (GATE_SECONDS):
+        aicomplete's `lease_seconds = 600` held a gate no core answered for 10 minutes (98)."""
         return self.lease_seconds if self.lease_seconds is not None else LEASE_FLOOR
 
     def lease_for(self, job: Job, shard: Shard) -> float:
@@ -236,14 +248,23 @@ class Board:
                 if (w.engine == "wasm" and k.bundle != "ready") or (w.engine == "native" and not job.native):
                     continue
                 state, at = w.gates.get(job.key, ("", 0.0))
-                if state == "fail" or (state == "pending" and now - at <= self._patience):
+                if state == "pending" and now - at > GATE_SECONDS:
+                    state = self._late_gate(w, job.key, at, now)
+                if state in ("fail", "pending"):
                     continue
                 if state != "pass":
                     w.gates[job.key] = ("pending", now)
+                    n = w.tries[job.key] = w.tries.get(job.key, 0) + 1
+                    diag.step(self.root, "gate", "start", f"gate-{wid}-{job.key}-{n}", now, worker=wid, key=job.key,
+                              job=job.id, reference=self._ref_kind(w, job.key), **{"try": n})
                     return {"task": "gate", "key": job.key, **self._payload(job, w)}
                 for s in job.shards:
                     if not s.done and not self._leased(job, s, now):
                         s.leases[wid] = now
+                        if (job.id, wid) not in self._handed:
+                            self._handed.add((job.id, wid))
+                            diag.step(self.root, "handout", "note", f"handout-{job.id}-{wid}", now, worker=wid,
+                                      key=job.key, job=job.id, result=f"first shard of {job.id} (shard {s.id})")
                         return {"task": "shard", "job": job.id, "shard": s.id, "key": job.key, "first": s.first,
                                 "count": s.count, "args": job.args, **self._payload(job, w)}
             return {"task": "idle", "wait_ms": 500}
@@ -264,23 +285,42 @@ class Board:
             self._wasm[key] = names[0] if len(names) == 1 else ""
         return self._wasm[key]
 
+    def _late_gate(self, w: Worker, key: str, at: float, now: float) -> str:
+        """A gate past its deadline with no answer: its step ends `timeout`. The first is handed
+        out again (the page replaces a core stuck that long); the second fails."""
+        n = w.tries.get(key, 1)
+        diag.step(self.root, "gate", "end", f"gate-{w.id}-{key}-{n}", now, worker=w.id, key=key, result="timeout",
+                  detail=f"no answer in {now - at:.0f} s")
+        if n < GATE_TRIES:
+            del w.gates[key]
+            return ""
+        w.why[key] = f"no answer to the fingerprint check in {GATE_SECONDS:.0f} s, {n} times"
+        self._fail_gate(w, key, w.why[key])
+        return "fail"
+
+    def _fail_gate(self, w: Worker, key: str, got: str) -> None:
+        k = self.keys[key]
+        w.gates[key] = ("fail", self.clock())
+        note = {"worker": w.id, "kind": w.kind, "label": w.label, "key": key, "reference": self._ref_kind(w, key),
+                "expected": k.reference(w.engine), "got": got[:200]}
+        for job in self.jobs.values():
+            if job.key == key:
+                job.gate_failures.append(note)
+        self._append(self.root / "gates.log", json.dumps(note))
+        self.gate_fails = [*self.gate_fails[-19:], {**note, "at": self.clock()}]
+
     def gate(self, wid: str, key: str, value: str) -> bool:
         with self.lock:
             w, k = self.workers.get(wid), self.keys.get(key)
             if w is None or k is None:
                 return False
-            expected = k.reference(w.engine)
-            ok = str(value).strip() == expected
-            w.gates[key] = ("pass" if ok else "fail", self.clock())
-            if not ok:
-                note = {"worker": wid, "kind": w.kind, "label": w.label, "key": key,
-                        "reference": "wasm" if w.engine == "wasm" and k.wasm else "native",
-                        "expected": expected, "got": str(value)[:200]}
-                for job in self.jobs.values():
-                    if job.key == key:
-                        job.gate_failures.append(note)
-                self._append(self.root / "gates.log", json.dumps(note))
-                self.gate_fails = [*self.gate_fails[-19:], {**note, "at": self.clock()}]
+            ok = str(value).strip() == k.reference(w.engine)
+            diag.step(self.root, "gate", "end", f"gate-{wid}-{key}-{w.tries.get(key, 1)}", self.clock(), worker=wid, key=key,
+                      result="ok" if ok else "failed", detail="" if ok else f"got {str(value)[:120]}")
+            if ok:
+                w.gates[key] = ("pass", self.clock())
+            else:
+                self._fail_gate(w, key, str(value))
             return ok
 
     # ------------------------------------------------------------ results
@@ -343,16 +383,17 @@ class Board:
                                  native, now, folder, seen=now, item=str(item)[:80])
             return jid
 
-    def set_bundle(self, key: str, state: str, error: str = "", wasm: str = "") -> None:
-        """A bundle's state; once ready, with its own fingerprint (the wasm reference). A
-        changed wasm reference unsets every browser's gate for the key."""
+    def set_bundle(self, key: str, state: str, error: str = "", wasm: str = "", note: str = "") -> None:
+        """A bundle's state; once ready, with its own fingerprint (the wasm reference), or a
+        `note` saying why there is none (browsers then gate against the native one). A changed
+        wasm reference unsets every browser's gate for the key."""
         with self.lock:
             k = self.keys.get(key)
             if k is None:
                 return
             if state != k.bundle:
                 k.since = self.clock()
-            k.bundle, k.error = state, error[:300]
+            k.bundle, k.error, k.note = state, error[:300], note[:300]
             self._wasm.pop(key, None)
             if state == "ready" and wasm.strip() != k.wasm:
                 k.wasm = wasm.strip()[:200]
@@ -498,7 +539,7 @@ class Board:
                 "out": len(out), "pending": len(j.shards) - len(done) - len(out), "seeds": seeds,
                 "seeds_done": seeds_done, "elapsed": round(elapsed, 1), "started": j.created,
                 "eta": None if eta is None else round(eta, 1),
-                "bundle": {"state": k.bundle, "error": k.error, "since": k.since or None} if k else None}
+                "bundle": {"state": k.bundle, "error": k.error, "since": k.since or None, "note": k.note} if k else None}
 
     def state_of(self, wid: str) -> dict:
         """One worker's state (`_state`), for a test or a caller outside the views."""
@@ -536,8 +577,14 @@ class Board:
             base = {"key": job.key}
             if gate[0] == "fail":
                 return {**base, "state": "error", "since": gate[1],
-                        "detail": f"failed the fingerprint gate for {_short(job.key)}"}
+                        "detail": f"failed the fingerprint gate for {_short(job.key)}"
+                        + (f": {w.why[job.key]}" if job.key in w.why else "")}
             if w.engine == "wasm":
+                if k.bundle == "referencing":       # an error once a try passed its deadline (retried once)
+                    return {**base, "state": "error" if k.error else "preparing", "since": k.since,
+                            "step": "referencing",
+                            "detail": f"the Node wasm reference for {_short(job.key)}: {k.error}" if k.error
+                            else f"the broker is computing the wasm reference for {_short(job.key)}"}
                 if k.bundle == "failed":
                     return {**base, "state": "error", "since": k.since,
                             "detail": f"the wasm build failed for {_short(job.key)}" + (f": {k.error}" if k.error else "")}
@@ -548,6 +595,10 @@ class Board:
                     return {**base, "state": "preparing", "since": k.since or job.created, "step": "building",
                             "detail": f"the broker is building the bundle for {_short(job.key)}"
                             if k.bundle == "building" else f"waiting for the bundle build for {_short(job.key)}"}
+            if gate[0] == "pending" and now - gate[1] > GATE_SECONDS:
+                return {**base, "state": "error", "since": gate[1] + GATE_SECONDS, "step": "gating",
+                        "detail": f"the fingerprint check for {_short(job.key)} passed its {GATE_SECONDS:.0f} s "
+                                  f"deadline (try {w.tries.get(job.key, 1)} of {GATE_TRIES})"}
             if gate[0] == "pending":
                 return {**base, "state": "preparing", "since": gate[1], "step": "gating",
                         "detail": f"checking the fingerprint for {_short(job.key)}"}
@@ -567,8 +618,12 @@ class Board:
     def reference_kind(self, wid: str, key: str) -> str:
         """Which reference this worker is gated against for `key`: wasm or native."""
         with self.lock:
-            w, k = self.workers.get(wid), self.keys.get(key)
-            return "wasm" if w and k and w.engine == "wasm" and k.wasm else "native"
+            w = self.workers.get(wid)
+            return self._ref_kind(w, key) if w else "native"
+
+    def _ref_kind(self, w: Worker, key: str) -> str:
+        k = self.keys.get(key)
+        return "wasm" if k and w.engine == "wasm" and k.wasm else "native"
 
     def panel(self, main_slots: int = 1) -> dict:
         """What the app's chip and Workers tab show (`status.json`, written by the broker's

@@ -15,8 +15,8 @@ error, or downloading / compiling / starting a bundle, with seconds in):
 | `offline` | not heard from in `fresh_seconds` |
 | `draining` | the page is finishing its shards before a reload (a new page version) |
 | `working` | it holds a live lease (`N shards out`) |
-| `error` | it failed the gate for the open job's commit; that commit's wasm build failed (with the build log's error line) or has run 20+ min; or a core reports an error |
-| `preparing` | the broker is building the bundle (or waits to), the gate is pending, or the page is downloading, compiling or starting it; with the step, the commit and the elapsed time |
+| `error` | it failed the gate for the open job's commit (a wrong value, or no answer twice); its gate or the Node wasm reference passed its deadline (`remote-diag.md`); that commit's wasm build failed (with the build log's error line) or has run 20+ min; or a core reports an error |
+| `preparing` | the broker is building the bundle (or waits to) or computing its wasm reference, the gate is pending, or the page is downloading, compiling or starting it; with the step, the commit and the elapsed time |
 | `idle` | none of these (`paused` when its cores are paused) |
 
 The main box is `working` while it holds a shard, else `idle`. `view.me`, `view.workers[]` and
@@ -109,7 +109,7 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
   ETA from its rate so far and the bundle building (elapsed) or failed (its error line), the other workers (name, state, cores, shards, ms a seed in this job),
   and the main box's state and load: CPU % and top consumers from the daemon's latest memory sample
   while fresh (what the inbox's load line shows; none while no daemon samples).
-- **Event log** (collapsed): joined, renamed, a bundle fetched and compiled (MB, seconds; the
+- **Event log** (collapsed; with each core's steps it is also uploaded to the broker: `remote-diag.md`): joined, renamed, a bundle fetched and compiled (MB, seconds; the
   first core ready), gated, shard N done, lost the race, shard N dropped
   (its job closed or another copy is in: `remote-workers.md`, *Placement*), tab hidden /
   visible, lost / rejoined the broker, errors. **Copy diagnostics** copies a JSON snapshot

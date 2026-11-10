@@ -276,7 +276,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         remote.start_broker(self.cfg.control, lambda note: self.log.append("warning", note=note))
 
     def _check_ignores(self) -> None:
-        probes = [n if "." in n and n != ".conductor" else f"{n}/probe" for n in RUNTIME]
+        probes = [n if "." in n and n != ".conductor" else f"{n}/probe" for n in RUNTIME
+                  if n != "remote-diag.md" or (self.cfg.control / ".conductor" / "remote").is_dir()]
         # One call for every probe: it prints the ones that are ignored.
         out = subprocess.run(["git", "-C", str(self.cfg.control), "check-ignore", *probes],
                              capture_output=True, text=True, encoding="utf-8", errors="replace",

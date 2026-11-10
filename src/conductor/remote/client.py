@@ -25,14 +25,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import settings
+from . import diag, settings
 from .board import who_path, write_who
 
 MAIN_DONE = {"worker": "main", "kind": "main", "engine": "native", "label": "main box"}
 STATUS_TIMEOUT = 0.5        # a dead broker never delays a local start past a second
 CALL_TIMEOUT = 10.0
 BEAT_SECONDS = 2.0          # the job's heartbeat: a job the broker stops hearing about is dropped
-BUILD_STALE_SECONDS = 20 * 60
+BUILD_STALE_SECONDS = 45 * 60   # a build lock this old is a dead build's (two tries of 20 min)
+FAULT_VAR = "CONDUCTOR_REMOTE_FAULT"   # `node-hang`: the Node wasm reference hangs (tests, the sandbox walk)
 PATIENCE = 45.0             # a broker restarting (a handover, or the daemon starting one that died) is waited this long
 WIN = sys.platform == "win32"
 NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if WIN else {}
@@ -72,6 +73,28 @@ def run_native(argv: list[str], cwd: Path, first: int, count: int, out: Path, ar
                 p.kill()
                 p.wait()
                 return -1
+
+
+def run_timed(argv: list[str], cwd: Path, out: Path, err: Path | None, deadline: float) -> int | None:
+    """A preparing step's child process, its output to files (a pipe a grandchild holds open
+    would outlive any timeout). Past `deadline` its whole tree is killed: None."""
+    from .. import procs
+    with open(out, "ab") as o, open(err, "ab") if err else open(os.devnull, "wb") as e:
+        p = subprocess.Popen(resolve(argv, cwd), cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=o,
+                             stderr=e if err else subprocess.STDOUT, **NO_WINDOW)
+        try:
+            return p.wait(timeout=deadline)
+        except subprocess.TimeoutExpired:
+            procs.kill_tree(p.pid)
+            p.wait()
+            return None
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def run_simple(argv: list[str], cwd: Path, log=None) -> subprocess.CompletedProcess:
@@ -155,20 +178,35 @@ def build_bundle(r: settings.Remote, key: str, cwd: Path) -> int:
     except OSError:
         return 0                                 # another build of this key is under way
     tmp = bundles / f"{key}.tmp{os.getpid()}"
+    log = bundles / f"{key}.build.log"
+    deadline = diag.DEADLINES["build"]
     try:
-        shutil.rmtree(tmp, ignore_errors=True)
-        with open(bundles / f"{key}.build.log", "w", encoding="utf-8") as log:
-            t0 = time.time()
-            done = run_simple(settings.fill(r.build, bundle=str(tmp)), cwd, log=log)
-            log.write(f"\nexit {done.returncode} after {time.time() - t0:.1f}s\n")
-        if done.returncode != 0 or not (tmp / r.bundle_js).exists():
-            why = f"exit {done.returncode}" if done.returncode != 0 else f"no {r.bundle_js} in the bundle"
-            (bundles / f"{key}.failed").write_text(f"build {why}: {failure_line(bundles / f'{key}.build.log')}\n",
-                                                   encoding="utf-8")
-            return 1
-        (tmp / ".ok").write_text("ok\n", encoding="utf-8")
-        os.replace(tmp, final)
-        return 0
+        log.unlink(missing_ok=True)
+        for n in (1, 2):                         # a build past its deadline is killed and tried once more
+            shutil.rmtree(tmp, ignore_errors=True)
+            sid, t0 = f"build-{key}-{os.getpid()}-{n}", time.time()
+            diag.step(r.state, "build", "start", sid, key=key, **{"try": n})
+            code = run_timed(settings.fill(r.build, bundle=str(tmp)), cwd, log, None, deadline)
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(f"\nexit {code} after {time.time() - t0:.1f}s\n" if code is not None
+                        else f"\nkilled after {deadline:.0f}s (its deadline)\n")
+            if code is None:
+                diag.step(r.state, "build", "end", sid, key=key, result="timeout", stderr=diag.tail(_read(log)),
+                          detail=f"killed at its {deadline / 60:.0f} min deadline" + ("; trying once more" if n == 1 else ""))
+                continue
+            if code != 0 or not (tmp / r.bundle_js).exists():
+                why = f"exit {code}" if code != 0 else f"no {r.bundle_js} in the bundle"
+                diag.step(r.state, "build", "end", sid, key=key, result="failed", exit=code, stderr=diag.tail(_read(log)),
+                          detail=failure_line(log))
+                (bundles / f"{key}.failed").write_text(f"build {why}: {failure_line(log)}\n", encoding="utf-8")
+                return 1
+            diag.step(r.state, "build", "end", sid, key=key, result="ok", exit=0)
+            (tmp / ".ok").write_text("ok\n", encoding="utf-8")
+            os.replace(tmp, final)
+            return 0
+        (bundles / f"{key}.failed").write_text(f"build killed at its {deadline / 60:.0f} min deadline, twice\n",
+                                               encoding="utf-8")
+        return 1
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         lock.unlink(missing_ok=True)
@@ -185,39 +223,70 @@ def failure_line(log: Path) -> str:
     return next((x for x in lines if x.lower().startswith(("error", "[error]"))), lines[-1] if lines else "")[:240]
 
 
-def wasm_reference(r: settings.Remote, key: str) -> tuple[str, str]:
+def wasm_reference(r: settings.Remote, key: str, retrying=None) -> tuple[str, str]:
     """The bundle's own `fingerprint()`, run on the main box in Node: what a browser must
-    reproduce. Cached beside the bundle. Returns (value, "") or ("", why not)."""
+    reproduce. Cached beside the bundle. Returns (value, "") or ("", why not). A try past its
+    deadline (2 min) is killed, and a failed one tried once more; `retrying(why)` hears of it."""
     folder = r.state / "bundles" / key
-    cached = folder / "wasm.fingerprint"
+    cached, gave_up = folder / "wasm.fingerprint", folder / "wasm.fallback"
     try:
         return cached.read_text(encoding="utf-8").strip(), ""
     except OSError:
         pass
+    if gave_up.exists():                         # failed twice for this bundle: the next job doesn't wait again
+        return "", _read(gave_up).strip() or "the wasm reference failed before"
     node = shutil.which("node")
     if node is None:
         return "", "node is not on PATH"
+    cmd = [node, str(Path(__file__).with_name("wasm_fingerprint.mjs")), str(folder), r.bundle_js]
+    if os.environ.get(FAULT_VAR) == "node-hang":
+        cmd = [node, "-e", "setInterval(() => {}, 1000)"]
+    deadline = diag.DEADLINES["reference"]
+    for n in (1, 2):
+        sid, why = f"reference-{key}-{os.getpid()}-{n}", ""
+        out, err = folder / f"node.{os.getpid()}.out", folder / f"node.{os.getpid()}.err"
+        for p in (out, err):
+            p.unlink(missing_ok=True)
+        diag.step(r.state, "reference", "start", sid, key=key, **{"try": n})
+        try:
+            code = run_timed(cmd, folder, out, err, deadline)
+        except OSError as exc:
+            code, why = -1, f"node: {exc}"
+        value, stderr = _read(out).strip(), _read(err)
+        for p in (out, err):
+            p.unlink(missing_ok=True)
+        if code == 0 and value:
+            tmp = cached.with_name(f"wasm.fingerprint.{os.getpid()}.tmp")
+            tmp.write_text(value + "\n", encoding="utf-8", newline="\n")
+            os.replace(tmp, cached)
+            diag.step(r.state, "reference", "end", sid, key=key, result="ok", exit=0, detail=value[:80])
+            return value, ""
+        if code is None:
+            why = f"Node passed its {deadline:.0f} s deadline and was killed"
+        elif not why:
+            lines = stderr.strip().splitlines()
+            line = next((x for x in lines if "Error" in x and not x.lstrip().startswith("at ")), lines[-1] if lines else "")
+            why = f"node exited {code}: {line.strip()[:300]}"
+        diag.step(r.state, "reference", "end", sid, key=key, result="timeout" if code is None else "failed",
+                  exit=code, stderr=diag.tail(stderr), detail=why + ("; trying once more" if n == 1 else ""))
+        if n == 1 and retrying:
+            retrying(f"{why}; trying once more")
+    why += ", twice"
     try:
-        out = subprocess.run([node, str(Path(__file__).with_name("wasm_fingerprint.mjs")), str(folder), r.bundle_js],
-                             cwd=str(folder), stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                             encoding="utf-8", errors="replace", timeout=120, **NO_WINDOW)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return "", f"node: {exc}"
-    value = out.stdout.strip()
-    if out.returncode != 0 or not value:
-        lines = out.stderr.strip().splitlines()
-        err = next((x for x in lines if "Error" in x and not x.lstrip().startswith("at ")), lines[-1] if lines else "")
-        return "", f"node exited {out.returncode}: {err.strip()[:300]}"
-    tmp = cached.with_name(f"wasm.fingerprint.{os.getpid()}.tmp")
-    tmp.write_text(value + "\n", encoding="utf-8", newline="\n")
-    os.replace(tmp, cached)
-    return value, ""
+        gave_up.write_text(why + "\n", encoding="utf-8", newline="\n")
+    except OSError:
+        pass
+    return "", why
 
 
-def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended: threading.Event) -> None:
+def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended: threading.Event,
+                  notes: dict | None = None) -> None:
     """Tell the broker when this commit's bundle is ready, with its wasm reference. A bundle
     not yet built is built only once a browser is connected, so a job no browser joins never
-    shares the main box with a build. Returns when ready, failed, or the job ends."""
+    shares the main box with a build. Returns when ready, failed, or the job ends. Without a
+    wasm reference, browsers gate against the native one: `notes["fallback"]` says why (the
+    job's record)."""
+    notes = {} if notes is None else notes
     from .. import procs
     bundles = r.state / "bundles"
     final, failed = bundles / key / ".ok", bundles / f"{key}.failed"
@@ -234,10 +303,17 @@ def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended
                                  cwd, bundles / f"{key}.spawn.log")
         while not ended.is_set():
             if final.exists():
-                wasm, why = wasm_reference(r, key)
+                if not (bundles / key / "wasm.fingerprint").exists():
+                    broker.call("bundle", {"key": key, "state": "referencing"}, patience=PATIENCE)
+                wasm, why = wasm_reference(r, key, retrying=lambda e: broker.call(
+                    "bundle", {"key": key, "state": "referencing", "error": e}, patience=PATIENCE))
+                note = ""
                 if why:
+                    note = notes["fallback"] = f"browsers gated against the native reference: {why}"
                     say(f"no wasm reference ({why}); browsers are gated against the native fingerprint")
-                broker.call("bundle", {"key": key, "state": "ready", "wasm": wasm}, patience=PATIENCE)
+                    diag.step(r.state, "fallback", "note", f"fallback-{key}-{os.getpid()}", key=key,
+                              result="fallback", detail=note)
+                broker.call("bundle", {"key": key, "state": "ready", "wasm": wasm, "note": note}, patience=PATIENCE)
                 return
             if failed.exists():
                 broker.call("bundle", {"key": key, "state": "failed",
@@ -283,8 +359,9 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
     failed: list[str] = []
     errors: list[str] = []
     down, ended = threading.Event(), threading.Event()
+    notes: dict = {}
     if r.build:
-        threading.Thread(target=ensure_bundle, args=(r, key, cwd, broker, ended), daemon=True).start()
+        threading.Thread(target=ensure_bundle, args=(r, key, cwd, broker, ended, notes), daemon=True).start()
     log = open(folder / "main.log", "ab")
 
     def beat() -> None:
@@ -376,7 +453,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
         for a, _ in ranges:
             f.write(shard_path(folder, a).read_bytes())
     os.replace(merged, out)
-    _record(folder, key, args, ranges, state, out, time.time() - t0)
+    _record(folder, key, args, ranges, state, out, time.time() - t0, notes.get("fallback", ""))
     _close(broker, jid)
     return 0
 
@@ -399,8 +476,10 @@ def kept_by(folder: Path, a: int, k: int, state_shard: dict) -> dict:
     return {"first": a, "count": k, **{x: who.get(x) for x in ("worker", "kind", "engine", "label", "ms") if x in who}}
 
 
-def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: Path, wall: float) -> None:
-    """Provenance: who ran each shard, whether native and wasm mixed, any gate failure."""
+def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: Path, wall: float,
+            fallback: str = "") -> None:
+    """Provenance: who ran each shard, whether native and wasm mixed, any gate failure, and
+    (`references.fallback`) why browsers were gated against the native reference."""
     shards = [kept_by(folder, a, k, s) for (a, k), s in zip(ranges, state.get("shards") or [{}] * len(ranges))]
     engines = sorted({s["engine"] for s in shards})
     fps = state.get("fingerprints") or {}
@@ -408,6 +487,8 @@ def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: P
     rec = {"key": key, "args": args, "out": str(out), "seconds": round(wall, 2), "engines": engines,
            "mixed": len(engines) > 1, "shards": shards, "gate_failures": state.get("gate_failures", []),
            "references": {"native": fps.get("native"), "wasm": fps.get("wasm"), "differ": differ}}
+    if fallback:
+        rec["references"]["fallback"] = fallback
     if rec["mixed"] and differ:
         rec["mixed_note"] = "native and wasm references differ: this output need not equal a local run's"
     (folder / "job.json").write_text(json.dumps(rec, indent=1) + "\n", encoding="utf-8", newline="\n")
@@ -421,6 +502,7 @@ def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: P
     say(f"{sum(s['count'] for s in shards)} seeds in {len(shards)} shards, {wall:.1f}s: {parts}"
         + ("; mixed native and wasm" if rec["mixed"] else "")
         + (", whose references differ (not what a local run gives)" if rec["mixed"] and differ else "")
+        + (f"; {fallback}" if fallback else "")
         + f"; record {folder / 'job.json'}")
     for g in rec["gate_failures"]:
         say(f"{g['kind']} worker {g['worker']} failed the fingerprint gate (expected {g['expected']}, got {g['got']}); "

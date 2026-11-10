@@ -15,6 +15,7 @@ CONFIG_NAME = "conductor.toml"
 RUNTIME = (
     "queue", "proposed", "running", "done", "reports", "questions", "picks", "requests",
     "signals", "receipts", "backlog", "inbox.md", "session.md", "review.md", "events.db", ".conductor",
+    "remote-diag.md",          # remote workers' digest (docs/remote-diag.md); checked only where they run
 )
 
 REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background", "push", "append_only",
