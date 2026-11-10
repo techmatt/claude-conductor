@@ -87,11 +87,11 @@ memory_pressure_percent = 90  # pressure: commit at or over this % of its limit 
 memory_pressure_free_gb = 3   # ... or free RAM at or under this (0 = off)
 memory_critical_percent = 95  # critical: the same, further on
 memory_critical_free_gb = 1.5
-memory_calm_seconds = 300     # a level falls only after the box stays clear this long (a rise is at once)
+memory_calm_seconds = 300     # a level falls only once the box stays clear this long (a rise is at once)
 load_warn_free_threads = 2    # load_high: under this many hardware threads free ...
 load_warn_seconds = 180       # ... for this long (see memory.md)
 load_tell_minutes = 15        # how often a stretch logs again, and an item causing it is messaged at most
-# the night shift's keys: night-shift.md; [run.<name>]: run-targets.md; [tools.<name>]: app.md
+# night shift keys: night-shift.md; [run.<name>]: run-targets.md; [tools.<name>]: app.md; [remote]: remote-workers.md
 
 [links]                       # name = URL; session.md lists them first, above everything else
 "design doc" = "https://claude.ai/artifact/…"

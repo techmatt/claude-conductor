@@ -19,7 +19,8 @@ from ..inbox import describe, outline_rows
 from ..resume import label as resume_label
 from ..util import clock
 from . import theme
-from .model import Project, conversation, current_outline, git_trail
+from .item_model import conversation, current_outline, git_trail
+from .model import Project
 from .widgets import mono, muted, open_session, summary, when
 
 _GIT_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="conductor-git")
@@ -69,7 +70,7 @@ class TrailHighlighter(QSyntaxHighlighter):
 
 
 class ConversationView(QWidget):
-    """One item as a chat thread (`model.conversation`): Matt's messages and amendments on
+    """One item as a chat thread (`item_model.conversation`): Matt's messages and amendments on
     the right with their replies under them, the executor's questions and progress on
     the left, conductor's start, picker and finish lines across. The latest outline is
     pinned above the thread. Tell…, Outline? and Amend… at the bottom act on the item on

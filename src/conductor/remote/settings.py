@@ -98,12 +98,6 @@ def _toml(control: Path) -> dict:
         return {}
 
 
-def raw_section(control: Path) -> dict | None:
-    """The `[remote]` table, or None when absent (or the file unreadable: never in the daemon's way)."""
-    table = _toml(control).get("remote")
-    return table if isinstance(table, dict) else None
-
-
 def load(control: Path) -> Remote | None:
     """The project's remote settings, or None when it has no `[remote]` section."""
     control = Path(control).resolve()

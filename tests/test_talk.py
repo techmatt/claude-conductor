@@ -6,7 +6,7 @@ import json
 import pytest
 
 from conductor import cli, procs, talk
-from conductor.app import actions, model
+from conductor.app import actions, item_model, model
 from conductor.app.model import Project
 from conductor.app.trail import ConversationView
 from conductor.inbox import describe
@@ -88,7 +88,7 @@ def test_conversation_ties_replies_to_their_tells(env):
     assert by_note["amendment applied"].detail["reply_to"] == am.id
     project = Project(env.control)
     project.poll_events()
-    turns = model.conversation(project.trail("code/001_talk").events)
+    turns = item_model.conversation(project.trail("code/001_talk").events)
     assert [t.title.split(" #")[0].split(",")[0] for t in turns] == [
         "Started", "Progress", "Message", "Amendment", "Progress", "Question (default 'blue' at "
         + env.events("ask")[0].detail["deadline_clock"] + ")", "Finished done"]
@@ -112,7 +112,7 @@ def test_conversation_ties_replies_to_their_tells(env):
 def test_conversation_waits_and_warns():
     from conductor.events import Event
     ev = lambda i, kind, **d: Event(i, f"2026-10-20T10:0{i}:00-07:00", kind, "code/001_x", "code", [], d)
-    turns = model.conversation([
+    turns = item_model.conversation([
         ev(1, "start", session_id="s"),
         ev(2, "tell", text="first", by="app"),
         ev(3, "delivered", tell=2, via="hook", after_seq=0),
@@ -310,7 +310,7 @@ def test_messages_name_their_sender(env):
     amend = log.append("amended", item=item, text="also this", by="app", state="running", delivery="next tool call")
     p = Project(env.control)
     p.poll_events()
-    turns = {t.id: t for t in model.conversation(p.trail(item).events)}
+    turns = {t.id: t for t in item_model.conversation(p.trail(item).events)}
     for b, ev in tells.items():
         assert turns[ev.id].name == by[b] and turns[ev.id].title == f"Message #{ev.id}"
         assert model.activity_text(ev).startswith(f"message #{ev.id} to 004_x from {by[b]}:")

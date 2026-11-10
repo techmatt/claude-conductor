@@ -85,7 +85,7 @@ message: "state: v0.2"
 
 ## Writing a prompt
 
-- **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick` (`docs/items.md`).
+- **Front-matter**: `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick`, `remote` (`docs/items.md`).
 - **Ultracode** (`ultracode: true`): subagent workflows where they help (multi-part, sweeps, redesigns, new systems; the preamble caps their size); a feature one also gets an adversarial review of its diff.
 - **Audits and templates are conductor's texts**, never retyped: `audit: true` keeps notes for a later cleanup (it fixes obvious ones itself): on by default for rules and gate items, off for art and small items, and for anything else when Matt asks; `template: <name>` is conductor's prompt, any body appended (`docs/templates.md`); Matt saying a template's phrase queues it.
 - **Concurrency** (`docs/scheduling.md`): a worktree per item. **`alongside: <what it touches>`** starts one beside its repo's others: a clearly separate code area, nothing shared outside git (art, voice, readonly prototypes). Templates but bug hunt, self audit and watch run alone. `depends_on` only where queue order doesn't serialize (another repo, `alongside`, `readonly`). `readonly` never merges, starts at once, sees `main` as then. Append-only logs: the repo's `append_only` (union merge).
@@ -101,10 +101,10 @@ message: "state: v0.2"
 - **Branches, not stops.** Every gate is "do what fits, record what didn't, continue"; the only hard stop is the wrong-repo guard. A prompt names a question in advance only when Matt must decide it.
 - **Every premise is a claim**, verified from source before acting, with what happens if it fails; a count that decides a plan is read live.
 - **Durations.** "An N-hour run" is that run alone; "finish by X" includes setup and readout. A budget is a target, not a cap. Before measuring, name the decision the number changes. **ETAs**: quote the executors', never your own.
-- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 minutes need the repo's `background` globs. The preamble holds the load budget, elevation, premises, the done-when check, report budget: restate one only if an item's differs. A gate inside a time limit: its measured run time beside it, and which checks may drop.
+- **Heavy work** (Playwright sweeps, ultracode): one browser, one test worker. Tests, builds over 10 min need the repo's `background` globs. The preamble holds the load budget, elevation, premises, the done-when check, report budget: restate one only if an item's differs. A gate inside a time limit: its measured run time beside it, and which checks may drop.
 - **Parked edits** go to `parked\<repo>.md`, one `- ` line each (`[rules]` first if it changes play: only a `rules: true` item carries it), never into prompts: the next serial **non-template** item carries them, whatever its file limits (`docs/parked.md`). Matt never edits config or docs by hand.
 - **Timing intent is a requirement.** Matt says parallel, alongside or now: scope it to qualify (`alongside:`, nothing shared riding along), check **queue status**, say when it starts before queuing (can't: why); its receipt confirms.
-- **Never mention git push, remotes, commit state or tests.**
+- **Never mention git push, remotes (bar no-remote lines), commit state or tests.**
 
 ## While items run
 

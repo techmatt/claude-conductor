@@ -7,7 +7,7 @@ import json
 import pytest
 
 from conductor import ask_server, cli, talk
-from conductor.app import model
+from conductor.app import item_model, model
 from conductor.app.model import Project
 from conductor.inbox import describe
 from conductor.util import clock
@@ -66,7 +66,7 @@ def test_outline_posted_ticked_and_requested(env, capsys):
     project = Project(env.control)
     project.poll_events()
     events = project.trail("code/001_out").events
-    turns = model.conversation(events)
+    turns = item_model.conversation(events)
     assert [t.title.split(" #")[0] for t in turns] == ["Started", "Outline", "Progress", "Outline request",
                                                        "Finished done"]
     assert turns[1].text == "outline 0/3 · next: Read the code by 10:40am · finish ~11:20am"
@@ -74,7 +74,7 @@ def test_outline_posted_ticked_and_requested(env, capsys):
     asked = turns[3]
     assert asked.who == "matt" and asked.text == "" and asked.under[-1][0] == "reply"
     assert asked.under[-1][2] == "outline 2/3 · next: Report by 11:20am · finish ~11:20am"
-    assert model.current_outline(events).id == reply.id
+    assert item_model.current_outline(events).id == reply.id
     assert model.activity_text(req) == f"outline request #{req.id} to 001_out from CLI"
     project.close()
 

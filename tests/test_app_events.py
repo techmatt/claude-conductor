@@ -2,8 +2,9 @@
 
 import json
 
-from conductor.app import model
-from conductor.app.model import Project, render_stream_json
+from conductor.app import item_model, model
+from conductor.app.model import Project
+from conductor.app.streamlog import render_stream_json
 from conftest import git
 
 
@@ -32,7 +33,7 @@ def test_trail_of_a_merged_item(env):
     assert {"enqueue", "start", "merge", "finish"} <= {e.kind for e in tr.events}
     assert tr.report.startswith("status:")
     assert "══ result" in tr.log
-    text = model.git_trail(p.cfg, "code/001_x", p.events)
+    text = item_model.git_trail(p.cfg, "code/001_x", p.events)
     assert "merged into main" in text and "a.txt" in text
     p.close()
 
@@ -43,9 +44,9 @@ def test_git_trail_prefers_the_branch(env):
     git(env.repo, "add", "y.txt")
     git(env.repo, "commit", "-q", "-m", "add y")
     git(env.repo, "checkout", "-q", "main")
-    text = model.git_trail(env.cfg, "code/002_y", [])
+    text = item_model.git_trail(env.cfg, "code/002_y", [])
     assert "still exists" in text and "add y" in text and "y.txt" in text
-    assert "nothing committed survives" in model.git_trail(env.cfg, "code/003_z", [])
+    assert "nothing committed survives" in item_model.git_trail(env.cfg, "code/003_z", [])
 
 
 def test_render_stream_json(tmp_path):
@@ -70,7 +71,7 @@ def test_git_trail_from_commit_events(env):
     git(env.repo, "commit", "-q", "-m", "add c")
     sha = git(env.repo, "rev-parse", "HEAD").strip()
     ev = model.Event(1, "2026-01-01T17:25:00+00:00", "commit", "code/005_c", "code", [], {"sha": sha, "scope": "code"})
-    text = model.git_trail(env.cfg, "code/005_c", [ev])
+    text = item_model.git_trail(env.cfg, "code/005_c", [ev])
     assert "1 commit(s) logged" in text and "c.txt" in text and "add c" in text
 
 

@@ -21,6 +21,8 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
   daemon at its start for a project with `[remote]`, and kept across a daemon restart
   unless the section changed. It exits once the daemon has been gone a minute. If it
   dies, the daemon starts it again within 10 s (one warning); its jobs carry on (`remote-url.md`).
+  By hand: `python -m conductor.remote.broker <control> [--stay] [--after <pid>]`; `--stay`
+  serves with no daemon (tests, a manual run), `--after` is a handover.
 - **LAN only, one shared token.** It binds `bind:port` (default `0.0.0.0:8770`) and serves
   every path under `/w/<token>/`: the worker page, the wasm bundles and the job API.
   Workers pull: they poll for shards and post results; a worker never listens. The main
@@ -110,7 +112,7 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   shards run on the main box. On lid open it rejoins within seconds, with no new gate
   for the same commit. A 5,000-seed job took 34–46 s (laptop in front or hidden) and about
   50 s (locked), against 303 s local-only. Every output was byte-identical.
-- **The local-remote worker** (`python -m conductor.remote.worker <control> [--cores N]`): a
+- **The local-remote worker** (`python -m conductor.remote.worker <control> [--cores N] [--id ID]`, id `lr<pid>` by default): a
   second process on the main box speaking the same protocol with the native command, for
   tests and failure injection (`--bad-fingerprint`, `--die-after N`, `--fail-every N`,
   `--hang-after N`). A native worker for other PCs is not built; the protocol allows one

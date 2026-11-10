@@ -272,6 +272,7 @@ def test_the_wasm_reference_is_the_bundles_own_fingerprint_run_in_node(farm):
     assert value == "" and "boom" in why
 
 
+@pytest.mark.slow           # waits out a broker gap: 7s serially
 def test_a_broker_restarting_mid_job_loses_nothing(farm, capsys):
     """A handover in miniature: the old broker stops taking calls, saves its board and lets go
     of the port; a new one takes both up. `farm-seeds` and the worker wait out the gap."""

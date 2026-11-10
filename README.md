@@ -7,12 +7,10 @@ queues as headless `claude -p` sessions (each in its own git worktree, merged in
 `alongside`), and records everything in an append-only event log from which the inbox and
 every other view is derived.
 
-`planner.md` is how a planner session uses it (its *Start* checklist and the vocab of a
-normal session; rare ops in `planner-vocab.md`); `claude-ai-new-project.md`
-is how a project is started, parked and resumed. This file and `docs/` are how conductor
-works: the canon for commands, file formats, fields and event kinds. Each topic file is
-small enough to read whole, and stays so: `CLEANUP.md` is the standing maintenance pass,
-with every file's size budget (`uv run python tools/sizes.py`).
+`planner.md` is how a planner session uses it (rare ops in `planner-vocab.md`);
+`claude-ai-new-project.md` is how a project is started, parked and resumed. This file and
+`docs/` are how conductor works: the canon for commands, file formats, fields and event
+kinds, a topic per file. `CLEANUP.md` is the maintenance pass, with each file's size budget.
 
 ## Install and run
 
@@ -50,9 +48,9 @@ One daemon per control folder: a second `run` refuses while the first is alive.
 checkpoint's own event on) or `checkpoint N` (from checkpoint #N on). `--item` takes `sandbox/001_x`,
 `001_x` or `001`.
 
-Stopping the daemon (Ctrl+C, or killing it) does **not** stop executors; the next start
-adopts them. A **tree** kill does, so start the daemon from the app or a plain terminal,
-never as a Claude Code background command (`docs/restart.md`).
+Stopping the daemon does **not** stop executors (the next start adopts them); a **tree**
+kill does, so start it from the app or a terminal, never as a Claude Code background
+command (`docs/restart.md`).
 
 ## Topics
 
@@ -81,11 +79,13 @@ never as a Claude Code background command (`docs/restart.md`).
 | `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, the picker server and page, saved choices |
-| `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, removal; `remote-status`, `remote-url` |
+| `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, the local-remote worker, removal |
+| `docs/remote-status.md` | The worker page; the app's remote chip and Workers tab |
+| `docs/remote-url.md` | The one worker URL: PC name, pinned token, broker handover |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory and load sampling, pressure levels, the launch guard, the leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one app per user, what it reads and writes, the header, actions, project tools, tray |
-| `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed |
+| `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/restart.md` | The restart rule, the self-restart on a code change; platform notes (process groups, detached launches) |
 | `docs/development.md` | The test suite, its lanes and the fake executor |

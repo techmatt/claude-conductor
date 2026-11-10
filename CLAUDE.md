@@ -35,7 +35,7 @@ When Matt says "cleanup conductor" (or "conductor cleanup" and the like), follow
 
 ## Standing prompt contract
 
-- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): a prompt's `start` line comes from `tools/prompts.py`, a cleanup pass's first action appends `<time> start <name>`; the last action of either is `uv run python tools/prompts.py done <name> <report path>` (or `stopped`).
+- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): a prompt's `start` line comes from `tools/prompts.py`, a cleanup pass's first action appends `<time> start <name>`; the last action of either is `uv run python tools/prompts.py done <name> <report path>` (or `done <name> stopped`).
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored), starting with a `status: done | partial | red` line (the planner's `session.md` digest shows it). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
 - Clock times are local 12-hour (`5:25pm`).
 - A step estimated over ~30 seconds is backgrounded, with a completion waiter on the real process, never on a launcher wrapper.

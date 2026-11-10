@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~85-130s; 458 tests; 2026-11-09)
+uv run pytest            # the fast lane, after every change (~85-130s; 483 tests; 2026-11-09)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~215-300s; 598 tests); run this before committing
+uv run pytest -m ""      # everything (~215-300s; 624 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -77,8 +77,8 @@ daemon still waits on and exits 1 if one still waits after 10 minutes (`RESTART_
 `--force` stops and starts each daemon detached (`procs.spawn_daemon`) instead; `--check`
 lists what runs now and exits 0. No app running: it starts one on the newest control folder.
 
-`uv run python tools/prompts.py list | next | run <slug|file> | done <name> <report> | migrate`
-is "run the next prompt" (`CLAUDE.md`). Planners write conductor prompts to
+`uv run python tools/prompts.py list | next [--anyway] | run <slug|file> [--anyway] |
+done <name> <report path|stopped> | migrate` is "run the next prompt" (`CLAUDE.md`). Planners write conductor prompts to
 `prompts/inbox/<YYYYMMDD-HHMMSS>-<project>-<slug>.md` with no number, because several
 planner sessions write without seeing each other (78 and 91 were each written twice, and 91
 was skipped once 92 ran). A claim takes the oldest (or the one named), gives it one past
