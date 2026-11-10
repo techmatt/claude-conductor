@@ -119,11 +119,12 @@
     <div class="head">
       <h2>Cores</h2>
       <div class="ctl">
-        <label><input id="cores" type="range" min="1" step="1"> <b id="coresOut" class="num"></b> <span class="muted">of <span id="coresMax"></span></span></label>
+        <label title="An upper limit for when this machine is wanted for something else; at the right end, none: the broker runs as many cores as help"><span class="muted">cap</span> <input id="cores" type="range" min="1" step="1"> <b id="coresOut" class="num"></b></label>
         <button id="toggle">Pause</button>
         <label class="toggle" id="wakeBox" hidden title="Stops this screen sleeping or locking while the toggle is on; a locked screen cost ~40% a core on a laptop"><input type="checkbox" id="wake"> Keep screen awake</label>
       </div>
     </div>
+    <div class="num muted" id="chosen">waiting for the broker's core count</div>
     <div class="tiles" id="tiles"></div>
   </section>
 
@@ -169,15 +170,20 @@
   const wid = store(sessionStorage, "wid") || newId();          // the same worker across a reload of this tab
   store(sessionStorage, "wid", wid);
   let fresh = true;                  // the first hello of this load re-gates whatever this worker failed before
-  let prefs = {};                                                // the slider, pause and wake choices, kept for good
+  let prefs = {};                                                // the cap, pause and wake choices, kept for good
   try { prefs = JSON.parse(store(localStorage, "prefs") || "{}") || {}; } catch { }
-  const savePrefs = () => store(localStorage, "prefs", JSON.stringify({ cores: Number(slider.value), paused, wake: wakeWanted }));
+  // The broker chooses the core count (99); the slider is only a cap, none at its right end.
+  // An old `cores` pref is not a cap: nobody chose it as one.
+  const capNow = () => Number(slider.value) < max ? Number(slider.value) : null;
+  const savePrefs = () => store(localStorage, "prefs", JSON.stringify({ cap: capNow(), paused, wake: wakeWanted }));
   const max = navigator.hardwareConcurrency || 2;
   const $ = (id) => document.getElementById(id);
   const started = Date.now();
   const slider = $("cores");
-  slider.max = max; slider.value = Math.min(max, Math.max(1, prefs.cores || max - 1));
-  $("coresMax").textContent = max;
+  slider.max = max; slider.value = Math.min(max, Math.max(1, prefs.cap || max));
+  let chosenN = null, chosenWhy = "";   // the broker's count for this worker, and why it last changed
+  const leaving = new Set();          // cores told to finish their task and stop (the count came down)
+  const coresNow = () => workers.filter(Boolean).length;
 
   let workers = [], paused = !!prefs.paused, project = "conductor", view = null;
   let version = null, reloading = 0, misses = 0;       // the page's code as first served; a reload under way since
@@ -267,7 +273,7 @@
     try {
       const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(10000),          // a stalled call fails and is retried, never hangs the loop
-        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length, label: label(), view: true, fresh,
+        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : coresNow(), hw: max, cap: capNow(), label: label(), view: true, fresh,
                                running, report: report(), log: sent, clock: Date.now() }) });
       if (!r.ok) throw new Error(`refused (HTTP ${r.status})`);
       const reply = await r.json();
@@ -275,7 +281,7 @@
       hellos.n++; hellos.times.push(Date.now() - helloAt);
       fresh = false;
       lastOk = Date.now();
-      if (!everOk) log(`joined as ${wid} (${label()}, ${workers.length} of ${max} cores)`);
+      if (!everOk) log(`joined as ${wid} (${label()}, ${max} cores here)`);
       else if (failing) log("rejoined the broker", "ok");
       everOk = true; failing = false;
       if (reply.page) {
@@ -290,6 +296,12 @@
       const me = view?.me, said = me ? `${me.state}${me.detail && me.state !== "working" ? " · " + me.detail : ""}` : "";
       if (said !== lastSaid) { plog("page", `state: ${said || "unknown"} (the broker's view)`); lastSaid = said; }
       misses = 0;
+      if (Number.isInteger(reply.cores) && reply.cores !== chosenN) {
+        log(chosenN === null ? `the broker runs ${reply.cores} core${reply.cores === 1 ? "" : "s"} here: ${reply.why}`
+          : `the broker changed the core count: ${reply.why}`);
+        chosenN = reply.cores; chosenWhy = reply.why || "";
+        resize();
+      }
       for (const [job, shard] of view?.drop || []) dropShard(job, shard);
     } catch (e) {
       hellos.fail++;
@@ -336,8 +348,7 @@
       const i = Number(slot);
       if (!["run", "prep"].includes(t.state) || t.job !== job || t.shard !== shard || !workers[i]) continue;
       workers[i].terminate();
-      workers[i] = startCore(i);
-      setTile(i, { state: "idle" });
+      workers[i] = null; leaving.delete(i); refill(i);
       log(`core ${i + 1}: dropped shard ${shard} (seeds ${t.first}–${t.first + t.count - 1}): its job closed or another copy is in`, "warn");
     }
   }
@@ -386,7 +397,7 @@
     reloading = Date.now();
     savePrefs();
     log("a new version of this page is served: finishing running shards, then reloading", "warn");
-    for (const w of workers) w.postMessage({ type: "drain" });
+    for (const w of workers) w?.postMessage({ type: "drain" });
     const check = setInterval(() => {
       const busy = Object.values(tiles).some((t) => t.state === "run");
       if (!busy || Date.now() - reloading > 300000) { clearInterval(check); location.reload(); }
@@ -396,6 +407,13 @@
   // ---------------------------------------------------------------- worker messages
   function onMessage(e) {
     const m = e.data, t = tiles[m.slot] || {};
+    // A core told to leave goes once its task is over (its result or gate posted, or idle).
+    if (leaving.has(m.slot) && ["idle", "shard", "gate", "hello", "error"].includes(m.type)) {
+      if (m.type === "shard") onShard(m);
+      workers[m.slot]?.terminate();
+      workers[m.slot] = null; leaving.delete(m.slot); refill(m.slot); hello(); draw();
+      return;
+    }
     const task = m.job ? { job: m.job, shard: m.shard, first: m.first, count: m.count } : {};
     if (["idle", "busy", "gating", "gate", "need"].includes(m.type)) {
       polled = Date.now();                       // a core's poll got through
@@ -442,6 +460,14 @@
       log(m.pass ? `fingerprint gate passed for ${m.key} (${short(m.value, 12)})` : `fingerprint gate FAILED for ${m.key}: got ${short(m.value, 24)}`, m.pass ? "ok" : "bad");
       hello();
     } else if (m.type === "shard") {
+      onShard(m);
+      hello();
+    }
+    draw();
+  }
+
+  function onShard(m) {
+    {
       const s = m.ms / 1000;
       shards.push({ at: new Date().toISOString(), slot: m.slot, job: m.job, shard: m.shard, first: m.first, count: m.count,
                     ms: Math.round(m.ms), ok: m.ok, accepted: m.accepted, err: m.err || undefined });
@@ -457,9 +483,7 @@
         if (m.accepted) { ran++; log(`shard ${m.shard} (seeds ${m.first}–${m.first + m.count - 1}) done in ${fmtS(s)}`); }
         else log(`shard ${m.shard} lost the race: another copy got in first (re-run elsewhere)`, "warn");
       }
-      hello();
     }
-    draw();
   }
 
   function startCore(slot) {
@@ -483,23 +507,34 @@
       if (t.state !== "prep" || !t.prepSince || now - t.prepSince < PREP_DEADLINE_MS || !workers[i]) continue;
       log(`core ${i + 1}: ${t.step || "preparing"} for ${t.key ? t.key.slice(0, 7) : "?"} passed its ${PREP_DEADLINE_MS / 1000} s deadline; core replaced`, "bad");
       workers[i].terminate();
-      workers[i] = startCore(i);
-      setTile(i, { state: "idle" });
+      workers[i] = null; leaving.delete(i); refill(i);
       hello();
     }
   }
   setInterval(watchdog, 5000);
 
+  // The cores this tab runs: the broker's count under the cap (none before its first answer).
+  // Cores come at once; an extra one finishes its task first (`leaving`), never killed: an idle
+  // one may have a poll in flight that takes a lease.
+  const wanted = () => paused || chosenN === null ? 0 : Math.min(chosenN, capNow() ?? max, max);
+  function refill(i) {                      // a slot just emptied: restart it if still wanted, else drop it
+    if (i < wanted()) { workers[i] = startCore(i); setTile(i, { state: "idle" }); return; }
+    delete tiles[i];
+    while (workers.length && !workers[workers.length - 1] && !leaving.has(workers.length - 1)) workers.pop();
+  }
   function resize() {
-    const want = paused ? 0 : Number(slider.value);
-    $("coresOut").textContent = paused ? 0 : slider.value;
-    while (workers.length < want) {
-      setTile(workers.length, { state: "idle" });
-      workers.push(startCore(workers.length));
+    const want = wanted();
+    $("coresOut").textContent = capNow() ?? "none";
+    if (paused) {                             // Pause frees the machine at once, as it always has
+      workers.forEach((w) => w?.terminate());
+      workers = []; leaving.clear();
+      for (const k of Object.keys(tiles)) delete tiles[k];
     }
-    while (workers.length > want) {
-      workers.pop().terminate();
-      delete tiles[workers.length];
+    for (let i = 0; i < want; i++) {
+      if (!workers[i]) { setTile(i, { state: "idle" }); workers[i] = startCore(i); }
+    }
+    for (let i = want; i < workers.length; i++) {
+      if (workers[i] && !leaving.has(i)) { leaving.add(i); workers[i].postMessage({ type: "drain" }); }
     }
     hello();
   }
@@ -541,7 +576,7 @@
     const since = (s) => s ? Math.max(0, view.now - s + (now - viewAt) / 1000) : null;
     const el = since(me.since);
     const busy = busyCount();
-    const words = me.state === "working" ? `${busy} of ${workers.length} cores running · ${me.out} shard${me.out === 1 ? "" : "s"} out`
+    const words = me.state === "working" ? `${busy} of ${coresNow()} cores running · ${me.out} shard${me.out === 1 ? "" : "s"} out`
       : me.state === "idle" ? (me.detail === "paused" ? "paused" : job ? "waiting for work" : "no farm job out")
       : me.detail + (el != null && ["preparing", "draining"].includes(me.state) ? ` · ${fmtS(el)}` : "");
     $("state").textContent = me.state;
@@ -561,6 +596,13 @@
         `${sym} ${gate.reference} reference ${short(gate.value)}` + (gate.state === "fail" ? " failed" : "");
       $("gate").className = "chip " + (gate.state === "pass" ? "ok" : gate.state === "fail" ? "bad" : "warn");
     }
+
+    // the broker's count, the cap if one is set, and why it last changed
+    const cap = capNow();
+    $("chosen").textContent = chosenN === null ? "waiting for the broker's core count"
+      : `${chosenN} core${chosenN === 1 ? "" : "s"} chosen by the broker` + (cap ? ` · cap ${cap}` + (cap < chosenN ? `: running ${cap}` : "") : " · no cap")
+        + (chosenWhy ? ` · ${chosenWhy}` : "");
+    $("chosen").title = $("chosen").textContent;
 
     // tiles
     const box = $("tiles"), slots = Object.keys(tiles).map(Number).sort((a, b) => a - b);
@@ -643,9 +685,9 @@
 
     // the tab title: readable from the tab strip, kept current while hidden (worker messages drive it)
     // (the same state as the badge, so the tab strip never says idle while a bundle loads)
-    const lead = me.state === "offline" ? `… ${connState}` : me.state === "working" ? `▶ ${busy}/${workers.length} · ${fmtN(rate)}/min`
+    const lead = me.state === "offline" ? `… ${connState}` : me.state === "working" ? `▶ ${busy}/${coresNow()} · ${fmtN(rate)}/min`
       : me.state === "preparing" ? `◌ preparing${el != null ? " " + fmtS(el) : ""}` : me.state === "draining" ? "⏏ draining"
-      : me.state === "error" ? "✗ error" : me.detail === "paused" ? "❚❚ paused" : `◦ idle · ${workers.length} cores`;
+      : me.state === "error" ? "✗ error" : me.detail === "paused" ? "❚❚ paused" : `◦ idle · ${coresNow()} cores`;
     document.title = `${lead} · ${project}`;
   }
 
@@ -695,7 +737,7 @@
     const r = rateNow();
     return {
       at: new Date().toISOString(), worker: wid, browser: label(), userAgent: navigator.userAgent,
-      cores: { hardware: max, used: workers.length, paused }, deviceMemoryGB: navigator.deviceMemory ?? null,
+      cores: { hardware: max, used: coresNow(), chosen: chosenN, why: chosenWhy, cap: capNow(), paused }, deviceMemoryGB: navigator.deviceMemory ?? null,
       secureContext: window.isSecureContext, visibility: document.visibilityState,
       wakeLock: !("wakeLock" in navigator) ? "unavailable" : wake ? "held" : "off",
       connection: { state: connState, lastHelloMsAgo: lastOk ? Date.now() - lastOk : null },
@@ -732,11 +774,11 @@
     myName = e.target.value.trim().slice(0, 40);
     e.target.value = myName;
     store(localStorage, "name", myName);
-    for (const w of workers) w.postMessage({ type: "label", label: label() });
+    for (const w of workers) w?.postMessage({ type: "label", label: label() });
     if (label() !== was) log(`renamed from "${was}" to "${label()}": shards run from now on carry it`);
     hello();
   });
-  slider.addEventListener("input", () => { resize(); savePrefs(); log(`cores set to ${slider.value}`); });
+  slider.addEventListener("input", () => { resize(); savePrefs(); log(capNow() ? `cap set to ${capNow()} cores` : "cap removed"); });
   $("toggle").addEventListener("click", () => {
     paused = !paused; $("toggle").textContent = paused ? "Resume" : "Pause";
     savePrefs(); log(paused ? "paused" : "resumed"); resize();

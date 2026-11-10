@@ -74,20 +74,21 @@ command (`docs/restart.md`).
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress`, outlines, messages (`tell:`), short calls, amendments, opening a finished session |
 | `docs/signals.md` | Every signal verb; how a signal file applies |
-| `docs/open.md` | Desktop actions: `open:` (checked paths, URLs) and `notify:` toasts |
+| `docs/open.md` | Desktop: `open:` (paths, URLs), `notify:` toasts |
 | `docs/receipts.md` | Each planner write's receipt: where, what it says, how long it lives |
-| `docs/inbox.md` | Checkpoints, the `session:` start digest (`session.md`), the `review:` bundle (`review.md`), `inbox.md`, toasts |
+| `docs/inbox.md` | Checkpoints, the `session.md` and `review.md` digests, `inbox.md`, toasts |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, picker server and page, saved choices |
 | `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, local-remote worker, removal |
 | `docs/remote-status.md` | The worker page; the app's remote chip, Workers tab |
 | `docs/remote-url.md` | The one worker URL: PC name, pinned token, broker handover |
-| `docs/remote-diag.md` | `remote-diag.md`, steps and page logs, deadlines |
+| `docs/remote-diag.md` | `remote-diag.md`, steps, page logs, deadlines |
+| `docs/remote-cores.md` | A browser's core count, chosen by the broker |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
 | `docs/events.md` | `events.db` and every event kind with its detail |
-| `docs/restart.md` | The restart rule, self-restart on a code change; platform notes (process groups, detached launches) |
+| `docs/restart.md` | The restart rule, self-restart on a code change; process groups, detached launches |
 | `docs/development.md` | The test suite, its lanes and the fake executor |
 | `docs/known-limits.md` | Accepted gaps, by area |

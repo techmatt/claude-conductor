@@ -210,7 +210,9 @@ class Handler(BaseHTTPRequestHandler):
             if b.get("kind") == "local-remote" and not self._local():
                 raise ValueError("a local-remote worker runs on the main box")
             reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")),
-                                fresh=b.get("fresh") is True, report=b.get("report"))
+                                fresh=b.get("fresh") is True, report=b.get("report"),
+                                hw=b.get("hw") if isinstance(b.get("hw"), int) else None,
+                                cap=b.get("cap") if isinstance(b.get("cap"), int) else None)
             board.renew(str(b["worker"]), b.get("running"))
             if b.get("log"):                     # the page's own log since its last hello (diag.py)
                 reply["log_taken"] = diag.page_lines(board.root, str(b["worker"]), str(b.get("label") or b["worker"]),

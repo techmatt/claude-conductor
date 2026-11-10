@@ -16,7 +16,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import diag
+from . import cores as policy, diag
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 KINDS = {"browser": "wasm", "local-remote": "native", "main": "native"}   # worker kind -> engine
@@ -48,6 +48,16 @@ class Worker:
     report: dict = field(default_factory=dict)   # what the worker says it is doing (its hello), with `at`
     tries: dict[str, int] = field(default_factory=dict)   # key -> gates handed out for it (GATE_TRIES)
     why: dict[str, str] = field(default_factory=dict)     # key -> why its gate failed, when not a wrong value
+    hw: int = 0                 # a browser's hardware cores (its hello); 0: an old page, no plan (`cores.py`)
+    cap: int = 0                # its slider's cap; 0: none
+
+    @property
+    def plan_name(self) -> str:
+        return self.label or self.id
+
+    @property
+    def limit(self) -> int:
+        return min(self.hw, self.cap or self.hw)
 
     @property
     def engine(self) -> str:
@@ -76,6 +86,7 @@ class Job:
     gate_failures: list[dict] = field(default_factory=list)
     item: str = ""               # the item that ran `farm-seeds`, for the worker page
     rates: dict[str, float] = field(default_factory=dict)   # worker id -> its ms a seed in this job (moving average)
+    tags: dict[str, int] = field(default_factory=dict)      # "shard:worker" -> a browser's cores when it was handed out
 
     @property
     def complete(self) -> bool:
@@ -161,14 +172,17 @@ class Board:
         self.items: list[str] = []         # items running on the main box (the broker's loop: `running_items`)
         self._wasm: dict[str, str] = {}    # key -> its bundle's one .wasm file (the page compiles it once)
         self._handed: set[tuple[str, str]] = set()   # (job, worker): its first shard is in the steps log
+        self.plans: dict[str, policy.Plan] = {}       # a browser's name -> its core count (`cores.py`)
         self._n = 0
 
     # ------------------------------------------------------------ workers
     def hello(self, wid: str, kind: str, cores: int = 1, label: str = "", fresh: bool = False,
-              report=None) -> dict:
+              report=None, hw=None, cap=None) -> dict:
         """`fresh`: the first hello of a page load or a worker start, which re-gates every key
         this worker failed (a fix needs no new tab or worker id). `report`: what the worker
-        says it is doing that the broker can't see (`_report`), for `state_of`."""
+        says it is doing that the broker can't see (`_report`), for `state_of`. `hw` (a
+        browser's hardware cores) and `cap` (its slider, None for none): the reply's `cores`
+        is the count the broker chose for it under its name (`cores.py`)."""
         if not ID_RE.match(wid) or kind not in KINDS or kind == "main":
             raise ValueError("bad worker id or kind")
         with self.lock:
@@ -183,7 +197,18 @@ class Board:
             w.report = _report(report, now)
             if fresh:
                 _drop_failed(w, pending=True)
-            return {"ok": True, "poll_ms": 500}
+            reply = {"ok": True, "poll_ms": 500}
+            if kind == "browser" and hw is not None:
+                w.hw = max(1, min(int(hw), 1024))
+                w.cap = max(0, min(int(cap or 0), w.hw))
+                p = self.plans.get(w.plan_name)
+                if p is None:
+                    p = self.plans[w.plan_name] = policy.Plan(why=f"new worker: starts at {policy.START}", at=now)
+                    policy.prune(self.plans)
+                if p.cores > w.hw:
+                    policy.change(p, w.hw, f"this machine has {w.hw} cores", now)
+                reply |= {"cores": p.cores, "why": p.why}
+            return reply
 
     def _fresh(self, w: Worker, now: float) -> bool:
         return now - w.last_seen <= self.fresh_seconds
@@ -261,6 +286,8 @@ class Board:
                 for s in job.shards:
                     if not s.done and not self._leased(job, s, now):
                         s.leases[wid] = now
+                        if w.hw:
+                            job.tags[f"{s.id}:{wid}"] = w.cores
                         if (job.id, wid) not in self._handed:
                             self._handed.add((job.id, wid))
                             diag.step(self.root, "handout", "note", f"handout-{job.id}-{wid}", now, worker=wid,
@@ -343,6 +370,7 @@ class Board:
             if ok and ms > 0:                      # per job: another job's args may cost more a seed
                 per, old = ms / s.count, job.rates.get(wid)
                 job.rates[wid] = per if old is None else 0.7 * old + 0.3 * per
+            self._plan_result(job, s, w, ok, ms)
             if s.done or not ok:
                 return False
             done = {"worker": wid, "kind": w.kind, "engine": w.engine, "label": w.label, "ms": round(ms)}
@@ -360,6 +388,38 @@ class Board:
             day = time.strftime("%Y-%m-%d", time.localtime(self.clock()))
             w.day, w.today = day, (w.today if w.day == day else 0) + 1
             return True
+
+    def _plan_result(self, job: Job, s: Shard, w: Worker, ok: bool, ms: float) -> None:
+        """A result, for the core counts (`cores.py`): a browser's own shard is a sample and
+        won or lost; the main box's copy landing first is a loss for each browser holding it."""
+        now = self.clock()
+        if w.kind == "main":
+            if ok and not s.done:
+                for wid in [x for x in s.leases if x != "main"]:
+                    other = self.workers.get(wid)
+                    n = job.tags.pop(f"{s.id}:{wid}", None)
+                    if other and other.hw and n is not None:
+                        p = self._plan(other)
+                        policy.outcome(p, job.id, n, won=False)
+                        self._decide(other, p, now)
+            return
+        n = job.tags.pop(f"{s.id}:{w.id}", None)
+        if not w.hw or n is None:
+            return
+        p = self._plan(w)
+        if ok and ms > 0:
+            policy.sample(p, job.id, n, ms / s.count)
+        if ok:
+            policy.outcome(p, job.id, n, won=not s.done)
+        self._decide(w, p, now)
+
+    def _plan(self, w: Worker) -> policy.Plan:
+        return self.plans.setdefault(w.plan_name, policy.Plan(why=f"new worker: starts at {policy.START}", at=self.clock()))
+
+    def _decide(self, w: Worker, p: policy.Plan, now: float) -> None:
+        why = policy.decide(p, w.limit, now)
+        if why:
+            diag.step(self.root, "cores", "note", f"cores-{w.id}-{now:.3f}", now, worker=w.id, result=why)
 
     # ------------------------------------------------------------ the main box
     def add_job(self, key: str, fingerprint: str, args: list[str], ranges: list[tuple[int, int]],
@@ -648,9 +708,16 @@ class Board:
                              # the main box is the broker's own machine: never "seen", always local
                              "last_seen": None if w.kind == "main" else w.last_seen or None,
                              "today": w.today if w.day == today else 0,
+                             **self._plan_row(w),
                              **self._state(w, now, jobs, n)})
             return {"now": now, "job": job, "workers": rows, "items": list(self.items),
                     "gate_fails": [dict(g) for g in self.gate_fails], "reruns": list(self.reruns)}
+
+    def _plan_row(self, w: Worker) -> dict:
+        """A browser's chosen count, its cap and the last change's reason (`cores.py`)."""
+        p = self.plans.get(w.plan_name) if w.hw else None
+        return {"chosen": min(p.cores, w.hw), "cap": w.cap or None, "hw": w.hw, "why": p.why,
+                "why_at": p.at} if p else {}
 
     def now_line(self) -> str | None:
         """The inbox's *Now* line, or None while no worker is connected."""
@@ -671,6 +738,7 @@ class Board:
         their gates. A worker mid-shard posts its result to the new broker and it counts."""
         with self.lock:
             data = {"at": self.clock(), "n": self._n, "gate_fails": self.gate_fails, "reruns": self.reruns,
+                    "plans": {k: asdict(v) for k, v in self.plans.items()},
                     "workers": [asdict(w) for w in self.workers.values()],
                     "keys": {k: asdict(v) for k, v in self.keys.items()},
                     "jobs": [asdict(j) | {"folder": str(j.folder)} for j in self.jobs.values()]}
@@ -679,7 +747,7 @@ class Board:
         os.replace(tmp, path)
 
     def restore(self, path: Path) -> bool:
-        """Take up a saved board (`save`); False, and nothing changed, if there is none or it
+        """Take up a saved board (`save`), the core counts learned by name with it; False, and nothing changed, if there is none or it
         doesn't read. Jobs the main box stopped calling drop out as ever (`_active`). Failed
         gates don't carry over: a new broker (a code change, a fix) gates those workers again."""
         try:
@@ -690,12 +758,13 @@ class Board:
             jobs = {j["id"]: Job(**{**j, "folder": Path(j["folder"]), "shards": [Shard(**s) for s in j["shards"]]})
                     for j in data["jobs"] if j["key"] in keys}
             n = int(data["n"])
+            plans = {k: policy.Plan(**v) for k, v in (data.get("plans") or {}).items()}
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
         for w in workers.values():
             _drop_failed(w)
         with self.lock:
-            self.workers, self.keys, self.jobs, self._n = workers, keys, jobs, n
+            self.workers, self.keys, self.jobs, self._n, self.plans = workers, keys, jobs, n, plans
             self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])
         return True
 

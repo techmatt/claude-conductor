@@ -183,7 +183,7 @@ def sweep(state: Path, now: float | None = None) -> None:
 # ------------------------------------------------------------------ the digest
 def _step_text(r: dict, now: float) -> str:
     what = {"build": "wasm build", "reference": "Node wasm reference", "gate": "fingerprint gate",
-            "handout": "handout", "fallback": "native fallback"}.get(r["step"], r["step"])
+            "handout": "handout", "fallback": "native fallback", "cores": "core count"}.get(r["step"], r["step"])
     key = f" {r['key'][:7]}" if r.get("key") else ""
     who = f" for {r.get('label') or r['worker']}" if r.get("worker") else ""
     head = f"{_hm(r['start'])} {what}{key}{who}"
@@ -195,7 +195,7 @@ def _step_text(r: dict, now: float) -> str:
     secs = r["end"] - r["start"]
     res = r.get("result", "ok")
     tail_ = (f"; exit {r['exit']}" if "exit" in r else "") + (f": {r['detail']}" if r.get("detail") else "")
-    return head + (f": {res}" if r["step"] in ("handout", "fallback") else f": {res} after {secs:.1f} s") + tail_
+    return head + (f": {res}" if r["step"] in ("handout", "fallback", "cores") else f": {res} after {secs:.1f} s") + tail_
 
 
 def trouble(runs: list[dict], now: float) -> list[dict]:
@@ -224,6 +224,10 @@ def render(project: str, panel: dict, state: Path, now: float | None = None) -> 
         since = f" (since {_hm(w['since'])})" if w.get("since") else ""
         kind = "" if w["kind"] == "main" else f" ({w['id']}, {w['kind']}, {w['cores']} cores)"
         out.append(f"- {w['label']}{kind}: {w['state']}{detail}{since}")
+        if w.get("chosen"):           # a browser's count, chosen by the broker (`cores.py`)
+            cap = f", capped at {w['cap']} on its page" if w.get("cap") and w["cap"] < w["chosen"] else ""
+            out.append(f"    cores: {w['chosen']} of {w['hw']} chosen by the broker{cap}; last change "
+                       f"{_hm(w['why_at'])}: {w['why']}")
     bad = trouble(runs, now)
     out += ["", "## Past deadline or failed", ""]
     if not bad:

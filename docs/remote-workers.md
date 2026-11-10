@@ -107,8 +107,8 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 
 ## Workers
 
-- **The browser page** (`page/`): one Web Worker per core, a core slider (remembered) defaulting to all
-  but one. Closing the tab costs nothing but the shards it held, which run elsewhere. It
+- **The browser page** (`page/`): one Web Worker per core, the broker choosing how many
+  (`remote-cores.md`). Closing the tab costs nothing but the shards it held, which run elsewhere. It
   is named in its Name box, else `Chrome on Win32` and the like; it compiles a bundle once
   for all its cores. What it shows: `remote-status.md`.
 - **On a real laptop over Wi-Fi** (88: Chrome, 7 of 8 cores): it works in the background,

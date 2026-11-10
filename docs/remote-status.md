@@ -95,7 +95,8 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
   (existing records stay as written). Empty: `<browser> on <platform>`.
 - **Cores:** a tile per Web Worker (its state, its seed range or its step: downloading,
   compiling or starting the bundle, the fingerprint check; elapsed; its last ms a seed only
-  while that was this job's; working tiles pulse softly), the slider, Pause, and *Keep screen awake*.
+  while that was this job's; working tiles pulse softly), the broker's core count with its last reason, the cap slider
+  (`remote-cores.md`), Pause, and *Keep screen awake*.
 - **Throughput:** seeds a minute (the last 60 s; `—` while nothing is out here) with a 2-minute sparkline; ms a seed per
   core (the median of the last six shards for this commit and arguments) against the main
   box's native rate in this job (`0.95× the main box per core`; per main slot, so per core
