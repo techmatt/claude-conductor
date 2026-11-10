@@ -76,3 +76,13 @@ this repo, and the app; how, `restart.md`, *Asked restarts*. It prints every 30s
 daemon still waits on and exits 1 if one still waits after 10 minutes (`RESTART_WAIT`).
 `--force` stops and starts each daemon detached (`procs.spawn_daemon`) instead; `--check`
 lists what runs now and exits 0. No app running: it starts one on the newest control folder.
+
+`uv run python tools/prompts.py list | next | run <slug|file> | done <name> <report> | migrate`
+is "run the next prompt" (`CLAUDE.md`). Planners write conductor prompts to
+`prompts/inbox/<YYYYMMDD-HHMMSS>-<project>-<slug>.md` with no number, because several
+planner sessions write without seeing each other (78 and 91 were each written twice, and 91
+was skipped once 92 ran). A claim takes the oldest (or the one named), gives it one past
+the highest number in `prompts/` or the ledger, moves it to `prompts/NN_<slug>.md` and
+appends the ledger's `start`. It refuses while a `start` has no `done`/`stopped`/`stale`
+after it; `--anyway` appends `<time> stale <name> (run anyway)` first. `migrate` sends a
+numbered prompt with neither a ledger line nor a report back to the inbox (none at 93).

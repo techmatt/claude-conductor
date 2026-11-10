@@ -20,14 +20,12 @@ When Matt says "restart all" (or "restart everything" and the like), restart the
 
 ## "Run next prompt"
 
-When Matt says "run next prompt" (or "run the next prompt" and the like):
+Planners write prompts to `prompts/inbox/<YYYYMMDD-HHMMSS>-<project>-<slug>.md`, unnumbered; a prompt gets its number when it runs (`tools/prompts.py`). Files a prompt reads live in `prompts/support/`.
 
-- **Next** is the lowest-numbered `prompts/NN_name.md` after the newest one with a `done` line in `prompts/ledger.md` (before the ledger: a report in `reports/`), in natural order: 12 < 12a < 13. Files a prompt reads live in `prompts/support/`.
-- Name it first ("Running 19_run_next_and_maintenance"), so a wrong pick is obvious, then run exactly that one as if pasted, ending with `Report written to <path>` as usual. Never chain on to the next one.
-- With several unrun, run only the lowest and say how many remain.
-- An **older** prompt with no report (skipped or superseded) is never run by this phrase; mention it in one line in case it was missed.
-- **None:** say so in one line ("No unrun prompt; the latest is 18_x, and its report is in") and do nothing else: no invented work, no reruns.
-- **What's left is checked at the end:** "that was the last unrun prompt" comes from a fresh look at `prompts/` against the ledger after the run, never from the start.
+- "Run next prompt" (and the like): `uv run python tools/prompts.py next`. It lists what's waiting, oldest first, takes the oldest, numbers it (`prompts/NN_<slug>.md`) and writes the ledger's `start` line. "Run <slug>" / "run <file>": `... run <name>`, out of order (an old numbered prompt too).
+- It refuses while the ledger has a `start` with no `done`: relay the name and start time. Only on Matt's word that it's stale ("run anyway") add `--anyway`, which records it.
+- Then say "Running NN_slug", run exactly that file as if pasted, end with `Report written to <path>`, and never chain on. Say how many still wait from a fresh `list` at the end.
+- Nothing waiting: say so in one line and do nothing else.
 
 There is no "run all prompts" phrase.
 
@@ -37,7 +35,7 @@ When Matt says "cleanup conductor" (or "conductor cleanup" and the like), follow
 
 ## Standing prompt contract
 
-- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): the very first action of every prompt or cleanup pass appends `<time> start <NN_name>`, and the last `<time> done <NN_name> → <report path>` (or `stopped`).
+- **Run ledger** (`prompts/ledger.md`, git-ignored, append-only): a prompt's `start` line comes from `tools/prompts.py`, a cleanup pass's first action appends `<time> start <name>`; the last action of either is `uv run python tools/prompts.py done <name> <report path>` (or `stopped`).
 - Write the final report to `reports/<prompt_name>_report.md` (git-ignored), starting with a `status: done | partial | red` line (the planner's `session.md` digest shows it). ~60 lines is a soft target; write it once. Findings, decisions and surprises only; no process narration. Mention tests only for a red you could not fix.
 - Clock times are local 12-hour (`5:25pm`).
 - A step estimated over ~30 seconds is backgrounded, with a completion waiter on the real process, never on a launcher wrapper.
