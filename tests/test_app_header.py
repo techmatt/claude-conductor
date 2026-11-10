@@ -69,6 +69,23 @@ def test_rejected_shows_until_dismissed_or_a_checkpoint(qapp, env, tmp_path):
     win.close()
 
 
+def test_no_remote_section_means_no_chip_and_no_workers_tab(qapp, env, tmp_path):
+    """Remote workers are opt-in: a project without `[remote]` (Word Warriors) gets no chip,
+    no Copy worker link and no Workers tab. Passes with the remote module removed too."""
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    from conductor.app.window import MainWindow
+    win = MainWindow([env.control], settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat),
+                     tray=False, interval_ms=60_000)
+    view = win.views[env.control.resolve()]
+    win.refresh()
+    assert [view.tabs.tabText(i).split(" (")[0] for i in range(view.tabs.count())] == \
+        ["Repos", "Questions", "Events", "Proposed"]
+    assert not [w for w in view.findChildren(QLabel) if "remote:" in w.text() and w.isVisibleTo(view)]
+    assert not [b for b in view.findChildren(QPushButton) if b.text() == "Copy worker link" and b.isVisibleTo(view)]
+    win.close()
+
+
 def test_a_send_box_wraps_and_enter_sends(qapp):
     from conductor.app.widgets import SEND_HINT, MessageDialog
     from PySide6.QtWidgets import QLabel

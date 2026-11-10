@@ -219,6 +219,20 @@ def main_load(control: Path) -> dict | None:
         return None
 
 
+def write_status(r: settings.Remote, info: dict, board: Board) -> None:
+    """`status.json`, for the app's chip and Workers tab (`remote/app.py`): the broker's
+    address and start, and `Board.panel`. Written by the loop that already runs every 2 s;
+    the app reads it at its own refresh, so nothing new polls."""
+    try:
+        status = {"at": time.time(), "pid": info["pid"], "port": info["port"], "url": info["url"],
+                  "started": info["started"], "main_slots": r.main_slots, **board.panel()}
+        tmp = r.state / "status.json.tmp"
+        tmp.write_text(json.dumps(status) + "\n", encoding="utf-8", newline="\n")
+        os.replace(tmp, r.state / "status.json")
+    except OSError:                              # the app's view, never the broker's end
+        pass
+
+
 def serve(control: Path, stay: bool = False) -> int:
     r = settings.load(control)
     if r is None:
@@ -251,6 +265,7 @@ def serve(control: Path, stay: bool = False) -> int:
             time.sleep(2)
             _write_now(r, board.now_line())
             board.load = main_load(r.control)
+            write_status(r, info, board)
             if stay or _daemon_alive(r.control):
                 gone_since = None
             elif gone_since is None:
@@ -260,6 +275,7 @@ def serve(control: Path, stay: bool = False) -> int:
                 break
     finally:
         _write_now(r, None)
+        (r.state / "status.json").unlink(missing_ok=True)
         server.shutdown()
         try:
             if json.loads((r.state / "broker.json").read_text(encoding="utf-8")).get("pid") == os.getpid():

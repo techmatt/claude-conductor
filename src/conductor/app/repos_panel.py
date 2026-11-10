@@ -41,6 +41,7 @@ class ReposPanel(Panel):
     def __init__(self, project: Project, notify, settings: QSettings | None = None):
         super().__init__(project, notify)
         self.settings = settings
+        self.note_suffix: dict[str, str] = {}      # item id -> a running item's remote note (remote/app.py)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(self.COLS)
         self.tree.setRootIsDecorated(True)
@@ -108,6 +109,7 @@ class ReposPanel(Panel):
         words its State cell uses."""
         at = now()
         out = []
+        suffix = getattr(self, "note_suffix", None) or {}     # tests call this unbound
         for rs in snap.repos:
             rows, counts = [], {}
             def count(state: str) -> None:
@@ -126,7 +128,9 @@ class ReposPanel(Panel):
             for a in rs.running:
                 running = a.phase == "running"
                 beside = "beside " + ", ".join(i.split("/", 1)[-1] for i in a.beside) if a.beside else ""
-                note = " · ".join(x for x in (a.resumed, a.progress, f"on {a.detail}" if a.detail else "",
+                # A remote job's `farming N/M` leads: a long progress line would elide it at the end.
+                note = " · ".join(x for x in (suffix.get(a.item, ""), a.resumed, a.progress,
+                                              f"on {a.detail}" if a.detail else "",
                                               f"port {a.port}" if a.port and running else "", beside,
                                               f"alongside: {a.alongside}" if a.alongside else "") if x)
                 # A readonly or alongside item runs beside the others; the summary still counts it as running.

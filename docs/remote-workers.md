@@ -99,7 +99,7 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 - **The browser page** (`page/`): one Web Worker per core, a core slider defaulting to all
   but one. Closing the tab costs nothing but the shards it held, which run elsewhere. It
   reports itself as `<browser> on <platform>` (`Chrome on Win32`), not the full user agent.
-  What it shows is under *The worker page*.
+  What it shows: `remote-status.md`.
 - **On a real laptop over Wi-Fi** (88: Chrome, 8 logical cores, the tab at 7): the tab
   keeps working in the background, minimised and on a locked screen. Chrome doesn't
   throttle Web Workers. Per core it ran wasm at 58 ms a seed in front, 64 behind another
@@ -114,38 +114,9 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   `--hang-after N`). A native worker for other PCs is not built; the protocol allows one
   (it would fetch the code instead of using the main box's folder).
 
-## The worker page
+## Status views
 
-A status console (90), dark unless the system asks for light, in the project's `accent`.
-Broker facts ride the hello it already sends every 2 s (`"view": true`; the reply's `page`
-and `view`, from `Board.view`); its own come from its Web Workers' messages.
-
-- **Header:** live / reconnecting / paused, `project · item`, the short commit
-  (`+changes` when the key carries a diff hash), and the gate with its kind
-  (`✓ wasm reference ba4ec8…`).
-- **Cores:** a tile per Web Worker (idle or running, its seed range, elapsed, its last ms a
-  seed; running tiles pulse softly), the slider, Pause, and *Keep screen awake*.
-- **Throughput:** seeds a minute (the last 60 s) with a 2-minute sparkline; ms a seed per
-  core (the median of the last six shards for this commit and arguments) against the main
-  box's native rate in this job (`0.95× the main box per core`; per main slot, so per core
-  only for a single-threaded native command). **Inferred slowdown:** at 25% or more over
-  the tab's own best for the same commit and arguments (six shards in), it says
-  `~35% slower than its best: background tab, power saving or other load?`. The page says
-  that other programs' CPU use isn't visible to it.
-- **Cluster:** the oldest open job as one bar (this tab / others / out / pending) with an
-  ETA from its rate so far, the other workers (kind, cores, shards, ms a seed in this job),
-  and the main box's load: CPU % and top consumers from the daemon's latest memory sample
-  while fresh (what the inbox's load line shows; none while no daemon samples).
-- **Event log** (collapsed): joined, gated, shard N done, lost the race, tab hidden /
-  visible, lost / rejoined the broker, errors. **Copy diagnostics** copies a JSON snapshot
-  (browser, cores, timings, the broker's last view, recent shards and events; never the
-  token), shown selected in a text box too, where the clipboard API is missing.
-- **Tab title** is a status line: `▶ 4/4 · 980/min · sandbox`, `◦ idle · 4 cores · sandbox`,
-  `… reconnecting · sandbox`. Worker messages redraw it, so it stays current in a hidden tab.
-- **Keep screen awake** uses the Screen Wake Lock API, off by default, retaken when the tab
-  shows again. It needs a secure context: on `http://127.0.0.1` it works; on the LAN URL
-  it is hidden. On a laptop, use a power plan that doesn't lock while plugged in, or allow
-  the URL in `chrome://flags/#unsafely-treat-insecure-origin-as-secure` (Edge alike).
+The worker page, the inbox's *Now* line and the app's chip and Workers tab: `remote-status.md`.
 
 ## Trust, builds, provenance
 
@@ -184,16 +155,9 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
   project's math does: in the `sim` test workload, the `libm` crate agrees and Rust's
   standard-library math on native Windows does not (the MSVC runtime differs by 1-2 ulp).
 
-## Visibility
-
-The inbox's *Now* section gets one line while a worker is connected:
-`remote workers: 2 connected (1 browser, 1 local-remote), 13 cores`. The broker writes it
-to `.conductor/now/remote.line` every 2 s; the inbox shows such a line only while it is
-under 30 s old (`inbox.now_files`).
-
 ## Runtime files (`.conductor/remote/`)
 
-`broker.json` (pid, port, URL, settings digest), `broker.log` (a port already taken
+`broker.json` (pid, port, URL, settings digest), `status.json` (the app's view, every 2 s), `broker.log` (a port already taken
 shows here: give each project its own `port`), `token`, `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
 `<commit>.build.log`), `jobs/<job>/` (shards, logs capped at 2 MB per worker, `job.json`;
 removed after 7 days), `gates.log`.
@@ -201,10 +165,11 @@ removed after 7 days), `gates.log`.
 ## Removing it
 
 Delete `src/conductor/remote/`, the two hooks (the end of `Daemon.startup` in
-`daemon.py`; the `if item.remote:` lines in `daemon_setup._start_exec`), `remote` from
+`daemon.py`; the `if item.remote:` lines in `daemon_setup._start_exec`), the app's
+optional import of `remote.app` in `app/window.py` (with `self.remote` and its refresh line), `remote` from
 `items.FIELDS` and `Item`, the `src/conductor/remote/tests` entry of `pytest.ini`'s
 `testpaths`, every project's `[remote]` section, and this file with its index lines.
-`inbox.now_files` reads a folder nothing else writes and may stay. The suite passes
+`inbox.now_files` reads a folder nothing else writes and may stay; so may `ReposPanel.note_suffix`, empty without the module. The suite passes
 without the module (checked when it landed, prompt 87).
 
 ## The test project

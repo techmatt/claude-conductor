@@ -33,6 +33,8 @@ class Worker:
     last_seen: float = 0.0
     gates: dict[str, tuple[str, float]] = field(default_factory=dict)   # key -> (pass|fail|pending, when)
     shards: int = 0             # shards it won
+    day: str = ""               # the local date `today` counts for
+    today: int = 0              # shards it won that day (the app's Workers tab)
 
     @property
     def engine(self) -> str:
@@ -92,6 +94,8 @@ class Board:
         self.jobs: dict[str, Job] = {}
         self.keys: dict[str, Key] = {}
         self.load: dict | None = None    # the main box's load ({cpu, top, text}), set by the broker's loop
+        self.gate_fails: list[dict] = []   # recent gate failures, with `at` (the app's problem line)
+        self.reruns: list[float] = []      # when the main box re-ran a shard still out on a worker
         self._n = 0
 
     # ------------------------------------------------------------ workers
@@ -118,13 +122,13 @@ class Board:
         return [w for w in self.workers.values() if w.kind != "main" and self._fresh(w, now)
                 and not (key and w.gates.get(key, ("",))[0] == "fail")]
 
-    def _leased(self, shard: Shard, now: float) -> bool:
+    def _live(self, wid: str, at: float, now: float) -> bool:
         """A live lease: within its timeout and held by a worker still heard from."""
-        for wid, at in shard.leases.items():
-            w = self.workers.get(wid)
-            if now - at <= self.lease_seconds and w and (w.kind == "main" or self._fresh(w, now)):
-                return True
-        return False
+        w = self.workers.get(wid)
+        return now - at <= self.lease_seconds and bool(w) and (w.kind == "main" or self._fresh(w, now))
+
+    def _leased(self, shard: Shard, now: float) -> bool:
+        return any(self._live(wid, at, now) for wid, at in shard.leases.items())
 
     def _active(self, now: float) -> list[Job]:
         """Open jobs, oldest first; one whose main box went quiet is dropped (`farm-seeds` killed)."""
@@ -178,6 +182,7 @@ class Board:
                     if job.key == key:
                         job.gate_failures.append(note)
                 self._append(self.root / "gates.log", json.dumps(note))
+                self.gate_fails = [*self.gate_fails[-19:], {**note, "at": self.clock()}]
             return ok
 
     # ------------------------------------------------------------ results
@@ -211,6 +216,8 @@ class Board:
             s.done = done
             s.leases.clear()
             w.shards += 1
+            day = time.strftime("%Y-%m-%d", time.localtime(self.clock()))
+            w.day, w.today = day, (w.today if w.day == day else 0) + 1
             return True
 
     # ------------------------------------------------------------ the main box
@@ -268,7 +275,10 @@ class Board:
                 return {"wait": True}
             s = free[0]
             s.leases["main"] = now
-            return {"shard": s.id, "first": s.first, "count": s.count, "rerun": bool(s.leases.keys() - {"main"})}
+            rerun = bool(s.leases.keys() - {"main"})
+            if rerun:
+                self.reruns = [t for t in self.reruns if now - t < 3600] + [now]
+            return {"shard": s.id, "first": s.first, "count": s.count, "rerun": rerun}
 
     def state(self, job_id: str) -> dict:
         """A job's shards and who ran them; also the main box's heartbeat for it."""
@@ -333,6 +343,47 @@ class Board:
             return {"job": job, "gate": gate, "bundle": bundle, "workers": others,
                     "main": {"ms_seed": round(rates["main"], 1) if "main" in rates else None},
                     "load": self.load}
+
+    def panel(self, main_slots: int = 1) -> dict:
+        """What the app's chip and Workers tab show (`status.json`, written by the broker's
+        loop): the current job as counts, one row per worker (the main box first), and the
+        recent trouble: gate failures and shards the main box re-ran."""
+        with self.lock:
+            now = self.clock()
+            jobs = self._active(now)
+            j = jobs[0] if jobs else None
+            out_by: dict[str, int] = {}
+            for job in jobs:
+                for s in job.shards:
+                    if not s.done:
+                        for wid, at in s.leases.items():
+                            if self._live(wid, at, now):
+                                out_by[wid] = out_by.get(wid, 0) + 1
+            job = None
+            if j:
+                done = sum(1 for s in j.shards if s.done)
+                out = sum(1 for s in j.shards if not s.done and self._leased(s, now))
+                seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in j.shards if s.done)
+                elapsed = max(0.001, now - j.created)
+                eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None
+                job = {"id": j.id, "item": j.item, "shards": len(j.shards), "done": done, "out": out,
+                       "pending": len(j.shards) - done - out, "eta": None if eta is None else round(eta, 1),
+                       "started": j.created}
+            today = time.strftime("%Y-%m-%d", time.localtime(now))
+            main = self.workers.get("main") or Worker("main", "main", label="main box")
+            rows = []
+            for w in [main, *sorted((w for w in self.workers.values() if w.kind != "main"), key=lambda w: w.first_seen)]:
+                key = j.key if j and j.key in w.gates else max(w.gates, key=lambda k: w.gates[k][1], default=None)
+                gate = w.gates[key][0] if key else ""
+                fresh = w.kind == "main" or self._fresh(w, now)
+                n = out_by.get(w.id, 0)
+                state = ("working" if n else "gate failed" if gate == "fail" else "stale" if not fresh
+                         else "gate pending" if gate == "pending" else "idle")
+                rows.append({"id": w.id, "kind": w.kind, "engine": w.engine, "label": w.label or w.id,
+                             "cores": w.cores, "state": state, "out": n, "gate": gate, "fresh": fresh,
+                             "last_seen": w.last_seen or None, "today": w.today if w.day == today else 0})
+            return {"job": job, "workers": rows, "gate_fails": [dict(g) for g in self.gate_fails],
+                    "reruns": list(self.reruns)}
 
     def now_line(self) -> str | None:
         """The inbox's *Now* line, or None while no worker is connected."""

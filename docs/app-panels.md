@@ -1,7 +1,8 @@
 # The app's panels
 
 The four tabs of a project in the desktop app (`docs/app.md`): Repos with each item's
-Conversation, Questions, Events and Proposed. Code: `src/conductor/app/*_panel.py`, with
+Conversation, Questions, Events and Proposed. A project with `[remote]` adds a fifth, Workers
+(`remote-status.md`). Code: `src/conductor/app/*_panel.py`, with
 an item's detail in `trail.py`.
 
 - *Repos* — a tree: each repo row, then up to three group rows, each item under its

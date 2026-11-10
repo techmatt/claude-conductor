@@ -22,6 +22,13 @@ from .repos_panel import ReposPanel
 from .tools_menu import ToolsMenu
 from .widgets import confirm, muted
 
+try:                            # opt-in remote workers: a chip and a Workers tab, only with `[remote]`
+    from ..remote import app as remote_app
+except ModuleNotFoundError as exc:      # the module removed (docs/remote-workers.md, *Removing it*)
+    if exc.name not in ("conductor.remote", "conductor.remote.app"):
+        raise
+    remote_app = None
+
 # Status-dot colours (graphics, not text: they need 3:1, which each meets).
 COLORS = {"red": theme.RED, "asking": theme.ICON_ASKING, "running": theme.ACCENT, "idle": theme.ICON_IDLE}
 SETTINGS_KEY = "controls"
@@ -158,6 +165,8 @@ class ProjectView(QWidget):
             self.tabs.addTab(panel, name.capitalize())
             panel.open_item.connect(self.open_item)
         lay.addWidget(self.tabs, 1)
+        self.head = head
+        self.remote = remote_app.RemoteStatus(self) if remote_app else None
 
     def open_item(self, item_id: str) -> None:
         self.tabs.setCurrentWidget(self.events_panel)
@@ -178,6 +187,8 @@ class ProjectView(QWidget):
         guarded("events", self.events_panel.add_events, new)
         snap = self.project.snapshot()
         self.snap = snap
+        if self.remote:                       # before Repos: it sets a farming item's Note suffix
+            guarded("remote", self.remote.refresh, snap)
         guarded("repos", self.repos_panel.update_snapshot, snap, new)
         guarded("questions", self.questions_panel.update_snapshot, snap)
         guarded("proposed", self.proposed_panel.update_snapshot, snap)

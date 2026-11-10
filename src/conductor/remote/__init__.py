@@ -7,8 +7,9 @@ the project's `conductor.toml` has a `[remote]` section, and neither able to rai
 - `item_launch`, from `_start_exec` for an item with `remote: true`: the `farm-seeds`
   command on its PATH, and one paragraph naming it at the end of its prompt.
 
-Deleting this folder, those two hooks (and `remote` in `items.FIELDS`) and the `[remote]`
-sections removes the feature.
+The app imports `app.py` (its chip and Workers tab) if it is there, and shows nothing for a
+project without `[remote]`. Deleting this folder, those two hooks, that import (and
+`remote` in `items.FIELDS`) and the `[remote]` sections removes the feature.
 """
 
 from __future__ import annotations
