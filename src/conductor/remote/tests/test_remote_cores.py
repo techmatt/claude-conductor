@@ -1,12 +1,14 @@
 """The broker's core count for a browser worker (`cores.py`), alone and through the board."""
 
+import json
+
 from conductor.remote import cores, diag
 from conductor.remote.board import Board
 from conductor.remote.cores import Plan
 
 
 def test_a_held_rate_raises_and_a_fallen_rate_backs_off_to_the_count_below():
-    p = Plan()
+    p = Plan(cores=2)
     for _ in range(2):
         cores.sample(p, "j", 2, 1000.0)
     assert cores.decide(p, 8, 10.0) == "2 → 3: rate held at 60 seeds/min a core"
@@ -48,7 +50,7 @@ def test_a_cap_below_the_count_decides_nothing_and_the_limit_bounds_a_raise():
 
 def test_the_best_lower_count_is_the_bar_so_a_slow_creep_stops():
     """99's walk: each step within HOLD of the one below, 2 to 9 cores on 4 CPUs."""
-    p = Plan()
+    p = Plan(cores=2)
     for n, ms in ((2, 1000.0), (3, 1100.0), (4, 1180.0)):
         for _ in range(cores.need(n)):
             cores.sample(p, "j", n, ms)
@@ -65,7 +67,7 @@ def test_a_shard_from_a_count_already_left_is_not_a_sample():
 
 
 def test_a_new_job_starts_its_measurements_over():
-    p = Plan()
+    p = Plan(cores=2)
     cores.sample(p, "j1", 2, 1000.0)
     cores.outcome(p, "j1", 2, False)
     cores.sample(p, "j2", 2, 9000.0)
@@ -80,9 +82,9 @@ class Clock:
         return self.t
 
 
-def _board(tmp_path):
+def _board(tmp_path, start=2):
     clock = Clock()
-    b = Board(tmp_path, lease_seconds=600, fresh_seconds=30, native_argv=["sim"], clock=clock)
+    b = Board(tmp_path, lease_seconds=600, fresh_seconds=30, native_argv=["sim"], clock=clock, start_cores=start)
     return b, clock
 
 
@@ -170,3 +172,34 @@ def test_a_cap_and_an_old_page(tmp_path):
     row = {r["id"]: r for r in b.panel()["workers"]}["bc"]
     assert row["cap"] == 1 and row["chosen"] == 2
     assert "cores" not in b.hello("bold", "browser", 4, "old page")   # no hw: no plan
+
+
+def test_a_new_name_starts_at_start_cores_and_a_plan_saved_below_it_is_reset_once(tmp_path):
+    """101: the start is 4. A board saved before 101 (no `start_cores`, its start 2) holds the
+    laptop at 2 under a 3-core ceiling: the first restore puts it at 4, cleared; one above stays."""
+    clock = Clock()
+    assert _tab(Board(tmp_path, native_argv=["sim"], clock=clock), "bn", "new")["cores"] == 4
+    b, clock = _board(tmp_path, start=2)
+    b.plans["Work laptop"] = Plan(cores=2, why="3 → 2: shards lost to the main box 2 of 3", at=clock.t,
+                                  ceiling=3, ceiling_at=clock.t, job="j", samples={"2": [900.0]}, outcomes=["lost"])
+    b.plans["desk"] = Plan(cores=6, why="5 → 6: rate held", at=clock.t)
+    b.save(tmp_path / "board.json")
+    data = json.loads((tmp_path / "board.json").read_text(encoding="utf-8"))
+    del data["start_cores"]                              # as saved before 101
+    (tmp_path / "board.json").write_text(json.dumps(data), encoding="utf-8")
+
+    b2, clock = _board(tmp_path, start=4)
+    assert b2.restore(tmp_path / "board.json")
+    p = b2.plans["Work laptop"]
+    assert (p.cores, p.ceiling, p.samples, p.outcomes) == (4, 0, {}, [])
+    assert p.why == "2 → 4: reset to the start count, 4" and b2.plans["desk"].cores == 6
+    reply = _tab(b2, "bl", "Work laptop", hw=8)
+    assert reply["cores"] == 4 and reply["why"] == "2 → 4: reset to the start count, 4"
+    text = diag.render("p", b2.panel(), tmp_path, now=clock.t)
+    assert "cores: 4 of 8 chosen by the broker" in text and "reset to the start count, 4" in text
+
+    b2.save(tmp_path / "board.json")                     # once: the next broker leaves it be
+    b2.plans["Work laptop"].cores = 3
+    b2.save(tmp_path / "board.json")
+    b3, _ = _board(tmp_path, start=4)
+    assert b3.restore(tmp_path / "board.json") and b3.plans["Work laptop"].cores == 3

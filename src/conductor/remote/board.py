@@ -160,9 +160,10 @@ def write_who(out: Path, done: dict) -> None:
 class Board:
     def __init__(self, root: Path, lease_seconds: float | None = None, fresh_seconds: float = 10.0,
                  bundle_js: str = "bundle.js", native_argv: list[str] | None = None, clock=time.time,
-                 seed_seconds: float = 0.05, main_slots: int | None = None):
+                 seed_seconds: float = 0.05, main_slots: int | None = None, start_cores: int = policy.START):
         """`lease_seconds` None: each lease is sized to its shard (`lease_for`). `main_slots`:
-        the main box's shards at once over every job (None: no cap, one slot to place by)."""
+        the main box's shards at once over every job (None: no cap, one slot to place by).
+        `start_cores`: a new browser name's count; a restored plan below it is reset to it."""
         self.root = Path(root)
         self.main_slots = main_slots if main_slots and main_slots > 0 else None
         self.ratios: dict[str, float] = {}   # worker id -> its ms a seed over the main box's, last measured together
@@ -181,6 +182,8 @@ class Board:
         self._wasm: dict[str, str] = {}    # key -> its bundle's one .wasm file (the page compiles it once)
         self._handed: set[tuple[str, str]] = set()   # (job, worker): its first shard is in the steps log
         self.plans: dict[str, policy.Plan] = {}       # a browser's name -> its core count (`cores.py`)
+        self.start_cores = max(1, start_cores)
+        self._resets: dict[str, str] = {}             # name -> a restore's reset, noted at its next hello
         self._n = 0
         self._notes = 0
 
@@ -213,8 +216,9 @@ class Board:
                 w.cap = max(0, min(int(cap or 0), w.hw))
                 p = self.plans.get(w.plan_name)
                 if p is None:
-                    p = self.plans[w.plan_name] = policy.Plan(why=f"new worker: starts at {policy.START}", at=now)
+                    p = self.plans[w.plan_name] = self._new_plan(now)
                     policy.prune(self.plans)
+                self._note_cores(w, self._resets.pop(w.plan_name, None), now)
                 if p.cores > w.hw:
                     policy.change(p, w.hw, f"this machine has {w.hw} cores", now)
                 for why in (policy.connected(p, gap, now), policy.lift(p, now)):
@@ -495,7 +499,10 @@ class Board:
         self._decide(w, p, now)
 
     def _plan(self, w: Worker) -> policy.Plan:
-        return self.plans.setdefault(w.plan_name, policy.Plan(why=f"new worker: starts at {policy.START}", at=self.clock()))
+        return self.plans.setdefault(w.plan_name, self._new_plan(self.clock()))
+
+    def _new_plan(self, now: float) -> policy.Plan:
+        return policy.Plan(cores=self.start_cores, why=f"new worker: starts at {self.start_cores}", at=now)
 
     def _decide(self, w: Worker, p: policy.Plan, now: float) -> None:
         self._note_cores(w, policy.lift(p, now), now)
@@ -830,6 +837,7 @@ class Board:
         with self.lock:
             data = {"at": self.clock(), "n": self._n, "gate_fails": self.gate_fails, "reruns": self.reruns,
                     "plans": {k: asdict(v) for k, v in self.plans.items()}, "ratios": self.ratios,
+                    "start_cores": self.start_cores,
                     "workers": [asdict(w) for w in self.workers.values()],
                     "keys": {k: asdict(v) for k, v in self.keys.items()},
                     "jobs": [asdict(j) | {"folder": str(j.folder)} for j in self.jobs.values()]}
@@ -851,6 +859,7 @@ class Board:
             n = int(data["n"])
             plans = {k: policy.Plan(**v) for k, v in (data.get("plans") or {}).items()}
             ratios = {str(k): float(v) for k, v in (data.get("ratios") or {}).items() if float(v) > 0}
+            was = int(data.get("start_cores") or 2)      # saved before 101: the start was 2
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
         for w in workers.values():
@@ -858,6 +867,12 @@ class Board:
         with self.lock:
             self.workers, self.keys, self.jobs, self._n, self.plans = workers, keys, jobs, n, plans
             self.ratios = ratios
+            if was != self.start_cores:              # plans learned under another start (101)
+                now = self.clock()
+                for name, p in plans.items():
+                    why = policy.restart(p, self.start_cores, now)
+                    if why:
+                        self._resets[name] = why
             self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])
         return True
 

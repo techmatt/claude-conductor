@@ -9,7 +9,8 @@ a seed, so jobs are never compared). Not the count just below: 99's sandbox walk
 a laptop tab on 7 cores won 1 shard of 7; on 2 it ran 1.22 seeds a minute a core and won
 its shards.
 
-- A new name starts at START.
+- A new name starts at the project's `start_cores` (START unless set; 4 since 101, Matt's call:
+  a tab starts useful at once). A saved plan below it is reset to it once (`restart`).
 - Raise by UP once `need` samples at the count are in, the rate held (within HOLD of the best
   lower count, or none measured yet in this job) and no shard was lost at it.
 - Back off when the rate fell past HOLD, or LOST of the last WINDOW outcomes at this count
@@ -30,7 +31,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-START = 2                 # a new worker's count
+START = 4                 # a new worker's count unless `[remote] start_cores` sets one
 UP = 1                    # a raise
 HOLD = 1.20               # per-core ms a seed within this factor of the best lower count's: the rate held
 WINDOW = 4                # outcomes (won / lost) looked at
@@ -99,6 +100,17 @@ def change(p: Plan, new: int, why: str, now: float) -> str:
     p.cores, p.why, p.at = new, f"{old} → {new}: {why}", now
     p.outcomes = []
     p.samples.pop(str(new), None)      # measured afresh at the new count
+    return p.why
+
+
+def restart(p: Plan, start: int, now: float) -> str | None:
+    """A plan below the start count goes to it, its ceiling, samples and outcomes cleared (a
+    plan learned under a lower start); the note says so. None for a plan at or above it."""
+    if p.cores >= start:
+        return None
+    old = p.cores
+    p.cores, p.why, p.at = start, f"{old} → {start}: reset to the start count, {start}", now
+    p.ceiling, p.ceiling_at, p.job, p.samples, p.outcomes, p.quiet = 0, 0.0, "", {}, [], 0.0
     return p.why
 
 
