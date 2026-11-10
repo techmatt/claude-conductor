@@ -13,7 +13,8 @@ At the control folder's root, beside `inbox.md`, for a project with `[remote]`. 
 leaves it alone); it stays after the broker exits. It holds:
 
 - **Workers**: each worker's one state (`remote-status.md`, *One state*), the main box first;
-  under a browser, its core count, its cap, and the last change and why (`remote-cores.md`).
+  under a browser, its core count, its cap, the last change and why, and its ceiling: until
+  when, or when it lifted (`remote-cores.md`).
 - **Past deadline or failed**: in the last 6 hours, any step started with no end past its
   deadline, or ended `failed`, `timeout` or `fallback`, with its stderr tail and that
   worker's page lines up to that moment.

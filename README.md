@@ -58,12 +58,12 @@ command (`docs/restart.md`).
 |---|---|
 | `docs/control-folder.md` | Layout, `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
 | `docs/rename-repo.md` | `conductor rename-repo` |
-| `docs/runtime.md` | The `.conductor/` folder: the daemon's lock, heartbeat, journals and scratch state |
+| `docs/runtime.md` | The `.conductor/` folder: lock, heartbeat, journals, scratch |
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |
 | `docs/push.md` | Pushing main and the control folder, `push:`, closeout; failures |
-| `docs/executors.md` | Launching an executor: MCP and settings files, `wait_for`, message delivery, long calls, setup |
+| `docs/executors.md` | Launching an executor: MCP and settings files, `wait_for`, delivery, long calls, setup |
 | `docs/preambles.md` | What it is told: the full, light or watch preamble, its port, scope, scratch and load |
 | `docs/reports.md` | The report's header and an item's outcome |
 | `docs/logs.md` | Run logs: compaction and gzip |
@@ -80,10 +80,11 @@ command (`docs/restart.md`).
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, picker server and page, saved choices |
 | `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, local-remote worker, removal |
-| `docs/remote-status.md` | The worker page; the app's remote chip, Workers tab |
-| `docs/remote-url.md` | The one worker URL: PC name, pinned token, broker handover |
-| `docs/remote-diag.md` | `remote-diag.md`, steps, page logs, deadlines |
-| `docs/remote-cores.md` | A browser's core count, chosen by the broker |
+| `docs/remote-status.md` | The worker page; the app's chip, Workers tab |
+| `docs/remote-url.md` | The one worker URL: PC name, pinned token, handover |
+| `docs/remote-diag.md` | `remote-diag.md`, steps, page logs |
+| `docs/remote-placement.md` | Who runs a shard; `main_slots`; leases |
+| `docs/remote-cores.md` | A browser's core count |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |

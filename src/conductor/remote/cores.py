@@ -14,9 +14,14 @@ its shards.
   lower count, or none measured yet in this job) and no shard was lost at it.
 - Back off when the rate fell past HOLD, or LOST of the last WINDOW outcomes at this count
   were lost to the main box: to the count below measured in this job, else half (rounded
-  up). The count backed off from is not tried again for CEILING_SECONDS.
+  up). The count backed off from is not tried again for CEILING_SECONDS; then the ceiling
+  lifts (`lift`, a note in the steps log and `remote-diag.md`).
 - A shard counts only while its count is the plan's: one handed out before a raise and
   finishing after it ran beside the new cores (99: that dragged the count below's rate down).
+- A plan with no sample in STALE_SECONDS of connected time starts the climb again: its
+  ceiling, samples and outcomes go (`connected`). Aicomplete 168: a laptop backed off 3 -> 2
+  at 4:59am took no sample for 3 hours (a drained core never said it stopped, so the page
+  went on reporting 3 cores and every shard was tagged at a count the plan had left).
 - A change reaches the page with its next hello; cores leave only between shards.
 """
 
@@ -31,6 +36,7 @@ HOLD = 1.20               # per-core ms a seed within this factor of the best lo
 WINDOW = 4                # outcomes (won / lost) looked at
 LOST = 2                  # lost in the window (and at least half of it) backs off
 CEILING_SECONDS = 3600.0  # a count backed off from is not tried again for this long
+STALE_SECONDS = 3600.0    # connected this long with no sample: the climb starts again
 KEEP = 100                # names kept
 
 
@@ -44,6 +50,9 @@ class Plan:
     job: str = ""                 # the job the samples are from
     samples: dict[str, list[float]] = field(default_factory=dict)   # str(count) -> per-core ms a seed, in `job`
     outcomes: list[str] = field(default_factory=list)              # won | lost, at this count, in `job`
+    quiet: float = 0.0            # connected seconds since the last sample (STALE_SECONDS)
+    lifted: int = 0               # the last ceiling that lifted, and when (remote-diag.md)
+    lifted_at: float = 0.0
 
 
 def need(n: int) -> int:
@@ -70,6 +79,7 @@ def sample(p: Plan, job: str, count: int, ms_seed: float) -> None:
     """A shard run with `count` cores busy in the tab (as it said when the shard was handed out)."""
     _job(p, job)
     if count == p.cores and ms_seed > 0:
+        p.quiet = 0.0
         xs = p.samples.setdefault(str(count), [])
         xs.append(ms_seed)
         del xs[:-8]
@@ -92,10 +102,32 @@ def change(p: Plan, new: int, why: str, now: float) -> str:
     return p.why
 
 
+def lift(p: Plan, now: float) -> str | None:
+    """A ceiling past its hold goes; the note says so (None while it holds, or with none)."""
+    if not p.ceiling or now - p.ceiling_at < CEILING_SECONDS:
+        return None
+    p.lifted, p.lifted_at, p.ceiling, p.ceiling_at = p.ceiling, now, 0, 0.0
+    return f"ceiling {p.lifted} lifted: an hour since the back-off from it; {p.cores} may climb to it again"
+
+
+def connected(p: Plan, seconds: float, now: float) -> str | None:
+    """`seconds` more connected; past STALE_SECONDS with no sample, the climb starts again."""
+    p.quiet += max(0.0, seconds)
+    if p.quiet < STALE_SECONDS:
+        return None
+    p.quiet, p.job, p.samples, p.outcomes = 0.0, "", {}, []
+    gone = f"; ceiling {p.ceiling} cleared" if p.ceiling else ""
+    if p.ceiling:
+        p.lifted, p.lifted_at, p.ceiling, p.ceiling_at = p.ceiling, now, 0, 0.0
+    p.why, p.at = f"at {p.cores}: no rate sample in an hour connected{gone}; climbing again", now
+    return p.why
+
+
 def decide(p: Plan, limit: int, now: float) -> str | None:
     """The plan's next count, applied, with its reason; None when it stays. `limit` is the
     tab's hardware cores, or its slider's cap; a cap under the plan's count is the user's
     choice, and nothing is decided while it holds."""
+    lift(p, now)
     n = p.cores
     if n > limit:
         return None

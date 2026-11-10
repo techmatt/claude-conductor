@@ -432,7 +432,7 @@ def serve(control: Path, stay: bool = False, after: int | None = None, watch: Co
         if old.stat().st_mtime < cutoff:
             shutil.rmtree(old, ignore_errors=True)
     board = Board(r.state, r.lease_seconds, r.fresh_seconds, r.bundle_js, native_argv=r.native,
-                  seed_seconds=r.seed_seconds)
+                  seed_seconds=r.seed_seconds, main_slots=r.main_slots)
     restored = board.restore(r.state / BOARD)
     try:
         server = make_server(r, board)

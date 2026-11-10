@@ -28,9 +28,11 @@ error, draining), and each change replaces the tile's text: 97's "loading bundle
 ## Loading a bundle (97)
 
 The tab fetches and compiles the bundle's one `.wasm` once (the poll's `wasm`:
-`Board._wasm_file`) and hands each core the `WebAssembly.Module`; init gets it as
-`{module_or_path}`, then bare, then nothing (init fetches its own), each on a fresh import,
-as the Node reference does. Bundle files are served `immutable` (a key's folder never
+`Board._wasm_file`) and hands each core the `WebAssembly.Module`; init gets it bare, then as
+`{module_or_path}`, then nothing (init fetches its own), each on a fresh import. Bare first
+(100): aicomplete's `farm.mjs` wraps its input in `{module_or_path}` itself, so the object
+form failed every core's first try; plain wasm-bindgen takes a bare Module too (its
+deprecation warning is not logged). Bundle files are served `immutable` (a key's folder never
 changes), so a reload or a replaced core costs no download. On aicomplete's 3.3 MB bundle
 (headless Edge on the main box, 7 cores) every core was ready in 0.12-0.35 s fetching its
 own and 0.08-0.42 s compiled once: loading was never the wait locally, and over Wi-Fi it is

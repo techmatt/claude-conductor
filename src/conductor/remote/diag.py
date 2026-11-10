@@ -226,8 +226,10 @@ def render(project: str, panel: dict, state: Path, now: float | None = None) -> 
         out.append(f"- {w['label']}{kind}: {w['state']}{detail}{since}")
         if w.get("chosen"):           # a browser's count, chosen by the broker (`cores.py`)
             cap = f", capped at {w['cap']} on its page" if w.get("cap") and w["cap"] < w["chosen"] else ""
+            ceiling = (f"; ceiling {w['ceiling']} until {_hm(w['ceiling_until'])}" if w.get("ceiling")
+                       else f"; ceiling {w['lifted']} lifted {_hm(w['lifted_at'])}" if w.get("lifted") else "")
             out.append(f"    cores: {w['chosen']} of {w['hw']} chosen by the broker{cap}; last change "
-                       f"{_hm(w['why_at'])}: {w['why']}")
+                       f"{_hm(w['why_at'])}: {w['why']}{ceiling}")
     bad = trouble(runs, now)
     out += ["", "## Past deadline or failed", ""]
     if not bad:

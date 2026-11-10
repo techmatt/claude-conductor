@@ -5,9 +5,12 @@
 //
 // The bundle's .wasm is fetched and compiled once per tab, by the page, and handed to each
 // core as a WebAssembly.Module (97: seven cores each fetched and compiled 3.3 MB). init() gets
-// it as wasm-bindgen's `{module_or_path}`, then bare, then nothing (init fetches its own),
+// it bare first, then as wasm-bindgen's `{module_or_path}`, then nothing (init fetches its own),
 // each on a fresh import of the module: a bundle that memoizes its init promise would hand
-// the first try's rejection to every later one (as wasm_fingerprint.mjs does in Node).
+// the first try's rejection to every later one (as wasm_fingerprint.mjs does in Node). Bare
+// first (100): a wrapper like aicomplete's farm.mjs wraps its input in `{module_or_path}`
+// itself, so the object form failed every first try ("Argument 0 must be a buffer source");
+// plain wasm-bindgen takes a bare Module too, with a deprecation warning not logged here.
 //
 // Every step goes to the page's rolling log too (`note`), which the page uploads with its hello
 // for the broker's diagnostics (98): no step here waits without a deadline or goes unrecorded.
@@ -23,7 +26,11 @@ self.addEventListener("error", (e) => note(`uncaught: ${e.message} (${e.filename
 self.addEventListener("unhandledrejection", (e) => note(`unhandled rejection: ${e.reason}`));
 for (const level of ["error", "warn"]) {
   const orig = console[level].bind(console);
-  console[level] = (...a) => { note(`console.${level}: ${a.map(String).join(" ")}`); orig(...a); };
+  console[level] = (...a) => {
+    const text = a.map(String).join(" ");
+    if (!text.startsWith("using deprecated parameters")) note(`console.${level}: ${text}`);   // a bare Module, as meant
+    orig(...a);
+  };
 }
 
 // Poll latency and failures, summed up once a minute into the log.
@@ -74,7 +81,7 @@ async function load(t, task) {
   const compiled = await fromPage(t, task);
   postMessage({ type: "loading", slot, key: t.key, step: "starting", ...task });
   const url = base + t.bundle + t.module;
-  const tries = compiled ? [{ module_or_path: compiled }, compiled, undefined] : [undefined];
+  const tries = compiled ? [compiled, { module_or_path: compiled }, undefined] : [undefined];
   let first = null;
   for (const [n, input] of tries.entries()) {
     const t1 = performance.now();
@@ -169,6 +176,9 @@ async function loop() {
       await sleep(t.wait_ms || 500);
     }
   }
+  // Drained (100): a core told to stop while idle left its loop after its sleep and said
+  // nothing, so the page kept it as running and reported a count it had left for hours.
+  postMessage({ type: "stopped", slot });
 }
 
 onmessage = (e) => {

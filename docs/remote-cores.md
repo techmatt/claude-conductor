@@ -3,7 +3,7 @@
 A browser worker runs on as many cores as actually help, chosen by the broker from what that
 worker delivers (99). Nobody sets or remembers a slider. The policy is
 `src/conductor/remote/cores.py`; `Board` feeds it and keeps the plans. The main box's
-`main_slots` and the local-remote worker's `--cores` are unchanged.
+`main_slots` (`remote-placement.md`) and the local-remote worker's `--cores` are not chosen.
 
 Why: aicomplete 163 (Nov 9). The laptop tab on all 7 cores won 1 shard of 7, the main box
 re-ran the other 6 at the tail, and the read ran slower than a local one. On 2 cores the same tab
@@ -25,7 +25,8 @@ job starts its measurements over.
 | raise | **+1**, when the rate held (median within **20%** of the best lower count's, or none measured yet in this job) and no shard was lost at it; never past the tab's cores or its cap |
 | back off on rate | median more than **20%** slower than the best lower count's: back to the count below |
 | back off on losses | **2** or more of the last **4** shards at this count lost to the main box (and at least half): back to the count below measured in this job, else half, rounded up (7 → 4) |
-| ceiling | a count backed off from is not tried again for **an hour** |
+| ceiling | a count backed off from is not tried again for **an hour**; then it lifts, a `core count` event saying so |
+| stale | **an hour** of connected time with no sample: the ceiling, samples and outcomes go, and the climb starts again from the current count |
 
 20%, not less: a CPU's all-core clock is below its one-core clock, a fall that is no fault.
 
@@ -34,6 +35,17 @@ copy is dropped, `remote-workers.md`, *Placement*), or the tab's copy arriving s
 shard is counted at the cores it was handed out under (the tab's last hello said how many
 were running), and only while that is the plan's count: a shard begun before a raise and
 finishing after it ran beside the new cores, and would drag the old count's rate down.
+
+### Why a plan stopped sampling (100)
+
+Aicomplete 168: the laptop was backed off 3 → 2 at 4:59am and its plan held `samples: {}`
+and a 3-core ceiling for 3 hours. A drained core that was idle left its loop after its
+poll's sleep and said nothing, so the page kept it as running and went on reporting 3
+cores; every shard was tagged at 3, a count the plan had left, and none counted. A core
+now says `stopped` as it leaves, and the page drops it then. The stale rule above is the
+backstop for any other way a plan goes quiet. Sandbox walk: a tab cut 7 → 2 reported 2
+at its next hello, sampled at 2 while its ceiling held, and climbed 2 → 7 within the job
+once it lifted (`ceiling 3 lifted 7:57:23am`).
 
 ## Under the worker's name
 
@@ -66,9 +78,11 @@ page is served from the working tree, so this happens before a commit hands the 
 
 - `remote-diag.md`, under each browser worker: `cores: 4 of 8 chosen by the broker; last
   change 10:52:31pm: 7 → 4: shards lost to the main box 3 of 4` (and `, capped at 3 on its
-  page` while capped). The change is also a `core count` event among that worker's events (a
-  `cores` note in `steps.log`).
-- `status.json`'s worker rows carry `chosen`, `cap`, `hw`, `why` and `why_at`.
+  page` while capped), then `; ceiling 7 until 11:52:31pm` while one holds or `; ceiling 7
+  lifted 11:52:31pm` once it has. Each change, lift and stale restart is also a `core count`
+  event among that worker's events (a `cores` note in `steps.log`).
+- `status.json`'s worker rows carry `chosen`, `cap`, `hw`, `why`, `why_at`, `ceiling`,
+  `ceiling_until`, `lifted` and `lifted_at`.
 
 ## Proof
 

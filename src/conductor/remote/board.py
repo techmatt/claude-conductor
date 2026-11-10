@@ -2,8 +2,10 @@
 locked; the HTTP layer (`broker.py`) and the tests drive it with an explicit clock.
 
 Placement lives here and in `client.py`: a worker pulls (`poll`); the main box claims
-(`claim`), and once nothing is left unleased it re-runs a shard still out on a worker,
-the first copy back winning (`result`). Outputs are bytes, never re-encoded."""
+(`claim`), at most `main_slots` shards at once over every open job, and once nothing is left
+unleased it re-runs a shard still out on a worker, the first copy back winning (`result`).
+A free shard goes to the worker expected to finish it soonest (`placement.py`). Outputs are
+bytes, never re-encoded."""
 
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import cores as policy, diag
+from . import cores as policy, diag, placement
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 KINDS = {"browser": "wasm", "local-remote": "native", "main": "native"}   # worker kind -> engine
@@ -28,6 +30,7 @@ LEASE_FACTOR = 4.0              # a derived lease: this many times a shard's exp
 BUILD_STUCK_SECONDS = 20 * 60   # a bundle building this long is shown as an error (client.BUILD_STALE_SECONDS)
 GATE_SECONDS = diag.DEADLINES["gate"]   # a gate unanswered this long is late: handed out again, once
 GATE_TRIES = 2                  # the second late gate fails (the worker's error, until it reloads)
+POLL_FRESH = 5.0                # a worker's free cores not polling for this long aren't waited for (placement)
 STATES = ("offline", "idle", "preparing", "working", "draining", "error")   # a worker's state (`Board.state_of`)
 STEPS = {"downloading": "downloading the bundle", "compiling": "compiling the bundle",
          "starting": "starting the bundle"}   # what a page may say it is preparing (its hello's `report`)
@@ -50,6 +53,7 @@ class Worker:
     why: dict[str, str] = field(default_factory=dict)     # key -> why its gate failed, when not a wrong value
     hw: int = 0                 # a browser's hardware cores (its hello); 0: an old page, no plan (`cores.py`)
     cap: int = 0                # its slider's cap; 0: none
+    polled: float = 0.0         # its last poll (a free core asking for work)
 
     @property
     def plan_name(self) -> str:
@@ -87,6 +91,7 @@ class Job:
     item: str = ""               # the item that ran `farm-seeds`, for the worker page
     rates: dict[str, float] = field(default_factory=dict)   # worker id -> its ms a seed in this job (moving average)
     tags: dict[str, int] = field(default_factory=dict)      # "shard:worker" -> a browser's cores when it was handed out
+    failed: list[str] = field(default_factory=list)         # workers that failed a shard here: no more of its shards
 
     @property
     def complete(self) -> bool:
@@ -155,9 +160,12 @@ def write_who(out: Path, done: dict) -> None:
 class Board:
     def __init__(self, root: Path, lease_seconds: float | None = None, fresh_seconds: float = 10.0,
                  bundle_js: str = "bundle.js", native_argv: list[str] | None = None, clock=time.time,
-                 seed_seconds: float = 0.05):
-        """`lease_seconds` None: each lease is sized to its shard (`lease_for`)."""
+                 seed_seconds: float = 0.05, main_slots: int | None = None):
+        """`lease_seconds` None: each lease is sized to its shard (`lease_for`). `main_slots`:
+        the main box's shards at once over every job (None: no cap, one slot to place by)."""
         self.root = Path(root)
+        self.main_slots = main_slots if main_slots and main_slots > 0 else None
+        self.ratios: dict[str, float] = {}   # worker id -> its ms a seed over the main box's, last measured together
         self.lease_seconds, self.fresh_seconds, self.seed_seconds = lease_seconds, fresh_seconds, seed_seconds
         self.bundle_js = bundle_js
         self.native_argv = native_argv   # from the settings, never from a request
@@ -174,6 +182,7 @@ class Board:
         self._handed: set[tuple[str, str]] = set()   # (job, worker): its first shard is in the steps log
         self.plans: dict[str, policy.Plan] = {}       # a browser's name -> its core count (`cores.py`)
         self._n = 0
+        self._notes = 0
 
     # ------------------------------------------------------------ workers
     def hello(self, wid: str, kind: str, cores: int = 1, label: str = "", fresh: bool = False,
@@ -193,6 +202,7 @@ class Board:
             w = self.workers.get(wid)
             if w is None or w.kind != kind:
                 w = self.workers[wid] = Worker(wid, kind, first_seen=now)
+            gap = min(now - w.last_seen, self.fresh_seconds) if w.last_seen else 0.0   # connected time since
             w.cores, w.label, w.last_seen = max(0, min(int(cores), 1024)), str(label)[:80], now
             w.report = _report(report, now)
             if fresh:
@@ -207,6 +217,8 @@ class Board:
                     policy.prune(self.plans)
                 if p.cores > w.hw:
                     policy.change(p, w.hw, f"this machine has {w.hw} cores", now)
+                for why in (policy.connected(p, gap, now), policy.lift(p, now)):
+                    self._note_cores(w, why, now)
                 reply |= {"cores": p.cores, "why": p.why}
             return reply
 
@@ -265,10 +277,11 @@ class Board:
             if w is None:
                 return {"task": "hello"}          # unknown (a broker restart): say hello again
             now = self.clock()
-            w.last_seen = now
+            w.last_seen = w.polled = now
             if label:
                 w.label = str(label)[:80]
-            for job in self._active(now):
+            jobs = self._active(now)
+            for job in jobs:
                 k = self.keys[job.key]
                 if (w.engine == "wasm" and k.bundle != "ready") or (w.engine == "native" and not job.native):
                     continue
@@ -283,18 +296,80 @@ class Board:
                     diag.step(self.root, "gate", "start", f"gate-{wid}-{job.key}-{n}", now, worker=wid, key=job.key,
                               job=job.id, reference=self._ref_kind(w, job.key), **{"try": n})
                     return {"task": "gate", "key": job.key, **self._payload(job, w)}
-                for s in job.shards:
-                    if not s.done and not self._leased(job, s, now):
-                        s.leases[wid] = now
-                        if w.hw:
-                            job.tags[f"{s.id}:{wid}"] = w.cores
-                        if (job.id, wid) not in self._handed:
-                            self._handed.add((job.id, wid))
-                            diag.step(self.root, "handout", "note", f"handout-{job.id}-{wid}", now, worker=wid,
-                                      key=job.key, job=job.id, result=f"first shard of {job.id} (shard {s.id})")
-                        return {"task": "shard", "job": job.id, "shard": s.id, "key": job.key, "first": s.first,
-                                "count": s.count, "args": job.args, **self._payload(job, w)}
+                free = [s for s in job.shards if not s.done and not self._leased(job, s, now)]
+                if not free or not self._share(job, wid, len(free), jobs, now):
+                    continue                     # a faster worker is expected to finish what is free sooner
+                s = free[0]
+                s.leases[wid] = now
+                if w.hw:
+                    job.tags[f"{s.id}:{wid}"] = w.cores
+                if (job.id, wid) not in self._handed:
+                    self._handed.add((job.id, wid))
+                    diag.step(self.root, "handout", "note", f"handout-{job.id}-{wid}", now, worker=wid,
+                              key=job.key, job=job.id, result=f"first shard of {job.id} (shard {s.id})")
+                return {"task": "shard", "job": job.id, "shard": s.id, "key": job.key, "first": s.first,
+                        "count": s.count, "args": job.args, **self._payload(job, w)}
             return {"task": "idle", "wait_ms": 500}
+
+    # ------------------------------------------------------------ placement (`placement.py`)
+    def _ms_seed(self, job: Job, wid: str) -> float:
+        """A worker's expected ms a seed a core in this job: measured here, else the main box's
+        rate here times the ratio last measured between them (1 for a worker never measured
+        beside it). The main box's rate before it has one here: from a worker measured here and
+        its ratio, else the mean of what is measured here, else `seed_seconds`."""
+        if wid in job.rates:
+            return job.rates[wid]
+        base = job.rates.get("main")
+        if base is None:
+            known = [r / self.ratios[x] for x, r in job.rates.items() if self.ratios.get(x, 0) > 0]
+            rates = list(job.rates.values())
+            base = known[0] if known else sum(rates) / len(rates) if rates else self.seed_seconds * 1000
+        return base * (1.0 if wid == "main" else self.ratios.get(wid, 1.0))
+
+    def _ends(self, jobs: list[Job], now: float) -> dict[str, list[float]]:
+        """Each worker's busy slots over the open jobs: when each is expected free."""
+        out: dict[str, list[float]] = {}
+        for j in jobs:
+            for s in j.shards:
+                if not s.done:
+                    for wid, at in s.leases.items():
+                        if self._live(j, s, wid, at, now):
+                            out.setdefault(wid, []).append(
+                                placement.busy_until(at, s.count * self._ms_seed(j, wid), now))
+        return out
+
+    def _serves(self, w: Worker, job: Job, now: float) -> bool:
+        """A remote worker that can take this job's shards now: heard from, gated, with cores,
+        not draining, paused or in error."""
+        if w.kind == "main" or w.cores < 1 or not self._fresh(w, now) or w.gates.get(job.key, ("",))[0] != "pass":
+            return False
+        if (w.engine == "wasm" and self.keys[job.key].bundle != "ready") or (w.engine == "native" and not job.native):
+            return False
+        rep = w.report if now - w.report.get("at", 0) <= self.fresh_seconds else {}
+        return rep.get("state") not in ("draining", "paused", "error")
+
+    def _share(self, job: Job, wid: str, free: int, jobs: list[Job], now: float) -> int:
+        """How many of the job's `free` shards the deal by expected finish gives to `wid`'s
+        free slots (`placement.deal`): the main box's `main_slots` over every job, each
+        serving worker's cores (its free ones only while it polls). A worker that failed a
+        shard of this job gets none of the rest."""
+        if wid in job.failed:
+            return 0
+        ends = self._ends(jobs, now)
+        n = next(s.count for s in job.shards if not s.done and not self._leased(job, s, now))
+        main_busy = ends.get("main", [])
+        slots = {"main": placement.slots_of(main_busy, self.main_slots or len(main_busy) + 1, now, wid == "main")}
+        for w in self.workers.values():
+            if w.id == wid or (w.id not in job.failed and self._serves(w, job, now)):
+                busy = ends.get(w.id, [])
+                count = w.cores if w.id == wid or now - w.polled <= POLL_FRESH else len(busy)
+                slots[w.id] = placement.slots_of(busy, count, now, w.id == wid)
+        ms = {x: n * self._ms_seed(job, x) for x in slots}
+        return placement.deal(free, slots, ms, now, asking=wid).get(wid, 0)
+
+    def _main_out(self, jobs: list[Job]) -> int:
+        """Shards the main box is running over every open job (`main_slots` caps it)."""
+        return sum(1 for j in jobs for s in j.shards if not s.done and "main" in s.leases)
 
     def _payload(self, job: Job, w: Worker) -> dict:
         if w.engine == "wasm":
@@ -370,7 +445,13 @@ class Board:
             if ok and ms > 0:                      # per job: another job's args may cost more a seed
                 per, old = ms / s.count, job.rates.get(wid)
                 job.rates[wid] = per if old is None else 0.7 * old + 0.3 * per
+                if "main" in job.rates:            # across jobs only as a ratio (placement)
+                    for x, r in job.rates.items():
+                        if x != "main":
+                            self.ratios[x] = r / job.rates["main"]
             self._plan_result(job, s, w, ok, ms)
+            if not ok and w.kind != "main" and wid not in job.failed:
+                job.failed.append(wid)             # 167: a laptop failed every shard of a spec its bundle lacked
             if s.done or not ok:
                 return False
             done = {"worker": wid, "kind": w.kind, "engine": w.engine, "label": w.label, "ms": round(ms)}
@@ -417,9 +498,13 @@ class Board:
         return self.plans.setdefault(w.plan_name, policy.Plan(why=f"new worker: starts at {policy.START}", at=self.clock()))
 
     def _decide(self, w: Worker, p: policy.Plan, now: float) -> None:
-        why = policy.decide(p, w.limit, now)
-        if why:
-            diag.step(self.root, "cores", "note", f"cores-{w.id}-{now:.3f}", now, worker=w.id, result=why)
+        self._note_cores(w, policy.lift(p, now), now)
+        self._note_cores(w, policy.decide(p, w.limit, now), now)
+
+    def _note_cores(self, w: Worker, why: str | None, now: float) -> None:
+        if why:                                    # a lift and a raise can share an instant: numbered
+            self._notes += 1
+            diag.step(self.root, "cores", "note", f"cores-{w.id}-{now:.3f}-{self._notes}", now, worker=w.id, result=why)
 
     # ------------------------------------------------------------ the main box
     def add_job(self, key: str, fingerprint: str, args: list[str], ranges: list[tuple[int, int]],
@@ -472,7 +557,12 @@ class Board:
             job.seen = self.workers["main"].last_seen = now
             if job.complete:
                 return {"done": True}
+            jobs = self._active(now)
+            if self.main_slots and self._main_out(jobs) >= self.main_slots:
+                return {"wait": True}              # every main slot is busy, in this job or another
             free = [s for s in job.shards if not s.done and not self._leased(job, s, now)]
+            if free and not self._share(job, "main", len(free), jobs, now):
+                return {"wait": True}              # a worker expected to finish them sooner takes them
             if not free and rerun:
                 free = sorted((s for s in job.shards if not s.done and "main" not in s.leases),
                               key=lambda s: min(s.leases.values(), default=now))
@@ -716,8 +806,9 @@ class Board:
     def _plan_row(self, w: Worker) -> dict:
         """A browser's chosen count, its cap and the last change's reason (`cores.py`)."""
         p = self.plans.get(w.plan_name) if w.hw else None
-        return {"chosen": min(p.cores, w.hw), "cap": w.cap or None, "hw": w.hw, "why": p.why,
-                "why_at": p.at} if p else {}
+        return {"chosen": min(p.cores, w.hw), "cap": w.cap or None, "hw": w.hw, "why": p.why, "why_at": p.at,
+                "ceiling": p.ceiling or None, "ceiling_until": p.ceiling_at + policy.CEILING_SECONDS if p.ceiling else None,
+                "lifted": p.lifted or None, "lifted_at": p.lifted_at or None} if p else {}
 
     def now_line(self) -> str | None:
         """The inbox's *Now* line, or None while no worker is connected."""
@@ -738,7 +829,7 @@ class Board:
         their gates. A worker mid-shard posts its result to the new broker and it counts."""
         with self.lock:
             data = {"at": self.clock(), "n": self._n, "gate_fails": self.gate_fails, "reruns": self.reruns,
-                    "plans": {k: asdict(v) for k, v in self.plans.items()},
+                    "plans": {k: asdict(v) for k, v in self.plans.items()}, "ratios": self.ratios,
                     "workers": [asdict(w) for w in self.workers.values()],
                     "keys": {k: asdict(v) for k, v in self.keys.items()},
                     "jobs": [asdict(j) | {"folder": str(j.folder)} for j in self.jobs.values()]}
@@ -759,12 +850,14 @@ class Board:
                     for j in data["jobs"] if j["key"] in keys}
             n = int(data["n"])
             plans = {k: policy.Plan(**v) for k, v in (data.get("plans") or {}).items()}
+            ratios = {str(k): float(v) for k, v in (data.get("ratios") or {}).items() if float(v) > 0}
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
         for w in workers.values():
             _drop_failed(w)
         with self.lock:
             self.workers, self.keys, self.jobs, self._n, self.plans = workers, keys, jobs, n, plans
+            self.ratios = ratios
             self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])
         return True
 

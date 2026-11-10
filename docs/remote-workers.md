@@ -54,7 +54,7 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
 | `host` | The join URL's host: this PC's name unless set (an IP, when other machines can't resolve the name). |
 | `shard_seeds` (25), `seed_seconds` (0.05), `local_below_seconds` (10) | Shard size, and the size check: a job of `count × seed_seconds` under `local_below_seconds` stays local. |
 | `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so each project's tabs are told apart. The page's title is the top-level `project`. |
-| `lease_seconds` (sized to the shard), `fresh_seconds` (10), `main_slots` (1) | How long a worker may hold a shard without renewing it (*Leases*); a worker not heard from in this long is gone; shards the main box runs at once. A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
+| `lease_seconds` (sized to the shard), `fresh_seconds` (10), `main_slots` (1) | How long a worker may hold a shard without renewing it (*Leases*); a worker not heard from in this long is gone; shards the main box runs at once, over every open job (`remote-placement.md`). A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
 
 ## The executor interface
 
@@ -74,36 +74,10 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
 
 ## Placement
 
-- No broker (or one not answering within half a second): the native command runs at once
-  over the whole range. A lease is never waited out.
-- A job estimated under `local_below_seconds` stays local.
-- Otherwise the range is split into shards of `shard_seeds`, **whether or not a worker is
-  connected**: the main box works the shards (`main_slots` at once), and a worker that joins
-  mid-job takes those still pending. Once none is left unleased, the main box re-runs the
-  oldest still out on a worker. The first copy back wins, and a shard the main box is
-  running is killed when a worker's copy lands.
-- Sharding costs the main box little (89, sandbox, no worker): 28.5 s against 27.3 s bare,
-  ~0.5 s fixed plus ~30 ms a shard, 17 ms of it a hidden console (`CREATE_NO_WINDOW`,
-  not `DETACHED_PROCESS`: its children could open windows).
-- A worker that joins mid-job is used at once (89: 600 seeds begun with none, a local-remote
-  worker joining 8 s in took 15 of 24 shards; 15.1 s against 33.2 s local, identical).
-- **Leases** (96). A worker no longer heard from (`fresh_seconds`) loses its shards at once.
-  One still heard from keeps a shard while its check-ins name it (the page's hello and the
-  local-remote worker's beat list their cores' `[job, shard]` pairs: `Board.renew`), so a
-  slow live worker never loses one. One that never names it (an old page) loses it after
-  `lease_seconds` when set, else 4× the shard at the slowest ms a seed measured in the job
-  (at `seed_seconds` before any), never under 60 s (`Board.lease_for`). The main box's
-  leases hold while its job is open. 161: a flat 60 s against 2-6 min shards re-ran 33 of 48.
-- **A shard nobody needs is dropped** (96): the page's hello reply names (`drop`) any shard
-  its cores run whose job closed or whose other copy is in; the page replaces that core's
-  Web Worker (a wasm run can't be interrupted) and the core goes idle. An idle core's poll
-  also prompts a hello, so this holds in a hidden tab (its timers are throttled).
-- A broker that stops answering mid-job is waited for 45 s (`client.PATIENCE`: a restart
-  takes a few); one still gone then, or a main-box slot that fails: the job is closed and
-  the shards not yet in run locally.
-- `farm-seeds` calls the broker every 2 s while its job runs; a job not heard from in
-  `fresh_seconds` is no longer served (a killed item's job never starves the next) and is
-  dropped after `lease_seconds` (60 s when unset).
+`remote-placement.md`: a job under `local_below_seconds` (or with no broker) runs
+locally; otherwise its shards go each to the worker expected to finish it soonest, the
+main box running at most `main_slots` at once over every job; leases, the tail re-run,
+dropped shards and a broker that goes away.
 
 ## Workers
 

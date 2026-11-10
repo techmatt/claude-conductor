@@ -412,7 +412,7 @@
   function onMessage(e) {
     const m = e.data, t = tiles[m.slot] || {};
     // A core told to leave goes once its task is over (its result or gate posted, or idle).
-    if (leaving.has(m.slot) && ["idle", "shard", "gate", "hello", "error"].includes(m.type)) {
+    if (leaving.has(m.slot) && ["idle", "shard", "gate", "hello", "error", "stopped"].includes(m.type)) {
       if (m.type === "shard") onShard(m);
       workers[m.slot]?.terminate();
       workers[m.slot] = null; leaving.delete(m.slot); refill(m.slot); hello(); draw();
