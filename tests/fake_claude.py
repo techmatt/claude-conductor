@@ -72,7 +72,9 @@ session = args[args.index("--resume" if resume else "--session-id") + 1] if (
     resume or "--session-id" in args) else "none"
 prompt = sys.stdin.read()
 lines = prompt.splitlines()
-store = Path(tempfile.gettempdir()) / "conductor-fake-sessions" / f"{session}.txt"
+# Under the test's own folder (`CLAUDE_CONFIG_DIR`, in `.pytest-tmp`), not %TEMP%: 103, Defender.
+SCRATCH = Path(os.environ.get("CLAUDE_CONFIG_DIR") or tempfile.gettempdir())
+store = SCRATCH / "conductor-fake-sessions" / f"{session}.txt"
 
 
 def transcript(sid: str) -> Path | None:
@@ -285,7 +287,7 @@ for ln in lines:
             hog = (f"import time; b = bytearray({mb} << 20); b[::4096] = b'x' * len(b[::4096]); "
                    f"open({str(Path.cwd() / '.hog')!r}, 'w').close(); time.sleep({secs})")
             left = procs.spawn_detached([sys.executable, "-c", hog], Path.cwd(),
-                                        Path(tempfile.gettempdir()) / "conductor-fake-hog.log")
+                                        SCRATCH / "conductor-fake-hog.log")
             while not (Path.cwd() / ".hog").exists():
                 time.sleep(0.05)
             retry_io((Path.cwd() / ".hog").unlink)     # the child may still have it open

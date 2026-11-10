@@ -16,7 +16,7 @@ def test_both_preambles_carry_the_new_lines(env):
     assert "never kill and relaunch work for load alone" in full
     assert "Every background call sets a `timeout` (a kill limit; 10 minutes if left out) sized to its estimate" in full
     light = " ".join(render(env, SHORT).split())
-    assert "Scripts and file edits: Write/Edit, never a heredoc" in light
+    assert "Scripts, edits: Write/Edit, never a heredoc" in light
     assert "on a load message, finish the unit, then go smaller" in light
     assert "`timeout` sized to the estimate" in light
     assert len(render(env, SHORT).split()) <= 430

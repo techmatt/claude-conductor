@@ -131,3 +131,28 @@ def test_an_hour_connected_with_no_sample_starts_the_climb_again(tmp_path):
     p.quiet = 0
     cores.sample(p, "j1", 2, 5.0)
     assert p.quiet == 0
+
+
+# ------------------------------------------------------------------ lagging shards (103)
+def test_a_free_main_slot_copies_a_remote_shard_past_one_and_a_half_times_its_expected_time(tmp_path):
+    b, clock = _board(tmp_path)
+    jid = _job(b)
+    b.jobs[jid].rates.update({"main": 80_000, "bl": 10_000})   # a shard: 160 s here, 20 s on the laptop
+    _tab(b)
+    _gate(b)
+    assert b.claim(jid) == {"wait": True}               # all 4 are the laptop's by expected finish
+    assert [b.poll("bl")["shard"] for _ in range(2)] == [0, 1]
+    clock.t += 25
+    _tab(b)                                             # still heard from: its leases hold
+    assert b.claim(jid) == {"wait": True}               # 25 s of an expected 20: not yet overdue
+    clock.t += 10                                       # 35 s: past 1.5 times
+    _tab(b)
+    assert b.claim(jid, rerun=False) == {"wait": True}  # a re-run is the caller's to allow
+    c = b.claim(jid)
+    assert (c["shard"], c["rerun"]) == (0, True)        # a free slot copies it; the free shards stay the laptop's
+    assert b.claim(jid)["shard"] == 1
+    assert b.claim(jid) == {"wait": True}               # both copied already
+    assert b.result("main", jid, 0, True, b"zero\n", ms=1000)
+    assert not b.result("bl", jid, 0, True, b"late\n")  # first copy wins
+    assert b.result("bl", jid, 1, True, b"one\n", ms=40_000)
+    assert b.jobs[jid].shards[1].done["worker"] == "bl"

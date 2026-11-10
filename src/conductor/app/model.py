@@ -412,7 +412,8 @@ def activity_text(ev: Event) -> str:
         case "late":
             return f"late answer, ignored: {d.get('text')}"
         case "question_closed":
-            return f"question closed unanswered: {d.get('reason') or d.get('outcome')}"
+            how = "closed" if d.get("outcome") == "by_message" else "closed unanswered"
+            return f"question {how}: {d.get('reason') or d.get('outcome')}"
         case "approve":
             return f"{name} approved{by}"
         case "cancel":

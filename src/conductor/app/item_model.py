@@ -120,7 +120,8 @@ def conversation(events: list[Event]) -> list[Turn]:
                 t = Turn(e.id, e.ts, "executor", f"Question ({how})", text)
                 if end := ends.get(d.get("question")):
                     what = end.detail.get("text") if end.kind != "question_closed" else end.detail.get("reason")
-                    t.under.append((QUESTION_ENDS[end.kind], end.ts, str(what or "")))
+                    label = "closed: a message answered it" if end.detail.get("outcome") == "by_message" else QUESTION_ENDS[end.kind]
+                    t.under.append((label, end.ts, str(what or "")))
                 else:
                     t.note, t.tone = "waiting for an answer", "wait"
                 out.append(t)

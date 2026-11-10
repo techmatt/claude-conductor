@@ -60,9 +60,18 @@ there against the laptop's 85 s. Sandbox walk: two 16-shard jobs at once with
 ## The tail
 
 Once none is left unleased, the main box re-runs the oldest shard still out on a worker
-(within its `main_slots`). The first copy back wins, and a shard the main box is running
-is killed when a worker's copy lands. A copy the main box lands while a browser holds
-the shard is a loss for that browser's core count (`remote-cores.md`).
+(within its `main_slots`). Before that, too (103): a main slot free while the deal keeps the
+free shards for a remote worker copies any shard out only on remote workers past 1.5× its
+worker's expected time (`board.OVERDUE`, `Board._overdue`), the most overdue first. A read
+waits for its slowest shard: aicomplete's laptop ran one job's 2-seed shards 7 to 11 min
+(j1794328936-30) while free shards still went its way. The first copy back wins, and a
+shard the main box is running is killed when a worker's copy lands (the worker's is dropped
+when the main box's lands: "another copy is in"). A copy the main box lands while a browser
+holds the shard is a loss for that browser's core count (`remote-cores.md`).
+
+A failed shard is free at once (its lease goes with the result), and the worker that failed
+it gets none of that job's others, so the main box's free slots take them straight away
+(100). A spec newer than a worker's bundle is not detected before the first failure: open.
 
 ## Leases (96)
 

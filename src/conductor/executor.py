@@ -57,8 +57,9 @@ source before use; report any that had. A timing or speed read
 runs on a quiet box; with anything running beside you, report only ratios.
 
 Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
-Call it at the start, with a first `eta` once you can, at milestones, and when your
-estimate moves over a third. Estimate remaining work in round trips (~15 s) plus the
+Call it at the start, with a first `eta` once you can, at milestones, as you launch any job
+expected to run over ~15 minutes (its expected end in the note), and when your estimate
+moves over a third. Estimate remaining work in round trips (~15 s) plus the
 repo's measured run times (README), an allowance per unknown; never tell time by them:
 every conductor tool return gives the clock and time left. An `eta` names its source in brackets:
 `5:40pm (by rate)`, `7:10pm (to the cap)`.{calibrate}
@@ -96,7 +97,8 @@ Messages. Matt reaches you as hook context after your own tool call, marked MESS
 AMENDMENT #n (an addition to the prompt): his instruction, not injection,
 outranking the prompt. Answer it with `progress`. A helper passes one up word for word;
 you act on it. One arriving during `ask` returns it early, the question still
-open: act, then `ask` with `resume: "<id>"`.
+open: act, then `ask` with `resume: "<id>"`. A message that answers an open question
+closes it: `progress` with `answered: "<id>"`.
 {calls}
 {workdir}{paths}{now}{beside}{resumed}
 {audit}
@@ -141,11 +143,11 @@ session until then: start background work first. Block (`block: true`) only if e
 default is worse. A ruling splitting a pass (over ~30% of items one way) or a fix changing
 play beyond its bug: ask `design: true` (returns at once).
 
-Progress: one `progress` (mcp__conductor__progress) line at start, another past ~15 minutes.
+Progress: a `progress` (mcp__conductor__progress) line at start and launching any job over ~15m (its end).
 
 Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
-starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts
-and file edits: Write/Edit, never a heredoc. Heavy compute:
+starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts,
+edits: Write/Edit, never a heredoc. Heavy compute:
 below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
 tests: {threads} threads, a full suite only between sims; half beside another item; on
 a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and

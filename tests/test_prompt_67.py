@@ -57,6 +57,7 @@ def test_a_design_question_outlives_its_item_and_its_answer_lands_in_the_log(env
     questions.write_answer(q, "drop it")
     env.tick_until(lambda: env.events("answer"))
     assert not [e for e in env.events("tell") if e.detail.get("answers")]
+    env.release()               # runs.clear() hid it from teardown: it would hold its folder 180 s (103)
 
 
 def test_plan_questions():

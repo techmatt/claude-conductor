@@ -31,6 +31,7 @@ BUILD_STUCK_SECONDS = 20 * 60   # a bundle building this long is shown as an err
 GATE_SECONDS = diag.DEADLINES["gate"]   # a gate unanswered this long is late: handed out again, once
 GATE_TRIES = 2                  # the second late gate fails (the worker's error, until it reloads)
 POLL_FRESH = 5.0                # a worker's free cores not polling for this long aren't waited for (placement)
+OVERDUE = 1.5                   # a remote shard out this many times its worker's expected time: a main slot copies it (103)
 STATES = ("offline", "idle", "preparing", "working", "draining", "error")   # a worker's state (`Board.state_of`)
 STEPS = {"downloading": "downloading the bundle", "compiling": "compiling the bundle",
          "starting": "starting the bundle"}   # what a page may say it is preparing (its hello's `report`)
@@ -163,7 +164,7 @@ class Board:
                  seed_seconds: float = 0.05, main_slots: int | None = None, start_cores: int = policy.START):
         """`lease_seconds` None: each lease is sized to its shard (`lease_for`). `main_slots`:
         the main box's shards at once over every job (None: no cap, one slot to place by).
-        `start_cores`: a new browser name's count; a restored plan below it is reset to it."""
+        `start_cores`: a new browser name's count; a known name keeps its learned plan (103)."""
         self.root = Path(root)
         self.main_slots = main_slots if main_slots and main_slots > 0 else None
         self.ratios: dict[str, float] = {}   # worker id -> its ms a seed over the main box's, last measured together
@@ -183,7 +184,6 @@ class Board:
         self._handed: set[tuple[str, str]] = set()   # (job, worker): its first shard is in the steps log
         self.plans: dict[str, policy.Plan] = {}       # a browser's name -> its core count (`cores.py`)
         self.start_cores = max(1, start_cores)
-        self._resets: dict[str, str] = {}             # name -> a restore's reset, noted at its next hello
         self._n = 0
         self._notes = 0
 
@@ -218,7 +218,6 @@ class Board:
                 if p is None:
                     p = self.plans[w.plan_name] = self._new_plan(now)
                     policy.prune(self.plans)
-                self._note_cores(w, self._resets.pop(w.plan_name, None), now)
                 if p.cores > w.hw:
                     policy.change(p, w.hw, f"this machine has {w.hw} cores", now)
                 for why in (policy.connected(p, gap, now), policy.lift(p, now)):
@@ -569,8 +568,11 @@ class Board:
                 return {"wait": True}              # every main slot is busy, in this job or another
             free = [s for s in job.shards if not s.done and not self._leased(job, s, now)]
             if free and not self._share(job, "main", len(free), jobs, now):
-                return {"wait": True}              # a worker expected to finish them sooner takes them
-            if not free and rerun:
+                late = self._overdue(job, now) if rerun else []
+                if not late:
+                    return {"wait": True}          # a worker expected to finish them sooner takes them
+                free = late                        # a free slot here copies a lagging remote shard
+            elif not free and rerun:
                 free = sorted((s for s in job.shards if not s.done and "main" not in s.leases),
                               key=lambda s: min(s.leases.values(), default=now))
             if not free:
@@ -581,6 +583,20 @@ class Board:
             if rerun:
                 self.reruns = [t for t in self.reruns if now - t < 3600] + [now]
             return {"shard": s.id, "first": s.first, "count": s.count, "rerun": rerun}
+
+    def _overdue(self, job: Job, now: float) -> list[Shard]:
+        """Shards out only on remote workers past OVERDUE times their worker's expected time,
+        the most overdue first. A read waits for its slowest shard: aicomplete's laptop ran
+        2-seed shards of one job 7 to 11 min (j1794328936-30) while free shards still went
+        its way, so the main box's tail rerun came late (103)."""
+        late = []
+        for s in job.shards:
+            if s.done or "main" in s.leases or not s.leases:
+                continue
+            over = max((now - at) / max(s.count * self._ms_seed(job, wid) / 1000, 1e-3) for wid, at in s.leases.items())
+            if over > OVERDUE:
+                late.append((-over, s.id, s))
+        return [s for _, _, s in sorted(late)]
 
     def state(self, job_id: str) -> dict:
         """A job's shards and who ran them; also the main box's heartbeat for it."""
@@ -837,7 +853,6 @@ class Board:
         with self.lock:
             data = {"at": self.clock(), "n": self._n, "gate_fails": self.gate_fails, "reruns": self.reruns,
                     "plans": {k: asdict(v) for k, v in self.plans.items()}, "ratios": self.ratios,
-                    "start_cores": self.start_cores,
                     "workers": [asdict(w) for w in self.workers.values()],
                     "keys": {k: asdict(v) for k, v in self.keys.items()},
                     "jobs": [asdict(j) | {"folder": str(j.folder)} for j in self.jobs.values()]}
@@ -859,20 +874,13 @@ class Board:
             n = int(data["n"])
             plans = {k: policy.Plan(**v) for k, v in (data.get("plans") or {}).items()}
             ratios = {str(k): float(v) for k, v in (data.get("ratios") or {}).items() if float(v) > 0}
-            was = int(data.get("start_cores") or 2)      # saved before 101: the start was 2
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
         for w in workers.values():
             _drop_failed(w)
         with self.lock:
             self.workers, self.keys, self.jobs, self._n, self.plans = workers, keys, jobs, n, plans
-            self.ratios = ratios
-            if was != self.start_cores:              # plans learned under another start (101)
-                now = self.clock()
-                for name, p in plans.items():
-                    why = policy.restart(p, self.start_cores, now)
-                    if why:
-                        self._resets[name] = why
+            self.ratios = ratios          # a known name keeps its plan whatever `start_cores` is now (103)
             self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])
         return True
 

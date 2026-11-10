@@ -86,7 +86,12 @@ class MemoryMixin:
         for item_id, t in trees.items():
             was_written, at = self._writes.get(item_id, (t.writes, None))   # its first sample is the baseline
             self._writes[item_id] = (t.writes, moved if t.writes != was_written else at)
-        load = self._load.sample({pid: item_id for item_id, t in trees.items() for pid in t.pids})
+        owned = {pid: item_id for item_id, t in trees.items() for pid in t.pids}
+        try:
+            load_mod.publish(self.cfg.state_dir, self.cfg.project, owned)    # for the other daemons' load lines
+        except OSError:
+            pass
+        load = self._load.sample(owned)
         high = self._check_load(load)
         rec = memory.sample(status, self.mem_level, trees, {**load, "high": high} if high else load)
         try:

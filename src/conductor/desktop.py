@@ -50,9 +50,12 @@ class Refused(ValueError):
     pass
 
 
+CHECKOUT = Path(__file__).resolve().parents[2]          # conductor's checkout (tests point it away: 103)
+
+
 def roots(cfg: Config) -> list[Path]:
     """Every folder a path may resolve inside, as it resolves now (missing ones left out)."""
-    here = Path(__file__).resolve().parents[2]          # conductor's checkout
+    here = CHECKOUT
     out = [cfg.control, *cfg.repos.values(), *([cfg.worktree_root] if cfg.worktree_root else []),
            *([here] if (here / "pyproject.toml").is_file() else []), *cfg.open_roots]
     return [p.resolve() for p in out if p.is_dir()]

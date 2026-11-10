@@ -10,7 +10,8 @@ a laptop tab on 7 cores won 1 shard of 7; on 2 it ran 1.22 seeds a minute a core
 its shards.
 
 - A new name starts at the project's `start_cores` (START unless set; 4 since 101, Matt's call:
-  a tab starts useful at once). A saved plan below it is reset to it once (`restart`).
+  a tab starts useful at once). A known name keeps its learned count and ceiling whatever the
+  start is (103: 101's one-time reset to 4 threw away a laptop's learned 2, ceiling 3).
 - Raise by UP once `need` samples at the count are in, the rate held (within HOLD of the best
   lower count, or none measured yet in this job) and no shard was lost at it.
 - Back off when the rate fell past HOLD, or LOST of the last WINDOW outcomes at this count
@@ -100,17 +101,6 @@ def change(p: Plan, new: int, why: str, now: float) -> str:
     p.cores, p.why, p.at = new, f"{old} → {new}: {why}", now
     p.outcomes = []
     p.samples.pop(str(new), None)      # measured afresh at the new count
-    return p.why
-
-
-def restart(p: Plan, start: int, now: float) -> str | None:
-    """A plan below the start count goes to it, its ceiling, samples and outcomes cleared (a
-    plan learned under a lower start); the note says so. None for a plan at or above it."""
-    if p.cores >= start:
-        return None
-    old = p.cores
-    p.cores, p.why, p.at = start, f"{old} → {start}: reset to the start count, {start}", now
-    p.ceiling, p.ceiling_at, p.job, p.samples, p.outcomes, p.quiet = 0, 0.0, "", {}, [], 0.0
     return p.why
 
 

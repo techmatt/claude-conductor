@@ -147,7 +147,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.memory_probe = procs.memory_status     # tests stand in a box at a given level
         self.mem_level = "ok"
         self._mem_at: float | None = None           # monotonic time of the last sample
-        self._load = load.Sampler()                 # the box's CPU, beside each sample
+        self._load = load.Sampler(cfg.control)      # the box's CPU, beside each sample
         self._writes: dict[str, tuple[int, float | None]] = {}   # item → its tools' bytes written, when that last moved
         self._mem_clear_since: float | None = None  # below the level since (monotonic), not yet calm
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about

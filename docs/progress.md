@@ -27,7 +27,8 @@ The full preamble asks for one row per done-when item of the prompt (72, after a
 075's calibration step vanished into a generic row), so a dropped one stays visible. With an outline, `note` may be left out. It is stored on the progress line
 and logged on the `progress` event (`outline`); the newest one per item is its current
 outline (`inbox.latest_outline`). The full preamble's *Outline* rule (a light item's preamble asks only for one line at
-the start, another past ~15 minutes): post one once oriented
+the start and one, with its end, on launching any job over ~15 minutes; the full one asks
+for that line too, 103 after aicomplete 167's 36 silent minutes): post one once oriented
 with a plan, again whenever a message asks, and resend it with a row `done` when that
 section finishes, re-estimating the others only if they moved a lot; coarse, no
 descriptions, no effort on accuracy. A staging session ends its plan with the

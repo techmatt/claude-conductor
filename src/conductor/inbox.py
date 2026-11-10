@@ -412,7 +412,8 @@ def describe(ev: Event) -> str:
         case "late":
             text = f"late answer to `{d.get('question')}` ignored ({d.get('outcome')} already): {d.get('text')}"
         case "question_closed":
-            text = f"`{d.get('question')}` closed unanswered: {d.get('reason') or d.get('outcome')}"
+            how = "closed" if d.get("outcome") == "by_message" else "closed unanswered"
+            text = f"`{d.get('question')}` {how}: {d.get('reason') or d.get('outcome')}"
         case "audit_used":
             text = (f"{who} used {len(d.get('notes', []))} audit note(s): " if ev.item else
                     f"{d.get('by')} marked {len(d.get('notes', []))} audit note(s) used: ") + ", ".join(d.get("notes", []))

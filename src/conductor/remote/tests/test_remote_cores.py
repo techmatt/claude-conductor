@@ -174,32 +174,21 @@ def test_a_cap_and_an_old_page(tmp_path):
     assert "cores" not in b.hello("bold", "browser", 4, "old page")   # no hw: no plan
 
 
-def test_a_new_name_starts_at_start_cores_and_a_plan_saved_below_it_is_reset_once(tmp_path):
-    """101: the start is 4. A board saved before 101 (no `start_cores`, its start 2) holds the
-    laptop at 2 under a 3-core ceiling: the first restore puts it at 4, cleared; one above stays."""
+def test_start_cores_is_only_a_new_names_count_a_known_one_keeps_its_plan(tmp_path):
+    """103: the start (4) is a new name's count. A known name keeps its learned count and
+    ceiling across a broker restart under any start: the laptop stays at 2 under its ceiling 3."""
     clock = Clock()
     assert _tab(Board(tmp_path, native_argv=["sim"], clock=clock), "bn", "new")["cores"] == 4
     b, clock = _board(tmp_path, start=2)
-    b.plans["Work laptop"] = Plan(cores=2, why="3 → 2: shards lost to the main box 2 of 3", at=clock.t,
-                                  ceiling=3, ceiling_at=clock.t, job="j", samples={"2": [900.0]}, outcomes=["lost"])
-    b.plans["desk"] = Plan(cores=6, why="5 → 6: rate held", at=clock.t)
+    b.plans["Work laptop"] = Plan(cores=2, why="3 → 2: rate fell", at=clock.t,
+                                  ceiling=3, ceiling_at=clock.t, job="j", samples={"2": [900.0]})
     b.save(tmp_path / "board.json")
-    data = json.loads((tmp_path / "board.json").read_text(encoding="utf-8"))
-    del data["start_cores"]                              # as saved before 101
-    (tmp_path / "board.json").write_text(json.dumps(data), encoding="utf-8")
 
     b2, clock = _board(tmp_path, start=4)
     assert b2.restore(tmp_path / "board.json")
-    p = b2.plans["Work laptop"]
-    assert (p.cores, p.ceiling, p.samples, p.outcomes) == (4, 0, {}, [])
-    assert p.why == "2 → 4: reset to the start count, 4" and b2.plans["desk"].cores == 6
     reply = _tab(b2, "bl", "Work laptop", hw=8)
-    assert reply["cores"] == 4 and reply["why"] == "2 → 4: reset to the start count, 4"
+    p = b2.plans["Work laptop"]
+    assert (reply["cores"], p.cores, p.ceiling) == (2, 2, 3) and reply["why"] == "3 → 2: rate fell"
     text = diag.render("p", b2.panel(), tmp_path, now=clock.t)
-    assert "cores: 4 of 8 chosen by the broker" in text and "reset to the start count, 4" in text
-
-    b2.save(tmp_path / "board.json")                     # once: the next broker leaves it be
-    b2.plans["Work laptop"].cores = 3
-    b2.save(tmp_path / "board.json")
-    b3, _ = _board(tmp_path, start=4)
-    assert b3.restore(tmp_path / "board.json") and b3.plans["Work laptop"].cores == 3
+    assert "cores: 2 of 8 chosen by the broker" in text and "reset" not in text
+    assert _tab(b2, "bz", "someone new", hw=8)["cores"] == 4

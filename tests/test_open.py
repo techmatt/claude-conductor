@@ -14,6 +14,13 @@ def send(env, text: str, name: str = "o.signal") -> None:
     env.tick_until(lambda: not (env.control / "signals" / name).exists())
 
 
+@pytest.fixture(autouse=True)
+def checkout_elsewhere(monkeypatch, tmp_path_factory):
+    """Test folders live in conductor's checkout (`.pytest-tmp`, 103), which `open:` allows:
+    the checkout root moves to an empty folder, so these paths read as outside it again."""
+    monkeypatch.setattr(desktop, "CHECKOUT", tmp_path_factory.mktemp("no-checkout"))
+
+
 @pytest.fixture
 def shown(env) -> list[dict]:
     """What would have been shown: each launch spec, nothing on the desktop."""

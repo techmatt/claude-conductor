@@ -53,7 +53,7 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
 | `port`, `bind`, `token` | The broker's address and token (above). A missing `token` is pinned by conductor (`remote-url.md`). |
 | `host` | The join URL's host: this PC's name unless set (an IP, when other machines can't resolve the name). |
 | `shard_seeds` (25), `seed_seconds` (0.05), `local_below_seconds` (10) | Shard size, and the size check: a job of `count × seed_seconds` under `local_below_seconds` stays local. |
-| `start_cores` (4) | A browser worker's core count when its name is new; a saved plan below it is reset to it once (`remote-cores.md`). Still under the tab's cores and its slider cap. |
+| `start_cores` (4) | A browser worker's core count when its name is new; a known name keeps its learned plan (103; `remote-cores.md`). Still under the tab's cores and its slider cap. |
 | `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so each project's tabs are told apart. The page's title is the top-level `project`. |
 | `lease_seconds` (sized to the shard), `fresh_seconds` (10), `main_slots` (1) | How long a worker may hold a shard without renewing it (*Leases*); a worker not heard from in this long is gone; shards the main box runs at once, over every open job (`remote-placement.md`). A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
 

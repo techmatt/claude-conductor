@@ -20,11 +20,18 @@ per sample.
 
 **Load** (61; `load.py`). Each sample also scans the box's processes (~0.3s at 270
 processes) for CPU: busy percent, and the top four consumers since the last sample, as a
-percent of the whole box. A process in an item's tree counts toward that item; any other
-counts under its process name, as outside. It is stored as `load` in the sample
-(`{cpu, top: [{who, cpu, item}]}`; none on the first sample, which has no rate), shown on
-the inbox's *Now* and in `conductor status` while the sample is fresh (`load CPU 63%:
-aicomplete/034 41%, python.exe 20% (outside)`), and carried by the `memory` and
+percent of the whole box. A process in an item's tree counts toward that item; one in
+another project's item's tree toward that item, tagged with its project; conductor's own
+(any `-m conductor…`, `conductor.exe` or `uv run conductor` command line: daemons, app,
+broker, ask servers) as `conductor`; any other under its process name, as outside (103,
+aicomplete 170: conductor's steady 3-4% and fractal-engine.exe read as outside). Other
+projects' items come from their daemons: each writes its items' pids to
+`.conductor/load-items.json` at every sample, and a sampler finds the other daemons by their
+command lines (`-m conductor run <control>`); a command line is read once per process. It
+is stored as `load` in the sample (`{cpu, top: [{who, cpu, item, of?}]}`, `of` the project or
+`conductor`; none on the first sample, which has no rate), shown on the inbox's *Now* and
+in `conductor status` while the sample is fresh (`load CPU 63%: aicomplete/034 41%,
+fractals/012 9% (fractals), conductor 3%, MsMpEng.exe 2% (outside)`), and carried by the `memory` and
 `memory_critical` events. Found live: aicomplete 030's benchmark lost its timings to a
 `pytest -m ""` from another session, and 034 made the box lag, neither visible anywhere.
 

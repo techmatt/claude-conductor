@@ -17,7 +17,11 @@ merge or prose conflict, a stage, a restart, or a real wait on a clock. The time
 real git and process spawns (~30ms each on Windows), not sleeps, so parallelism is the
 lever. Pytest's settings live in `pytest.ini`, which wins over `pyproject.toml`'s older
 table. A passing test's folder is deleted at its teardown; left for a later session,
-that cost 12-16s at the end of every run. `Env`'s daemons skip the load scan (~0.5s) and
+that cost 12-16s at the end of every run. Temp folders live in `.pytest-tmp/<pid>` under
+the repo (git-ignored; the root `conftest.py` sets `--basetemp`), not `%TEMP%`: `C:\Code`
+is under the Defender exclusion and `%TEMP%` is not, and Defender averaged ~18% CPU
+through a run there (103, aicomplete 170). One folder a run, so two at once never clear
+each other's; a green run removes its own, the next run any whose pid is gone. `Env`'s daemons skip the load scan (~0.5s) and
 its repos have no sample hooks. Keep new tests deterministic under load: hold an executor open with `env.hold()`
 (a `FAKE wait-for` line) and let it go with `env.release()` rather than a fixed `FAKE
 sleep`, which races a loaded machine. `env.tick_until` and `env.hold()` give up only after

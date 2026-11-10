@@ -20,7 +20,7 @@ job starts its measurements over.
 
 | | |
 |---|---|
-| start | a new name starts at **`start_cores`** (`[remote]`, default **4**), under the tab's cores and its cap |
+| start | a new name starts at **`start_cores`** (`[remote]`, default **4**), under the tab's cores and its cap; a known name keeps its plan |
 | samples | a count decides on its rate once **2-4** shards are in at it (its own count, at most 4) |
 | raise | **+1**, when the rate held (median within **20%** of the best lower count's, or none measured yet in this job) and no shard was lost at it; never past the tab's cores or its cap |
 | back off on rate | median more than **20%** slower than the best lower count's: back to the count below |
@@ -56,12 +56,13 @@ a new plan at `start_cores`.
 
 ### The start count (101)
 
-Matt's call, Nov 10: a tab starts useful at once, at 4, not 2. `board.json` keeps the start its
-plans were learned under (a board saved before 101 has none: 2). A broker started with another
-`start_cores` resets every plan below it to it, once, clearing its ceiling, samples and
-outcomes (`cores.restart`): the plan's last change reads `2 → 4: reset to the start count, 4`,
-and a `core count` event says so at that worker's next hello. Plans above it keep their count. Two machines with the same automatic name share a plan: name each in its
-Name box. The newest 100 names are kept.
+Matt's call, Nov 10: a tab starts useful at once, at 4, not 2. Since 103 it is only a new
+name's count: a known name keeps its learned count and ceiling across broker restarts and
+setting changes. 101 reset every plan below the start to it once, clearing ceiling, samples
+and outcomes; that threw away aicomplete's Work laptop (8 threads, likely mixed fast and slow
+cores: at 2 its seeds read 110 s and 298 s; 2 → 3 fell from 0.61 to 0.32 seeds/min a core),
+so the reset is gone, and 103 put that plan back at 2 under a ceiling of 3. Two machines with
+the same automatic name share a plan: name each in its Name box. The newest 100 names are kept.
 
 ## The page
 

@@ -81,6 +81,11 @@ Options:
   its `away_seconds` (in the result) don't count as blocked time. A default whose
   deadline passed meanwhile is taken at `resume`. Each mailbox file cuts a wait short
   once, so a helper's `ask` (the hook never delivers to one) can't spin.
+- **A message that answers it closes it** (103; aicomplete 167's sat open 54 min after
+  one did): the executor calls `progress` with `answered: "<id>"` (the full preamble's
+  *Messages* says so). The server resolves it `by_message`, its reason the note; the daemon
+  logs `question_closed`, shown as "closed: answered by a message". Only an open question
+  of the same item; the executor judges, so a message is still never taken as an answer.
 - **The watch answers.** A watch's `answer:` action (`night-shift.md`) writes an answer
   only from one Matt or the planner already gave, naming its source; `watch_answer` logs it.
 

@@ -110,6 +110,8 @@ PROGRESS_TOOL = {
                     "required": ["title", "eta"],
                 },
             },
+            "answered": {"type": "string", "description": ("The id of your open question a message just answered: "
+                                                           "closes it, so it no longer waits for Matt.")},
         },
     },
 }
@@ -276,11 +278,29 @@ class Server:
                 if isinstance(args[key], bool) or not isinstance(args[key], (int, float)):
                     return f"`{key}` must be a number", True
                 entry[key] = args[key]
+        closed = ""
+        if (ref := args.get("answered")) not in (None, ""):
+            q, why = self._open_question(ref)
+            if why:
+                return why, True
+            # 103, aicomplete 167: a message answered an open ask, which sat 54 min more.
+            questions.resolve(q, "by_message", None, "executor",
+                              reason="answered by a message" + (f": {entry['note']}" if entry.get("note") else ""))
+            self._away_since.pop(q.id, None)
+            closed = f" {q.id} is closed."
         talk.record_progress(self.control, self.item, entry)
         # Waiting mail is never handed out here: the server can't tell a helper's call from
         # the lead's, and a helper ignores it (Word Warriors 059). The PostToolUse hook that
         # runs right after this call can (`talk.subagent_call`), so it delivers.
-        return "Logged; carry on." + self._running_now(), False
+        return "Logged;" + closed + " carry on." + self._running_now(), False
+
+    def _open_question(self, ref) -> tuple[questions.Question | None, str | None]:
+        q = questions.load(questions.qdir(self.control) / f"{ref.strip()}.md") if isinstance(ref, str) else None
+        if q is None or q.item != self.item:
+            return None, f"`answered`: no question {ref!r} of this item"
+        if not q.is_open:
+            return None, f"`answered`: {q.id} is already resolved ({q.result.get('outcome')})"
+        return q, None
 
     def _running_now(self) -> str:
         """The wall clock and the time left to the cap (84: executors that told time by
