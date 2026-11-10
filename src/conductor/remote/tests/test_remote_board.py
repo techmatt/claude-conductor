@@ -235,3 +235,24 @@ def test_a_saved_board_carries_jobs_leases_and_gates_to_a_new_broker(tmp_path):
     assert b2.poll("w1")["task"] == "shard"            # gate kept: straight to the last shard
     assert b2.add_job("k1", "fp", [], [(0, 1)], ".") != jid  # ids never repeat
     assert not Board(tmp_path).restore(tmp_path / "missing.json")
+
+
+def test_a_failed_worker_re_gates_on_a_fresh_hello_or_a_new_broker_under_the_same_id(tmp_path):
+    b, clock = board(tmp_path)
+    job(b)
+    b.hello("w1", "browser")
+    b.set_bundle("k1", "ready")
+    assert b.poll("w1")["task"] == "gate"
+    assert not b.gate("w1", "k1", "wrong")             # refused before a fix
+    b.hello("w1", "browser")                           # a beat: still refused
+    assert b.poll("w1")["task"] == "idle"
+    b.hello("w1", "browser", fresh=True)               # the page reloaded, same worker id
+    assert b.poll("w1")["task"] == "gate"
+    assert b.gate("w1", "k1", "fp")
+    assert b.poll("w1")["task"] == "shard"
+    assert not b.gate("w1", "k1", "wrong again")
+    b.save(tmp_path / "board.json")                    # a new broker (a code change) takes up the board
+    b2 = Board(tmp_path, lease_seconds=30, fresh_seconds=5, native_argv=["sim"], clock=clock)
+    assert b2.restore(tmp_path / "board.json")
+    assert b2.poll("w1")["task"] == "gate"             # no new tab, no new id
+    assert b2.gate("w1", "k1", "fp") and b2.poll("w1")["task"] == "shard"

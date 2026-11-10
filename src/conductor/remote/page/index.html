@@ -150,6 +150,7 @@
   const newId = () => "b" + Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
   const wid = store(sessionStorage, "wid") || newId();          // the same worker across a reload of this tab
   store(sessionStorage, "wid", wid);
+  let fresh = true;                  // the first hello of this load re-gates whatever this worker failed before
   let prefs = {};                                                // the slider, pause and wake choices, kept for good
   try { prefs = JSON.parse(store(localStorage, "prefs") || "{}") || {}; } catch { }
   const savePrefs = () => store(localStorage, "prefs", JSON.stringify({ cores: Number(slider.value), paused, wake: wakeWanted }));
@@ -199,9 +200,10 @@
   async function hello() {
     try {
       const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label(), view: true }) });
+        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label(), view: true, fresh }) });
       if (!r.ok) throw new Error(`refused (HTTP ${r.status})`);
       const reply = await r.json();
+      fresh = false;
       lastOk = Date.now();
       if (!everOk) log(`joined as ${wid} (${label()}, ${workers.length} of ${max} cores)`);
       else if (failing) log("rejoined the broker", "ok");

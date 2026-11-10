@@ -81,6 +81,12 @@ class Key:
         return self.wasm if engine == "wasm" and self.wasm else self.fingerprint
 
 
+def _drop_failed(w: Worker) -> None:
+    """Forget the keys this worker failed, so its next poll gates them again."""
+    for key in [k for k, (state, _) in w.gates.items() if state == "fail"]:
+        del w.gates[key]
+
+
 class Board:
     def __init__(self, root: Path, lease_seconds: float = 60.0, fresh_seconds: float = 10.0,
                  bundle_js: str = "bundle.js", native_argv: list[str] | None = None, clock=time.time):
@@ -99,7 +105,9 @@ class Board:
         self._n = 0
 
     # ------------------------------------------------------------ workers
-    def hello(self, wid: str, kind: str, cores: int = 1, label: str = "") -> dict:
+    def hello(self, wid: str, kind: str, cores: int = 1, label: str = "", fresh: bool = False) -> dict:
+        """`fresh`: the first hello of a page load or a worker start, which re-gates every key
+        this worker failed (a fix needs no new tab or worker id)."""
         if not ID_RE.match(wid) or kind not in KINDS or kind == "main":
             raise ValueError("bad worker id or kind")
         with self.lock:
@@ -111,6 +119,8 @@ class Board:
             if w is None or w.kind != kind:
                 w = self.workers[wid] = Worker(wid, kind, first_seen=now)
             w.cores, w.label, w.last_seen = max(1, min(int(cores), 1024)), str(label)[:80], now
+            if fresh:
+                _drop_failed(w)
             return {"ok": True, "poll_ms": 500}
 
     def _fresh(self, w: Worker, now: float) -> bool:
@@ -413,7 +423,8 @@ class Board:
 
     def restore(self, path: Path) -> bool:
         """Take up a saved board (`save`); False, and nothing changed, if there is none or it
-        doesn't read. Jobs the main box stopped calling drop out as ever (`_active`)."""
+        doesn't read. Jobs the main box stopped calling drop out as ever (`_active`). Failed
+        gates don't carry over: a new broker (a code change, a fix) gates those workers again."""
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             workers = {w["id"]: Worker(**{**w, "gates": {k: tuple(v) for k, v in w["gates"].items()}})
@@ -424,6 +435,8 @@ class Board:
             n = int(data["n"])
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
+        for w in workers.values():
+            _drop_failed(w)
         with self.lock:
             self.workers, self.keys, self.jobs, self._n = workers, keys, jobs, n
             self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])

@@ -133,15 +133,20 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
   reference for its own kind. Two references a commit, both computed on the main box:
   - **native** (local-remote and any native worker): the `fingerprint` command's stdout;
   - **wasm** (browsers): the bundle's own `fingerprint()`, run in Node
-    (`wasm_fingerprint.mjs`; init gets the bundle's one `.wasm` file as bytes) once the
-    bundle is built, cached as `bundles/<commit>/wasm.fingerprint`.
+    (`wasm_fingerprint.mjs`; init gets the bundle's one `.wasm` file as bytes, as
+    `{module_or_path}` and, if that throws, bare: an `init(input)` that wraps its argument
+    itself, 95) once the bundle is built, cached as `bundles/<commit>/wasm.fingerprint`.
+    The bundle may be `.js`, `.mjs` or `.cjs`: all are served as `text/javascript`.
 
   So a project that keeps its fastest math (Matt, 2026-11-09), whose wasm build never
   reproduces its native answer, still gets browsers. Without Node, or if the bundle's
   fingerprint fails there, browsers are gated against the native reference (and
   `farm-seeds` says so). A worker that fails gets no shards for the commit; the failure,
   with the reference it missed, is in `.conductor/remote/gates.log`, the job's record and
-  `farm-seeds`' stderr, and the inbox's workers line counts it.
+  `farm-seeds`' stderr, and the inbox's workers line counts it. A failure is not for
+  good (95): the worker re-gates under the same id when its page reloads or a
+  local-remote worker restarts (the first hello says `fresh`), when a new broker takes up
+  the board (a code change), or when the commit's reference changes.
 - **References that differ** mean native and wasm shards may differ in their last bits.
   `job.json`'s `references` says so (`differ: true`); a merged output that mixed both gets
   `mixed_note`, and `farm-seeds`' summary ends "whose references differ (not what a local

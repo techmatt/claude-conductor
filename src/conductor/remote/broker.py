@@ -41,7 +41,8 @@ MAX_BODY = 16 * 1024 * 1024    # a shard's output, base64'd, fits well under thi
 FILE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}$")
 RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM\d|LPT\d)(\..*)?$", re.I)     # Windows device names
 JOB_KEEP_DAYS = 7
-TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".wasm": "application/wasm",
+JS = "text/javascript; charset=utf-8"      # a module script of any other type is refused by the browser
+TYPES = {".html": "text/html; charset=utf-8", ".js": JS, ".mjs": JS, ".cjs": JS, ".wasm": "application/wasm",
          ".json": "application/json", ".css": "text/css; charset=utf-8"}
 DAEMON_GONE_SECONDS = 60.0
 LOCAL_ONLY = {"job", "bundle", "claim", "state", "close", "status"}
@@ -206,7 +207,8 @@ class Handler(BaseHTTPRequestHandler):
         if op == "hello":
             if b.get("kind") == "local-remote" and not self._local():
                 raise ValueError("a local-remote worker runs on the main box")
-            reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")))
+            reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")),
+                                fresh=b.get("fresh") is True)
             if b.get("view"):                    # the worker page: what it shows, with the hello it already sends
                 reply |= {"page": {**self.page, "version": page_version()}, "view": board.view(str(b["worker"]))}
             return reply

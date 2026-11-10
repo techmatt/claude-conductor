@@ -197,6 +197,9 @@ def test_the_page_and_bundles_need_the_token_and_main_box_calls_need_loopback(fa
     (bundle / "b.wasm").write_bytes(b"\0asm")
     resp = urllib.request.urlopen(base + "bundle/k1/b.wasm")
     assert resp.headers["Content-Type"] == "application/wasm"
+    for name in ("farm.mjs", "farm.cjs", "farm.js"):          # a module script of another type won't load
+        (bundle / name).write_text("export {}\n", encoding="utf-8")
+        assert urllib.request.urlopen(base + f"bundle/k1/{name}").headers["Content-Type"].startswith("text/javascript")
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(base + "bundle/k1/NUL")
     assert e.value.code == 404
@@ -270,6 +273,19 @@ def test_the_wasm_reference_is_the_bundles_own_fingerprint_run_in_node(farm):
     (other / "bundle.js").write_text("export default async () => {};\nthrow new Error('boom');\n", encoding="utf-8")
     value, why = client.wasm_reference(farm.r, "k2")
     assert value == "" and "boom" in why
+    # A bundle whose init(input) wraps its argument itself (aicomplete's farm.mjs): the
+    # object form throws, the raw bytes work.
+    wraps = farm.r.state / "bundles" / "k3"
+    wraps.mkdir()
+    (wraps / "farm_bg.wasm").write_bytes(b"\0asm\1\0\0\0")
+    (wraps / "farm.mjs").write_text(
+        "let got;\nasync function inner({ module_or_path: m }) {\n"
+        "  if (!(m instanceof Uint8Array)) throw new TypeError('Argument 0 must be a buffer source');\n"
+        "  got = m.length;\n}\n"
+        "export default async function init(input) { await inner({ module_or_path: input }); }\n"
+        "export function fingerprint() { return `wrapped-${got}`; }\n", encoding="utf-8")
+    farm.r.bundle_js = "farm.mjs"
+    assert client.wasm_reference(farm.r, "k3") == ("wrapped-8", "")
 
 
 @pytest.mark.slow           # waits out a broker gap: 7s serially

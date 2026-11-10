@@ -35,7 +35,8 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
     stop = stop or threading.Event()
     lock = threading.Lock()
     ran = [0]
-    broker.call("hello", {"worker": wid, "kind": "local-remote", "cores": cores, "label": f"pid {os.getpid()}"})
+    broker.call("hello", {"worker": wid, "kind": "local-remote", "cores": cores, "label": f"pid {os.getpid()}",
+                          "fresh": True})          # a start re-gates what this id failed before
 
     def beat() -> None:
         while not stop.wait(2.0):
