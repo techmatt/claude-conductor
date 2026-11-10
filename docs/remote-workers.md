@@ -54,7 +54,7 @@ inbox and digest are the same text as before (`test_remote_hooks.py` checks this
 | `host` | The join URL's host: this PC's name unless set (an IP, when other machines can't resolve the name). |
 | `shard_seeds` (25), `seed_seconds` (0.05), `local_below_seconds` (10) | Shard size, and the size check: a job of `count × seed_seconds` under `local_below_seconds` stays local. |
 | `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so each project's tabs are told apart. The page's title is the top-level `project`. |
-| `lease_seconds` (60), `fresh_seconds` (10), `main_slots` (1) | A shard not back in this long is leased again; a worker not heard from in this long is gone; shards the main box runs at once. A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
+| `lease_seconds` (sized to the shard), `fresh_seconds` (10), `main_slots` (1) | How long a worker may hold a shard without renewing it (*Leases*); a worker not heard from in this long is gone; shards the main box runs at once. A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
 
 ## The executor interface
 
@@ -90,13 +90,23 @@ folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in argume
   own console children open visible windows, so it is not used.
 - A worker that joins mid-job is used at once (89: 600 seeds begun with none, a local-remote
   worker joining 8 s in took 15 of 24 shards; 15.1 s against 33.2 s local, identical).
-- A lease past `lease_seconds`, or held by a worker no longer heard from, is leased again.
+- **Leases** (96). A worker no longer heard from (`fresh_seconds`) loses its shards at once.
+  One still heard from keeps a shard while its check-ins name it (the page's hello and the
+  local-remote worker's beat list their cores' `[job, shard]` pairs: `Board.renew`), so a
+  slow live worker never loses one. One that never names it (an old page) loses it after
+  `lease_seconds` when set, else 4× the shard at the slowest ms a seed measured in the job
+  (at `seed_seconds` before any), never under 60 s (`Board.lease_for`). The main box's
+  leases hold while its job is open. 161: a flat 60 s against 2-6 min shards re-ran 33 of 48.
+- **A shard nobody needs is dropped** (96): the page's hello reply names (`drop`) any shard
+  its cores run whose job closed or whose other copy is in; the page replaces that core's
+  Web Worker (a wasm run can't be interrupted) and the core goes idle. An idle core's poll
+  also prompts a hello, so this holds in a hidden tab (its timers are throttled).
 - A broker that stops answering mid-job is waited for 45 s (`client.PATIENCE`: a restart
   takes a few); one still gone then, or a main-box slot that fails: the job is closed and
   the shards not yet in run locally.
 - `farm-seeds` calls the broker every 2 s while its job runs; a job not heard from in
   `fresh_seconds` is no longer served (a killed item's job never starves the next) and is
-  dropped after `lease_seconds`.
+  dropped after `lease_seconds` (60 s when unset).
 
 ## Workers
 
@@ -134,8 +144,11 @@ The worker page, the inbox's *Now* line and the app's chip and Workers tab: `rem
   - **native** (local-remote and any native worker): the `fingerprint` command's stdout;
   - **wasm** (browsers): the bundle's own `fingerprint()`, run in Node
     (`wasm_fingerprint.mjs`; init gets the bundle's one `.wasm` file as bytes, as
-    `{module_or_path}` and, if that throws, bare: an `init(input)` that wraps its argument
-    itself, 95) once the bundle is built, cached as `bundles/<commit>/wasm.fingerprint`.
+    `{module_or_path}`, then bare (an `init(input)` that wraps its argument itself, 95), then
+    nothing, each try on a fresh import of the module: aicomplete's `init` keeps its first
+    promise, so a second call on the same module only repeated the first try's rejection, 96)
+    once the bundle is built, cached as `bundles/<commit>/wasm.fingerprint` (a failure is
+    not cached: the next job tries again).
     The bundle may be `.js`, `.mjs` or `.cjs`: all are served as `text/javascript`.
 
   So a project that keeps its fastest math (Matt, 2026-11-09), whose wasm build never

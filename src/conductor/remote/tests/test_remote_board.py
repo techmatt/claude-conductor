@@ -256,3 +256,49 @@ def test_a_failed_worker_re_gates_on_a_fresh_hello_or_a_new_broker_under_the_sam
     assert b2.restore(tmp_path / "board.json")
     assert b2.poll("w1")["task"] == "gate"             # no new tab, no new id
     assert b2.gate("w1", "k1", "fp") and b2.poll("w1")["task"] == "shard"
+
+
+def test_a_lease_is_sized_to_its_shard_and_renewed_while_its_worker_runs_it(tmp_path):
+    """No `lease_seconds`: 161's tab took 2-6 min a shard against a flat 60 s lease, and the
+    main box re-ran 33 of 48. A lease is LEASE_FACTOR times the shard at the slowest rate seen
+    (or `seed_seconds`), and a worker that says it is still running the shard renews it."""
+    clock = Clock()
+    b = Board(tmp_path, fresh_seconds=5, native_argv=["sim"], clock=clock, seed_seconds=28)
+    jid = b.add_job("k1", "fp", [], [(0, 4), (4, 4), (8, 4)], ".")
+    job_ = b.jobs[jid]
+    assert b.lease_for(job_, job_.shards[0]) == 4 * 4 * 28          # 448 s before any rate is known
+    b.seed_seconds = 0.01                              # a guess far too low: the 60 s floor
+    assert b.lease_for(job_, job_.shards[0]) == 60.0
+    gated(b, "tab", kind="local-remote")
+    gated(b, "old", kind="local-remote")
+    assert b.poll("tab")["shard"] == 0 and b.poll("old")["shard"] == 1
+    for _ in range(100):                               # 300 s: both heard from every 3 s
+        clock.t += 3
+        b.hello("tab", "local-remote")
+        b.renew("tab", [[jid, 0]])                     # the tab says it is still at shard 0
+        b.hello("old", "local-remote")                 # an old page says nothing of its shards
+        b.state(jid)
+    c = b.claim(jid, rerun=False)                      # old's lease ran out at 60 s; tab's held
+    assert (c["shard"], c["rerun"]) == (1, True)
+    assert b.claim(jid, rerun=False)["shard"] == 2
+    assert b.claim(jid, rerun=False) == {"wait": True}
+    assert b.claim(jid)["rerun"] is True and len(b.reruns) == 2   # shard 0 only at the tail
+    b.renew("ghost", [[jid, 0], ["nope", 1], [jid, 99], "x"])     # nothing it holds: no change
+    job_.rates["main"] = 30_000.0                      # a measured rate: 4 seeds at 30 s, 4 times
+    assert b.lease_for(job_, job_.shards[0]) == 480.0
+    b2 = Board(tmp_path, lease_seconds=60, fresh_seconds=5, clock=clock, seed_seconds=28)
+    assert b2.lease_for(job_, job_.shards[0]) == 60    # an explicit lease_seconds wins
+
+
+def test_the_page_is_told_to_drop_a_closed_jobs_shard_or_one_done_elsewhere(tmp_path):
+    b, _ = board(tmp_path)
+    jid = job(b, n=3)
+    gated(b, "tab", kind="local-remote")
+    s0, s1 = b.poll("tab")["shard"], b.poll("tab")["shard"]
+    running = [[jid, s0], [jid, s1], ["nope"], "x"]
+    assert b.view("tab", running)["drop"] == []
+    assert b.result("main", jid, s1, True, b"m")       # the main box's copy of s1 is in
+    assert b.view("tab", running)["drop"] == [[jid, s1]]
+    b.close(jid)
+    assert b.view("tab", running)["drop"] == [[jid, s0], [jid, s1]]
+    assert b.view("tab")["drop"] == []

@@ -35,14 +35,17 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
     stop = stop or threading.Event()
     lock = threading.Lock()
     ran = [0]
+    running: set[tuple[str, int]] = set()          # [job, shard] under way: the beat renews their leases
     broker.call("hello", {"worker": wid, "kind": "local-remote", "cores": cores, "label": f"pid {os.getpid()}",
                           "fresh": True})          # a start re-gates what this id failed before
 
     def beat() -> None:
         while not stop.wait(2.0):
             try:
+                with lock:
+                    now = [list(p) for p in running]
                 broker.call("hello", {"worker": wid, "kind": "local-remote", "cores": cores,
-                                      "label": f"pid {os.getpid()}"})
+                                      "label": f"pid {os.getpid()}", "running": now})
             except BrokerDown:
                 pass
 
@@ -71,12 +74,18 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
                 if hang_after is not None and n > hang_after:
                     stop.wait()                  # holds the lease and goes quiet
                     return
-                native, t0 = t["native"], time.time()
-                with tempfile.TemporaryDirectory() as d:
-                    out = Path(d) / "shard.out"
-                    code = run_native(native["argv"], Path(native["cwd"]), t["first"], t["count"], out, t["args"])
-                    ok = code == 0 and out.exists() and not (fail_every and n % fail_every == 0)
-                    data = base64.b64encode(out.read_bytes()).decode() if ok else ""
+                native, t0, pair = t["native"], time.time(), (t["job"], t["shard"])
+                with lock:
+                    running.add(pair)
+                try:
+                    with tempfile.TemporaryDirectory() as d:
+                        out = Path(d) / "shard.out"
+                        code = run_native(native["argv"], Path(native["cwd"]), t["first"], t["count"], out, t["args"])
+                        ok = code == 0 and out.exists() and not (fail_every and n % fail_every == 0)
+                        data = base64.b64encode(out.read_bytes()).decode() if ok else ""
+                finally:
+                    with lock:
+                        running.discard(pair)
                 log = f"{time.strftime('%H:%M:%S')} {wid} shard {t['shard']} seeds {t['first']}+{t['count']} " \
                       f"exit {code} in {(time.time() - t0) * 1000:.0f} ms" + ("" if ok else " (failed)")
                 try:

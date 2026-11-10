@@ -209,13 +209,16 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("a local-remote worker runs on the main box")
             reply = board.hello(str(b["worker"]), str(b["kind"]), int(b.get("cores", 1)), str(b.get("label", "")),
                                 fresh=b.get("fresh") is True)
+            board.renew(str(b["worker"]), b.get("running"))
             if b.get("view"):                    # the worker page: what it shows, with the hello it already sends
-                reply |= {"page": {**self.page, "version": page_version()}, "view": board.view(str(b["worker"]))}
+                reply |= {"page": {**self.page, "version": page_version()},
+                          "view": board.view(str(b["worker"]), b.get("running"))}
             return reply
         if op == "poll":
             return board.poll(str(b["worker"]))
         if op == "gate":
-            return {"pass": board.gate(str(b["worker"]), str(b["key"]), str(b["value"]))}
+            wid, key = str(b["worker"]), str(b["key"])
+            return {"pass": board.gate(wid, key, str(b["value"])), "reference": board.reference_kind(wid, key)}
         if op == "result":
             ok = b.get("ok") is True
             if ok and isinstance(b.get("output_b64"), str):       # native workers: the bytes exactly
@@ -393,7 +396,8 @@ def serve(control: Path, stay: bool = False, after: int | None = None, watch: Co
     for old in (r.state / "jobs").glob("j*") if (r.state / "jobs").is_dir() else []:
         if old.stat().st_mtime < cutoff:
             shutil.rmtree(old, ignore_errors=True)
-    board = Board(r.state, r.lease_seconds, r.fresh_seconds, r.bundle_js, native_argv=r.native)
+    board = Board(r.state, r.lease_seconds, r.fresh_seconds, r.bundle_js, native_argv=r.native,
+                  seed_seconds=r.seed_seconds)
     restored = board.restore(r.state / BOARD)
     try:
         server = make_server(r, board)

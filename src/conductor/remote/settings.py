@@ -47,7 +47,7 @@ class Remote:
     shard_seeds: int = 25
     seed_seconds: float = 0.05             # estimated native seconds per seed, for the size check
     local_below_seconds: float = 10.0      # a job estimated under this stays local
-    lease_seconds: float = 60.0            # a shard not back in this long is leased again
+    lease_seconds: float | None = None     # None: each lease sized to its shard (Board.lease_for)
     fresh_seconds: float = 10.0            # a worker not heard from in this long is gone
     main_slots: int = 1                    # shards the main box runs at once
     accent: str = ACCENT                   # the worker page's accent colour (#rgb or #rrggbb)

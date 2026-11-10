@@ -21,6 +21,8 @@ KINDS = {"browser": "wasm", "local-remote": "native", "main": "native"}   # work
 LOG_CHARS = 64_000              # a worker's log, per result
 LOG_FILE_CAP = 2_000_000        # a worker's log file per job stops growing here
 WORKER_FORGET_SECONDS = 3600.0
+LEASE_FLOOR = 60.0              # a derived lease is never shorter than this
+LEASE_FACTOR = 4.0              # a derived lease: this many times a shard's expected time
 
 
 @dataclass
@@ -88,10 +90,12 @@ def _drop_failed(w: Worker) -> None:
 
 
 class Board:
-    def __init__(self, root: Path, lease_seconds: float = 60.0, fresh_seconds: float = 10.0,
-                 bundle_js: str = "bundle.js", native_argv: list[str] | None = None, clock=time.time):
+    def __init__(self, root: Path, lease_seconds: float | None = None, fresh_seconds: float = 10.0,
+                 bundle_js: str = "bundle.js", native_argv: list[str] | None = None, clock=time.time,
+                 seed_seconds: float = 0.05):
+        """`lease_seconds` None: each lease is sized to its shard (`lease_for`)."""
         self.root = Path(root)
-        self.lease_seconds, self.fresh_seconds = lease_seconds, fresh_seconds
+        self.lease_seconds, self.fresh_seconds, self.seed_seconds = lease_seconds, fresh_seconds, seed_seconds
         self.bundle_js = bundle_js
         self.native_argv = native_argv   # from the settings, never from a request
         self.clock = clock
@@ -132,17 +136,39 @@ class Board:
         return [w for w in self.workers.values() if w.kind != "main" and self._fresh(w, now)
                 and not (key and w.gates.get(key, ("",))[0] == "fail")]
 
-    def _live(self, wid: str, at: float, now: float) -> bool:
-        """A live lease: within its timeout and held by a worker still heard from."""
-        w = self.workers.get(wid)
-        return now - at <= self.lease_seconds and bool(w) and (w.kind == "main" or self._fresh(w, now))
+    @property
+    def _patience(self) -> float:
+        """How long a job's main box or a pending gate is waited for."""
+        return self.lease_seconds if self.lease_seconds is not None else LEASE_FLOOR
 
-    def _leased(self, shard: Shard, now: float) -> bool:
-        return any(self._live(wid, at, now) for wid, at in shard.leases.items())
+    def lease_for(self, job: Job, shard: Shard) -> float:
+        """How long one worker may hold a shard: `lease_seconds` when set, else LEASE_FACTOR
+        times the shard at the slowest rate measured in this job (any worker), or at
+        `seed_seconds` before any is, never under LEASE_FLOOR. aicomplete's 4 seeds at 28 s
+        is 448 s, where the old flat 60 s re-ran 33 of 48 shards (161)."""
+        if self.lease_seconds is not None:
+            return self.lease_seconds
+        ms = max([*job.rates.values(), self.seed_seconds * 1000])
+        return max(LEASE_FLOOR, LEASE_FACTOR * shard.count * ms / 1000)
+
+    def _live(self, job: Job, shard: Shard, wid: str, at: float, now: float) -> bool:
+        """A live lease: the main box's while its job is (it runs what it claims until the
+        result), else held by a worker still heard from and within `lease_for` of its lease or
+        last renewal. A worker that says it is running the shard renews it (`renew`), so a
+        slow live worker keeps its shard; one that never says so loses it at `lease_for`."""
+        w = self.workers.get(wid)
+        if w is None:
+            return False
+        if w.kind == "main":
+            return True
+        return self._fresh(w, now) and now - at <= self.lease_for(job, shard)
+
+    def _leased(self, job: Job, shard: Shard, now: float) -> bool:
+        return any(self._live(job, shard, wid, at, now) for wid, at in shard.leases.items())
 
     def _active(self, now: float) -> list[Job]:
         """Open jobs, oldest first; one whose main box went quiet is dropped (`farm-seeds` killed)."""
-        for job in [j for j in self.jobs.values() if now - j.seen > max(self.lease_seconds, 3 * self.fresh_seconds)]:
+        for job in [j for j in self.jobs.values() if now - j.seen > max(self._patience, 3 * self.fresh_seconds)]:
             del self.jobs[job.id]
         return sorted((j for j in self.jobs.values() if not j.complete and now - j.seen <= self.fresh_seconds),
                       key=lambda j: j.created)
@@ -159,13 +185,13 @@ class Board:
                 if (w.engine == "wasm" and k.bundle != "ready") or (w.engine == "native" and not job.native):
                     continue
                 state, at = w.gates.get(job.key, ("", 0.0))
-                if state == "fail" or (state == "pending" and now - at <= self.lease_seconds):
+                if state == "fail" or (state == "pending" and now - at <= self._patience):
                     continue
                 if state != "pass":
                     w.gates[job.key] = ("pending", now)
                     return {"task": "gate", "key": job.key, **self._payload(job, w)}
                 for s in job.shards:
-                    if not s.done and not self._leased(s, now):
+                    if not s.done and not self._leased(job, s, now):
                         s.leases[wid] = now
                         return {"task": "shard", "job": job.id, "shard": s.id, "key": job.key, "first": s.first,
                                 "count": s.count, "args": job.args, **self._payload(job, w)}
@@ -277,7 +303,7 @@ class Board:
             job.seen = self.workers["main"].last_seen = now
             if job.complete:
                 return {"done": True}
-            free = [s for s in job.shards if not s.done and not self._leased(s, now)]
+            free = [s for s in job.shards if not s.done and not self._leased(job, s, now)]
             if not free and rerun:
                 free = sorted((s for s in job.shards if not s.done and "main" not in s.leases),
                               key=lambda s: min(s.leases.values(), default=now))
@@ -315,19 +341,51 @@ class Board:
                                  "gates": {k: v[0] for k, v in w.gates.items()}} for w in live],
                     "jobs": len([j for j in self.jobs.values() if not j.complete])}
 
-    def view(self, wid: str) -> dict:
-        """What the worker page shows beside its own measurements, sent with each hello (no
-        polling of its own): the current job as counts, this worker's gate, the other
-        workers, the main box's native rate and load."""
+    @staticmethod
+    def _pairs(running) -> list[tuple[str, int]]:
+        out = []
+        for pair in running if isinstance(running, list) else []:
+            try:
+                out.append((str(pair[0]), int(pair[1])))
+            except (TypeError, ValueError, IndexError):
+                continue
+        return out
+
+    def renew(self, wid: str, running) -> None:
+        """A worker's check-in names the [job, shard] pairs its cores are running: their
+        leases start over, so a slow worker that is still at it never loses one."""
         with self.lock:
             now = self.clock()
+            for jid, sid in self._pairs(running):
+                job = self.jobs.get(jid)
+                if job and 0 <= sid < len(job.shards) and wid in job.shards[sid].leases:
+                    job.shards[sid].leases[wid] = now
+
+    def _unwanted(self, running) -> list[list]:
+        """Of the [job, shard] pairs a page's cores are running, those nobody needs any more:
+        the job is closed (or gone), or another copy of the shard is in."""
+        drop = []
+        for jid, sid in self._pairs(running):
+            job = self.jobs.get(jid)
+            if job is None or job.complete or not 0 <= sid < len(job.shards) or job.shards[sid].done:
+                drop.append([jid, sid])
+        return drop
+
+    def view(self, wid: str, running=None) -> dict:
+        """What the worker page shows beside its own measurements, sent with each hello (no
+        polling of its own): the current job as counts, this worker's gate, the other
+        workers, the main box's native rate and load; and `drop`, the shards in `running`
+        (its cores' [job, shard] pairs) it should stop, so a closed job's work ends at once."""
+        with self.lock:
+            now = self.clock()
+            drop = self._unwanted(running)
             me = self.workers.get(wid)
             jobs = self._active(now)
             job = None
             if jobs:
                 j = jobs[0]
                 done = [s for s in j.shards if s.done]
-                out = [s for s in j.shards if not s.done and self._leased(s, now)]
+                out = [s for s in j.shards if not s.done and self._leased(j, s, now)]
                 seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in done)
                 elapsed = max(0.001, now - j.created)
                 eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None
@@ -352,7 +410,13 @@ class Board:
                       for w in self.workers.values() if w.kind != "main" and w.id != wid and self._fresh(w, now)]
             return {"job": job, "gate": gate, "bundle": bundle, "workers": others,
                     "main": {"ms_seed": round(rates["main"], 1) if "main" in rates else None},
-                    "load": self.load}
+                    "load": self.load, "drop": drop}
+
+    def reference_kind(self, wid: str, key: str) -> str:
+        """Which reference this worker is gated against for `key`: wasm or native."""
+        with self.lock:
+            w, k = self.workers.get(wid), self.keys.get(key)
+            return "wasm" if w and k and w.engine == "wasm" and k.wasm else "native"
 
     def panel(self, main_slots: int = 1) -> dict:
         """What the app's chip and Workers tab show (`status.json`, written by the broker's
@@ -367,12 +431,12 @@ class Board:
                 for s in job.shards:
                     if not s.done:
                         for wid, at in s.leases.items():
-                            if self._live(wid, at, now):
+                            if self._live(job, s, wid, at, now):
                                 out_by[wid] = out_by.get(wid, 0) + 1
             job = None
             if j:
                 done = sum(1 for s in j.shards if s.done)
-                out = sum(1 for s in j.shards if not s.done and self._leased(s, now))
+                out = sum(1 for s in j.shards if not s.done and self._leased(j, s, now))
                 seeds, seeds_done = sum(s.count for s in j.shards), sum(s.count for s in j.shards if s.done)
                 elapsed = max(0.001, now - j.created)
                 eta = (seeds - seeds_done) * elapsed / seeds_done if seeds_done else None

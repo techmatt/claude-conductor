@@ -164,6 +164,9 @@
   let workers = [], paused = !!prefs.paused, project = "conductor", view = null;
   let version = null, reloading = 0, misses = 0;       // the page's code as first served; a reload under way since
   let lastOk = 0, everOk = false, failing = false, connState = "connecting";
+  // The page's hello and its cores' polls both prove the broker answers: the header goes by
+  // either (an idle tab whose hello stalled read "no broker" while its cores gated, 96).
+  let polled = 0, helloAt = 0, helloBusy = false, lastGate = null;
   const tiles = {};                 // slot -> {state, first, count, shard, at, msSeed, text}
   const done = [];                  // {t, seeds} for every good shard, 2.5 min kept
   const perSeed = [];               // {rk, v, t} ms a seed, a shard each
@@ -198,9 +201,14 @@
 
   // ---------------------------------------------------------------- the broker
   async function hello() {
+    if (helloBusy) return;
+    helloBusy = true; helloAt = Date.now();
+    // What the cores are running, so the broker can say which of it nobody needs any more.
+    const running = Object.values(tiles).filter((t) => t.state === "run" && t.job && t.first != null).map((t) => [t.job, t.shard]);
     try {
       const r = await fetch(base + "api/hello", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label(), view: true, fresh }) });
+        signal: AbortSignal.timeout(10000),          // a stalled call fails and is retried, never hangs the loop
+        body: JSON.stringify({ worker: wid, kind: "browser", cores: paused ? 0 : workers.length || 1, label: label(), view: true, fresh, running }) });
       if (!r.ok) throw new Error(`refused (HTTP ${r.status})`);
       const reply = await r.json();
       fresh = false;
@@ -216,12 +224,28 @@
       }
       view = reply.view || null;
       misses = 0;
+      for (const [job, shard] of view?.drop || []) dropShard(job, shard);
     } catch (e) {
       if (!failing) log(everOk ? `lost the broker: ${e.message || e}` : `no broker yet: ${e.message || e}`, "bad");
       failing = true; misses++;
       if (!everOk) connState = "no broker";
+    } finally {
+      helloBusy = false;
     }
     draw();
+  }
+
+  // A core still running a shard of a closed job, or one another copy already won: a wasm
+  // run can't be interrupted, so the core is replaced (its bundle loads again on next use).
+  function dropShard(job, shard) {
+    for (const [slot, t] of Object.entries(tiles)) {
+      const i = Number(slot);
+      if (t.state !== "run" || t.job !== job || t.shard !== shard || !workers[i]) continue;
+      workers[i].terminate();
+      workers[i] = startCore(i);
+      tiles[i] = { state: "idle" };
+      log(`core ${i + 1}: dropped shard ${shard} (seeds ${t.first}–${t.first + t.count - 1}): its job closed or another copy is in`, "warn");
+    }
   }
 
   // Every 2 s while the broker answers; backing off to 30 s (with jitter) while it doesn't.
@@ -248,9 +272,14 @@
   // ---------------------------------------------------------------- worker messages
   function onMessage(e) {
     const m = e.data, t = tiles[m.slot] || (tiles[m.slot] = { state: "idle" });
-    if (everOk && !failing && ["idle", "busy", "gating", "gate"].includes(m.type)) lastOk = Date.now();   // a worker's poll got through
+    if (["idle", "busy", "gating", "gate"].includes(m.type)) {
+      polled = Date.now();                       // a core's poll got through
+      // Worker messages aren't throttled in a hidden tab, the page's timers are: an idle
+      // core's poll also keeps the hello (and its drop list) going.
+      if (polled - helloAt > 2500) hello();
+    }
     if (m.type === "busy") firstWork ||= m.at;
-    if (m.type === "busy") Object.assign(t, { state: "run", first: m.first, count: m.count, shard: m.shard, at: m.at, text: "" });
+    if (m.type === "busy") Object.assign(t, { state: "run", job: m.job, first: m.first, count: m.count, shard: m.shard, at: m.at, text: "" });
     else if (m.type === "idle") { if (t.state !== "idle") Object.assign(t, { state: "idle", text: "" }); }
     else if (m.type === "loading") Object.assign(t, { state: "run", text: "loading bundle", at: Date.now(), first: null });
     else if (m.type === "gating") Object.assign(t, { state: "run", text: "fingerprint", at: Date.now(), first: null });
@@ -259,6 +288,7 @@
     else if (m.type === "hello") hello();
     else if (m.type === "gate") {
       t.state = "idle";
+      lastGate = { key: m.key, state: m.pass ? "pass" : "fail", reference: m.reference || "native", value: m.pass ? m.value : "" };
       log(m.pass ? `fingerprint gate passed for ${m.key} (${short(m.value, 12)})` : `fingerprint gate FAILED for ${m.key}: got ${short(m.value, 24)}`, m.pass ? "ok" : "bad");
       hello();
     } else if (m.type === "shard") {
@@ -281,15 +311,19 @@
     draw();
   }
 
+  function startCore(slot) {
+    const w = new Worker(base + "worker.js", { type: "module" });
+    w.onmessage = onMessage;
+    w.postMessage({ type: "start", base, wid, slot });
+    return w;
+  }
+
   function resize() {
     const want = paused ? 0 : Number(slider.value);
     $("coresOut").textContent = paused ? 0 : slider.value;
     while (workers.length < want) {
-      const w = new Worker(base + "worker.js", { type: "module" });
-      w.onmessage = onMessage;
-      w.postMessage({ type: "start", base, wid, slot: workers.length });
       tiles[workers.length] = { state: "idle" };
-      workers.push(w);
+      workers.push(startCore(workers.length));
     }
     while (workers.length > want) {
       workers.pop().terminate();
@@ -319,12 +353,13 @@
   // ---------------------------------------------------------------- drawing
   function draw() {
     const now = Date.now();
-    connState = reloading ? "reloading" : paused ? "paused" : !everOk ? connState : !failing && now - lastOk < 7000 ? "live" : "reconnecting";
-    $("dot").className = "dot " + (connState === "live" ? "live" : everOk ? "lost" : "");
+    const heard = Math.max(failing ? 0 : lastOk, polled);
+    connState = reloading ? "reloading" : paused ? "paused" : now - heard < 7000 ? "live" : heard || everOk ? "reconnecting" : connState;
+    $("dot").className = "dot " + (connState === "live" ? "live" : heard || everOk ? "lost" : "");
     $("conn").textContent = connState;
     $("conn").className = "chip " + (connState === "live" ? "ok" : connState === "paused" ? "muted" : "warn");
     $("project").textContent = project;
-    const job = view?.job, gate = view?.gate;
+    const job = view?.job, gate = view?.gate || lastGate;
     $("item").textContent = job ? (job.item || job.id) : "waiting for a job";
     const key = job?.key || gate?.key;
     $("commit").textContent = key ? "commit " + key.slice(0, 7) + (key.includes("-") ? " +changes" : "") : "commit —";

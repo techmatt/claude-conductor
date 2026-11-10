@@ -48,7 +48,7 @@ async function loop() {
       }
       try {
         const r = await api("gate", { worker: wid, key: t.key, value });
-        postMessage({ type: "gate", slot, key: t.key, pass: r.pass, value });
+        postMessage({ type: "gate", slot, key: t.key, pass: r.pass, reference: r.reference, value });
       } catch (e) {
         postMessage({ type: "error", slot, text: String(e) });
       }

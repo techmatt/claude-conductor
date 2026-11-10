@@ -273,16 +273,17 @@ def test_the_wasm_reference_is_the_bundles_own_fingerprint_run_in_node(farm):
     (other / "bundle.js").write_text("export default async () => {};\nthrow new Error('boom');\n", encoding="utf-8")
     value, why = client.wasm_reference(farm.r, "k2")
     assert value == "" and "boom" in why
-    # A bundle whose init(input) wraps its argument itself (aicomplete's farm.mjs): the
-    # object form throws, the raw bytes work.
+    # A bundle whose init(input) wraps its argument itself and keeps its first promise
+    # (aicomplete's farm.mjs): the object form rejects, and that rejection is what the same
+    # module's init hands back ever after, so the raw bytes need a fresh import (96).
     wraps = farm.r.state / "bundles" / "k3"
     wraps.mkdir()
     (wraps / "farm_bg.wasm").write_bytes(b"\0asm\1\0\0\0")
     (wraps / "farm.mjs").write_text(
-        "let got;\nasync function inner({ module_or_path: m }) {\n"
+        "let got, ready;\nasync function inner({ module_or_path: m }) {\n"
         "  if (!(m instanceof Uint8Array)) throw new TypeError('Argument 0 must be a buffer source');\n"
         "  got = m.length;\n}\n"
-        "export default async function init(input) { await inner({ module_or_path: input }); }\n"
+        "export default function init(input) { return ready ??= inner({ module_or_path: input }); }\n"
         "export function fingerprint() { return `wrapped-${got}`; }\n", encoding="utf-8")
     farm.r.bundle_js = "farm.mjs"
     assert client.wasm_reference(farm.r, "k3") == ("wrapped-8", "")

@@ -46,7 +46,11 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
 - **Header:** live / reconnecting (backing off while the broker is away) / paused /
   reloading (a new page version: `remote-url.md`), `project · item`, the short commit
   (`+changes` when the key carries a diff hash), and the gate with its kind
-  (`✓ wasm reference ba4ec8…`).
+  (`✓ wasm reference ba4ec8…`). Live means the page's hello or any core's poll got an
+  answer in the last 7 s; the gate is the broker's view, else the last one this tab's
+  cores ran, so an idle tab shows both truthfully (96). A hello gives up after 10 s and is
+  tried again: a stalled one had left a tab at `no broker` with no gate while its cores
+  worked (161, and once on the sandbox in 96).
 - **Cores:** a tile per Web Worker (idle or running, its seed range, elapsed, its last ms a
   seed; running tiles pulse softly), the slider, Pause, and *Keep screen awake*.
 - **Throughput:** seeds a minute (the last 60 s) with a 2-minute sparkline; ms a seed per
@@ -60,7 +64,8 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
   ETA from its rate so far, the other workers (kind, cores, shards, ms a seed in this job),
   and the main box's load: CPU % and top consumers from the daemon's latest memory sample
   while fresh (what the inbox's load line shows; none while no daemon samples).
-- **Event log** (collapsed): joined, gated, shard N done, lost the race, tab hidden /
+- **Event log** (collapsed): joined, gated, shard N done, lost the race, shard N dropped
+  (its job closed or another copy is in: `remote-workers.md`, *Placement*), tab hidden /
   visible, lost / rejoined the broker, errors. **Copy diagnostics** copies a JSON snapshot
   (browser, cores, timings, the broker's last view, recent shards and events; never the
   token), shown selected in a text box too, where the clipboard API is missing.
