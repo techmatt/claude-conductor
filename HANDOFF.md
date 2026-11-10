@@ -35,7 +35,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 Last cleanup: 2026-11-07, after prompt 85
 
-Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`), aicomplete (`C:\Code\aicomplete-control`) and fractals (`C:\Code\fractals-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
+Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`), aicomplete (`C:\Code\aicomplete-control`), fractals (`C:\Code\fractals-control`) and workbench (`C:\Code\workbench-control`: small unrelated scripts, a subfolder each; 92). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it all works now.
 
 What is live, by area (each prompt's report says when it came; the doc named holds how it works now):
 
