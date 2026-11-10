@@ -267,14 +267,19 @@ def _daemon_alive(control: Path) -> bool:
 
 
 def _write_now(r: settings.Remote, line: str | None) -> None:
+    """The inbox's *Now* line. A reader holding the file (Windows refuses the replace or
+    unlink then) costs one 2 s beat, never the broker: aicomplete's died of it, 95."""
     path = r.control.joinpath(*settings.NOW_LINE)
-    if line is None:
-        path.unlink(missing_ok=True)
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(line + "\n", encoding="utf-8", newline="\n")
-    os.replace(tmp, path)
+    try:
+        if line is None:
+            path.unlink(missing_ok=True)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(line + "\n", encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
+    except OSError:
+        pass
 
 
 def main_load(control: Path) -> dict | None:

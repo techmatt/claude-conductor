@@ -347,3 +347,17 @@ def test_the_join_url_names_this_pc_unless_host_is_set(farm):
     assert broker.join_host(farm.r) in (socket.gethostname(), broker.lan_ip())
     farm.setup(host='"192.168.9.9"')
     assert broker.join_host(farm.r) == "192.168.9.9"
+
+
+def test_a_now_line_held_by_a_reader_never_kills_the_broker(farm, monkeypatch):
+    farm.setup()
+    path = farm.r.control.joinpath(*settings.NOW_LINE)
+    broker._write_now(farm.r, "one")
+
+    def refused(*a, **kw):
+        raise PermissionError(5, "Access is denied")      # Windows, while the inbox reads it
+    monkeypatch.setattr(broker.os, "replace", refused)
+    broker._write_now(farm.r, "two")
+    monkeypatch.setattr(type(path), "unlink", refused)
+    broker._write_now(farm.r, None)
+    assert path.read_text(encoding="utf-8") == "one\n"     # kept until the next beat
