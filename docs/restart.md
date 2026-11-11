@@ -15,9 +15,11 @@ holds in memory and runs the same recovery; three such ticks in a row stop it
    a command line) → **adopt** it: keep waiting, same deadline, same guard snapshot;
 4. the executor is gone but its log has a `result` line → finished while conductor was
    down; harvest it normally (`recover`);
-5. otherwise → **red**, reason *interrupted*. It is never re-run automatically — it may
-   have committed part of its work; a follow-up is a new queue item. Its worktree and
-   branch are kept.
+5. otherwise it was **cut off**: its session is resumed in place, once (*Machine
+   restarts*), never re-run from the top. When it can't be (a second cut, a watch, no
+   transcript, the worktree off its branch) → **red**, reason *interrupted* naming the
+   machine restart if there was one. Its worktree and branch are kept; a follow-up is a
+   new queue item.
 
 A judged item saves its outcome in `.run.json` before anything else happens. Phase
 `concluding` (not merging: red, readonly, launch failed — or merged/conflicted and
@@ -54,6 +56,31 @@ discarded (note `daemon stopped during setup; requeued`), the item goes back to
 `queue/` and `requeue` is logged (reason `daemon stopped during setup`). A stage is
 discarded (`the daemon stopped during the stage's setup`). No executor ran, so the rule
 holds.
+
+## Machine restarts
+
+A planned Windows Update restart killed workbench 009 at 2:35am (~2 h lost until 4:19am).
+`daemon_machine.py` and `winupdate.py` (105):
+
+- **Warning.** Every 10 minutes the daemon reads whether an update waits for a restart
+  (the `RebootRequired` / `RebootPending` registry keys) and the active hours. While one
+  does and anything runs or is queued, it logs one `warning` (`update_restart: true`,
+  `active`) per boot and day: outside active hours Windows may restart by itself. Restart
+  at a quiet moment or widen active hours. Off on other platforms.
+- **A cut-off run resumes.** Rule 5 resumes the same session (`claude -p --resume <id>`)
+  in its kept worktree with `.continueN.md` as its message: cut at (the log's last
+  write), why (the machine restarted, with Windows' logged reason from System event 1074,
+  back at the boot time; or the executor exited while conductor was down), everything
+  it started is gone, check state, redo the cut step, carry on; and any amendments sent
+  meanwhile. It stays in `running/` (scheduling never sees it), keeps its lock, and its
+  deadline moves by the time lost. Logged `recover` (`continued`, `why`, `cut`). Once
+  per item (`CONTINUE_LIMIT`): a second cut is red, *(after its resume)*. The log appends.
+- **`external_data: true`** (`items.md`): an item that changes data outside git (009
+  deduped `E:\Kids Photos`). Its prompt asks it to commit before each step that changes
+  the data and record how far each got, so its branch always matches the data; its
+  resume message says to check the data first. A red one's `red` event carries
+  `external_data` (its kept branch) and its inbox line says *`land:` first*: the
+  data matches that branch, not main. Landing mid-run is not built (HANDOFF *Open*).
 
 ## Self-restart
 

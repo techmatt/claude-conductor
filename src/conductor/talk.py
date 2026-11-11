@@ -158,6 +158,27 @@ def move_mail(control: Path, old: str, new: str) -> None:
         p.unlink(missing_ok=True)
 
 
+def waiting_amends(control: Path, item: str) -> list[dict]:
+    """`item`'s amendments not yet delivered, oldest first (read, not claimed). They outlive
+    a discarded stage: the next launch or resume takes them."""
+    out = []
+    for p in pending(control, item):
+        try:
+            msg = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if is_amend(msg):
+            out.append(msg)
+    return out
+
+
+def amends_line(ids: list) -> str:
+    """What a discarded stage's receipt and warning say of the amendments it leaves standing."""
+    nums = ", ".join(f"#{i}" for i in ids)
+    return (f"amendment{'s' if len(ids) > 1 else ''} {nums} still stand{'' if len(ids) > 1 else 's'}: "
+            "the new stage reads them and the resume message carries them; don't re-send")
+
+
 def pending(control: Path, item: str) -> list[Path]:
     d = mail_dir(control, item)
     return sorted((p for p in d.glob("*.json") if p.stem.isdigit()), key=lambda p: int(p.stem)) if d.is_dir() else []

@@ -184,7 +184,7 @@ class SetupMixin:
         elif executor.read_result(Path(rec["log"])) is not None:
             self.log.append("recover", item=item_id, note="executor finished while conductor was down")
             self.finish(run)
-        else:
+        elif not self._continue_interrupted(run):        # daemon_machine: resumed in place, once
             self.finish(run, interrupted=True)
 
     # ---------------------------------------------------------------- second halves
@@ -226,9 +226,10 @@ class SetupMixin:
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
         env = {executor.PORT_VAR: str(rec["port"])}
-        if item.remote:   # opt-in remote workers: `farm-seeds` (docs/remote-workers.md)
-            from . import remote
-            env |= remote.item_launch(cfg.control, paths.prompt, item.id)
+        from . import remote   # remote workers: `farm-seeds` (docs/remote-workers.md); off without [remote]
+        if remote.wants(cfg.control, item) and (farm := remote.item_launch(cfg.control, paths.prompt, item.id)):
+            env |= farm
+            rec["remote"] = True                 # what it ran with, `remote:` or the default (its start event)
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
                                                      settings=paths.settings, fork_of=rec.get("resume_session")),
@@ -251,6 +252,8 @@ class SetupMixin:
             extra |= {"resumed": True, "landed": resume["landed"]}
         if item.alongside:
             extra["alongside"] = item.alongside
+        if rec.get("remote"):
+            extra["remote"] = True
         if rec.get("resume_of"):
             extra |= {"resume_of": rec["resume_of"], "resume_session": rec["resume_session"]}
         if rec["beside"]:
@@ -307,7 +310,8 @@ class SetupMixin:
         paths.report.parent.mkdir(parents=True, exist_ok=True)
         for stale in (paths.stage_log, paths.stage_stderr):
             stale.unlink(missing_ok=True)
-        write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec, picks.section(cfg, item.needs_pick)))
+        write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec, picks.section(cfg, item.needs_pick),
+                                                                   talk.waiting_amends(cfg.control, item.id)))
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], None), Path(rec["worktree"]),
                                     paths.stage_prompt, paths.stage_log, paths.stage_stderr)

@@ -230,6 +230,9 @@ def describe(ev: Event) -> str:
             text = f"{who} red: {'; '.join(d.get('reasons', []))}"
             if d.get("after_red", "stop") == "stop":
                 text += f" — queue `{ev.repo}` held"
+            if d.get("external_data"):
+                text += (f" · **it changed data outside git**, which now matches `{d['external_data']}`, not main: "
+                         f"`land: {who}` first, then judge the rest")
         case "tamper":
             text = f"{who} changed the control folder; reverted: {'; '.join(d.get('changes', []))}"
             if d.get("attributed"):
@@ -333,9 +336,12 @@ def describe(ev: Event) -> str:
             text += f"; warning: {d['warning']}" if d.get("warning") else ""
         case "edited":
             text = f"{who} rewritten in the queue; it runs the new text" + (
-                " (its stage is discarded; it launches fresh)" if d.get("staged") else "")
+                " (its stage is discarded; it stages again from the new text)" if d.get("staged") else "")
+            text += f"; {talk.amends_line(d['amendments'])}" if d.get("staged") and d.get("amendments") else ""
         case "adopt":
             text = f"{who} {'stage ' if d.get('stage') else ''}adopted after restart (pid {d.get('pid')})"
+        case "recover" if d.get("continued"):
+            text = f"{who} {d.get('note')}"
         case "recover":
             text = f"{who} finished while conductor was down; harvested"
         case "requeue":

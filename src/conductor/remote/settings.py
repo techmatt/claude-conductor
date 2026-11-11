@@ -23,7 +23,7 @@ NOW_LINE = (".conductor", "now", "remote.line")   # the inbox's *Now* line while
 
 KEYS = {"dir","native", "native_build", "build", "bundle_js", "fingerprint", "merge", "port", "bind",
         "token", "shard_seeds", "seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds",
-        "main_slots", "start_cores", "accent", "host"}
+        "main_slots", "start_cores", "accent", "host", "default"}
 TOKEN_REQUEST = "remote-token"          # the request folder's suffix that pins a generated token (`pin_token`)
 
 
@@ -54,6 +54,7 @@ class Remote:
     accent: str = ACCENT                   # the worker page's accent colour (#rgb or #rrggbb)
     host: str = ""                         # the join URL's host: this PC's name unless set (an IP, say)
     project: str = ""                      # conductor.toml's `project` (else the control folder's name)
+    default: bool = False                  # an item without `remote:` gets farm-seeds (unless readonly or a template)
 
     @property
     def state(self) -> Path:
@@ -64,6 +65,7 @@ class Remote:
         counts as the one in effect, so pinning a generated one changes nothing."""
         d = asdict(self)
         d["control"], d["token"] = str(self.control), self.secret()
+        d.pop("default")                   # items' business, not the broker's
         return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:16]
 
     def secret(self) -> str:
@@ -119,6 +121,10 @@ def load(control: Path) -> Remote | None:
             if not isinstance(table[key], str):
                 raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a string")
             setattr(r, key, table[key])
+    if "default" in table:
+        if not isinstance(table["default"], bool):
+            raise RemoteError(f"{CONFIG_NAME}: remote.default must be true or false")
+        r.default = table["default"]
     if Path(r.dir).is_absolute() or ".." in Path(r.dir).parts:
         raise RemoteError(f"{CONFIG_NAME}: remote.dir must be a folder inside the repo")
     if not ACCENT_RE.match(r.accent):

@@ -23,7 +23,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
 | **review cards** / **tool X** | Signal `tool: <name>`: starts that `[tools.<name>]` if needed and opens it (`tool: <name> stop` stops it; `docs/app.md`, *Project tools*). |
-| **use remote workers** | With `[remote]` only: `remote: true` on the item, its body running seeded batches via `farm-seeds` (`docs/remote-workers.md`). |
+| **use remote workers** | `[remote]` only: `remote: true` (or `[remote] default`), seeded batches via `farm-seeds` (`docs/remote-workers.md`). |
 | **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
 | **rename repo R to S** [at P] | Only when nothing of R is queued, staged or running: **stop conductor**, then tells Matt to run `uv run conductor rename-repo R S [--path P] --control <control>` in `C:\Code\claude-conductor` and start the daemon. History carries over; `state.md`'s prose about R is fixed by request. |

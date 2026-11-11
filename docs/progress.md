@@ -161,7 +161,7 @@ delivery; its id is the amendment's number) and moves it into the item's mailbox
 
 - **queued** (not staged; or in setup): appended to the prompt at launch, each under `## Amendment #n
   (5:25pm, via planner): it amends the prompt above and wins where they conflict`.
-- **staging / staged** (a staged resume in setup too): the stage is kept; at resume the amendments follow the resume
+- **staging / staged** (a staged resume in setup too): the stage is kept (a rewrite's new stage reads them: `items.md`); at resume the amendments follow the resume
   message, which tells the executor each amends the prompt it read and overrides the
   plan it made where they conflict.
 - **running**: through the message hook, whole (multi-line), as `AMENDMENT #n from

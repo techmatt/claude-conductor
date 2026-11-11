@@ -15,7 +15,7 @@ NAME_RE = re.compile(r"^(\d{3,}|W\d+)_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 WATCH_RE = re.compile(r"^W(\d+)_")     # a watch's own series (`W12_watch`): never a queue number
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
           "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules", "needs_pick",
-          "remote"}
+          "remote", "external_data"}
 GIST_CHARS = 160
 
 
@@ -36,7 +36,8 @@ class Item:
     ultracode: bool = False                             # launch with Claude Code's ultracode on
     audit: bool = False                                 # keep audit notes beside the report
     rules: bool = False                                 # bumps the rules revision: carries `[rules]` parked edits
-    remote: bool = False                                # `farm-seeds` on its PATH, with `[remote]` (conductor.remote)
+    remote: bool | None = None                          # `farm-seeds` on its PATH, with `[remote]`; None: its `default`
+    external_data: bool = False                         # changes data outside git (restart.md, *Interrupted items*)
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     alongside: str | None = None                        # what it touches: may start beside running items
     resume_of: str | None = None                        # `resume:` the finished item whose session it forks
@@ -54,7 +55,7 @@ class Item:
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
                 "ultracode": self.ultracode, "audit": self.audit, "template": self.template,
                 "alongside": self.alongside, "resume_of": self.resume_of, "rules": self.rules,
-                "needs_pick": self.needs_pick}
+                "needs_pick": self.needs_pick, "external_data": self.external_data}
 
     def gist(self) -> str:
         """One line on what the item does, for the items started beside it: its `alongside`
@@ -105,11 +106,13 @@ def parse(path: Path, repo: str) -> Item:
     item.after_red = str(meta.get("after_red", "stop"))
     if item.after_red not in ("stop", "continue"):
         item.errors.append("`after_red` must be stop or continue")
-    for flag in ("needs_planner", "readonly", "ultracode", "audit", "rules", "remote"):
+    for flag in ("needs_planner", "readonly", "ultracode", "audit", "rules", "remote", "external_data"):
         value = meta.get(flag, False)
         if not isinstance(value, bool):
             item.errors.append(f"`{flag}` must be true or false")
         setattr(item, flag, bool(value))
+    if "remote" not in meta:
+        item.remote = None                              # the project's `[remote] default` decides
     if meta.get("max_hours") is not None:
         try:
             item.max_hours = float(meta["max_hours"])

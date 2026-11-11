@@ -18,7 +18,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
-from . import daemon_signals, inbox, items, parked, request
+from . import daemon_signals, inbox, items, parked, request, talk
 from .events import Event
 from .util import FrontMatterError, clock, now, read_text, split_front_matter, write_text
 
@@ -123,6 +123,7 @@ class ReceiptsMixin:
                 how = "the launch it raced was undone; " if d.get("launching") else ""
                 how += "its stage is redone" if d.get("staged") else "it runs the new text"
                 how += f"; now {d['starts']}" if d.get("starts") else ""     # only when the start moved
+                how += f"; {talk.amends_line(d['amendments'])}" if d.get("staged") and d.get("amendments") else ""
                 self._write_receipt(rel, [ev], result=f"rewritten: {how}", warning=d.get("warning"))
             case "invalid" if ev.item and rel.startswith("queue/"):
                 self._write_receipt(rel, [ev], reason=self._reason(ev))

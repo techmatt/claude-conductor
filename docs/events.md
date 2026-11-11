@@ -13,7 +13,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item, of; `memory.md`), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any; starts (when it will start and why: `receipts.md`); parked (the parked edits it will carry as the queue stands); warning (a `depends_on` that can't be met) |
-| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start); warning |
+| `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); amendments (ids still standing); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start); warning |
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, an item is set aside (its dependency cancelled), or a merge waits (reason changed) | reason; merge; alone (only this item holds) |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
@@ -28,12 +28,12 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `checkout_dirty` | a fast-forward of the main checkout failed part-way and left changes that are not the branch's, so nothing was put back (red; the merge holds: `worktrees.md`) | branch, files (the paths not the branch's), error, note |
 | `paths_violation` | the branch changed files outside `paths` (red) | files, paths_declared |
 | `adopt` | restart found the executor (or stage: `stage: true`) alive | pid, session_id |
-| `recover` | restart found it finished while the daemon was down, or a merge to resume | note |
+| `recover` | restart found it finished while the daemon was down, a merge to resume, or a cut-off run resumed (`restart.md`) | note; continued, pid, cut, why, deadline |
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
 | `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow and friction (as written, or null), pick (`<repo>/<path>`, or null; picks: all of them, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
 | `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on; or an `audit_used:` signal (no item, `by`) | notes (item ids); paths (their files) |
-| `red` | the item's status is red | reasons, after_red |
+| `red` | the item's status is red | reasons, after_red; external_data (its kept branch) |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
 | `drift` | control folder changed with no executor running, or by conductor's own git | changes, note; own |
 | `repo_renamed` | `conductor rename-repo` gave a repo a new key; every earlier row now names the new one (`rename-repo.md`) | old, new, path, moved, sha, by |

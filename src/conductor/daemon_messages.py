@@ -252,6 +252,11 @@ class MessagesMixin:
                 retry_io(p.unlink)
         return fresh
 
+    def _kept_amends(self, item_id: str) -> dict:
+        """`{"amendments": [ids]}` for amendments still waiting for `item_id`, else {}."""
+        ids = [m.get("id") for m in talk.waiting_amends(self.cfg.control, item_id)]
+        return {"amendments": ids} if ids else {}
+
     def _amend_state(self, item_id: str, view: state.View, queued: set[str]) -> str | None:
         """queued | staging | staged | running | merging | finished, or None (not seen)."""
         rec = run.rec if (run := self.runs.get(item_id)) else view.running.get(item_id)

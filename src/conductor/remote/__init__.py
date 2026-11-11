@@ -7,8 +7,9 @@ the project's `conductor.toml` has a `[remote]` section, and none able to raise:
   pinning a generated token into `[remote]` (`pin_token`);
 - `keep_broker`, from `Daemon.tick`: a broker that died is started again (checked every
   `KEEP_SECONDS`);
-- `item_launch`, from `_start_exec` for an item with `remote: true`: the `farm-seeds`
-  command on its PATH, and one paragraph naming it at the end of its prompt.
+- `item_launch`, from `_start_exec` for an item `wants` says farms (`remote: true`, or no
+  `remote:` under `[remote] default = true`): the `farm-seeds` command on its PATH, and one
+  paragraph naming it at the end of its prompt.
 
 The app imports `app.py` (its chip and Workers tab) if it is there, and shows nothing for a
 project without `[remote]`. Deleting this folder, those hooks, that import (and
@@ -121,6 +122,21 @@ def pin_token(r) -> None:
         f"---\ntargets: [{settings.CONFIG_NAME}]\nmessage: \"remote: pin the worker page's token, so its URL never "
         f"changes\"\n---\n<<<<<<< {settings.CONFIG_NAME}\n{header[0]}\n=======\n{header[0]}\n"
         f"token = \"{r.secret()}\"\n>>>>>>>\n", encoding="utf-8", newline="\n")
+
+
+def wants(control: Path, item) -> bool:
+    """Whether an item gets `farm-seeds`: its `remote:` when it says, else `[remote] default`
+    for an item that is neither readonly nor a template. Never raises."""
+    if item.remote is not None:
+        return bool(item.remote)
+    if item.readonly or item.template:
+        return False
+    try:
+        from . import settings
+        r = settings.load(control)
+        return bool(r and r.default)
+    except Exception:                            # noqa: BLE001 - a bad [remote] warns at daemon start
+        return False
 
 
 def item_launch(control: Path, prompt: Path, item: str = "") -> dict[str, str]:

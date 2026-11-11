@@ -406,6 +406,23 @@ RESUME_AMEND = """
 {text}
 """
 
+EXTERNAL = """
+
+---
+
+Data outside git. This item changes data outside the repo, which no merge can undo. Commit
+the code (and any progress or state file) before each step that changes that data, and
+record in a committed file how far each step got, so that if you are cut off, your branch
+matches the data and can land as it is.
+"""
+
+STAGE_AMENDS = """
+---
+
+Amendments already sent for this item: each amends the prompt above and wins where they
+conflict. Plan with them; they come again with the resume message.
+"""
+
 
 MERGE = """\
 You are a conductor merge executor: an unattended headless Claude Code session for
@@ -557,7 +574,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         pick=PICK if pick else "", pick_line=PICK_LINE if pick else "",
         tail="" if resume else PROMPT_FOLLOWS,
     )
-    extra = choices + parked_mod.section(list(parked))
+    extra = choices + parked_mod.section(list(parked)) + (EXTERNAL if item.external_data else "")
     if not resume:
         return text + body(cfg, item, notes, usage) + extra + "".join(_amend(AMEND, m) for m in amends)
     n = resume["landed"]
@@ -627,9 +644,11 @@ def wants_calibrate(item: Item) -> bool:
     return item.rules or bool(CALIBRATE_RE.search(item.body))
 
 
-def build_stage_prompt(cfg: Config, item: Item, run: dict, choices: str = "") -> str:
+def build_stage_prompt(cfg: Config, item: Item, run: dict, choices: str = "", amends: list[dict] = ()) -> str:
+    """`amends`: amendments still waiting (a rewrite discarded the stage they were sent to)."""
+    tail = (STAGE_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
     return STAGE.format(item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
-                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item) + choices
+                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item) + choices + tail
 
 
 def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:

@@ -159,6 +159,13 @@ def no_conductor_reports(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_update_pending(monkeypatch):
+    """This box's own Windows Update state never reaches a test's events (105)."""
+    from conductor import winupdate
+    monkeypatch.setattr(winupdate, "pending", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def claude_config(tmp_path, monkeypatch):
     """Claude Code's config folder, where the fake executor keeps its session transcripts
     and a resume item's launch looks for its original's: never the real `~/.claude`."""

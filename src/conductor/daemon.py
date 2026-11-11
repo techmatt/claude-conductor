@@ -34,6 +34,7 @@ from . import (audits, desktop, executor, git, globs, guard, inbox, items, load,
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
+from .daemon_machine import MachineMixin
 from .daemon_memory import MemoryMixin
 from .daemon_merge import MergeMixin
 from .daemon_messages import MessagesMixin
@@ -104,7 +105,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
 
 
 class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
-             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin):
+             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -364,6 +365,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_merges()
         self.process_pushes()
         self.sample_memory()
+        self.check_update_restart()     # daemon_machine
         from . import remote        # a broker that died starts again: a no-op without `[remote]`
         remote.keep_broker(self.cfg.control, lambda note: self.log.append("warning", note=note))
         self.night_shift()
@@ -611,7 +613,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     moved = {"starts": starts} if self.starts.get(item.id) != starts else {}
                     self.starts[item.id] = starts
                     self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    staged=item.id in view.staged, **moved, **dep_warning(item))
+                                    staged=item.id in view.staged, **moved, **dep_warning(item),
+                                    **self._kept_amends(item.id))
                 self.queued_hashes[item.id] = digest
                 if item.errors:
                     # Per file version and reason: a `resume:` item's reason moves with the queue.
@@ -636,7 +639,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 view.staged.pop(item_id)
             elif file_hash(item.path) != srec.get("item_hash"):
                 if item_id not in edited:         # rewritten while the daemon was down
-                    self.log.append("edited", item=item_id, paths=[self.cfg.rel(item.path)], staged=True)
+                    self.log.append("edited", item=item_id, paths=[self.cfg.rel(item.path)], staged=True,
+                                    **self._kept_amends(item_id))
                 self._discard_stage(self.stages.get(item_id) or self._stage_run(srec),
                                     f"the item file changed while {srec.get('phase', 'staged')}",
                                     then="it starts again from the new text")
@@ -930,6 +934,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             # record must go regardless, or the head waits on a stage nobody tracks.
             self._worktree_op(rec, "discarded", "stage discarded")
         retry_io(run.rec_path.unlink, True)
+        if kept := self._kept_amends(rec["item"]).get("amendments"):
+            then += f"; {talk.amends_line(kept)}"
         self.log.append("warning", item=rec["item"], note=f"stage discarded: {reason}; {then}")
 
     def resume(self, item: items.Item, srec: dict) -> None:
@@ -978,7 +984,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         elif killed:
             reasons.append(f"killed at max_hours {rec['max_hours']:g}")
         elif interrupted:
-            reasons.append("interrupted: executor gone after a daemon restart and left no result")
+            reasons.append(f"interrupted: {rec.get('interrupted') or 'executor gone after a daemon restart'}"
+                           + (" (after its resume)" if rec.get("continued") else "") + "; it left no result")
         elif result is None:
             reasons.append(f"executor left no result (exit code {exit_code})")
         elif result.get("is_error"):

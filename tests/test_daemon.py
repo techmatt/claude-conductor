@@ -375,6 +375,7 @@ def test_restart_adopts_live_executor(env):
 
 @pytest.mark.slow
 def test_restart_with_dead_executor_is_red_never_rerun(env):
+    # Killed at once, before its session has a transcript: nothing to resume (105), so red.
     env.queue("001_long", "FAKE sleep 30")
     env.queue("002_next", "FAKE report done")
     env.tick_until(lambda: env.events("start"))

@@ -309,8 +309,10 @@ class MergeMixin:
         if text := self._outcome_stamp(rec):
             stamp_report(Path(rec["report"]), text)
         if out["status"] == "red":
+            # Its data outside git now matches the kept branch, not main: the inbox offers `land:`.
+            outside = {"external_data": rec["branch"]} if rec.get("external_data") and rec.get("branch") else {}
             self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
-                            reasons=out["reasons"], after_red=rec.get("after_red", "stop"))
+                            reasons=out["reasons"], after_red=rec.get("after_red", "stop"), **outside)
         if out.get("conductor"):
             extra["conductor"] = out["conductor"]       # a red of conductor's making, landed anyway
         if rec.get("parked"):
