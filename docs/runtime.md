@@ -18,6 +18,7 @@ write.
 - `open.log`: `open:` launches (`open.md`).
 - `restart.ready`: the self-restart handshake (`restart.md`).
 - `memory.jsonl`: memory samples (`memory.md`).
+- `load-items.json`: this daemon's items' pids, for other daemons' load lines (`memory.md`).
 - `push/<target>.log`: the last push's output (`push.md`).
 - `leftovers.json`: worktrees to retry removing (`worktrees.md`).
 - `merge-attributes/<repo>.attributes`: the union-merge attributes a rebase lands `append_only` files with (`worktrees.md`).

@@ -316,6 +316,7 @@ def test_stop_daemon_leaves_executors_running(env):
     env.d.runs.clear()
     env.d.log.close()
     d = Daemon(config.load(env.control), echo=env.lines.append, notifier=env.notifier)
+    d._load.sample = lambda owned: None             # as env.new_daemon: no ~0.5s scan of the box
     env.signal("stop.signal", "by: app\nstop: daemon")
     d.run_forever()                               # returns on its own
     env.d = env.new_daemon()
@@ -451,6 +452,7 @@ def test_a_reorder_retires_the_old_ids_holds_in_the_inbox(env):
 def test_a_tick_that_fails_on_a_locked_file_recovers(env, monkeypatch):
     env.d.log.close()
     d = Daemon(config.load(env.control), echo=env.lines.append, notifier=env.notifier)
+    d._load.sample = lambda owned: None             # as env.new_daemon: no ~0.5s scan of the box
     real, calls = Daemon.process_requests, []
 
     def flaky(self):

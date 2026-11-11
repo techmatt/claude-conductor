@@ -7,68 +7,10 @@ import time
 
 import pytest
 
-from conductor.remote import broker, client, settings, worker
+from conductor.remote import broker, client, settings
 from conductor.remote.board import Board
 
-from .conftest import git, init_repo, remote_section
-
-
-@pytest.fixture
-def farm(tmp_path, monkeypatch):
-    """A control folder with `[remote]`, a code repo, and a broker serving on a free port."""
-    control, repo = tmp_path / "control", tmp_path / "code"
-    init_repo(repo, {"README.md": "x\n"})
-
-    class F:
-        servers, stops = [], []
-
-        def setup(self, **over):
-            control.mkdir(exist_ok=True)
-            (control / "conductor.toml").write_text('project = "t"\n[repos]\ncode = "../code"\n' + remote_section(**over),
-                                                    encoding="utf-8")
-            self.r = settings.load(control)
-            self.board = Board(self.r.state, self.r.lease_seconds, self.r.fresh_seconds, self.r.bundle_js,
-                               native_argv=self.r.native)
-            server = broker.make_server(self.r, self.board)
-            threading.Thread(target=server.serve_forever, daemon=True).start()
-            self.servers.append(server)
-            port = server.server_address[1]
-            self.r.state.mkdir(parents=True, exist_ok=True)
-            (self.r.state / "broker.json").write_text(json.dumps(
-                {"pid": 0, "local": f"http://127.0.0.1:{port}/w/{self.r.secret()}/"}), encoding="utf-8")
-            monkeypatch.setenv(settings.CONTROL_VAR, str(control))
-            monkeypatch.chdir(repo)
-            return self
-
-        def worker(self, wid, **kw):
-            stop = threading.Event()
-            self.stops.append(stop)
-            threading.Thread(target=worker.work, args=(client.Broker.find(self.r), wid, kw.pop("cores", 1),
-                                                       self.r.fingerprint), kwargs={**kw, "stop": stop},
-                             daemon=True).start()
-            end = time.time() + 10
-            while not any(w.id == wid for w in self.board.live()) and time.time() < end:
-                time.sleep(0.02)
-
-        def run(self, first, count, *args, out="out.txt"):
-            code = client.main([str(first), str(count), str(tmp_path / out), *args])
-            return code, (tmp_path / out).read_bytes() if (tmp_path / out).exists() else None
-
-        def local(self, first, count, *args):
-            path = tmp_path / "local.txt"
-            client.run_native(self.r.native, repo, first, count, path, list(args))
-            return path.read_bytes()
-
-        def record(self):
-            return json.loads(max((self.r.state / "jobs").glob("*/job.json"), key=lambda p: p.stat().st_mtime)
-                              .read_text(encoding="utf-8"))
-
-    f = F()
-    yield f
-    for s in f.stops:
-        s.set()
-    for s in f.servers:
-        s.shutdown()
+from .conftest import git
 
 
 def test_a_job_splits_across_the_main_box_and_a_worker_and_merges_byte_identical(farm, capsys):
@@ -174,7 +116,7 @@ def test_the_broker_dying_mid_job_finishes_the_rest_locally(farm, capsys, monkey
     def die():
         server.shutdown()
         server.server_close()
-    threading.Timer(0.4, die).start()
+    farm.once_a_job_is_open(die)
     code, out = farm.run(0, 100, "--sleep", "0.01")
     assert (code, out) == (0, farm.local(0, 100))
     assert "broker went away" in capsys.readouterr().err
@@ -312,7 +254,7 @@ def test_a_broker_restarting_mid_job_loses_nothing(farm, capsys):
         new = broker.make_server(farm.r, b2, port=port)
         threading.Thread(target=new.serve_forever, daemon=True).start()
         farm.servers.append(new)
-    threading.Timer(0.5, restart).start()
+    farm.once_a_job_is_open(restart)
     code, out = farm.run(0, 300, "--sleep", "0.01")
     assert (code, out) == (0, farm.local(0, 300))
     err = capsys.readouterr().err

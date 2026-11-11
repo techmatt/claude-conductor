@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~85-130s; 483 tests; 2026-11-09)
+uv run pytest            # the fast lane, after every change (~90-130s; 526 tests; 2026-11-10)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~215-300s; 634 tests); run this before committing
+uv run pytest -m ""      # everything (~230-300s; 668 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -25,7 +25,7 @@ each other's; a green run removes its own, the next run any whose pid is gone. `
 its repos have no sample hooks. Keep new tests deterministic under load: hold an executor open with `env.hold()`
 (a `FAKE wait-for` line) and let it go with `env.release()` rather than a fixed `FAKE
 sleep`, which races a loaded machine. `env.tick_until` and `env.hold()` give up only after
-`WAIT_SECONDS` (180s, `conftest.py`): a passing test never waits it out, and a project's
+`WAIT_SECONDS` (180s, `tests/conftest.py`): a passing test never waits it out, and a project's
 executor holding the CPU no longer fails the full lane (58 and 59 committed red from it).
 Under 12 burning cores plus a second suite run (2026-10-30) the full lane took 25 min and
 398 of 401 passed: two still timed out and one push-batching test was widened. Every `Env` copies a code repo and control folder

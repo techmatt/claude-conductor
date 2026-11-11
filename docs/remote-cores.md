@@ -31,7 +31,7 @@ job starts its measurements over.
 20%, not less: a CPU's all-core clock is below its one-core clock, a fall that is no fault.
 
 A loss is the main box's copy of a shard landing while the tab still held it (the tab's
-copy is dropped, `remote-workers.md`, *Placement*), or the tab's copy arriving second. A
+copy is dropped, `remote-placement.md`, *The tail*), or the tab's copy arriving second. A
 shard is counted at the cores it was handed out under (the tab's last hello said how many
 were running), and only while that is the plan's count: a shard begun before a raise and
 finishing after it ran beside the new cores, and would drag the old count's rate down.

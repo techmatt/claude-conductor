@@ -3,8 +3,9 @@
 **Progress.** The executor's second tool, `progress` (`mcp__conductor__progress`):
 
 ```
-progress(note, eta?, done?, remaining?, outline?)   # eta: free text (5:40pm (by rate), 25m (to the cap)); done/remaining: numbers
+progress(note, eta?, done?, remaining?, outline?, answered?)   # eta: free text (5:40pm (by rate), 25m (to the cap)); done/remaining: numbers
                                                     # outline: [{title, eta, done}], see Outline
+                                                    # answered: an open question's id a message answered (questions.md)
 ```
 
 It returns at once (`Logged; carry on.`, then the clock, `Now 11:03pm, 3h17m left to the cap.`,

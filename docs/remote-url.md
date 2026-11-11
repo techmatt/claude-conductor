@@ -20,7 +20,7 @@ with no action from Matt.
   (2 s, 4, 8, 16, then every 30 s, jittered) and show `reconnecting`; a core's result is
   retried ~45 s so it lands on the new broker. The board (jobs, shards done and leased,
   workers and their gates) is saved to `board.json` every 2 s and taken up at start, so a
-  gated worker goes straight on (one that failed its gate is gated again, 95) and `farm-seeds` carries on after its wait (`remote-workers.md`, *Placement*).
+  gated worker goes straight on (one that failed its gate is gated again, 95) and `farm-seeds` carries on after its wait (`remote-placement.md`, *Dropped shards and a broker that goes away*).
 - **A daemon restart** leaves the broker alone (same settings).
 - **A new commit**: the next job's key asks for the new bundle and a new gate; the tab
   loads it and re-gates (sandbox, 94: `c46fe7d` re-gated, 44 of 60 shards on the tab).

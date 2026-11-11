@@ -1,6 +1,5 @@
 """The broker's core count for a browser worker (`cores.py`), alone and through the board."""
 
-import json
 
 from conductor.remote import cores, diag
 from conductor.remote.board import Board

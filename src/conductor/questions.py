@@ -29,6 +29,7 @@ from pathlib import Path
 import yaml
 
 from .util import FrontMatterError, read_text, split_front_matter, stamp
+from .util import write_text as _write    # atomic, retried while a reader holds the file
 
 ANSWER_SETTLE_SECONDS = 1.0       # an answer file is read once it stops changing
 OVERRIDES_RE = re.compile(r"^[\s*_#`]*default overrides prompt:\s*(.+)$", re.IGNORECASE)
@@ -134,13 +135,6 @@ def create(control: Path, item: str, question: str, options: list[str], default:
 
 def stamp_at(epoch: float) -> str:
     return stamp(datetime.fromtimestamp(epoch).astimezone())
-
-
-def _write(path: Path, text: str) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
 
 
 def load(path: Path) -> Question | None:

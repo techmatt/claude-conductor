@@ -199,5 +199,3 @@ def test_the_brokers_hello_takes_the_pages_log(farm):
     assert diag.read_page(farm.r.state, "b1")[0][1:] == ("page", "joined")
     assert json.loads(json.dumps(reply))["ok"]
 
-
-from .test_remote_flow import farm  # noqa: E402,F401  the flow tests' fixture

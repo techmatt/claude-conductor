@@ -10,7 +10,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `daemon_restart` | the old daemon restarts itself on a code change or a `restart: daemon` (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`, or `asked by <by> (restart: daemon)` with paths), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
 | `daemon_died` | at start: the previous daemon never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `load_high` | under `load_warn_free_threads` (2) free for 3 samples and `load_warn_seconds` (180), again every `load_tell_minutes` (15) while it lasts (`memory.md`); inbox only, no toast (70); messages only an item that is a real share of the load (80) | free, keep, items (told now), causes (items that are a real share), load, caution |
-| `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item; `memory.md`), action |
+| `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item, of; `memory.md`), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
 | `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`); `shares_number` (the other items with its number), if any; starts (when it will start and why: `receipts.md`); parked (the parked edits it will carry as the queue stands); warning (a `depends_on` that can't be met) |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start); warning |
@@ -68,7 +68,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `answer` | answered before it resolved | question, text, outcome, reason, waited_seconds, deadline (moved, when blocking); by (the answer file's `by:`) |
 | `default` | the default deadline passed unanswered | question, text (the default), outcome, reason, waited_seconds |
 | `late` | an answer file after a default or close | question, text, outcome, note; by |
-| `question_closed` | resolved with no answer: item finished, or the tool call was cancelled | question, text, outcome, reason, waited_seconds |
+| `question_closed` | resolved with no answer: item finished, the tool call cancelled, or a message answered it (`by_message`) | question, text, outcome, reason, waited_seconds |
 | `queue_empty` | an item finished and its repo has nothing queued or running | last |
 | `watch_flag` | the night shift's check flagged something (`night-shift.md`) | flag (`quiet`, `eta`, `question`, `blocked`, `backlog`, `memory`, `run_failed`), key, text; watch (`skipped: <why>` for a stall no watch looked at) |
 | `watch_answer` | a watch's `answer:` action answered a question | question, text, source, watch |

@@ -114,7 +114,7 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
   while fresh (what the inbox's load line shows; none while no daemon samples).
 - **Event log** (collapsed; with each core's steps it is also uploaded to the broker: `remote-diag.md`): joined, renamed, a bundle fetched and compiled (MB, seconds; the
   first core ready), gated, shard N done, lost the race, shard N dropped
-  (its job closed or another copy is in: `remote-workers.md`, *Placement*), tab hidden /
+  (its job closed or another copy is in: `remote-placement.md`, *The tail*), tab hidden /
   visible, lost / rejoined the broker, errors. **Copy diagnostics** copies a JSON snapshot
   (browser, cores, timings, the broker's last view, recent shards and events; never the
   token), shown selected in a text box too, where the clipboard API is missing.

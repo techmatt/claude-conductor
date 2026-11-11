@@ -1,14 +1,18 @@
 """Fixtures for the remote-workers tests. They live inside the module, so deleting it takes
 them too; the few root-conftest fixtures they need are repeated here."""
 
+import json
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 import pytest
 
 from conductor import config, daemon, daemon_signals, request
+from conductor.remote import broker, client, settings, worker
+from conductor.remote.board import Board
 
 ROOT = Path(__file__).resolve().parents[4]
 FAKE_CLAUDE = ROOT / "tests" / "fake_claude.py"
@@ -107,3 +111,71 @@ def project(tmp_path):
     yield make
     for p in made:
         p.close()
+
+
+@pytest.fixture
+def farm(tmp_path, monkeypatch):
+    """A control folder with `[remote]`, a code repo, and a broker serving on a free port."""
+    control, repo = tmp_path / "control", tmp_path / "code"
+    init_repo(repo, {"README.md": "x\n"})
+
+    class F:
+        servers, stops = [], []
+
+        def setup(self, **over):
+            control.mkdir(exist_ok=True)
+            (control / "conductor.toml").write_text('project = "t"\n[repos]\ncode = "../code"\n' + remote_section(**over),
+                                                    encoding="utf-8")
+            self.r = settings.load(control)
+            self.board = Board(self.r.state, self.r.lease_seconds, self.r.fresh_seconds, self.r.bundle_js,
+                               native_argv=self.r.native)
+            server = broker.make_server(self.r, self.board)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.servers.append(server)
+            port = server.server_address[1]
+            self.r.state.mkdir(parents=True, exist_ok=True)
+            (self.r.state / "broker.json").write_text(json.dumps(
+                {"pid": 0, "local": f"http://127.0.0.1:{port}/w/{self.r.secret()}/"}), encoding="utf-8")
+            monkeypatch.setenv(settings.CONTROL_VAR, str(control))
+            monkeypatch.chdir(repo)
+            return self
+
+        def worker(self, wid, **kw):
+            stop = threading.Event()
+            self.stops.append(stop)
+            threading.Thread(target=worker.work, args=(client.Broker.find(self.r), wid, kw.pop("cores", 1),
+                                                       self.r.fingerprint), kwargs={**kw, "stop": stop},
+                             daemon=True).start()
+            end = time.time() + 10
+            while not any(w.id == wid for w in self.board.live()) and time.time() < end:
+                time.sleep(0.02)
+
+        def once_a_job_is_open(self, fn):
+            """Run `fn` on a thread as soon as the board holds a job: a fixed timer can fire
+            before a loaded box has posted it."""
+            def wait():
+                end = time.time() + WAIT
+                while not self.board.jobs and time.time() < end:
+                    time.sleep(0.01)
+                fn()
+            threading.Thread(target=wait, daemon=True).start()
+
+        def run(self, first, count, *args, out="out.txt"):
+            code = client.main([str(first), str(count), str(tmp_path / out), *args])
+            return code, (tmp_path / out).read_bytes() if (tmp_path / out).exists() else None
+
+        def local(self, first, count, *args):
+            path = tmp_path / "local.txt"
+            client.run_native(self.r.native, repo, first, count, path, list(args))
+            return path.read_bytes()
+
+        def record(self):
+            return json.loads(max((self.r.state / "jobs").glob("*/job.json"), key=lambda p: p.stat().st_mtime)
+                              .read_text(encoding="utf-8"))
+
+    f = F()
+    yield f
+    for s in f.stops:
+        s.set()
+    for s in f.servers:
+        s.shutdown()

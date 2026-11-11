@@ -98,7 +98,7 @@ and digest list them under *Staged plans' questions* until the item launches; an
 answers them (066's "96 games or 96 a cell?" sat unread through a 48-minute lock wait).
 
 The ask server resolves the question by creating `<id>.result.json` exclusively
-(`outcome`: `answered` | `default` | `cancelled`, `text`, `at`, `by`); the daemon only
+(`outcome`: `answered` | `default` | `cancelled` | `by_message`, `text`, `at`, `by`); the daemon only
 creates one for `closed`. So a question resolves exactly once, and an executor gets its
 answer even while the daemon is down. The daemon observes the folder each tick and logs
 `ask`, `answer`, `default`, `late` and `question_closed`, each naming the question
