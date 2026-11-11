@@ -1,6 +1,9 @@
-"""Every test run's temp folders live under the repo, in `.pytest-tmp/<pid>`, not
-`%TEMP%\\pytest-of-<user>`: `C:\\Code` is under the Defender exclusion and `%TEMP%` is not,
-and Defender averaged ~18% CPU scanning a run's folders there (aicomplete 170).
+"""Every test run's temp folders live beside the repo, in `../<repo>-pytest-tmp/<pid>`,
+not `%TEMP%\\pytest-of-<user>`: `C:\\Code` is under the Defender exclusion and `%TEMP%` is
+not, and Defender averaged ~18% CPU scanning a run's folders there (aicomplete 170).
+Not inside the repo either (103 had `.pytest-tmp`): in a git working tree, git-ignored or
+not, TortoiseGit's status cache and Explorer's overlays react to every file a test makes,
+~45 CPU-seconds a 6,000 files against ~0 beside it, and Defender's share doubles (104).
 
 One folder per run (the controller's pid), so two runs at once never clear each other's;
 a folder whose run is gone is removed at the next run's start. xdist hands each worker
@@ -14,7 +17,8 @@ from pathlib import Path
 import psutil
 import pytest
 
-TMP_ROOT = Path(__file__).parent / ".pytest-tmp"
+REPO = Path(__file__).resolve().parent
+TMP_ROOT = REPO.parent / f"{REPO.name}-pytest-tmp"
 
 
 def _writable(fn, path, _exc) -> None:

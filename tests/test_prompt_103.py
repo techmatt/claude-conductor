@@ -116,9 +116,10 @@ def test_the_preambles_ask_for_a_progress_line_on_a_long_job_and_for_closing(env
     assert len(light.split()) <= 430
 
 
-# ------------------------------------------------------------------ test temp under the repo
-def test_this_run_keeps_its_temp_folders_under_the_repo(tmp_path):
-    root = Path(__file__).resolve().parents[1] / ".pytest-tmp"
-    assert root in tmp_path.resolve().parents
+# ------------------------------------------------------------------ test temp beside the repo
+def test_this_run_keeps_its_temp_folders_beside_the_repo_outside_its_tree(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    root = repo.parent / f"{repo.name}-pytest-tmp"          # 104: not inside the working tree
+    assert root in tmp_path.resolve().parents and repo not in tmp_path.resolve().parents
     assert "pytest-of-" not in str(tmp_path)
     assert os.environ.get("PYTEST_XDIST_WORKER") is None or "popen-gw" in str(tmp_path)

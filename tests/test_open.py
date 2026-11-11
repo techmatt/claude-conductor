@@ -16,8 +16,9 @@ def send(env, text: str, name: str = "o.signal") -> None:
 
 @pytest.fixture(autouse=True)
 def checkout_elsewhere(monkeypatch, tmp_path_factory):
-    """Test folders live in conductor's checkout (`.pytest-tmp`, 103), which `open:` allows:
-    the checkout root moves to an empty folder, so these paths read as outside it again."""
+    """`open:` allows paths in conductor's checkout, where a test folder can live (103's
+    `.pytest-tmp`, or a `--basetemp` by hand): the checkout root moves to an empty folder,
+    so these paths always read as outside it."""
     monkeypatch.setattr(desktop, "CHECKOUT", tmp_path_factory.mktemp("no-checkout"))
 
 

@@ -117,16 +117,11 @@ message: "state: v0.2"
 - **Memory.** *Now*'s first line. At `pressure`, say what is eating it; raise `memory_critical` (red) at once. `daemon_died` (red): its items are red `interrupted`; say what was lost, propose follow-ups.
 - **`run_failed`** (red) ends with its log's tail: say what broke.
 - **`checkout_dirty`** (red): a merge stopped part-way, the main checkout holding changes not the branch's: name the files to Matt; once he cleans them it lands by itself.
-- **Picks.** A prompt producing candidates says "picker" (brings the schema), under a new name, images in a `shared` folder (check `conductor.toml`). "Which go forward": a `kind: many` row, rows unselected. Rounds are `<name>_r<N>` (a saved one retires earlier ones; another Matt is done with: **retire X**; `docs/picks.md`). **`needs_pick: <name>`**, queued once a report names the picker, holds an item until it is saved and appends the choices at launch: never relay them by hand. *picks saved <time>*: read the choices, never ask Matt.
+- **Picks** (writing a picker prompt: `docs/picks.md` *For the planner*). **`needs_pick: <name>`** holds an item until the pick is saved and appends the choices at launch: never relay them by hand. *picks saved <time>*: read the choices, never ask Matt.
 
 ## Reading a report
 
-A report opens with `status: done | partial | red`, `blocks:` (what it blocks), `carry:` (what `state.md` should change), `slow:`, `friction:`, a `pick:` per picker (manifest path).
-
-- `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
-- A `conductor:` line under the header overrides `status:`: `NOT on main` (red after a `done` report; branch kept) or `landed on main … despite …` (conductor's own red; no hold). Kept work Matt wants lands with **land X**.
-- A non-`none` `slow:` or `friction:`: mention it in a line only if it points at a fix; it counts toward *Maintenance*.
-- `pick:`: tell Matt the picker is ready (**pick X**).
+A report opens with `status: done | partial | red`, `blocks:`, `carry:`, `slow:`, `friction:`, `pick:`; each line's reading: `docs/reports.md` *For the planner*. Always: `red` with `after_red: stop` holds the repo's queue until **clear R**; a `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**); `pick:` → **pick X**.
 
 Don't summarize a report back: say what it changes, what the planner got wrong and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right; flag only decisions that block upcoming work.
 

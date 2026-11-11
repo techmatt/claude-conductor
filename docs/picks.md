@@ -6,6 +6,12 @@ the planner reads his choices to write the next prompt. One generic page serves 
 project (`src/conductor/web/picker.html`); it knows nothing about what it shows. Code:
 `picks.py` (manifest, choices, what is pending; no HTTP) and `picker.py` (the server).
 
+**For the planner** (`planner.md`, *Picks*, points here). A prompt producing candidates
+says "picker" (that brings the schema), under a new name, images in a `shared` folder
+(check `conductor.toml`). "Which go forward" is a `kind: many` row, rows unselected.
+Rounds are `<name>_r<N>`: a saved one retires earlier ones; another Matt is done with:
+**retire X**. **`needs_pick: <name>`** is queued once a report names the picker.
+
 **Manifest.** A JSON file the executor writes in its code repo; the preamble's
 *Pickers* paragraph gives it the schema, since executors never see these docs. The
 paragraph goes in only when the item's body could produce candidates (it names a picker,

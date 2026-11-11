@@ -72,6 +72,8 @@ Chores:
 - Staging `Questions:` that decide a rule's shape should block launch until answered, or reach the planner at once: 156's Q1, answered 4 h after the merge, cost a rework item. (aicomplete 164's retro, due from #7341, as are the next three)
 - Remind an executor when its last outline's ETA is over a third behind its latest `eta` (two of 156's three watch tells).
 - Aicomplete's item scripts start headless Edge with `--user-data-dir` under `%TEMP%\aic-cdp-*` (not excluded from Defender): the worktree's `out/` would be (170). Its planner's; conductor launches no browser.
+- Size splits deferred until a prompt would push past budget (cleanup_2026-11-10): control-folder.md's *Requests* into `docs/requests.md` the next time it would grow; `remote/board.py` (893/900 lines) worker state apart from jobs and shards.
+- Defender still takes ~15-18% of the box through a full lane (104): process launches (~7ms of its CPU a git, ~19ms a Python), which no path exclusion covers. Fewer spawns is the only cut on conductor's side; the run is ~4 min.
 - `wait_for`'s default `fail` pattern matches "error" in ordinary prose (subagent output under ultracode: aicomplete 173 lost ~10 min). Fix: a default that can't match ordinary text. Due from #7766.
 
 Still not live:
@@ -98,7 +100,7 @@ Still not live:
 - **91's new-project setup**: does the first request edit the stub `state.md`, not replace it?
 - **Inbox sections read twice** (aicomplete 11-03): a read spliced across a rewrite? Save the next with its read time.
 - **98's diagnostics** (aicomplete): why did the laptop miss two gates (10:17, 10:25pm)?
-- **99-103's core counts, placement** (aicomplete): laptop reset to 2, ceiling 3: does it hold; does a farm beat local (161 didn't)? Does the overdue copy cut a read's tail? 103's load labels, `answered:` and long-job line: unseen live.
+- **99-103's core counts, placement** (aicomplete): laptop reset to 2, ceiling 3: does it hold; does a farm beat local (161 didn't)? Does the overdue copy cut a read's tail? 103's `answered:` and long-job line: unseen live (its load labels are live: `conductor 3%` in aicomplete's samples).
 - **Farm load** (aicomplete 168, #7341): no broker → `run_local` runs native at full `--threads` (12-16 aic-sim, ~95 min): cap at `main_slots`. A `remote: true` item's load warning should name `main_slots` as its share, farming the lighter path (168 read it as "run native"). A worker offline mid-item raised no flag: the watch or *Now* should.
 - `farm-seeds` and the worker page come from the working checkout: uncommitted code reaches live jobs and tabs (98, 99; 100's edits reloaded the laptop 4 times).
 - `farm-seeds` runs `aic-sim.exe` in place: a rebuild mid-job fails, a straggler holds it (167). Copy it per job. Due from #7341.

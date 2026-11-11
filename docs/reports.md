@@ -42,6 +42,20 @@ It is carried, shown and counted like `slow:`, and it feeds the digest's workflo
 line (`inbox.md`, *Maintenance facts*). Parked edits an item carries are answered just
 after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 
+## For the planner
+
+How a planner reads the header (`planner.md`, *Reading a report*, points here):
+
+- `blocks:` what the item blocks; `carry:` what `state.md` should change, folded in by request.
+- `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something
+  broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
+- A `conductor:` line under the header overrides `status:`: `NOT on main` (red after a
+  `done` report; branch kept) or `landed on main … despite …` (conductor's own red; no
+  hold). Kept work Matt wants lands with **land X**.
+- A non-`none` `slow:` or `friction:`: mention it in a line only if it points at a fix; it
+  counts toward *Maintenance*.
+- `pick:` (one per picker, its manifest path): tell Matt the picker is ready (**pick X**).
+
 ## Outcome
 
 The item's final status is the report's status unless something makes it

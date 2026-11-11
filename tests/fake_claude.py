@@ -72,7 +72,7 @@ session = args[args.index("--resume" if resume else "--session-id") + 1] if (
     resume or "--session-id" in args) else "none"
 prompt = sys.stdin.read()
 lines = prompt.splitlines()
-# Under the test's own folder (`CLAUDE_CONFIG_DIR`, in `.pytest-tmp`), not %TEMP%: 103, Defender.
+# Under the test's own folder (`CLAUDE_CONFIG_DIR`, in `<repo>-pytest-tmp`), not %TEMP%: 103, Defender.
 SCRATCH = Path(os.environ.get("CLAUDE_CONFIG_DIR") or tempfile.gettempdir())
 store = SCRATCH / "conductor-fake-sessions" / f"{session}.txt"
 
