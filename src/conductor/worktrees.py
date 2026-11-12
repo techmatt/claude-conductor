@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import git, globs, procs, setup_run
+from . import git, globs, kept, procs, setup_run
 from .config import Config
 
 BRANCH_PREFIX = "conductor/"
@@ -105,8 +105,10 @@ def run_setup(cfg: Config, repo: str, path: Path, log: Path) -> str | None:
 
 def discard(cfg: Config, repo: str, path: Path, branch: str | None) -> None:
     """Remove the worktree and its branch, whatever state they are in. Never through
-    `git worktree remove`: links go first, then the files, then git forgets the tree."""
+    `git worktree remove`: links go first, then the files, then git forgets the tree.
+    Its `out/keep/` is kept first (`kept.save`)."""
     repo_path = cfg.repos[repo]
+    kept.save(cfg, repo, path)
     procs.remove_tree(path)
     git.run(repo_path, "worktree", "prune", check=False)
     if branch and git.rev(repo_path, f"refs/heads/{branch}"):

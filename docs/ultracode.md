@@ -17,7 +17,10 @@ So conductor uses the first route. Proven through conductor in the sandbox: an
 `ultracode: true` item's session carried the "Ultracode is on" notice. Ultracode does
 not force a workflow: the notice leaves trivial turns solo, and the executor judges
 what counts. A 23-file doc audit (`sandbox/043`) was done solo, without a workflow.
-So `ultracode: true` pays off on genuinely large work. An item with `ultracode: true` front-matter
+So `ultracode: true` pays off on genuinely large work. Nor on sim-heavy work: aicomplete
+201 (`ultracode: true`, a rules item whose work was sims) ran no Workflow, since a sim is one
+process to wait on, not parts to fan out; `planner.md` says to leave it off such items (110).
+An item with `ultracode: true` front-matter
 launches (or resumes, after staging) with the key in its `--settings` file; a stage
 or merge executor never has it. Switching *mid-run* has no route (a `tell:` is an
 ordinary message): queue the work, or a follow-up, with `ultracode: true`. A

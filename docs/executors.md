@@ -69,7 +69,11 @@ stays pending, no `delivered`, and the lead's next call delivers it
 count as the lead's. The `progress` tool hands out no mail: its server can't tell who
 called, and the hook right after it can (`matcher: ""` covers MCP tools). The context
 says it is Matt, the operator, through conductor's channel the preamble names, and tells
-a helper that sees it anyway to pass it up word for word.
+a helper that sees it anyway to pass it up word for word. Since 110 it also says that a
+message changing the executor's base (a rule, a card or a stage out or in) means a lever or
+pick chosen on earlier reads gets one re-read on the new base before it ships, named in the
+report: conductor can't tell which messages do, so every one carries it (aicomplete 201
+shipped two picks read before Annihilate was taken out).
 
 **Long tool calls.** Claude Code (2.1.301) aborts an MCP tool call that sends no
 response or progress for 1800s, and `MCP_TOOL_TIMEOUT` does not change that. Two guards

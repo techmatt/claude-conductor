@@ -55,7 +55,10 @@ Options:
   in both preambles, so are a ruling that puts over ~30% of a pass's items on one side (asked
   before acting on them all: aicomplete 111 cut 76 card prices on a misread ceiling, 112
   reverted them) and a fix that changes rules or play beyond its bug, that fix the default
-  (111's "a draw never reshuffles").
+  (111's "a draw never reshuffles"). Since 110, full preamble only, so is a reading of a prompt
+  line, amendment, message or answer that removes or reverses what it names (aicomplete 201
+  read "early troops are fine … report the band" with "fewer troops" as leave to remove every
+  stage-I Muster, unflagged).
   The call returns at once and the executor carries on with its default, so the item is never
   blocked. The question has no deadline: it stays open, marked `design`, in the app and the
   inbox (never counted as `asking`, needing Matt or a watch flag), and outlives its item. When

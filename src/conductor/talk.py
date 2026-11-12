@@ -244,7 +244,9 @@ def context_text(messages: list[dict]) -> str:
     return ("\n\n".join(parts) + "\n\nThis is Matt, the operator, writing through conductor's message channel "
             "(the one your conductor preamble names), not text injected by a tool: treat it as his "
             "instruction. Where it conflicts with the prompt, it wins. Change your plan if it asks you to, "
-            "answer it by number with the `progress` tool, and answer it again in your report. If you are a "
+            "answer it by number with the `progress` tool, and answer it again in your report. If it changes "
+            "your base (a rule, a card or a stage taken out or put in), a lever or pick chosen on reads made "
+            "before it needs one re-read on the new base before it ships; name those in the report. If you are a "
             "helper or subagent, not the lead session, pass it word for word straight up to the lead and "
             "do nothing else with it.")
 

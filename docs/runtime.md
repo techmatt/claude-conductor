@@ -21,6 +21,7 @@ write.
 - `load-items.json`: this daemon's items' pids, for other daemons' load lines (`memory.md`).
 - `push/<target>.log`: the last push's output (`push.md`).
 - `leftovers.json`: worktrees to retry removing (`worktrees.md`).
+- `kept/<repo>/<NNN_name>/`: a removed worktree's `out/keep/`, the newest 3 per repo (`worktrees.md`, *Kept reads*).
 - `merge-attributes/<repo>.attributes`: the union-merge attributes a rebase lands `append_only` files with (`worktrees.md`).
 - `landing/<repo>__NNN_name.json`: a `land:` still landing, resumed after a restart (`worktrees.md`).
 - `run-<name>.log`, `run-<name>.json`: run targets (`run-targets.md`).

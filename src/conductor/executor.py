@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import audits, load
+from . import audits, kept, load
 from . import parked as parked_mod
 from .config import Config
 from .items import Item
@@ -33,8 +33,9 @@ report that you'd take it, or ask) and never contradicts a prompt line or amendm
 the question's first line says `default overrides prompt: <line>`. A question touching a
 stated design principle is Matt's, as are a lever reversing a direction the brief or an
 amendment states, however clear the data; a ruling putting over ~30% of a pass's items on one
-side (ask its meaning before acting on all); and a fix changing play beyond its bug (the fix as
-default): `design: true` with a default returns at once, you
+side (ask its meaning before acting on all); a reading of a prompt line, amendment, message or
+answer that removes or reverses what it names ("fewer" read as "none"); and a fix changing play
+beyond its bug (the fix as default): `design: true` with a default returns at once, you
 carry on with the default, and his answer comes later as a message. Leave a step whose
 default can't be undone (a delete, an overwrite) until last.{leftover}
 
@@ -72,7 +73,9 @@ again when a message asks. Staged, your plan ends with it: post it first thing.
 The box. Never run what needs elevation (UAC, admin installs, services): its prompt waits
 unseen; take a no-admin route or report it. Scratch goes
 in `out/` (git-ignored) in your working directory, never %TEMP%; working papers the prompt asks for (per-card notes, helper write-ups)
-go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`. Scripts go
+go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`.
+Read outputs a later item could reuse (a farm's `games.jsonl`, its specs, a readonly write-up) go
+in `out/keep/`: conductor keeps the last three items' when the worktree goes. Scripts go
 in a file, then run; edit files with Write/Edit only, never a shell heredoc, `sed` or `-c`
 string. Heavy compute (sweeps, builds, test
 runs, subagent fan-out) runs at below-normal priority, which its children inherit (Bash:
@@ -581,7 +584,8 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         checks=checks_text(cfg.opts(item.repo).warning_checks),
         tail="" if resume else PROMPT_FOLLOWS,
     )
-    extra = choices + parked_mod.section(list(parked)) + (EXTERNAL if item.external_data else "")
+    extra = (choices + parked_mod.section(list(parked)) + (EXTERNAL if item.external_data else "")
+             + ("" if watch else kept.section(cfg, item.repo)))
     if not resume:
         return text + body(cfg, item, notes, usage) + extra + "".join(_amend(AMEND, m) for m in amends)
     n = resume["landed"]

@@ -99,7 +99,8 @@ only in the environment (74). Stages and merge executors get none.
 - **Working papers** (73, aicomplete 079). Papers a prompt asks for (per-card notes,
   helper write-ups) go in a folder named for the item under the repo's results folder
   (`experiments/results/<item>/`), committed; ultracode helpers had put them in `out/`,
-  git-ignored, and they were lost. Full preamble only.
+  git-ignored, and they were lost. Full preamble only. Read outputs a later item could
+  reuse go in `out/keep/`, which outlives the worktree (110; `worktrees.md`, *Kept reads*).
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
   runs at below-normal process priority and leaves at least 4 hardware threads free:
   simulation and test runs default to `load.run_threads()` threads (the box's less 4 and 2

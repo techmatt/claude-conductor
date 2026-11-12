@@ -238,7 +238,8 @@ for ln in lines:
                 time.sleep(0.2)
         case "report":
             status = parts[2]
-        case "write":
+        case "write":                                       # as Write: it makes the folders
+            Path(parts[2]).parent.mkdir(parents=True, exist_ok=True)
             Path(parts[2]).write_text(parts[3] + "\n", encoding="utf-8")
         case "audit":
             notes = Path(lines[lines.index(next(ln for ln in lines if "running notes file at exactly" in ln)) + 1].strip())
