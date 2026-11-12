@@ -18,12 +18,15 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 | Path | Budget | Why |
 |---|---|---|
 | `planner.md` | 25 KB | the one file every session reads whole, so the common path (*Start*, a normal session's vocab) belongs in it and nowhere else |
-| `planner-vocab.md` | 4 KB | rare ops only, read when Matt uses one; a row a normal session needs moves to `planner.md` |
-| `HANDOFF.md` | 20 KB | starts a claude.ai session on conductor, on demand; *Open* is a wavefront, not a log |
+| `planner-vocab.md` | 5 KB | rare ops only, read when Matt uses one; a row a normal session needs moves to `planner.md` (4 → 5 KB 2026-11-12: read on demand, and every row was being squeezed) |
+| `HANDOFF.md` | 24 KB | starts a claude.ai session on conductor, on demand; *Open* is a wavefront, not a log (20 → 24 KB 2026-11-12: prompts 104–108 each had to compress older lines to fit theirs) |
 | `CLAUDE.md` | 6 KB | read at every Claude Code session here |
 | `README.md` | 7 KB | an overview and an index into `docs/`, nothing more |
 | `CLEANUP.md` | 9 KB | read whole by every cleanup |
-| `claude-ai-new-project.md` | 10 KB | read with `planner.md` to start, park or resume a project |
+| `claude-ai-new-project.md` | 12 KB | read with `planner.md` only to start, park or resume a project (10 → 12 KB 2026-11-12) |
+| `docs/events.md` | 20 KB | one table every kind, read by lookup, not whole; complete in one place for *show events* and the facts sweep (15 → 20 KB 2026-11-12) |
+| `docs/progress.md` | 18 KB | a busy topic, at 98% (15 → 18 KB 2026-11-12); past it, split |
+| `docs/inbox.md` | 18 KB | a busy topic, at 97% (15 → 18 KB 2026-11-12); past it, split |
 | `docs/*.md` | 15 KB | one topic each, small enough to read whole |
 | `src/conductor/daemon.py` | 1100 lines | the loop, launch, stage and finish; the `daemon_*` mixins hold the rest |
 | `src/**/*.py` | 900 lines | a module that grows past this has more than one concern |
