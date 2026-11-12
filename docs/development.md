@@ -95,3 +95,6 @@ the highest number in `prompts/` or the ledger, moves it to `prompts/NN_<slug>.m
 appends the ledger's `start`. It refuses while a `start` has no `done`/`stopped`/`stale`
 after it; `--anyway` appends `<time> stale <name> (run anyway)` first. `migrate` sends a
 numbered prompt with neither a ledger line nor a report back to the inbox (none at 93).
+`list` and an empty `next` name every inbox `.md` not matching the stamped form
+(`Skipped, misnamed: inbox/<file> (rename it to <stamp>-<project>-<slug>.md …)`, stamped
+with its write time): 106 sat as `106_<slug>.md` behind "Nothing waiting" twice.

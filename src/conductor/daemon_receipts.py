@@ -18,7 +18,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
-from . import daemon_signals, inbox, items, parked, request, talk
+from . import daemon_signals, inbox, items, parked, request, session, talk
 from .events import Event
 from .util import FrontMatterError, clock, now, read_text, split_front_matter, write_text
 
@@ -102,6 +102,8 @@ class ReceiptsMixin:
                           "; ".join(map(tell_result, tells)) if tells else "applied")
                 # A cancel with queued dependents says so: each now holds by itself.
                 warning = "; ".join(e.detail["warning"] for e in got if e.kind == "cancel" and e.detail.get("warning"))
+                if request and (fold := session.state_warning(request.detail)):     # 106: fold before it grows
+                    warning = "; ".join(filter(None, [warning, fold]))
                 self._write_receipt(rel, got, result=result, warning=warning or None)
 
     def _receipt_event(self, ev: Event) -> None:

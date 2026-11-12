@@ -3,7 +3,7 @@
 
     python -m conductor.ask_server --control <folder> --item <repo/NNN_name> --default-minutes 10
 
-Four tools. `ask(question, options?, default?, block?)` writes the question file, then
+Five tools. `ask(question, options?, default?, block?)` writes the question file, then
 holds the tool call open until the question resolves: an answer file appears, or (with
 a default and `block` false) the default deadline passes; a message for the item hands
 the call back early with the question still open, and `ask(resume=<id>)` waits on. `progress(note, eta?, done?,
@@ -12,7 +12,9 @@ hands out no waiting message (the PostToolUse hook after it does, on the lead's 
 `wait(minutes?)` is how a paused item idles: it returns once a message waits for the item
 (the hook after it delivers it) or the minutes pass. `wait_for(path | pid | log + line, every?,
 minutes?)` replaces an executor's shell polls: it checks every ~50s and returns when the
-target changes, a message waits, or the minutes pass, saying what changed. JSON-RPC 2.0 over
+target changes, a message waits, or the minutes pass, saying what changed. `start(command, log?)`
+starts a long job detached (`procs.spawn_detached`), so it outlives the shell call, and
+returns its pid at once (106). JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
 `notifications/cancelled` are still served while one waits.
 """
@@ -21,13 +23,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
-from . import memory, questions, talk, waitfor
+from . import memory, procs, questions, talk, waitfor
 from .util import clock, duration, now, parse_stamp
 
 POLL_SECONDS = 1.0
@@ -43,6 +46,8 @@ OUTLINE_ROWS = 12               # the preamble asks for ~8; a few more are taken
 WAIT_MINUTES = 10               # `wait`'s default; at most WAIT_MAX_MINUTES, inside Claude Code's MCP idle timeout
 WAIT_MAX_MINUTES = 20
 WAIT_FOR_EVERY = 50             # seconds between `wait_for`'s checks of its target; mail is looked at each POLL_SECONDS
+START_NAME = "start"
+SCRATCH = "out"                 # executor.SCRATCH: `start`'s default log folder
 
 TOOL = {
     "name": TOOL_NAME,
@@ -166,6 +171,31 @@ WAIT_FOR_TOOL = {
 }
 
 
+# 106, aicomplete 188: a farm started with Git Bash `&` died with its shell call.
+START_TOOL = {
+    "name": START_NAME,
+    "description": (
+        "Start a long job (a farm, a sweep, a build or test run that may pass 10 minutes) so it "
+        "outlives your shell, and return at once. A Git Bash `&`, `nohup` or a `run_in_background` "
+        "command dies when Claude Code ends or reaps that shell; this one is started detached by "
+        "conductor (no parent, own process group), at below-normal priority, in your working "
+        "directory, stdin closed, output appended to `log`. Returns its Windows pid: wait with "
+        "`wait_for` (`pid`, plus `log` and `line` for its done line). Stop it before you finish; "
+        "what an item leaves running in its worktree is stopped when it ends."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "command": {"type": "string", "description": ("The command line, run by Git Bash as your Bash tool "
+                                                          "runs it (`nice` not needed), in your working directory.")},
+            "log": {"type": "string", "description": ("Its output file, relative to your working directory "
+                                                      f"(default {SCRATCH}/<first word>-<time>.log).")},
+        },
+        "required": ["command"],
+    },
+}
+
+
 def parse_outline(value) -> tuple[list[dict], str | None]:
     """The `outline` argument as stored rows ({title, eta, done}), or an error."""
     if not isinstance(value, list) or not value:
@@ -222,12 +252,13 @@ class Server:
                 "serverInfo": {"name": SERVER_NAME, "version": "1"},
             })
         elif method == "tools/list":
-            self.reply(mid, {"tools": [TOOL, PROGRESS_TOOL, WAIT_TOOL, WAIT_FOR_TOOL]})
-        elif method == "tools/call" and params.get("name") == PROGRESS_NAME:
+            self.reply(mid, {"tools": [TOOL, PROGRESS_TOOL, WAIT_TOOL, WAIT_FOR_TOOL, START_TOOL]})
+        elif method == "tools/call" and params.get("name") in (PROGRESS_NAME, START_NAME):
+            fn = self.progress if params["name"] == PROGRESS_NAME else self.start
             try:
-                text, is_error = self.progress(params.get("arguments") or {})
+                text, is_error = fn(params.get("arguments") or {})
             except Exception as exc:      # never leave a call hanging on a bug
-                text, is_error = f"progress failed: {exc}", True
+                text, is_error = f"{params['name']} failed: {exc}", True
             self.reply(mid, {"content": [{"type": "text", "text": text}], "isError": is_error})
         elif method == "tools/call":
             if params.get("name") not in (TOOL_NAME, WAIT_NAME, WAIT_FOR_NAME):
@@ -293,6 +324,25 @@ class Server:
         # the lead's, and a helper ignores it (Word Warriors 059). The PostToolUse hook that
         # runs right after this call can (`talk.subagent_call`), so it delivers.
         return "Logged;" + closed + " carry on." + self._running_now(), False
+
+    def start(self, args: dict) -> tuple[str, bool]:
+        """Start `command` detached (`procs.spawn_detached`), below normal, in the working
+        directory; return its pid and log at once."""
+        command, log = args.get("command"), args.get("log")
+        if not isinstance(command, str) or not command.strip():
+            return "`command` must be a non-empty string", True
+        if log not in (None, "") and not isinstance(log, str):
+            return "`log` must be a path", True
+        if not log:
+            word = re.sub(r"[^A-Za-z0-9_-]+", "", Path(command.split()[0]).stem)[:20] or "job"
+            log = f"{SCRATCH}/{word}-{datetime.now():%H%M%S}.log"
+        path = Path(log) if Path(log).is_absolute() else self.workdir / log
+        try:
+            job = procs.spawn_detached(procs.shell_argv(command), self.workdir, path, below_normal=True)
+        except OSError as exc:
+            return f"could not start it: {exc}", True
+        return (f"Started, pid {job.pid}, detached: it outlives your shell. Output: {log}. Wait with "
+                f"`wait_for` (pid {job.pid}, log {log!r}, line <its done line>)." + self._running_now()), False
 
     def _open_question(self, ref) -> tuple[questions.Question | None, str | None]:
         q = questions.load(questions.qdir(self.control) / f"{ref.strip()}.md") if isinstance(ref, str) else None

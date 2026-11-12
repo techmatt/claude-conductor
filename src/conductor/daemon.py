@@ -30,7 +30,7 @@ from pathlib import Path
 import psutil
 
 from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, notify, parked, picker, picks, procs, questions,
-               request, state, talk, targets, worktrees)
+               request, session, state, talk, targets, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
@@ -548,7 +548,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                         guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
                     continue
                 self.log.append("request", paths=req.targets, request=d.name, message=req.message,
-                                targets=req.targets, no_change=sha is None,
+                                targets=req.targets, no_change=sha is None, **session.state_size(self.cfg.control, req.targets),
                                 **({"identical": True} if req.identical else {}))
                 if sha:
                     self.log.append("commit", paths=req.targets, scope="control", sha=sha,

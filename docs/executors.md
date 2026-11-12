@@ -38,13 +38,23 @@ how things stand: `path` not there, `pid` running, or `log`'s size, age and last
 is checked every `every` seconds, the item's mailbox every second, so a message ends the
 wait at once and the hook after the call delivers it; each mail file does that once, so a
 helper's call can't spin (`ask`'s rule). `pid` is a Windows pid: Git Bash's `$!` is not one,
-so a bash job waits on a `log` line or a marker `path`. A `wait_for` counts as one tool call
+so a bash job waits on a `log` line or a marker `path`, or is launched with `start`. A `wait_for` counts as one tool call
 and pings as `ask` does (*Long tool calls*). Code: `waitfor.py`, `ask_server.py`.
+
+**`start`** (`mcp__conductor__start`, 106) launches a long job that must outlive its shell:
+a Git Bash `&` (or `nohup`, or a `run_in_background` command) dies when Claude Code ends or
+reaps that shell (aicomplete 188's farm). `start(command, log?)` runs `command` through Git
+Bash (`procs.git_bash`: `CLAUDE_CODE_GIT_BASH_PATH`, else beside `git`, never System32's WSL
+`bash`; `/bin/sh` elsewhere) via `procs.spawn_detached`: a launcher that exits at once, own
+process group, out of the job object where allowed, below-normal priority, stdin closed, in
+the working directory, output appended to `log` (default `out/<first word>-<HHMMSS>.log`).
+It returns at once with the Windows pid for `wait_for`. Its cwd is the worktree and its
+parent is gone, so the end-of-item reap (`procs.strays`) and the memory scan both count it.
 
 The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own Python
 (`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …
 --workdir …`); its tools are `ask` (`questions.md`), `progress` (`progress.md`), `wait` (a
-paused item) and `wait_for`. The
+paused item), `wait_for` and `start`. The
 `--settings` file holds the PostToolUse message hook and the PreToolUse *Short calls* hook (`progress.md`), and
 `"ultracode": true` for an `ultracode` item. A stage gets neither file.
 

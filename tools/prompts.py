@@ -62,6 +62,20 @@ def inbox(root: Path) -> list[Waiting]:
     return sorted(out, key=lambda w: (w.written, w.path.name))
 
 
+def misnamed(root: Path) -> list[str]:
+    """Inbox `.md` files `inbox` skips, each with the name it wants (stamped with its write
+    time). 106: a prompt saved as `106_<slug>.md` sat unseen behind "Nothing waiting"."""
+    out = []
+    for p in sorted((root / "prompts" / "inbox").glob("*.md")):
+        if STAMP.match(p.name):
+            continue
+        m = NUMBERED.match(p.stem)
+        slug = (m[3] if m else p.stem).replace("_", "-").strip("-") or "prompt"
+        want = f"{datetime.fromtimestamp(p.stat().st_mtime):%Y%m%d-%H%M%S}-<project>-{slug}.md"
+        out.append(f"Skipped, misnamed: inbox/{p.name} (rename it to {want} to queue it)")
+    return out
+
+
 def ledger(root: Path) -> list[tuple[str, str, str]]:
     """(time, word, name) per ledger line the tool reads."""
     try:
@@ -165,6 +179,8 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
             print(f"open: {name} (started {at}, no done line)")
         waiting = inbox(root)
         print("\n".join(w.line() for w in waiting) if waiting else "Nothing waiting in prompts/inbox/.")
+        for line in misnamed(root):
+            print(line)
         return 0
     if a.cmd == "done":
         append(root, f"stopped {a.name}" if a.report == "stopped" else f"done {a.name} → {a.report}")
@@ -178,7 +194,7 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     if a.cmd == "next":
         waiting = inbox(root)
         if not waiting:
-            print("Nothing waiting in prompts/inbox/.")
+            print("\n".join(["Nothing waiting in prompts/inbox/.", *misnamed(root)]))
             return 1
         print("Waiting, oldest first:\n" + "\n".join("  " + w.line() for w in waiting))
         name = claim(root, waiting[0])

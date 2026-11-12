@@ -166,15 +166,14 @@ Time limit: {max_hours:g}h; killed at {deadline}, later if blocked.
 
 Write your report to exactly this path:
     {report}
-{only} Other changes there: reverted, item red.
+{only} Other changes there: reverted, red.
 Start it with:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>
 friction: none | <what slowed you>
-`done`: goal met. `partial`: part met, nothing broken, the rest
-follow-up. `red`: broken or unsafe; the queue stops. Answer messages and
+`done`: goal met. `partial`: part met, nothing broken. `red`: broken or unsafe; the queue stops. Answer messages and
 amendments by number. End with `Report written to {report}`.
 
 {tail}"""
@@ -215,9 +214,8 @@ Servers. Any server you start (the app, anything that listens) uses port
 {port} (`CONDUCTOR_PORT`), never the repo's usual one, which a run target or another item
 may hold: pass it through (a flag, an environment variable) where the repo hard-codes a
 port; for a second, bind to port 0. Claude Code stops a background command after 10
-minutes, so start a long-lived server detached, its output to a log (PowerShell
-`Start-Process -WindowStyle Hidden -RedirectStandardOutput <log>`, Python `subprocess.Popen`
-with `DETACHED_PROCESS`) or by a repo script, and stop it before you finish. A fresh
+minutes, so start a long-lived server with `start` (mcp__conductor__start: detached, its
+output to a log) or a repo script that detaches, and stop it before you finish. A fresh
 worktree has no `node_modules`: run `npm ci` in a package folder before its checks.
 """
 
@@ -273,15 +271,16 @@ appearing, a pid exiting or a log line, checked every ~50 s; a message returns i
 never with shell polls, `sleep`, one long waiter or by ending your turn: a message cannot
 reach you idle. A foreground shell call's `timeout` stays at {cap_ms} or less. Every background
 call sets a `timeout` (a kill limit; 10 minutes if left out) sized to its estimate with
-margin; a job that may outrun that starts detached, its output to a log, then `wait_for` it. Conductor enforces the cap: a foreground shell call still running
+margin. A job that may outrun that goes through `start` (mcp__conductor__start: detached, it
+outlives your shell; a Git Bash `&` or `nohup` job dies with it), then `wait_for` its pid. Conductor enforces the cap: a foreground shell call still running
 after {cap:g} seconds is moved to the background (you are told; Claude Code
 kills it 10 minutes later){bg}.
 """
 
 CALLS_LIGHT = """
 Short calls. Nothing foreground over ~{cap:g} s (a `timeout` of {cap_ms} or less):
-background longer work (`run_in_background`, `timeout` sized to the estimate) and wait with `wait_for` (mcp__conductor__wait_for), never polls or
-ending your turn.
+background longer work (`run_in_background`, `timeout` sized to the estimate; over 10m:
+mcp__conductor__start, never `&`), wait with `wait_for` (mcp__conductor__wait_for), never polls or ending your turn.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"

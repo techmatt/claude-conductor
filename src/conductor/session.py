@@ -338,6 +338,61 @@ def state_sections(text: str) -> dict[str, list[str]]:
     return out
 
 
+DATED = re.compile(r"\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w* \d{1,2}\b"
+                   r"|\(\d{1,2}(:\d\d)?\s?[ap]m\)|#\d{3,}")
+FOLD_SHOW = 3       # lines a fold hint names
+
+
+def fold_candidates(text: str) -> list[str]:
+    """`state.md`'s top-level bullets that carry two or more indented sub-bullets, biggest
+    sub-bullet text first, at most `FOLD_SHOW`: `*Section*: "line start…" (N sub-bullets,
+    M dated, 2.1 KB)`. What a planner day appends (aicomplete, 2026-11-11: 30 → 41 KB of
+    dated sub-bullets) and what folding each into its line, as it now stands, removes."""
+    found = []
+    for name, body in state_sections(text).items():
+        parent, subs = None, []
+        for ln in [*body, "- "]:            # a sentinel bullet closes the last one
+            if ln.startswith(("- ", "* ")):
+                if parent and len(subs) >= 2:
+                    size = sum(len(s.encode("utf-8")) + 1 for s in subs)
+                    head = parent[2:].strip()
+                    head = head if len(head) <= 50 else head[:50].rstrip() + "…"
+                    dated = sum(1 for s in subs if DATED.search(s))
+                    found.append((size, f'*{name.capitalize()}*: "{head}" ({len(subs)} sub-bullets, '
+                                        f'{dated} dated, {size / 1024:.1f} KB)'))
+                parent, subs = ln, []
+            elif parent and ln[:1].isspace() and ln.lstrip().startswith(("- ", "* ")):
+                subs.append(ln)
+            elif parent and ln[:1].isspace() and ln.strip() and subs:
+                subs[-1] += "\n" + ln        # a sub-bullet's continuation counts with it
+    return [line for _, line in sorted(found, key=lambda f: -f[0])[:FOLD_SHOW]]
+
+
+def state_size(control: Path, targets: list[str]) -> dict:
+    """For a request that wrote `state.md` and left it past `STATE_TRIM_KB`: its size and the
+    lines to fold (`fold_candidates`), for the request event and its receipt; else {}."""
+    if "state.md" not in targets:
+        return {}
+    try:
+        text = read_text(control / "state.md")
+    except (OSError, UnicodeDecodeError):
+        return {}
+    size = len(text.encode("utf-8"))
+    if size <= STATE_TRIM_KB * 1024:
+        return {}
+    return {"state_kb": round(size / 1024, 1), "fold": fold_candidates(text)}
+
+
+def state_warning(detail: dict) -> str | None:
+    """A request receipt's warning for `state_size`'s fields: fold before it grows."""
+    if not detail.get("state_kb"):
+        return None
+    fold = detail.get("fold") or []
+    return (f"state.md is {detail['state_kb']:g} KB, past its {STATE_TRIM_KB} KB budget: "
+            + (f"fold these lines' sub-bullets into the line as it now stands (fold state): {'; '.join(fold)}"
+               if fold else "trim state is due"))
+
+
 def due_items(lines: list[str]) -> list[str]:
     """The top-level bullet items (with their indented continuation lines) saying `due`."""
     items: list[list[str]] = []
@@ -408,6 +463,10 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
     out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]
     if state_line := size_line("state.md", *docs, STATE_TRIM_KB, "trim state"):
         out.append(state_line)
+        try:
+            out += [f"  - fold: {f}" for f in fold_candidates(read_text(cfg.control / "state.md"))]
+        except (OSError, UnicodeDecodeError):
+            pass
     for repo in cfg.repos:
         out += maintenance(cfg, log, view, repo, docs)
     return "\n".join(out) + "\n"

@@ -94,7 +94,8 @@ only in the environment (74). Stages and merge executors get none.
 - **Background timeouts** (82, both, in *Short calls*). Every `run_in_background` call sets a
   `timeout` sized to its estimate with margin (left out, Claude Code kills it at 10 minutes:
   fractals 026's and website 003's render chains died mid-run); a job that may outrun that
-  starts detached, its output to a log, and is waited on with `wait_for`.
+  goes through `start` (106: a Git Bash `&` dies with its shell, aicomplete 188's farm;
+  `executors.md`) and is waited on with `wait_for`. *Servers* says the same for a server.
 - **Working papers** (73, aicomplete 079). Papers a prompt asks for (per-card notes,
   helper write-ups) go in a folder named for the item under the repo's results folder
   (`experiments/results/<item>/`), committed; ultracode helpers had put them in `out/`,

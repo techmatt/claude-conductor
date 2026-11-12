@@ -39,6 +39,9 @@ events: [812, 813]
 - `outcome`: `accepted`, with `result` (what happened), or `refused`, with `reason`.
   A queue item's `accepted` receipt (enqueued or rewritten) may also carry `warning`: a
   `depends_on` that can never be met in order, so it will hold (`items.md`); fix it now.
+  A request that leaves `state.md` past 25 KB says so in `warning`, naming up to three
+  lines carrying two or more indented sub-bullets, biggest first (**fold state**;
+  `session.fold_candidates`; 106: one day of appended sub-bullets took aicomplete 30 → 41 KB).
   A signal refused part-way also has `applied`: the lines that applied before the one
   that failed (they stay applied). A request held by an earlier one on the same targets
   is `pending`, its `result` what it waits for, replaced by the final receipt; so is one

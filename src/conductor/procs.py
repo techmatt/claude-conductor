@@ -379,6 +379,31 @@ def run_shell(command: str, cwd: Path, log: Path, timeout: float) -> int | None:
             return None
 
 
+def git_bash() -> str | None:
+    """Git for Windows' `bash.exe`, the shell Claude Code's Bash tool runs: Claude Code's
+    own setting, else found beside `git` (`Git\\cmd\\git.exe`, `Git\\mingw64\\bin\\git.exe`);
+    never a bare `bash` off PATH, which can be System32's WSL launcher."""
+    import shutil
+    if (env := os.environ.get("CLAUDE_CODE_GIT_BASH_PATH")) and Path(env).is_file():
+        return env
+    if not (git := shutil.which("git")):
+        return None
+    here = Path(git).resolve().parent
+    for root in (here.parent, here.parent.parent):
+        if (bash := root / "bin" / "bash.exe").is_file():
+            return str(bash)
+    return None
+
+
+def shell_argv(command: str) -> list[str] | str:
+    """`command` as the executor's Bash tool would run it: Git Bash on Windows (the
+    platform shell, as a string, if there is none), `/bin/sh` elsewhere."""
+    if not WINDOWS:
+        return ["/bin/sh", "-c", command]
+    bash = git_bash()
+    return [bash, "-c", command] if bash else command
+
+
 def resolve(command: str) -> str:
     """`claude` → full path (Windows needs it for .cmd/.exe shims under Popen)."""
     import shutil

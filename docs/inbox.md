@@ -51,15 +51,15 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
    - **From state.md**: the control folder's `state.md` lines a start raises, copied as
      written, so the planner need not stage it: *Waiting on Matt* and *Open questions*
      whole, and *Pending fixes, due* and *Maintenance, due*: each top-level bullet (with
-     its indented lines) of that section saying the word `due`, any case. Sections match
-     by `## ` heading, ignoring a `(…)` after the name; a missing one says so, as does a
+     its indented lines) saying `due`, any case. Sections match
+     by `## ` heading, ignoring a `(…)` after it; a missing one says so, as does a
      missing `state.md`;
    - **Planner habits**: `state.md`'s *Planner habits* section whole (rules for the
-     planner itself, which it follows and never lists to Matt), under its own heading
+     planner, which it follows and never lists to Matt), under its own heading
      and a one-line note saying so; left out when the section is absent or empty. Habit
      lines filed under *Pending fixes* were relayed as fixes every start;
    - **Maintenance facts**: first `**due** trim state` when the control `state.md` is
-     past 25 KB (`STATE_TRIM_KB`), with its growth; then per repo, with no judgement: for each template (bug hunt,
+     past 25 KB (`STATE_TRIM_KB`), with its growth and `fold:` lines (`receipts.md`); then per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's
