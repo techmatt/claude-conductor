@@ -177,6 +177,7 @@ def fin(env, name: str, **detail):
     done = env.control / "done" / "code"
     done.mkdir(parents=True, exist_ok=True)
     (done / f"{name}.md").write_text("x\n", encoding="utf-8")
+    detail.setdefault("session_id", f"s-{name}")         # a retro forks it: none, none is due
     return env.d.log.append("finish", item=f"code/{name}", repo="code", status=detail.pop("status", "done"), **detail)
 
 
@@ -202,7 +203,7 @@ def test_a_retro_is_due_on_a_run_past_half_again_its_first_eta(env):
         log.append("start", item=f"code/{name}", happened=stamp(base))
         log.append("progress", item=f"code/{name}", eta=eta, note="x", happened=stamp(base + timedelta(minutes=1)))
         log.append("progress", item=f"code/{name}", eta="9h", note="later", happened=stamp(base + timedelta(minutes=2)))
-        return env.d.log.append("finish", item=f"code/{name}", repo="code", status="done",
+        return env.d.log.append("finish", item=f"code/{name}", repo="code", status="done", session_id="s",
                                 happened=stamp(base + timedelta(hours=hours)))
     (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)
     for name in ("001_ok", "002_small", "003_late"):

@@ -59,7 +59,9 @@ def build_template(root: Path) -> Path:
         'memory_pressure_percent = 0\nmemory_pressure_free_gb = 0\n'
         'memory_critical_percent = 0\nmemory_critical_free_gb = 0\n'
         # The night shift's check is off, so no test depends on the time of day; its own tests turn it on.
-        'watch_check_minutes = 0\n\n'
+        'watch_check_minutes = 0\n'
+        # Nor does a partial or red finish queue a self-audit; the retro tests turn it on.
+        'auto_retros = false\n\n'
         f'[repos]\ncode = "../code"\n\n[executor]\ncommand = {[sys.executable, str(FAKE)]!r}\n'
     ).replace("'", '"').replace("\\", "/")
     init_repo(root / "control", {"conductor.toml": toml, "state.md": "# state\n",

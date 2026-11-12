@@ -1,14 +1,13 @@
 # Event log
 
 `events.db`, table `events(id, ts, kind, item, repo, paths, detail)`. `ts` is local
-ISO time with offset; `paths` is a JSON list (control-folder-relative where inside
-it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
+ISO time with offset; `paths` is a JSON list (relative inside the control folder); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 
 | kind | when | notable detail |
 |---|---|---|
-| `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control, code (start: its code version, `restart.md`); running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on an `OSError`, with error) |
-| `daemon_restart` | the old daemon restarts itself on a code change or a `restart: daemon` (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`, or `asked by <by> (restart: daemon)` with paths), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
-| `daemon_died` | at start: the previous daemon never stopped cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
+| `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control, code (start: its code version, `restart.md`); running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on `OSError`, with error) |
+| `daemon_restart` | the old daemon restarts itself on a code change or a `restart: daemon` (`restart.md`); the new one logs `daemon_start` | reason (`code changed: <old sha> → <new sha> <subject>`, or `asked by <by> (restart: daemon)`, paths), from, to (`<src tree id> <pyproject blob id>`), pid, new_pid, running, staging, note |
+| `daemon_died` | at start: the last daemon didn't stop cleanly (red) | pid, started, last_beat, last_beat_clock, gap, note, memory (its last sample: at, level, commit, limit, free), running |
 | `load_high` | under `load_warn_free_threads` (2) free for 3 samples and `load_warn_seconds` (180), again every `load_tell_minutes` (15) while it lasts (`memory.md`); inbox only, no toast (70); messages only an item that is a real share of the load (80) | free, keep, items (told now), causes (items that are a real share), load, caution |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item, of; `memory.md`), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
@@ -31,7 +30,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `recover` | restart found it finished while the daemon was down, a merge to resume, or a cut-off run resumed (`restart.md`) | note; continued, pid, cut, why, deadline |
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow and friction (as written, or null), pick (`<repo>/<path>`, or null; picks: all of them, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow and friction (as written, or null), pick (`<repo>/<path>` or null; picks: all, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
 | `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on; or an `audit_used:` signal (no item, `by`) | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red; external_data (its kept branch) |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: the ones whose own writing tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
@@ -74,6 +73,7 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `watch_answer` | a watch's `answer:` action answered a question | question, text, source, watch |
 | `pause` / `resume` | a `pause:` / `resume:` signal (`night-shift.md`, *Pause*) | repo; items, by; paused_seconds (resume) |
 | `watch` | conductor queued a watch item | reason, flags (their keys), file, by |
+| `retro` | a self-audit queued (`retros.md`) | of, why, file, by |
 | `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
 | `autopilot` | an `autopilot:` signal set the mode (`night-shift.md`); the last one holds | mode (`off`, `night`, `always`), was, by |
 | `ack` | `ack: invalid` (`signals.md`) | what, events (`invalid` ids), by |
@@ -81,4 +81,4 @@ it); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 | `push` | main was pushed to the remote (`push.md`); repo: none for the control folder | target (repo or `.control`), remote, branch, sha, why (`merge`, `start`, `signal`, `closeout`, `commit`), up_to_date, recovered (the first success after a failure) |
 | `push_failed` | a push failed, once per failure (an automatic retry of the same one logs nothing) | target, remote, branch, why, error, signature, output (git's last lines), rejected (the remote moved on: never forced) |
 | `closeout_push` | every push a `closeout:` request started is done | request, pushed, failed |
-| `config_reload`, `warning` | config applied / worth a note, not red; the note says what (a runtime path or shared folder not ignored; a toast, `open:` launch, self-restart, tick, memory sample, log compaction or night shift that failed; a stage discarded; a worktree not removed; a main checkout restored after a part-way fast-forward; a report unreviewed at a checkpoint or reviewed twice; a message never delivered or a `tell:` for no live item; an amend file naming no item; a signal or reorder cut short by a crash; the daemon under a Claude Code session; a watch's action not carried out; a remote broker that did not start or was restarted after dying, or a bad `[remote]`, `remote-workers.md`) | note; checkpoint, finish (unreviewed at a checkpoint); applied (a part-applied signal); amend, tell (never delivered); verb, target (an `open:` launch); action (a watch's); item, branch, files (a restored checkout) |
+| `config_reload`, `warning` | config applied / worth a note, not red; the note says what (a runtime path or shared folder not ignored; a toast, `open:` launch, self-restart, tick, memory sample, log compaction or night shift that failed; a stage discarded; a worktree not removed; a main checkout restored after a fast-forward; a report unreviewed at a checkpoint or reviewed twice; a message never delivered, a `tell:` for no live item or an amend file naming none; a signal or reorder a crash cut short; a daemon under Claude Code; a watch's action not carried out; a remote broker not started or restarted after dying, a bad `[remote]`: `remote-workers.md`) | note; checkpoint, finish (unreviewed at a checkpoint); applied (a part-applied signal); amend, tell (never delivered); verb, target (an `open:` launch); action (a watch's); item, branch, files (a restored checkout) |

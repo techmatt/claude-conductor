@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import git, globs, inbox, nightshift, parked
@@ -169,7 +170,7 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str,
             named.setdefault(comp, []).append(ev.item.split("/", 1)[1].split("_", 1)[0])
     repeats = [f"{c} ({', '.join(ids)})" for c, ids in named.items() if len(ids) >= 2]
     out.append(f"- `friction:` repeated in the last {len(recent)} report(s): {'; '.join(repeats) or 'none'}")
-    out.append(workflow_retro(log, view, repo))
+    out.append(workflow_retro(log, view, repo, cfg.auto_retros))
     waiting, rules = parked.counts(cfg.control, repo)
     out.append(f"- parked edits waiting: {waiting}" + (f" ({rules} `[rules]`)" if rules else ""))
     return out
@@ -301,25 +302,82 @@ def retro_trigger(log: EventLog, fin: Event) -> str | None:
     return f"ran {times:.1f}× its first ETA" if (times := overrun(log, fin)) else None
 
 
-def workflow_retro(log: EventLog, view: View, repo: str) -> str:
-    """When a workflow retro (`post-audit`, a self-audit) last ran, how many non-template
-    items finished since, and that one is due when any of them went `partial` or `red` or
-    overran (`retro_trigger`), or at RETRO_FLOOR of them. It names the item with the most
-    friction among those that triggered it (all of them, at the floor)."""
-    fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo), key=lambda e: e.id)
-    last = next((ev for ev in reversed(fins) if canonical(ev.detail.get("template")) == "self_audit"), None)
-    since = [ev for ev in fins if not ev.detail.get("template") and not ev.detail.get("resume_of")
-             and (last is None or ev.id > last.id)]
-    text = (f"{last.item.split('/', 1)[1]}, {clock(last.ts)}" if last else "never") + \
-        f" · {len(since)} non-template item(s) finished since"
+@dataclass
+class Retro:
+    """A repo's workflow retros (docs/retros.md): the latest self-audit that ran, the one
+    queued or running, the non-template items finished since the newer of them was queued,
+    and the item a retro is due on now with why (None when none is)."""
+    last: Event | None
+    pending: tuple[str, str] | None         # (item, "queued" | "running")
+    since: list[Event]
+    due: Event | None
+    why: list[str]
+
+
+def _resumable(fin: Event) -> bool:
+    """A finish a self-audit can fork: it names a session and launched (`resume.problem`)."""
+    return bool(fin.detail.get("session_id")) and not any(
+        str(r).startswith("launch failed") for r in fin.detail.get("reasons") or [])
+
+
+def retros(log: EventLog, view: View, repo: str) -> Retro:
+    """Where the repo's workflow retros stand. Items count from the newest self-audit's
+    queueing (its `retro` or `enqueue` event; its finish when it has neither), so what
+    finishes while one runs counts toward the next. One is due when any counted item went
+    `partial` or `red` or overran (`retro_trigger`), or at RETRO_FLOOR of them, on the item
+    with the most friction among those that triggered it (all of them, at the floor). Never
+    on an item a self-audit already covers, or one with no session to fork."""
+    audits: list[tuple[int, str, str, Event | None]] = []     # (marker, item, state, finish)
+    for ev in view.finishes.values():
+        if ev.repo == repo and canonical(ev.detail.get("template")) == "self_audit":
+            audits.append((0, ev.item, "ran", ev))
+    audits += [(0, i, "running", None) for i, rec in view.running.items()
+               if rec.get("repo") == repo and rec.get("template") == "self_audit"]
+    audits += [(0, it.id, "queued", None) for it in view.queued.get(repo, []) if it.template == "self_audit"]
+    covered = {ev.detail.get("resume_of") for ev in view.finishes.values() if ev.detail.get("template") == "self_audit"}
+    covered |= {rec.get("resume_of") for rec in view.running.values() if rec.get("template") == "self_audit"}
+    covered |= {it.resume_of for q in view.queued.values() for it in q if it.template == "self_audit"}
+    marked = []
+    for _, item, how, fin in audits:
+        first = next((e for e in log.query(kinds=["retro", "enqueue"], item=item) if e.item == item), None)
+        marked.append((first.id if first else fin.id if fin else 1 << 62, item, how, fin))
+    ran = [m for m in marked if m[2] == "ran"]
+    last = max(ran, key=lambda m: m[3].id)[3] if ran else None
+    pend = max((m for m in marked if m[2] != "ran"), default=None, key=lambda m: m[0])
+    floor = max((m[0] for m in marked), default=0)
+    since = sorted((ev for ev in view.finishes.values() if ev.repo == repo and ev.id > floor
+                    and not ev.detail.get("template") and not ev.detail.get("resume_of")), key=lambda e: e.id)
     triggers = {ev.id: why for ev in since if (why := retro_trigger(log, ev))}
+    due, parts = None, []
     if triggers or len(since) >= RETRO_FLOOR:
-        scored = [(friction_score(log, ev), ev) for ev in since if ev.id in triggers or not triggers]
-        (score, why), worst = max(scored, key=lambda s: (s[0][0], s[1].id))
-        trigger = triggers.get(worst.id)
-        why = [w for w in why if w != trigger]
-        parts = ([trigger] if trigger else []) + why or ["no friction recorded; the latest"]
-        text += f" · **due**: post-audit {worst.item.split('/', 1)[1]} ({', '.join(parts)})"
+        pool = [ev for ev in since if (ev.id in triggers or not triggers) and ev.item not in covered and _resumable(ev)]
+        if pool:
+            (_, why), due = max(((friction_score(log, ev), ev) for ev in pool), key=lambda s: (s[0][0], s[1].id))
+            trigger = triggers.get(due.id)
+            why = [w for w in why if w != trigger]
+            parts = ([trigger] if trigger else []) + why or ["no friction recorded; the latest"]
+    return Retro(last, (pend[1], pend[2]) if pend else None, since, due, parts)
+
+
+def workflow_retro(log: EventLog, view: View, repo: str, auto: bool = False) -> str:
+    """The digest's line: the last retro, the one queued or running, the items counted
+    since, and the one due. With `auto` (`[defaults] auto_retros`) conductor queues a due
+    one itself, so it reads as queued or ran; **due** (the planner offers it) only without."""
+    r = retros(log, view, repo)
+    text = (f"{r.last.item.split('/', 1)[1]}, {clock(r.last.ts)}" if r.last else "never")
+    if r.pending:
+        text += f" · {r.pending[1]}: {r.pending[0].split('/', 1)[1]}"
+    text += f" · {len(r.since)} non-template item(s) finished since"
+    if r.due:
+        what = f"post-audit {r.due.item.split('/', 1)[1]} ({', '.join(r.why)})"
+        if not auto:
+            text += f" · **due**: {what}"
+        elif r.pending:
+            text += f" · next: {what}, queued once {r.pending[0].split('/', 1)[1]} ends"
+        elif repo in view.paused:
+            text += f" · next: {what}, queued when `{repo}` resumes"
+        else:
+            text += f" · next: {what}, conductor queues it"
     return f"- workflow retro: {text}"
 
 

@@ -78,17 +78,18 @@ poll_seconds = 2              # daemon loop interval
 ask_default_minutes = 10      # an unanswered non-blocking ask returns its default after this
 stage_minutes = 30            # a stage running longer is killed and discarded
 setup_minutes = 10            # per setup command
-merge_minutes = 10            # a merge executor resolving a prose conflict is killed after this
-foreground_seconds = 60       # an executor's foreground shell call moves to the background after this; 0 = off (see progress.md)
-toasts = true                 # Windows desktop notifications (see inbox.md, Toasts)
-doc_budget_kb = 15            # a tracked repo doc past this is **due** in session.md's Maintenance facts (inbox.md)
-memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (see memory.md)
+merge_minutes = 10            # a merge executor resolving prose is killed after this
+foreground_seconds = 60       # a foreground shell call is backgrounded after this; 0 = off (progress.md)
+toasts = true                 # Windows desktop notifications (inbox.md, Toasts)
+doc_budget_kb = 15            # a repo doc past this is **due** in session.md (inbox.md)
+auto_retros = true            # queue a due workflow retro unasked (retros.md)
+memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (memory.md)
 memory_keep_hours = 24        # samples kept in .conductor/memory.jsonl
 memory_pressure_percent = 90  # pressure: commit at or over this % of its limit (0 = off) ...
 memory_pressure_free_gb = 3   # ... or free RAM at or under this (0 = off)
 memory_critical_percent = 95  # critical: the same, further on
 memory_critical_free_gb = 1.5
-memory_calm_seconds = 300     # a level falls only once the box stays clear this long (a rise is at once)
+memory_calm_seconds = 300     # a level falls only once the box is clear this long (rises at once)
 load_warn_free_threads = 2    # load_high: under this many hardware threads free ...
 load_warn_seconds = 180       # ... for this long (see memory.md)
 load_tell_minutes = 15        # how often a stretch logs again, and an item causing it is messaged at most
@@ -110,7 +111,7 @@ shared = ["data", ".venv"]    # untracked folders linked into every worktree (ju
 setup = ["uv sync"]           # shell commands run in a new worktree before launch
 prose = ["CLAUDE.md", "README.md", "docs/**/*.md"]   # the default: exempt from `paths`, merged textually
 append_only = ["experiments/history.md"]            # logs only appended to: merged by union on landing (default none; worktrees.md)
-background = ["npm test*", "*playwright test*"]       # shell commands executors always background (default none; see progress.md)
+background = ["npm test*", "*playwright test*"]       # shell commands executors always background (default none; progress.md)
 doc_budget_exempt = ["docs/cards.md"]                 # docs never listed as trim due (inbox.md)
 
 [executor]                    # optional

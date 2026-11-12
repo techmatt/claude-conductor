@@ -119,7 +119,7 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   changes, each with what it would have saved: 59) and *Where the time went*, writing only
   what the original's own notes miss or got wrong (75: aicomplete 089 and 095 repeated
   theirs, and the cleanup verified them twice). It runs as the
-  digest's **workflow retro** (when: `inbox.md`, *Session start digest*). They count as unused notes for the repo's next cleanup, whose inlined heading
+  **workflow retro**, which conductor queues itself when one is due (`retros.md`). They count as unused notes for the repo's next cleanup, whose inlined heading
   names the original (`… : a self-audit of <orig>, written by its own session`). The
   report has **Summary** and **About conductor** (findings about the template,
   preamble, planner or tools, for the planner to carry to conductor's `planner-notes.md`). Not

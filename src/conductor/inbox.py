@@ -433,6 +433,8 @@ def describe(ev: Event) -> str:
             text = f"watch flag ({d.get('flag')}): {d.get('text')}" + (f" — watch {d['watch']}" if d.get("watch") else "")
         case "watch":
             text = f"watch {who} launched: {d.get('reason')}"
+        case "retro":
+            text = f"workflow retro {who} queued: post-audit of {d.get('of')} ({', '.join(d.get('why') or [])})"
         case "push":
             text = (f"pushed {d.get('target')} {d.get('branch')} to {d.get('remote')} ({str(d.get('sha'))[:8]}"
                     + (", up to date" if d.get("up_to_date") else "") + f"; {', '.join(d.get('why', []))})")

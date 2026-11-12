@@ -88,6 +88,7 @@ class Config:
     foreground_seconds: float = 60.0  # an executor's foreground shell call moves to the background after this (0: off)
     toasts: bool = True
     doc_budget_kb: float = 15.0      # a tracked repo doc past this shows **due** in the digest (session.doc_facts)
+    auto_retros: bool = True         # conductor queues a due workflow retro itself (daemon_retros, docs/retros.md)
     # Memory (`memory.py`): sampled every N seconds (0: off); a level is commit at or over
     # a percent of its limit, or free RAM at or under a size (0 turns either off).
     memory_sample_seconds: float = 30.0
@@ -191,6 +192,13 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
             if globs.invalid(glob):
                 raise ConfigError(f"{where}.{key}: {glob!r} must be a relative glob inside the repo")
     return opts
+
+
+def _flag(table: dict, key: str, default: bool) -> bool:
+    value = table.get(key, default)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{CONFIG_NAME}: defaults.{key} must be true or false")
+    return value
 
 
 def _is_command(value) -> bool:
@@ -351,6 +359,7 @@ def load(control: Path) -> Config:
         merge_minutes=float(defaults.get("merge_minutes", 10.0)),
         foreground_seconds=float(defaults.get("foreground_seconds", 60.0)),
         toasts=bool(defaults.get("toasts", True)),
+        auto_retros=_flag(defaults, "auto_retros", True),
         doc_budget_kb=float(defaults.get("doc_budget_kb", 15.0)),
         **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS + NIGHT_KEYS},
         command=[str(x) for x in command],

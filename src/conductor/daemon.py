@@ -42,6 +42,7 @@ from .daemon_push import PushMixin
 from .daemon_receipts import ReceiptsMixin
 from .daemon_reap import ReapMixin
 from .daemon_restart import RestartMixin
+from .daemon_retros import RetrosMixin
 from .daemon_setup import SetupMixin
 from .daemon_signals import SIGNAL_SETTLE_SECONDS, SignalsMixin
 from .daemon_templates import TemplatesMixin
@@ -105,7 +106,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
 
 
 class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
-             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin):
+             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -369,6 +370,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         from . import remote        # a broker that died starts again: a no-op without `[remote]`
         remote.keep_broker(self.cfg.control, lambda note: self.log.append("warning", note=note))
         self.night_shift()
+        self.queue_retros()             # daemon_retros
         self.schedule()
         self.write_inbox()
 
