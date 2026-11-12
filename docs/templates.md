@@ -30,8 +30,11 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   *Audit notes* paragraph (`audit.md`) naming an absolute path,
   `reports/<repo>__NNN_name.audit.md`, as the second file the executor may write
   outside its working directory. It keeps a running notes file there while it works,
-  covering every task, under five headings: what was poorly structured, what took
-  longer than expected and why, what should be refactored or cleaned up, what
+  covering every task, under six headings: what was poorly structured, what took
+  longer than expected and why (tokens and context as well as time, by activity), what
+  was *re-derived or re-read* (the same file, search or fact established twice) and what
+  would have cached it (108: retired Matt's hand-run session retrospective; a cleanup adds
+  that doc line, index or script), what should be refactored or cleaned up, what
   CLAUDE.md or README should say, and (84) what *needs a decision*, with options and a
   pick: those bullets ride the report's inbox line (`audits.decisions`, `inbox.md`) so the
   planner rules on them at review, where cleanups had deferred them back as "planner's
@@ -113,7 +116,7 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
 - **`template: self_audit`** (only on a resume item, `resume.md`; **post-audit X**). The
   original's own session, forked, looks back over its run, from memory and its record,
   and changes nothing. It behaves as `audit: true`: its notes, at the resume item's own
-  `.audit.md` path, start `Self-audit of <orig>.` and use the four headings plus
+  `.audit.md` path, start `Self-audit of <orig>.` and use the five non-decision headings plus
   *What happened vs. what was asked* (each divergence and when it started), *What
   misled you* (quoted, with the wording that would have worked, then concrete workflow
   changes, each with what it would have saved: 59) and *Where the time went*, writing only

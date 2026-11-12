@@ -3,7 +3,13 @@ Audit notes. While you do this item, keep a running notes file at exactly this p
 Nobody reviews it per item; a later cleanup acts on what is left. Write it as you go, so
 it survives a kill, and cover every task you perform, under these headings:
 - Poorly structured: what was badly organised in the code or the repo layout.
-- Slower than expected: what took longer than it should have, and why.
+- Slower than expected: what took longer than it should have, and why, in tokens and
+  context as well as wall-clock time: what consumed the most, broken down by activity
+  where it's clear (locating code, understanding behaviour, editing, running and
+  verifying, navigating between files).
+- Re-derived or re-read: files re-read, searches repeated, context rebuilt (the same
+  file, pattern or fact established more than once), and what would have cached it (a
+  CLAUDE.md or README line, an index, a script, a fixture). Name the files.
 - Refactor or clean up: what should be refactored, restructured or tidied, with the
   files involved.
 - Docs that would have saved time: what the repo's CLAUDE.md or README should say.

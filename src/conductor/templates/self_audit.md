@@ -8,8 +8,8 @@ Write audit notes to the audit notes file described above, about that run, not a
 this look back. The run's own notes (`<name>.audit.md` in your record) already reach the
 next cleanup: write only what they miss or got wrong, never a repeat. Start the file with
 the line `Self-audit of {{original}}.`, then use its
-four headings (Poorly structured, Slower than expected, Refactor or clean up, Docs that
-would have saved time) and three more:
+five headings (Poorly structured, Slower than expected, Re-derived or re-read, Refactor
+or clean up, Docs that would have saved time) and three more:
 - What happened vs. what was asked: where the run diverged from the prompt's goal,
   budget or plan, and the moment each divergence started (a time from the run log, or
   the step).

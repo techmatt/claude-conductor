@@ -114,7 +114,8 @@ def notes(cfg: Config, repo: str, finishes: dict[str, Event], used: dict[str, Ev
 # `templates/audit.md`'s headings, however an executor marks them up (`## X`, `- X:`, `**X**`).
 _HEAD = r"^[#*\-\s]*({})\b[^\n]*$"
 DECISION_HEADING = re.compile(_HEAD.format("needs a decision"), re.IGNORECASE)
-OTHER_HEADING = re.compile(_HEAD.format("poorly structured|slower than expected|refactor or clean ?up|"
+OTHER_HEADING = re.compile(_HEAD.format("poorly structured|slower than expected|re-?derived or re-?read|"
+                                        "refactor or clean ?up|"
                                         "docs that would have saved time"), re.IGNORECASE)
 NOTHING = re.compile(r"\W*(nothing to note|none)\W*", re.IGNORECASE)
 

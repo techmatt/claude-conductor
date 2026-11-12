@@ -241,6 +241,7 @@ def test_a_commit_on_an_open_design_default_and_decision_notes_show_on_its_line(
      ["keep A or B (pick A)", "one more"]),
     ("**Needs a decision**: Nothing to note.\n- Slower than expected: none\n", []),
     ("- Refactor or clean up: tidy a.py\n", []),
+    ("- Needs a decision:\n  - keep A (pick A)\n- Re-derived or re-read: x.py read 3 times\n", ["keep A (pick A)"]),
 ])
 def test_decision_notes_are_read_however_the_heading_is_marked(tmp_path, notes, want):
     p = tmp_path / "n.audit.md"

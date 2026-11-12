@@ -1,11 +1,12 @@
 Cleanup of `{{repo}}`. Earlier items kept the audit notes below while they worked: what
-was poorly structured, what took longer than expected, what should be refactored, and
-what the repo's CLAUDE.md or README should say. Act on them.
+was poorly structured, what took longer than expected, what was re-read or re-derived,
+what should be refactored, and what the repo's CLAUDE.md or README should say. Act on them.
 
 1. Read every note, then check each one against the code as it is now: some may already
    be fixed, contradict each other, or be wrong.
 2. Carry out whatever is clear and well defined: refactors, restructuring, dead code,
-   naming, CLAUDE.md and README improvements. Keep behaviour unchanged unless a note
+   naming, CLAUDE.md and README improvements; for each re-read or re-derived note, add
+   the doc line, index or script that would have cached it. Keep behaviour unchanged unless a note
    names a plain bug. Run the tests after each substantial step and leave them green.
 3. Defer every design-level call: anything that changes what the code does for its
    users, picks between real alternatives, or needs Matt's judgement. Never decide one.
