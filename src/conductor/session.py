@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import git, globs, inbox, nightshift, parked
+from . import git, globs, inbox, nightshift, parked, resume
 from .audits import canonical
 from .config import Config
 from .events import Event, EventLog
@@ -315,9 +315,12 @@ class Retro:
 
 
 def _resumable(fin: Event) -> bool:
-    """A finish a self-audit can fork: it names a session and launched (`resume.problem`)."""
-    return bool(fin.detail.get("session_id")) and not any(
-        str(r).startswith("launch failed") for r in fin.detail.get("reasons") or [])
+    """A finish a self-audit can fork: it launched and its session's transcript is still in
+    Claude Code's projects folder (`resume.prepare` fails the launch red otherwise: an item
+    older than Claude Code's pruning, or a sandbox's fake session)."""
+    sid = fin.detail.get("session_id")
+    return bool(sid) and not any(str(r).startswith("launch failed") for r in fin.detail.get("reasons") or []) \
+        and resume.session_file(str(sid)) is not None
 
 
 def retros(log: EventLog, view: View, repo: str) -> Retro:

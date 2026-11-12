@@ -31,7 +31,8 @@ command (`docs/restart.md`).
 | File | What it covers |
 |---|---|
 | `docs/commands.md` | Every `conductor` command and flag; `--since`; the default control folder |
-| `docs/control-folder.md` | Layout, `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard, requests |
+| `docs/control-folder.md` | Layout, `.gitignore`, `conductor.toml`, `conductor init`, the tamper guard |
+| `docs/requests.md` | Planner requests: applying, waits, failures and order, edit blocks |
 | `docs/rename-repo.md` | `conductor rename-repo` |
 | `docs/runtime.md` | The `.conductor/` folder: lock, heartbeat, journals, scratch |
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |

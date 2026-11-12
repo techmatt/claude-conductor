@@ -2,14 +2,13 @@
 lines to fold (request receipt and digest); a misnamed inbox prompt is named, not skipped."""
 
 import io
-import json
 import time
 from pathlib import Path
 
 import psutil
 
-from conductor import ask_server, procs, session
-from conductor.util import read_text, split_front_matter
+from conductor import ask_server, session
+from conductor.util import read_text
 
 from test_prompt_inbox import root, run, tool  # noqa: F401  (fixture and helpers)
 from test_receipts import receipt

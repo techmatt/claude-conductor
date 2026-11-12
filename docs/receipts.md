@@ -47,7 +47,7 @@ events: [812, 813]
   is `pending`, its `result` what it waits for, replaced by the final receipt; so is one
   still waiting on its own files 2s after `request.md` (`PENDING_AFTER_SECONDS`):
   `waiting for targets missing: state.md`, or `waiting for a changed copy: every target is
-  identical to HEAD so far (…)` (`control-folder.md`, *Requests*). Younger, it has no
+  identical to HEAD so far (…)` (`requests.md`, *Waits*). Younger, it has no
   receipt yet: missing means not handled yet.
 - `events`: the ids of every event its handling logged, one line each below: a
   signal's, side effects included; a request's `request`, `commit` (and a `closeout:`

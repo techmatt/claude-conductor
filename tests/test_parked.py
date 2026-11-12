@@ -6,6 +6,8 @@ import pytest
 from conductor import executor, items, parked, state
 from conductor.util import read_text
 
+from conftest import transcript
+
 
 def write_parked(env, *lines: str) -> None:
     parked.prepare(env.control)
@@ -47,7 +49,7 @@ def test_a_workflow_retro_at_the_floor_names_the_most_friction(env):
     def fin(name: str, **detail):
         (env.control / "done" / "code" / f"{name}.md").write_text("x\n", encoding="utf-8")
         return log.append("finish", item=f"code/{name}", repo="code", status=detail.pop("status", "done"),
-                          session_id="s", **detail)
+                          session_id=transcript("s"), **detail)
 
     fin("010_audit", template="self_audit", resume_of="code/009_x")
     for n in range(11, 22):

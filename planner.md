@@ -73,7 +73,7 @@ message: "state: v0.2"
 >>>>>>>
 ```
 
-**Edits** (the default for `state.md`): whole lines of the staged file, old ones unique there; an empty new side deletes; a miss refuses it all. A whole file: edit the staged copy, send it whole. Every changed file is a target; quote a `message:` holding a colon. `nothing to commit: … identical to HEAD`: the copy sent was unedited; resend from a fresh path. Refusals, the tamper guard, warnings: `docs/control-folder.md`.
+**Edits** (the default for `state.md`): whole lines of the staged file, old ones unique there; an empty new side deletes; a miss refuses it all. A whole file: edit the staged copy, send it whole. Every changed file is a target; quote a `message:` holding a colon. `nothing to commit: … identical to HEAD`: the copy sent was unedited; resend from a fresh path. Refusals, warnings: `docs/requests.md`; the tamper guard: `control-folder.md`.
 
 ## Every session
 

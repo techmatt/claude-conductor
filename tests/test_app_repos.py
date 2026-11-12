@@ -171,6 +171,7 @@ def test_mark_reviewed_from_the_repos_tab(qapp, env, tmp_path):
     win.close()
 
 
+@pytest.mark.slow
 def test_running_row_progress_tell_and_open_in_terminal(qapp, env, tmp_path, monkeypatch):
     from conductor import procs
     from conductor.app.window import MainWindow

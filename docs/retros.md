@@ -22,7 +22,8 @@ It names the item with the most friction among those that triggered it (at the f
 of them): its `friction:` parts, watch tells to it, questions that timed out to their
 default, watch `eta` flags, and red (counts double); ties go to the latest. Never an item a
 self-audit (queued, running or finished, conductor's or Matt's) already covers, nor one
-with no session to fork (no `session_id`, or a `launch failed` red). Template items
+with no session to fork (no `session_id`, a `launch failed` red, or a transcript gone from
+Claude Code's projects folder: `resume.md`). Template items
 (watches included) and resume items (**ask X**, self-audits) are never counted.
 
 ## Queued by conductor

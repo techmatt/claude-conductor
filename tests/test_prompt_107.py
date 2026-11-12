@@ -9,7 +9,7 @@ import pytest
 from conductor import session, state
 from conductor.util import read_text
 
-from conftest import git
+from conftest import git, transcript
 
 
 def auto(env) -> None:
@@ -24,7 +24,7 @@ def fin(env, name: str, **detail):
     done = env.control / "done" / "code"
     done.mkdir(parents=True, exist_ok=True)
     (done / f"{name}.md").write_text("x\n", encoding="utf-8")
-    detail.setdefault("session_id", f"s-{name}")
+    detail.setdefault("session_id", transcript(f"s-{name}"))
     return env.d.log.append("finish", item=f"code/{name}", repo="code", status=detail.pop("status", "done"), **detail)
 
 
@@ -74,6 +74,18 @@ def test_no_retro_of_a_template_watch_or_resume_item_or_one_with_no_session(env)
     fin(env, "003_x", status="red", session_id=None, reasons=["launch failed: no claude"])
     env.d.queue_retros()
     assert queued(env) == [] and "due" not in retro_line(env) and "next" not in retro_line(env)
+
+
+def test_no_retro_of_an_item_whose_transcript_is_gone(env):
+    """The sandbox's first daemon after 107 queued a retro of a 13-day-old item with no
+    transcript, which went red at launch (cleanup 2026-11-12)."""
+    auto(env)
+    fin(env, "001_old", status="red", session_id="pruned")
+    env.d.queue_retros()
+    assert queued(env) == [] and "due" not in retro_line(env)
+    fin(env, "002_new", status="partial")
+    env.d.queue_retros()
+    assert queued(env) == ["code/003_post_audit_002"]
 
 
 def test_never_a_second_for_an_item_a_post_audit_covers(env):

@@ -6,9 +6,9 @@ merge and staging paths are covered without spending Claude runs. It runs in two
 in parallel (`pytest-xdist`, up to 8 workers):
 
 ```
-uv run pytest            # the fast lane, after every change (~90-130s; 526 tests; 2026-11-10)
+uv run pytest            # the fast lane, after every change (~80-130s; 550 tests; 2026-11-12)
 uv run pytest -m slow    # the slow lane alone
-uv run pytest -m ""      # everything (~230-300s; 668 tests); run this before committing
+uv run pytest -m ""      # everything (~220-300s; 697 tests); run this before committing
 uv run pytest -n0 tests/test_x.py::test_y    # one test, no workers (startup ~3s otherwise)
 ```
 
@@ -68,7 +68,8 @@ set `daemon.memory_probe` to a stand-in box. `procs.claude_ancestor` is stubbed 
 every test (the suite usually runs inside Claude Code). `FAKE ask {json}` calls the
 real ask server through the item's `--mcp-config` using `tests/mcp_client.py`, a
 scripted MCP client that also runs standalone:
-`python tests/mcp_client.py <mcp.json> '{"question": "…", "default": "…"}'`. The sandbox
+`python tests/mcp_client.py <mcp.json> '{"question": "…", "default": "…"}'`. It asserts the
+server's exact tool list, so a new conductor tool is added there too (106). The sandbox
 (`C:\Code\conductor-sandbox`, `C:\Code\conductor-sandbox-control`) is for end-to-end
 runs with real executors.
 

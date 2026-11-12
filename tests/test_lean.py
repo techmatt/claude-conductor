@@ -13,6 +13,8 @@ from conductor import ask_server, executor, git, session, state, talk
 from conductor.items import Item
 from conductor.util import now, stamp
 
+from conftest import transcript
+
 
 def render(env, body: str = "x " * 200, run: dict | None = None, **meta) -> str:
     item = Item("code", "W1_watch", env.control / "queue" / "code" / "W1_watch.md", num=1, body=body, **meta)
@@ -177,7 +179,7 @@ def fin(env, name: str, **detail):
     done = env.control / "done" / "code"
     done.mkdir(parents=True, exist_ok=True)
     (done / f"{name}.md").write_text("x\n", encoding="utf-8")
-    detail.setdefault("session_id", f"s-{name}")         # a retro forks it: none, none is due
+    detail.setdefault("session_id", transcript(f"s-{name}"))   # a retro forks it: none, none is due
     return env.d.log.append("finish", item=f"code/{name}", repo="code", status=detail.pop("status", "done"), **detail)
 
 
@@ -203,7 +205,7 @@ def test_a_retro_is_due_on_a_run_past_half_again_its_first_eta(env):
         log.append("start", item=f"code/{name}", happened=stamp(base))
         log.append("progress", item=f"code/{name}", eta=eta, note="x", happened=stamp(base + timedelta(minutes=1)))
         log.append("progress", item=f"code/{name}", eta="9h", note="later", happened=stamp(base + timedelta(minutes=2)))
-        return env.d.log.append("finish", item=f"code/{name}", repo="code", status="done", session_id="s",
+        return env.d.log.append("finish", item=f"code/{name}", repo="code", status="done", session_id=transcript("s"),
                                 happened=stamp(base + timedelta(hours=hours)))
     (env.control / "done" / "code").mkdir(parents=True, exist_ok=True)
     for name in ("001_ok", "002_small", "003_late"):

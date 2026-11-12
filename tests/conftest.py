@@ -176,6 +176,14 @@ def claude_config(tmp_path, monkeypatch):
     return path
 
 
+def transcript(session_id: str) -> str:
+    """A transcript for a hand-made finish's session, so a retro can fork it (`resume.session_file`)."""
+    path = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "fake" / f"{session_id}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{}\n", encoding="utf-8")
+    return session_id
+
+
 @pytest.fixture
 def qapp():
     """The offscreen Qt application the app tests share."""
