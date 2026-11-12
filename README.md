@@ -48,6 +48,7 @@ command (`docs/restart.md`).
 | `docs/night-shift.md` | Stall check, watch item, autopilot, the backlog and its draws, nightly budget |
 | `docs/resume.md` | Resume items: asking a finished item's own session (forked); self-audit |
 | `docs/retros.md` | Workflow retros: when one is due, conductor queuing it, the digest's line |
+| `docs/warnings.md` | A report's `warnings:` line: a project's own checks, where warnings show |
 | `docs/questions.md` | The `ask` tool, answers, defaults, blocking questions |
 | `docs/progress.md` | `progress`, outlines, messages (`tell:`), short calls, amendments, opening a finished session |
 | `docs/signals.md` | Every signal verb; how a signal file applies |

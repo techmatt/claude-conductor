@@ -167,3 +167,9 @@ only in the environment (74). Stages and merge executors get none.
   progress. The leftover check skips a bar shown unreachable. Light gets the same in three
   lines. Words: full template 1,055 → 1,228; light rendered 385 → 428, its cap raised to 430
   (cutting 43 more words would have cost existing rules).
+- **Warnings** (109): every preamble's header gains `warnings: none | <kind>: <what tripped>[; …]`
+  (`warnings.md`); full and light point at the repo's CLAUDE.md *Warning checks* and name its
+  `warning_checks` commands (`executor.checks_text`), and say a warning never changes the status.
+  Light folds the pointer into its header line and holds its 430 cap, paid for by shorter
+  `slow:`, unmet-bar, message, design-ask and header-intro lines. Its report-path line stays
+  word for word: `tests/fake_claude.py` and the restart preamble find the path by it.

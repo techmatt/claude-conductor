@@ -60,6 +60,7 @@ def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: 
     out = [f"# Review — {cfg.project}", "",
            f"Written for `{rel}` at {clock(now())}: `review: {what}`. Nothing is marked reviewed: "
            "`reviewed:` comes only from processing a report read in full, as process X / process all does.",
+           *(["", "## Warnings", *warned] if (warned := inbox.warning_lines(view, finishes)) else []),
            "", "## Unreviewed reports" if not item_id else "## Report",
            *(inbox.unreviewed_lines(view, finishes, picks.saved_at(cfg, view), cfg) or ["- none"])]
     bundle = Bundle("", items=[ev.item for ev in finishes])

@@ -69,6 +69,9 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
                     f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}.")
         case "notify":
             return f"{project}: from the {detail.get('by') or 'planner'}", str(detail.get("text", ""))[:250]
+        case "finish" if (w := str(detail.get("warnings") or "").strip()) and w.lower().rstrip(".") != "none":
+            # A report's `warnings:` line: surfaced, never a hold (docs/warnings.md).
+            return f"{project}: {who} raised warnings", w[:250]
         case "queue_empty":
             return f"{project}: queue `{repo}` is empty", f"last item {detail.get('last')}"
     return None

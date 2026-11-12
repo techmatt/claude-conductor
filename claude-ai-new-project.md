@@ -39,7 +39,8 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
    - local 12-hour clock times;
    - steps over ~30 seconds backgrounded, with a completion waiter on the real process, never on a launcher wrapper;
    - LF line endings (`.gitattributes` `* text=auto eol=lf`);
-   - operational facts learned while working promoted into the repo's README, never left only in a report.
+   - operational facts learned while working promoted into the repo's README, never left only in a report;
+   - a *Warning checks* section: offer Matt checks for the project's domain (a game: balance, game length, dominant picks; data: row counts, drift; a web app: perf, accessibility; any: docs gone stale, security), each tripping as a `<kind>: <text>` part of the report's `warnings:` line; a check with a script also goes in the repo's `warning_checks` (`docs/warnings.md`). Warnings are surfaced, never gated.
 
    From then on, work flows through the queue; each session starts with **start a new <project> session**.
 

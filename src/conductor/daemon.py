@@ -1032,7 +1032,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "blocks": (header or {}).get("blocks"), "carry": (header or {}).get("carry"),
             "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
             "picks": [r for v in (header or {}).get("picks", []) if (r := _pick_ref(repo, v))],
-            "friction": (header or {}).get("friction"),
+            "friction": (header or {}).get("friction"), "warnings": (header or {}).get("warnings"),
             "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }

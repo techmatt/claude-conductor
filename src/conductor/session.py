@@ -170,6 +170,9 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str,
             named.setdefault(comp, []).append(ev.item.split("/", 1)[1].split("_", 1)[0])
     repeats = [f"{c} ({', '.join(ids)})" for c, ids in named.items() if len(ids) >= 2]
     out.append(f"- `friction:` repeated in the last {len(recent)} report(s): {'; '.join(repeats) or 'none'}")
+    warned = inbox.warning_repeats(view, repo, SLOW_WINDOW)
+    out.append(f"- `warnings:` kinds repeated in the last {len(recent)} report(s): "
+               + ("; ".join(f"{k} ({', '.join(ids)})" for k, ids in warned.items()) or "none"))
     out.append(workflow_retro(log, view, repo, cfg.auto_retros))
     waiting, rules = parked.counts(cfg.control, repo)
     out.append(f"- parked edits waiting: {waiting}" + (f" ({rules} `[rules]`)" if rules else ""))

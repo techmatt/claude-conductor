@@ -323,7 +323,7 @@ class MergeMixin:
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
             blocks=out["blocks"], carry=out["carry"], slow=out.get("slow"), pick=out.get("pick"),
-            friction=out.get("friction"),
+            friction=out.get("friction"), warnings=out.get("warnings"),
             session_id=rec["session_id"], exit_code=out["exit_code"],
             cost_usd=out["cost_usd"], turns=out["turns"],
             needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,

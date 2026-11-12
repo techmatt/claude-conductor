@@ -109,14 +109,18 @@ Write your report to exactly this path:
 {only} Touch nothing else
 in that folder: conductor reverts any change and marks this item red.
 
-The report starts with these five lines:
+The report starts with these six lines:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
+warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 {pick_line}`slow:` names only a part over ~15 minutes or twice your estimate, with cause and
-fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that cost time or tokens.
+fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that cost time or tokens;
+`warnings:`, what the repo's warning checks trip (its CLAUDE.md *Warning checks*{checks}; run
+them before the report) and any other warning you notice, each led by a kind (`design`, `data`,
+`perf`, `docs`, `security` or the repo's own). A warning never changes your status.
 `done`: goal met. `partial`: part met, nothing broken, the rest follow-up (an
 instruction declined with a reason included). `red`: something broken or unsafe; this
 repo's queue should not continue without a look.
@@ -137,11 +141,11 @@ LIGHT = """\
 You are a conductor executor: headless Claude Code running item {item_id} for
 project {project}. Nobody is watching.
 
-Asking. If a wrong guess wastes real work, `ask` (mcp__conductor__ask) Matt with a
+Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
 default; unanswered, it returns after {ask_minutes:g} minutes. It holds the
 session until then: start background work first. Block (`block: true`) only if every
 default is worse. A ruling splitting a pass (over ~30% of items one way) or a fix changing
-play beyond its bug: ask `design: true` (returns at once).
+play beyond its bug: ask `design: true` (never waits).
 
 Progress: a `progress` (mcp__conductor__progress) line at start and launching any job over ~15m (its end).
 
@@ -156,9 +160,9 @@ No elevation (UAC, admin installs, services): go no-admin or report it.{leftover
 
 Latitude. Conflicts: locked rulings, then goal, then done-when bars, then method (a suggestion
 unless required); report what gave way, don't ask. Bars are scored strictly, not chased: check
-a numeric target is reachable first; one shown not is reported unmet with its evidence.
+a numeric target is reachable first, else report it unmet with evidence.
 
-MESSAGE #n or AMENDMENT #n hook context is Matt's and outranks the prompt.
+MESSAGE #n / AMENDMENT #n hook context: Matt's, outranking the prompt.
 {calls}
 {workdir}{paths}{port}{now}{beside}
 
@@ -167,13 +171,14 @@ Time limit: {max_hours:g}h; killed at {deadline}, later if blocked.
 Write your report to exactly this path:
     {report}
 {only} Other changes there: reverted, red.
-Start it with:
+Its header:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
-slow: none | <component> ~<time>, <why>, <what would fix it>
+slow: none | <part> ~<time>, <why>, <fix>
 friction: none | <what slowed you>
-`done`: goal met. `partial`: part met, nothing broken. `red`: broken or unsafe; the queue stops. Answer messages and
+warnings: none | <kind>: <what CLAUDE.md's *Warning checks*{checks} or you caught>; …
+`done`: goal met. `partial`: part met, nothing broken. `red`: broken or unsafe; the queue stops. Answer messages,
 amendments by number. End with `Report written to {report}`.
 
 {tail}"""
@@ -203,6 +208,7 @@ blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>
 friction: none | <what slowed you>
+warnings: none | <kind>: <anything that looks wrong>[; …]
 Answer every message and amendment by number. End your final message with
 `Report written to {report}`.
 
@@ -492,7 +498,8 @@ def _workdir(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
 ASK_TIMEOUT_MS = 7 * 24 * 3600 * 1000
 
 HEADER_KEYS = ("status", "blocks", "carry")
-OPTIONAL_KEYS = ("slow", "friction", "pick")     # straight after the three, any order
+OPTIONAL_KEYS = ("slow", "friction", "warnings", "pick")     # straight after the three, any order
+TEXT_KEYS = ("slow", "friction", "warnings")     # kept as written; `pick` is a path
 MAX_PICKS = 12                                   # `pick:` lines a header may carry, one per picker
 STATUSES = ("done", "partial", "red")
 
@@ -571,6 +578,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
         deadline=clock(deadline), report=paths.report.resolve(),
         pick=PICK if pick else "", pick_line=PICK_LINE if pick else "",
+        checks=checks_text(cfg.opts(item.repo).warning_checks),
         tail="" if resume else PROMPT_FOLLOWS,
     )
     extra = choices + parked_mod.section(list(parked)) + (EXTERNAL if item.external_data else "")
@@ -583,6 +591,12 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
                               landed=landed)
     tail = (RESUME_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
     return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + extra + tail
+
+
+def checks_text(commands: list[str]) -> str:
+    """The repo's `warning_checks` (conductor.toml) for the preamble's `warnings:` line:
+    `` and `a`; `b` ``, or nothing."""
+    return " and " + "; ".join(f"`{c}`" for c in commands) if commands else ""
 
 
 def _amend(template: str, msg: dict) -> str:
@@ -831,8 +845,8 @@ def gzip_log(log: Path) -> tuple[int, int] | None:
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:
     """(header, problem). Accepts the three lines bare or inside a `---` block, then
-    `slow:` (what took long), `friction:` (what cost the item time or tokens; absent is no
-    problem either) and optional `pick:` lines (a picker manifest's path each: `pick` is the
+    `slow:` (what took long), `friction:` (what cost the item time or tokens), `warnings:`
+    (what its checks tripped; absent is no problem either) and optional `pick:` lines (a picker manifest's path each: `pick` is the
     first, `picks` all of them; fractals 022 had three). Those only right after the three,
     in any order, never in the body."""
     if not report.is_file():
@@ -842,7 +856,7 @@ def read_header(report: Path) -> tuple[dict | None, str | None]:
     header = {}
     seen = 0                            # optional lines met so far, set or not
     for n, ln in enumerate(lines):
-        m = re.match(r"^\**(status|blocks|carry|slow|pick|friction)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
+        m = re.match(r"^\**(status|blocks|carry|slow|pick|friction|warnings)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
         key = m.group(1).lower() if m else None
         if key is None or (key in header and key != "pick"):
             continue                    # the first of each key counts; a repeat is body
@@ -856,7 +870,7 @@ def read_header(report: Path) -> tuple[dict | None, str | None]:
             continue
         seen += 1
         value = m.group(2).strip()
-        if key in ("slow", "friction"):
+        if key in TEXT_KEYS:
             if value:
                 header[key] = value
             continue

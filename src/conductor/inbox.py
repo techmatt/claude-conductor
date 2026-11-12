@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -129,6 +130,61 @@ def slow_text(detail: dict) -> str | None:
     return slow if slow and slow.lower().rstrip(".") != "none" else None
 
 
+def warnings_text(detail: dict) -> str | None:
+    """A finish's `warnings:` worth showing, or None when `none` or absent."""
+    text = str(detail.get("warnings") or "").strip()
+    return text if text and text.lower().rstrip(".") != "none" else None
+
+
+WARNING_KIND_RE = re.compile(r"^\**`?([A-Za-z][\w-]{0,23})`?\**\s*:\s*(.+)$")
+
+
+def warning_parts(text: str | None) -> list[tuple[str, str]]:
+    """`design: capstone cheap; perf: 40s turn` → [("design", "capstone cheap"), ("perf", "40s turn")].
+    A part with no `<kind>:` lead is kind `other`."""
+    out = []
+    for part in (text or "").split(";"):
+        if not (part := part.strip()):
+            continue
+        m = WARNING_KIND_RE.match(part)
+        out.append((m[1].lower(), m[2].strip()) if m else ("other", part))
+    return out
+
+
+def _num(item: str) -> str:
+    return item.split("/", 1)[1].split("_", 1)[0]
+
+
+def warning_repeats(view: View, repo: str, window: int = 5) -> dict[str, list[str]]:
+    """Kind → the item numbers naming it, among `repo`'s last `window` reports (resume
+    items aside); only kinds named in two or more."""
+    fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo and not ev.detail.get("resume_of")),
+                  key=lambda e: e.id)[-window:]
+    named: dict[str, list[str]] = {}
+    for ev in fins:
+        for kind in dict.fromkeys(k for k, _ in warning_parts(warnings_text(ev.detail))):
+            named.setdefault(kind, []).append(_num(ev.item))
+    return {k: ids for k, ids in named.items() if len(ids) >= 2}
+
+
+def warning_lines(view: View, finishes: list[Event]) -> list[str]:
+    """The *Warnings* section: each finish among `finishes` whose report raised any, kind by
+    kind, then the kinds among them repeated in their repo's recent reports."""
+    from .session import SLOW_WINDOW      # session imports this module
+    out, kinds = [], {}
+    for ev in finishes:
+        if not (parts := warning_parts(warnings_text(ev.detail))):
+            continue
+        out.append(f"- {ev.item} ({ev.detail.get('status')}, finished {clock(ev.ts)}, #{ev.id}): "
+                   + "; ".join(f"**{k}**: {t}" for k, t in parts))
+        kinds.setdefault(ev.repo, set()).update(k for k, _ in parts)
+    for repo, shown in kinds.items():
+        if reps := {k: ids for k, ids in warning_repeats(view, repo, SLOW_WINDOW).items() if k in shown}:
+            out.append(f"- repeated in `{repo}`'s last {SLOW_WINDOW} report(s): "
+                       + "; ".join(f"{k} ×{len(ids)} ({', '.join(ids)})" for k, ids in reps.items()))
+    return out
+
+
 def describe(ev: Event) -> str:
     """One line for an event, used by the inbox and `conductor events`."""
     d = ev.detail
@@ -152,6 +208,8 @@ def describe(ev: Event) -> str:
                 text += f" · slow: {slow}"
             if (friction := (d.get("friction") or "").strip()) and friction.lower().rstrip(".") != "none":
                 text += f" · friction: {friction}"
+            if warned := warnings_text(d):
+                text += f" · **warnings: {warned}**"
             if refs := picks.refs(d):
                 text += f" · pick: {', '.join(refs)}"
             if d.get("parked_done") or d.get("parked_back"):
@@ -689,6 +747,9 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
         out += ["", "## Staged plans' questions", *staged_qs]
     from . import session        # imports this module
     unreviewed, theirs = view.unreviewed(), session.conductor_reports(root)
+    if warned := warning_lines(view, unreviewed):
+        # Standing like questions, until the report is reviewed: raised to Matt first (docs/warnings.md).
+        out += ["", "## Warnings", *warned]
     if unreviewed or theirs:
         # Standing, like questions: shown until a `reviewed:` signal, read mark or not.
         out += ["", "## Unreviewed reports", *unreviewed_lines(view, unreviewed, picks.saved_at(cfg, view), cfg), *theirs]

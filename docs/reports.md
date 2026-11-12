@@ -12,12 +12,13 @@ blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost the item time or tokens>[; <another>]
+warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 pick: <manifest path relative to the repo root>     # optional: only after writing a picker manifest
 ```
 
-(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first six
+(Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first
 non-blank lines are read: `status`, `blocks` and `carry` count only in the first three
-(the first of each); `slow:`, `friction:` and `pick:` only straight after them, in any
+(the first of each); `slow:`, `friction:`, `warnings:` and `pick:` only straight after them, in any
 order, each counted only when every line before it was a header line; `pick:` with a one-word value; so a body that opens with
 "Status: …" or "Pick: went with …" stays body. Backticks around a pick are dropped, `\`
 becomes `/`, and `pick: none` is no pick. The `finish` event carries it as
@@ -39,7 +40,12 @@ lines as a maintenance trigger (`planner.md`, *Maintenance*).
 `friction:` (59) is a free signal on every report: one or two things in the prompt, the
 repo's docs, its tools or conductor that cost the item time or tokens (`none` is fine).
 It is carried, shown and counted like `slow:`, and it feeds the digest's workflow-retro
-line (`inbox.md`, *Maintenance facts*). Parked edits an item carries are answered just
+line (`inbox.md`, *Maintenance facts*).
+
+`warnings:` (109) is what the repo's warning checks tripped and any other warning the
+executor noticed, each part led by a kind: `design: capstone has a cheap source; perf:
+40s turns`. It never changes the status. It leads the inbox, `session.md` and
+`review.md` under *Warnings*, counted per kind, and toasts: `warnings.md`. Parked edits an item carries are answered just
 after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 
 ## For the planner
@@ -54,6 +60,8 @@ How a planner reads the header (`planner.md`, *Reading a report*, points here):
   hold). Kept work Matt wants lands with **land X**.
 - A non-`none` `slow:` or `friction:`: mention it in a line only if it points at a fix; it
   counts toward *Maintenance*.
+- `warnings:`: raise it to Matt first, kind by kind, with the item's own judgement of
+  each (from the report body); a kind repeating across reports is worth a fix prompt.
 - `pick:` (one per picker, its manifest path): tell Matt the picker is ready (**pick X**).
 
 ## Outcome

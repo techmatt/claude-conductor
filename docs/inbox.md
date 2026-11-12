@@ -70,7 +70,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      digest (sizes kept in `.conductor/doc_sizes.json`), nothing for one under; its unused audit notes;
      and each `slow:` component (the words before ` ~` or the first comma) named in two
      or more of its last five finished reports, with their numbers, and the same for
-     `friction:`. Then the **workflow retro** line: the last self-audit, the one queued or
+     `friction:`, and each `warnings:` kind (`warnings.md`). Then the **workflow retro** line: the last self-audit, the one queued or
      running, the non-template items finished since, and the next due (`retros.md`: when,
      and what it reads with `auto_retros` off). Last comes `parked edits waiting: N` (`parked.md`);
 3. a `read` event through the last event the digest shows (detail `session`: the
@@ -88,7 +88,8 @@ marks nothing reviewed. Layout:
 1. `# Review — <project>`, then ``Written for `signals/<file>` at <clock>: `review: all`.``
    (or the item ref) and a line saying nothing is marked reviewed: like `session.md`,
    a stage that names an older signal is the previous bundle.
-2. `## Unreviewed reports` (`## Report` for one item): the inbox's one-line summaries
+2. `## Warnings` when any of those reports raised one, as in the inbox (`warnings.md`); then
+   `## Unreviewed reports` (`## Report` for one item): the inbox's one-line summaries
    (`inbox.unreviewed_lines`), or `- none`.
 3. Per report, oldest first: `## <repo>/<NNN_name> — **<status>**, finished <clock>
    (#<id>)` (plus ` · reviewed #N` if it already is), ``- report: `reports/…md` ``, a
@@ -109,7 +110,9 @@ Its header names the current checkpoint (see *Checkpoints*).
 First **Questions**: every open ask, regardless of the read
 mark, a `design` one marked held for Matt; one whose item finished last, marked "item finished: an answer
 records a ruling" (83). **Staged plans' questions**, standing the same way
-until the item launches (`questions.md`). Then **Unreviewed reports**: every finished item without a `reviewed` event,
+until the item launches (`questions.md`). **Warnings**: each unreviewed report's
+`warnings:` line by kind, then per-kind repeats in its repo's last five reports
+(`warnings.md`). Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`
 line (and ` · slow: …` unless its report said `slow: none` or nothing, and
 ` · pick: <ref>` when its report named a picker, then ` · **picks saved <time>**` once its
@@ -189,7 +192,7 @@ with a stale heartbeat, **died**, or not running) and the same memory and load l
 
 The daemon raises a Windows toast (library: `windows-toasts`, WinRT in-process) for
 `ask`, `red`, `tamper`, `hold`, `run_failed`, `pick_failed`, `amend_refused`, `memory` (a level other than
-`ok`), `memory_critical`, `daemon_died`, `checkout_dirty`, `notify` (a `notify:` signal or a watch's action) and `queue_empty` events. Each title names the project and
+`ok`), `memory_critical`, `daemon_died`, `checkout_dirty`, `notify` (a `notify:` signal or a watch's action) and `queue_empty` events, and a `finish` whose report raised `warnings:`. Each title names the project and
 the item; the toast's tag is `<project>#<event id>`, which is what the Action Center
 history records. Toasts use Command Prompt's registered app id, with "Conductor" as
 the attribution line, so nothing has to be installed. A toast that fails is logged as a
