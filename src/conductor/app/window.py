@@ -6,12 +6,11 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon
-from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu,
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QMenu,
                                QMessageBox, QPushButton, QSizePolicy, QSystemTrayIcon, QTabWidget, QToolBar,
                                QVBoxLayout, QWidget)
 
 from .. import config as config_mod
-from ..inbox import checkpoint_name
 from ..util import clock
 from . import actions, icon, stale, status, theme
 from .events_panel import EventsPanel
@@ -82,10 +81,8 @@ class ProjectView(QWidget):
         # One daemon button: Start daemon while it is down, Stop daemon… while it runs.
         self.daemon_btn = QPushButton("Start daemon")
         self.daemon_btn.clicked.connect(self.toggle_daemon)
-        self.checkpoint_btn = QPushButton("New checkpoint…")
-        self.checkpoint_btn.setToolTip("A session boundary: finished, reviewed items from before it drop out of "
-                                       "Repos, Events and the inbox (a `checkpoint:` signal)")
-        self.checkpoint_btn.clicked.connect(self.new_checkpoint)
+        # No checkpoint button: a checkpoint comes only from a planner's `session:` /
+        # `checkpoint:` signal or the CLI, so a session's closeout can't be skipped (112).
         # Autopilot: whether the night shift may start work on its own (an `autopilot:` signal),
         # and beside it what it will start next.
         self.autopilot_btn = QPushButton()
@@ -139,7 +136,6 @@ class ProjectView(QWidget):
         head.addWidget(self.tools.failure, 1)
         head.addWidget(self.autopilot_btn)
         head.addWidget(self.autopilot_label, 1)
-        head.addWidget(self.checkpoint_btn)
         head.addWidget(self.daemon_btn)
         lay.addLayout(head)
         # Code that differs (`stale.banner`): its own wrapped line, so the whole sentence
@@ -251,12 +247,7 @@ class ProjectView(QWidget):
         self._update_pause(snap)
         self._update_run_buttons(snap)
         guarded("tools", self.tools.update_snapshot, snap, new)
-        cp = snap.checkpoint
-        self.checkpoint_btn.setToolTip(
-            (f"Current: {checkpoint_name(cp)}, {clock(cp.ts)}. " if cp else "No checkpoint yet. ")
-            + "A new one is a session boundary: finished, reviewed items from before it drop out of "
-              "Repos, Events and the inbox (a `checkpoint:` signal)")
-        sdir =self.project.control / "signals"
+        sdir = self.project.control / "signals"
         pending = sorted(sdir.glob("app-*.signal")) if sdir.is_dir() else []
         bits = []
         if pending:
@@ -308,18 +299,6 @@ class ProjectView(QWidget):
     def stop_target(self, name: str) -> None:
         path = actions.run_target(self.project.control, name, stop=True)
         self.notify(f"stop {name}: wrote signals/{path.name}; the daemon stops it")
-
-    def new_checkpoint(self, label: str | None = None) -> None:
-        if label is None:
-            label, ok = QInputDialog.getText(
-                self, "New checkpoint",
-                "Label for the new checkpoint (a session boundary).\n\nFinished items reviewed before it drop "
-                "out of the current view; unreviewed reports, holds, questions and queued work carry forward.",
-                text="session start")
-            if not ok:
-                return
-        path = actions.checkpoint(self.project.control, label)
-        self.notify(f"new checkpoint: wrote signals/{path.name}; the daemon logs it")
 
     def restart_all(self) -> None:
         actions.restart_all(self.project.control)

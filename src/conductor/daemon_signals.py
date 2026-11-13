@@ -507,7 +507,7 @@ class SignalsMixin:
         """A planner session's start in one signal: a checkpoint with the label, then
         `session.md` (the inbox since the read mark, conductor's reports past the planner's
         marker, each repo's maintenance facts), then the read mark moved past it all."""
-        cp = self._checkpoint(label, rel, session="session.md")
+        cp = self._checkpoint(label, rel, session="session.md", number=session_mod.next_number(self.log))
         top = self.log.max_id()
         view = state.scan(self.cfg, self.log)
         write_text(self.cfg.path("session.md"), session_mod.render(self.cfg, self.log, view, cp, rel, top))

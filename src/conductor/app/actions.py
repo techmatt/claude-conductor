@@ -1,7 +1,8 @@
 """Everything the app writes. No Qt.
 
-The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, checkpoint, run, pick and
-stop are `signals/` files the daemon carries out and logs. Besides those it writes only an
+The app changes nothing in the queue itself: approve, cancel, reorder, clear, reviewed, tell, run, pick and
+stop are `signals/` files the daemon carries out and logs. `checkpoint` and `session` here
+are the CLI's: the app has no way to make a checkpoint (112). Besides those it writes only an
 answer file (the same function `conductor answer` uses) and an amend file (as `conductor
 amend` does), starts the daemon, and opens a console on a finished item's session.
 """
@@ -103,13 +104,13 @@ def amend(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     return final
 
 
-def checkpoint(control: Path, label: str = "", by: str = BY) -> Path:
+def checkpoint(control: Path, label: str = "", by: str = "cli") -> Path:
     """A new checkpoint (a session boundary). The label is one line."""
     one = " ".join(label.split())
     return write_signal(control, f"checkpoint: {one}".rstrip(), by=by)
 
 
-def session(control: Path, label: str = "start", by: str = BY) -> Path:
+def session(control: Path, label: str = "start", by: str = "cli") -> Path:
     """A planner session's start: a checkpoint plus the `session.md` digest, read mark moved."""
     one = " ".join(label.split())
     return write_signal(control, f"session: {one}".rstrip(), by=by)

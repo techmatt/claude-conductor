@@ -123,6 +123,12 @@ class Config:
     tools: dict[str, RunTarget] = field(default_factory=dict)   # `[tools.<name>]` (`targets.ToolRunner`)
     open_roots: list[Path] = field(default_factory=list)   # more folders `open:` may act in
     links: dict[str, str] = field(default_factory=dict)    # `[links]` name = URL, first in session.md
+    display_name: str = ""     # `display_name`: how Matt's chat titles name it ("AIcomplete"); `name` falls back
+
+    @property
+    def name(self) -> str:
+        """The project as a chat title names it: `display_name`, else `project` capitalised."""
+        return self.display_name or self.project[:1].upper() + self.project[1:]
 
     # Layout ---------------------------------------------------------------
     def path(self, *parts: str) -> Path:
@@ -341,6 +347,10 @@ def load(control: Path) -> Config:
     if not isinstance(links, dict) or not all(isinstance(v, str) and v.strip() for v in links.values()):
         raise ConfigError(f"{CONFIG_NAME}: `[links]` must be name = URL strings")
 
+    display_name = data.get("display_name", "")
+    if not isinstance(display_name, str):
+        raise ConfigError(f"{CONFIG_NAME}: `display_name` must be a string")
+
     defaults = data.get("defaults", {})
     executor = data.get("executor", {})
     command = executor.get("command", ["claude"])
@@ -371,4 +381,5 @@ def load(control: Path) -> Config:
         tools=_tools(repos, data.get("tools")),
         open_roots=[_resolve(control, x) for x in open_roots],
         links={str(k): v.strip() for k, v in links.items()},
+        display_name=display_name.strip(),
     )

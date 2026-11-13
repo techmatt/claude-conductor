@@ -602,7 +602,7 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     read = env.events("read")[-1]
     assert read.id > cp.id and read.detail["session"] == cp.id and read.detail["through"] == read.id - 1
     text = (env.control / "session.md").read_text(encoding="utf-8")
-    assert text.startswith("# Session start — ") and "`signals/planner-1.signal`" in text
+    assert text.startswith(f"# {env.d.cfg.name} session 1\n") and "`signals/planner-1.signal`" in text
     assert "Mark read:" not in text and "code/004_last finished" in text      # the inbox since the old mark
     reports = text.split("## Unreviewed reports", 1)[1].split("\n## ", 1)[0]
     assert "conductor's 12a_y **partial**" in reports and "conductor's 13_z **no status line**" in reports
@@ -619,6 +619,20 @@ def test_session_writes_a_checkpoint_the_digest_and_moves_the_read_mark(env, tmp
     send(env, "session: again", "planner-2.signal")
     text = (env.control / "session.md").read_text(encoding="utf-8")
     assert "code/004_last finished" not in text and '"again"' in text
+    assert text.startswith(f"# {env.d.cfg.name} session 2\n")
+
+
+def test_session_numbers_continue_from_history_and_use_the_display_name(env):
+    toml = env.control / "conductor.toml"
+    toml.write_text('display_name = " AIcomplete "\n' + toml.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    env.configure('[repos]\ncode = "../code"\n')         # commits it and restarts the daemon
+    assert env.d.cfg.name == "AIcomplete"
+    send(env, "checkpoint: by hand", "cli-1.signal")       # a bare checkpoint is not a session
+    send(env, "session: start", "planner-1.signal")
+    send(env, "session: start", "planner-2.signal")
+    assert [e.detail.get("number") for e in env.events("checkpoint")] == [None, 1, 2]
+    assert (env.control / "session.md").read_text(encoding="utf-8").startswith("# AIcomplete session 2\n")
+    assert config.Config(control=env.control, project="workbench", repos={}).name == "Workbench"
 
 
 def test_session_md_starts_with_the_project_links(env):

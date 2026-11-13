@@ -512,6 +512,17 @@ def planner_habits(control: Path) -> list[str]:
     return ["## Planner habits", "", HABITS_NOTE, "", *lines] if any(ln.strip() for ln in lines) else []
 
 
+def next_number(log: EventLog) -> int:
+    """The number the next planner session takes: one more than the `session:` checkpoints
+    logged so far (`session` in their detail), so it continues from history (112)."""
+    return 1 + sum(1 for ev in log.query(kinds=["checkpoint"]) if ev.detail.get("session"))
+
+
+def title(cfg: Config, cp: Event) -> str:
+    """`AIcomplete session 12`: the planner's first line and claude.ai's chat title."""
+    return f"{cfg.name} session {cp.detail.get('number', '?')}"
+
+
 def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int,
            root: Path | None = None) -> str:
     """The digest: the inbox since the previous read mark, headed by the session's
@@ -519,7 +530,8 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
     `[links]` come first, above everything else. Saves this digest's doc sizes for the next."""
     docs = doc_growth(cfg)
     links = "".join(f"- {name}: {url}\n" for name, url in cfg.links.items())
-    head = (f"# Session start — {cfg.project}\n\n"
+    # The planner's first line after Start's calls copies the heading, so claude.ai titles the chat by it (112).
+    head = (f"# {title(cfg, cp)}\n\n"
             + (f"## Links\n\n{links}\n" if links else "")
             + f"Written for `{rel}` at {clock(cp.ts)}: {inbox.checkpoint_name(cp)}. "
             f"The read mark moves to #{top} as this is written; no `read:` is needed.\n\n"

@@ -270,16 +270,17 @@ def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
     ev = view.events_panel
     assert ev.current.isChecked() and ev.current.text() == "since checkpoint (none yet)"
     everything = len(ev.model.rows)
-    view.new_checkpoint("session start")
-    [sig] = (env.control / "signals").glob("app-*.signal")
-    assert sig.read_text(encoding="utf-8") == "by: app\ncheckpoint: session start\n"
+    assert not hasattr(view, "checkpoint_btn") and not hasattr(view, "new_checkpoint")   # the CLI's or a planner's only
+    from conductor.app import actions
+    sig = actions.checkpoint(env.control, "session start")
+    assert sig.read_text(encoding="utf-8") == "by: cli\ncheckpoint: session start\n"
     env.tick_until(lambda: env.events("checkpoint"))
     [cp] = env.events("checkpoint")
     win.refresh()
     # Events: from the checkpoint on by default (its own line and the warning for 002).
     assert ev.current.text() == f"since checkpoint #{cp.id}"
     assert [e.kind for e in ev.model.rows] == ["checkpoint", "warning"]
-    assert model.activity_text(ev.model.rows[0]) == f'new checkpoint #{cp.id} "session start" (by app)'
+    assert model.activity_text(ev.model.rows[0]) == f'new checkpoint #{cp.id} "session start" (by cli)'
     ev.current.setChecked(False)
     assert len(ev.model.rows) == everything + 2
     # Repos: 002 (unreviewed) is current; 001 sits in the collapsed Earlier group.
@@ -298,7 +299,6 @@ def test_a_checkpoint_in_the_app(qapp, env, tmp_path):
     assert panel._rows[("group", "code", "earlier")].isExpanded()
     assert not panel._rows[("group", "code", "finished")].isExpanded()
     assert panel._rows[("group", "code", "finished")].text(0) == "Finished since checkpoint (1)"
-    assert f"Current: checkpoint #{cp.id}" in view.checkpoint_btn.toolTip()
     win._quitting = True
     win.close()
 

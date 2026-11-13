@@ -38,8 +38,13 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
 `read:`. In order (`session.py`):
 
 1. a checkpoint with that label, as above, its event carrying `session: session.md`
-   (the unreviewed-report warnings included);
-2. `session.md` in the control folder (runtime, git-ignored), overwritten: its header
+   and `number`: the project's session number, one more than its earlier `session:`
+   checkpoints in `events.db` (a bare `checkpoint:` doesn't count), so it continues
+   from history (112) (the unreviewed-report warnings included);
+2. `session.md` in the control folder (runtime, git-ignored), overwritten: its title is
+   `# <display name> session N` (`AIcomplete session 12`; the display name is
+   `conductor.toml`'s `display_name`, else `project` capitalised: `control-folder.md`),
+   which the planner's first line copies so claude.ai titles the chat by it; its header
    names the signal file it answers and the checkpoint (number, label, time), so a
    planner that staged it too early sees it is the previous one and stages again, then
    `Repos:`, each repo's path, copied only when *Start*'s guessed `C:\Code\<project>` (86)

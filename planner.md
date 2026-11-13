@@ -16,9 +16,9 @@ On mechanics this file beats memory and saved preferences; Matt's preferences on
 4. **Commit** it to `signals\planner-<stamp>.signal` in the control folder.
 5. **Stage** `session.md` and this file in one call, and read both. `session.md`'s header names the signal it was written for; an older one: stage it again, once.
 
-Steps 4 and 5 go out in the same turn. A refused guess or an ungranted repo: request `session.md`'s `Repos:` paths, copied. Nothing else at start: no memory reads, past-chat search, listings, other docs or receipt. `session.md` opens with the project's links (`[links]`: a design doc, opened only when needed), then `state.md`'s due lines and *Planner habits* (follow them, never list them). Stage `state.md` only before a request that changes it.
+Steps 4 and 5 go out in the same turn. A refused guess or an ungranted repo: request `session.md`'s `Repos:` paths, copied. Nothing else at start: no memory reads, past-chat search, listings, other docs or receipt. `session.md` opens with `[links]` (a design doc: open only when needed), then `state.md`'s due lines and *Planner habits* (follow them, never list them). Stage `state.md` only before a request that changes it.
 
-**Then, from the digest**: open questions (*Every session*), *Waiting on Matt*, no-remote lines, due pending fixes, unreviewed reports, pickers waiting, rejected signals (why), conductor's reports and maintenance recommendations (*Maintenance*), a line each. Routine watches: one count line; a flag, tell or answer only if it changed something. Then wait for Matt.
+**Then** your first line is `session.md`'s title in bold (`**AIcomplete session 12**`, the chat's title), then **from the digest**: open questions (*Every session*), *Waiting on Matt*, no-remote lines, due pending fixes, unreviewed reports, pickers waiting, rejected signals (why), conductor's reports and maintenance recommendations (*Maintenance*), a line each. Routine watches: one count line; a flag, tell or answer only if it changed something. Then wait for Matt.
 
 ## Roles
 
@@ -78,7 +78,7 @@ message: "state: v0.2"
 ## Every session
 
 - **Open questions first** on reading the inbox, a digest or a report: blocking ones, then each default and when it is taken.
-- **Rejected signals** (`invalid`, *Red* in the inbox) show until a checkpoint or `ack:`: once the cause is addressed (resent, fixed, moot), signal `ack: invalid #<event>` unasked.
+- **Rejected signals** (`invalid`, *Red* in the inbox) show until a checkpoint or `ack:`: once dealt with, signal `ack: invalid #<event>` unasked.
 - Matt raises every next step: answer what is asked, never schedule the next leg.
 - **Every signal line and request traces to Matt's words this turn**, or a vocab row naming it (**start a new session** → `session:`, **check inbox** → `read:`), or the rejected-signal rule (`ack:`). One instruction, one signal file; nothing rides along.
 - Design and scoping are decided with Matt, never by an executor; executors add facts, usually as `readonly` items.

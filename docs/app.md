@@ -63,9 +63,11 @@ a plain button for a one-repo project, a menu of `Pause <repo>` / `Resume <repo>
 several; while any repo is paused an amber **PAUSED <repo> since <time>** sits beside it.
 **Autopilot: Off / Night only / Always** is a menu writing `autopilot: <mode>`
 (`night-shift.md`, *Autopilot*); beside it, muted, what autopilot starts next
-(`nightshift.plan`). **New checkpoint…** asks for a label (default `session start`) and writes
-`checkpoint: <label>`; its tooltip names the current checkpoint. Labels that don't fit a
-narrow window are clipped, their tooltips whole.
+(`nightshift.plan`). Labels that don't fit a narrow window are clipped, their tooltips whole.
+The app has **no way to make a checkpoint** (112: its *New checkpoint…* button is gone): a
+checkpoint comes only from a planner's `session:` / `checkpoint:` signal or the CLI
+(`conductor session` / `checkpoint`), so a session's closeout can't be skipped. The Events
+tab's *since checkpoint #N* still names the current one.
 
 **Message boxes** (Tell…, Amend…, a question's answer): word-wrapped, never scrolling
 sideways, several lines tall; **Enter** sends (as OK), **Shift+Enter** is a new line, and a

@@ -68,6 +68,7 @@ events.db*
 
 ```toml
 project = "sandbox"
+display_name = "Sandbox"      # session.md's "<display name> session N" (inbox.md); default: project capitalised
 locks = ["shared"]            # named locks items may take; must not clash with repo names
 worktree_root = "../conductor-sandbox-worktrees"   # default ../<project>-worktrees
 open_roots = ["C:/Code/gdrive-sync/sandbox"]  # more folders `open:` may act in (see open.md)
