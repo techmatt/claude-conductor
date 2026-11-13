@@ -138,17 +138,20 @@ only in the environment (74). Stages and merge executors get none.
   and status lines.
 - **Telling time** (84, full, in *Progress*): remaining work is estimated in round trips
   (~15 s, measured ~16 s; it said 20–40 s), never the clock: `progress` and `wait_for`
-  returns carry it and the time left to the cap (`progress.md`). Words held at 1,203, paid
-  for in the progress, outline and premises lines.
+  returns carry it and the time left to the cap (`progress.md`). Words held.
 - **Aicomplete's notes of 11-07 to 11-08** (86): every conductor tool return gives the clock
   (143 froze early, believing 1 h of 2h40m was left); a full test suite (`cargo test
   --workspace`) runs only between sims, never beside one (142 saturated 12 threads; both
   preambles); helpers never `git checkout` or `git restore` a shared folder (144's discarded
-  the lead's doc edits; full only: an ultracode item never draws light). Words held: full
-  1,203, light rendered at 385, paid for in the premises, elevation, report-header, status,
-  outline and messages lines.
+  the lead's doc edits; full only: an ultracode item never draws light). Words held.
 - **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
-  (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`).
+  (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`), and
+  (113) gives each helper its own scratch path, `out/<helper>/` (fractal-website 006: a
+  shared one let a helper overwrite another module's docstring).
+- **Fix the obvious in place** (113, Matt; both, ending *Latitude*): unless readonly, fix
+  anything obvious found (stale doc line, small bug, dead code, own audit findings) before
+  finishing, even at extra time, inside `paths:`; a note only for Matt's decisions or large
+  work. `self_audit` too, and it lands (`resume.md`); `AUDIT_FIX` keeps only its list.
 - **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the
   executor lists each done-when item against its measured result and takes a step that
   advances an unmet one, in scope, saying which (aicomplete 090 stopped 3 of 4 hours early
@@ -172,6 +175,7 @@ only in the environment (74). Stages and merge executors get none.
 - **Warnings** (109): every preamble's header gains `warnings: none | <kind>: <what tripped>[; …]`
   (`warnings.md`); full and light point at the repo's CLAUDE.md *Warning checks* and name its
   `warning_checks` commands (`executor.checks_text`), and say a warning never changes the status.
+  Full adds (113) that a repo with no such section is fine and says nothing.
   Light folds the pointer into its header line and holds its 430 cap, paid for by shorter
   `slow:`, unmet-bar, message, design-ask and header-intro lines. Its report-path line stays
   word for word: `tests/fake_claude.py` and the restart preamble find the path by it.

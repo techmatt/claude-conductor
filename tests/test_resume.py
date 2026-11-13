@@ -38,7 +38,7 @@ def test_resume_front_matter(tmp_path):
     assert not audit.errors and audit.template == "self_audit"
     for front, why in [("resume: 001_orig", "<repo>/<NNN_name>"), ("resume: code/orig", "<repo>/<NNN_name>"),
                        ("resume: other/001_x", "another repo"), ("resume: [code/001_x]", "<repo>/<NNN_name>"),
-                       ("resume: code/001_orig\nreadonly: false", "always readonly"),
+                       ("resume: code/001_orig\nreadonly: false", "only a self-audit writes"),
                        ("resume: code/001_orig\ntemplate: bug_hunt", "refused on a resume item"),
                        ("template: self_audit", "needs `resume:")]:
         assert any(why in e for e in parsed(tmp_path, front).errors), front

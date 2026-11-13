@@ -36,7 +36,8 @@ Each tick after a `finish`, `pause`, `resume` or `retro` event, for each repo:
 - otherwise the due one is written to `queue/<repo>/<NNN>_post_audit_<X's number>.md`,
   numbered like any item (`nightshift.queue_name`), front-matter `resume: <repo>/<X>`,
   `template: self_audit`, no body, and logged as a `retro` event (`of`, `why`,
-  `by: conductor`). It runs readonly like any resume item.
+  `by: conductor`). It fixes the obvious in place and lands like any serial item (113,
+  `resume.md`), so a red's retro waits behind its hold until `clear:`.
 
 It is not a night-shift draw: autopilot does not gate it, nor does the time of day.
 `[defaults] auto_retros = false` in `conductor.toml` turns it off; then the digest marks

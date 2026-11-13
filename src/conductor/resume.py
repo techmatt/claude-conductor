@@ -1,8 +1,9 @@
 """Resume items: `resume: <repo>/<NNN_name>` puts Matt's questions (or `template: self_audit`)
 to a finished item's own session. The session is forked (`--resume <orig> --fork-session
---session-id <new>`), so the original stays as it was and can be resumed again; the item
-runs readonly in a fresh worktree at current main, never merges, and may read the
-original's record in the control folder (named in its preamble).
+--session-id <new>`), so the original stays as it was and can be resumed again. An ask
+runs readonly in a fresh worktree at current main and never merges; a self-audit fixes what
+it finds and lands like any serial item (113). Either may read the original's record in the
+control folder (named in its preamble).
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ SINCE_LIMIT = 50                         # `git.commits_between` returns at most
 
 RESUMED = """
 Resumed. This session is your own run of {orig}, resumed as a fork: you remember that run,
-and its session stays as it was. This is a new item, `{item_id}`: readonly, never merged,
+and its session stays as it was. This is a new item, `{item_id}`: {lands},
 and its prompt below is about that run. Your report this time goes to the path named
 below, not the one from your run. The code may have moved on: your working directory is
 fresh at `{main}` {base}, and {since}
@@ -144,4 +145,6 @@ def paragraph(cfg: Config, log: EventLog, rec: dict, extract: Path) -> str:
                  + "\n".join(f"- {sha[:10]} {subject}" for sha, subject in reversed(landed)))
     write_extract(log, orig, extract)
     files = "\n".join(f"    {p.resolve()}" for p in readable(cfg, orig, extract))
-    return RESUMED.format(orig=orig, item_id=rec["item"], main=main, base=base[:10], since=since, files=files)
+    lands = "readonly, never merged" if rec.get("readonly") else "it lands like any item (its fixes commit)"
+    return RESUMED.format(orig=orig, item_id=rec["item"], main=main, base=base[:10], since=since, files=files,
+                          lands=lands)

@@ -21,7 +21,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **retry X** | Signal `retry: <repo>/<NNN_name>`: a finished red item's kept session resumes in its kept worktree, then finishes and merges as usual, releasing its red's hold (`docs/api-retry.md`). For a red the API caused (`API error` reason) once it is back; an outage's API failure is retried by itself first. |
 | **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing its red's hold. Only after its report is read with Matt. |
 | **content cleanup R** [extras] | Queues `template: content_cleanup` (body: Matt's extras); never a maintenance default. |
-| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
+| **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run, fixes the obvious in place and lands it (serial, waits behind a red hold), noting the rest for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
 | **review cards** / **tool X** | Signal `tool: <name>`: starts that `[tools.<name>]` if needed and opens it (`tool: <name> stop` stops it; `docs/app.md`, *Project tools*). |
 | **use remote workers** | `[remote]` only: default since 105 under `[remote] default = true` (`remote: false` opts out), else `remote: true`; seeded batches via `farm-seeds` (`docs/remote-workers.md`). |

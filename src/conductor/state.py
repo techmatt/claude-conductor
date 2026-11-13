@@ -435,7 +435,8 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
         return hold("invalid item: " + "; ".join(head.errors))
     if head.id in view.done or head.id in view.running:
         return hold(f"{head.id} already ran; a re-run needs a new item number")
-    looks = head.resume_of or head.template == "watch"   # asking why it went red is the point; a watch only reads
+    # Asking why it went red is the point; a watch only reads. A self-audit writes, so it waits (113).
+    looks = head.resume_of and head.readonly or head.template == "watch"
     if (ev := view.red_hold.get(repo)) and not looks:
         return hold(f"queue held after red {ev.item} (event #{ev.id}); write `clear: {repo}` to signals/")
     if (ev := view.planner_hold.get(repo)) and head.template != "watch":

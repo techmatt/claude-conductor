@@ -308,8 +308,8 @@ class MergeMixin:
                             note=f"message #{msg.get('id')} was never delivered: the executor exited first")
         if text := self._outcome_stamp(rec):
             stamp_report(Path(rec["report"]), text)
-        # A resume item (ask, self-audit) is readonly: its red has nothing to protect, so never holds.
-        after_red = "continue" if rec.get("resume_of") else rec.get("after_red", "stop")
+        # A readonly resume item (an ask) has nothing to protect, so its red never holds; a self-audit writes (113).
+        after_red = "continue" if rec.get("resume_of") and rec.get("readonly") else rec.get("after_red", "stop")
         if out["status"] == "red":
             # Its data outside git now matches the kept branch, not main: the inbox offers `land:`.
             outside = {"external_data": rec["branch"]} if rec.get("external_data") and rec.get("branch") else {}

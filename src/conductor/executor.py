@@ -52,7 +52,9 @@ numeric target (tuning, calibration, a gate) starts with a cheap reachability ch
 or less on a small budget: put back what the new rules changed, or push the strongest allowed
 lever to its limit; if out of reach, post that as progress and go straight to explaining the
 gap. Decide anything else as fits the goal, record it, and continue; the only hard stop is a
-prompt's wrong-repo guard.
+prompt's wrong-repo guard. Unless readonly, fix anything obvious you find in place before you finish,
+even at some extra time (a stale doc line, a small bug, dead code, your own audit findings),
+inside your `paths:` if declared; a note or follow-up is only for what needs Matt's decision or is large.
 
 Premises. A number or fact the prompt quotes may have moved since: re-read it from
 source before use; report any that had. A timing or speed read
@@ -91,7 +93,7 @@ kill and relaunch work for load alone. At most 2 heavy subagents
 light read-only reviewers don't count but run batched per dimension. A Workflow runs at
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
-quote the prompt's rulings word for word. Never pass
+quote the prompt's rulings word for word and give each helper its own scratch path (`out/<helper>/`). Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
 helpers by file. Helpers never `git checkout` or `git restore` a shared folder: that discards
 the lead's unsaved edits. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in
@@ -123,7 +125,7 @@ warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 {pick_line}`slow:` names only a part over ~15 minutes or twice your estimate, with cause and
 fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that cost time or tokens;
 `warnings:`, what the repo's warning checks trip (its CLAUDE.md *Warning checks*{checks}; run
-them before the report) and any other warning you notice, each led by a kind (`design`, `data`,
+them before the report; no such section is fine, say nothing) and any other warning you notice, each led by a kind (`design`, `data`,
 `perf`, `docs`, `security` or the repo's own). A warning never changes your status.
 `done`: goal met. `partial`: part met, nothing broken, the rest follow-up (an
 instruction declined with a reason included). `red`: something broken or unsafe; this
@@ -142,11 +144,11 @@ no process narration; the rest follows the repo's CLAUDE.md. Your final message 
 # The preamble for a small item (`is_light`): the rules a short job can trip on, and none
 # of the ceremony (outline, ETAs, pickers, servers) that costs it round trips.
 LIGHT = """\
-You are a conductor executor: headless Claude Code running item {item_id} for
+A conductor executor: headless Claude Code, item {item_id},
 project {project}. Nobody is watching.
 
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
-default; unanswered, it returns after {ask_minutes:g} minutes. It holds the
+default; it returns unanswered after {ask_minutes:g} min. It holds the
 session until then: start background work first. Block (`block: true`) only if every
 default is worse. A ruling splitting a pass (over ~30% of items one way) or a fix changing
 play beyond its bug: ask `design: true` (never waits).
@@ -154,17 +156,18 @@ play beyond its bug: ask `design: true` (never waits).
 Progress: a `progress` (mcp__conductor__progress) line at start and launching any job over ~15m (its end).
 
 Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
-starts its question `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts,
+starts `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts,
 edits: Write/Edit, never a heredoc. Heavy compute:
 below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
 tests: {threads} threads, a full suite only between sims; half beside another item; on
 a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
 Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
-No elevation (UAC, admin installs, services): go no-admin or report it.{leftover}
+No elevation (UAC, admin installs, services): go without or report.{leftover}
 
 Latitude. Conflicts: locked rulings, then goal, then done-when bars, then method (a suggestion
 unless required); report what gave way, don't ask. Bars are scored strictly, not chased: check
-a numeric target is reachable first, else report it unmet with evidence.
+a numeric target is reachable first, else report it unmet with evidence. Unless readonly, fix
+small obvious things in place.
 
 MESSAGE #n / AMENDMENT #n hook context: Matt's, outranking the prompt.
 {calls}
@@ -174,7 +177,7 @@ Time limit: {max_hours:g}h; killed at {deadline}, later if blocked.
 
 Write your report to exactly this path:
     {report}
-{only} Other changes there: reverted, red.
+{only} Others there: reverted, red.
 Its header:
 status: done | partial | red
 blocks: <what this blocks, or none>
@@ -300,13 +303,12 @@ PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
 LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time limit left, run the next "
             "most useful step toward its goal, in scope, and say in the report what it was.\n")
 LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of the time limit left you may stop, or "
-                  "run a further check on the goal, writing only to scratch and inside the load budget.\n")
+                  "run a further check on the goal, its outputs in scratch, inside the load budget.\n")
 LEFTOVER_FULL = (" Before finishing with over an hour of the time limit left, list each done-when item\n"
                  "against its measured result (a band met is not a target met); for one unmet and not shown\n"
                  "unreachable, take the next step that advances it, in scope, and say what it was.")
-AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (a small, safe fix, a doc line),\n"
-             "even if it takes a little longer: a later cleanup re-reading it costs more. Leave a note\n"
-             "only for what needs a decision or is large; the report lists the notes you implemented.\n")
+AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (as above); the report lists\n"
+             "the notes you implemented.\n")
 LEFTOVER_LIGHT = " Goal unmet, over an hour left: take the next useful step."
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."

@@ -2,11 +2,16 @@ Self-audit of your own run of {{original}} in `{{repo}}`. Look back over that ru
 what this session remembers and from your record named above (its prompt, report, run
 log, stage log, audit notes, amendments and events). If the item was staged, its real
 prompt is `<name>.stage.prompt.md`: `<name>.prompt.md` then holds only the resume preamble.
-`<name>.amend.md` holds every amendment. Change nothing: this is a look back, not rework.
+`<name>.amend.md` holds every amendment. This is a look back, not rework of the run's goal.
+
+Fix what is obvious in place, before you finish, even at some extra time: a stale doc or
+CLAUDE.md line, a small bug, dead code, a finding of yours or of the run's own notes with
+a small, safe fix. You land like any item, so commit those fixes. A note is only for what
+needs Matt's decision or is large; the report lists what you fixed.
 
 Write audit notes to the audit notes file described above, about that run, not about
 this look back. The run's own notes (`<name>.audit.md` in your record) already reach the
-next cleanup: write only what they miss or got wrong, never a repeat. Start the file with
+next cleanup: write only what they miss or got wrong and you did not fix, never a repeat. Start the file with
 the line `Self-audit of {{original}}.`, then use its
 five headings (Poorly structured, Slower than expected, Re-derived or re-read, Refactor
 or clean up, Docs that would have saved time) and three more:

@@ -164,8 +164,9 @@ RESUME_TEMPLATES = ("self_audit",)     # the templates a resume item may use, an
 
 
 def _resume(item: Item, meta: dict) -> None:
-    """`resume: <repo>/<NNN_name>`: always readonly, in its own repo. Whether that item has
-    finished with a session is the queue's to say (`resume.problem`, from `state.scan`)."""
+    """`resume: <repo>/<NNN_name>`, in its own repo: readonly, except a self-audit, which fixes
+    what it finds and lands like any serial item (113; `readonly: true` keeps one a look only).
+    Whether that item has finished with a session is the queue's to say (`resume.problem`)."""
     value = meta["resume"]
     repo, slash, name = str(value).partition("/") if isinstance(value, str) else ("", "", "")
     if not slash or not NAME_RE.match(name):
@@ -174,12 +175,12 @@ def _resume(item: Item, meta: dict) -> None:
     if repo != item.repo:
         item.errors.append(f"`resume`: {value} is in another repo; queue the item in `{repo}`")
         return
-    if meta.get("readonly") is False:
-        item.errors.append("`readonly: false` is refused on a resume item: it is always readonly")
+    if meta.get("readonly") is False and item.template is None:
+        item.errors.append("`readonly: false` is refused on a resume item: only a self-audit writes")
     if item.template is not None and item.template not in RESUME_TEMPLATES:
         item.errors.append(f"`template: {item.template}` is refused on a resume item (only "
                            f"{', '.join(RESUME_TEMPLATES)})")
-    item.readonly = True
+    item.readonly = item.template is None or meta.get("readonly") is True
     item.resume_of = f"{repo}/{name}"
 
 

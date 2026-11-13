@@ -781,7 +781,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             landed = git.commits_between(repo_path, stage["base"], rec["base"]) if not error else []
             rec["resume"] = {"old": stage["base"], "new": rec["base"] or stage["base"], "landed": len(landed)}
             self._worktree_event(rec, "moved", f"{stage['base'][:10]} → {(rec['base'] or '?')[:10]}")
-        elif cfg.opts(item.repo).worktrees or item.resume_of or item.template == "watch":   # these: always one
+        elif cfg.opts(item.repo).worktrees or item.readonly and item.resume_of or item.template == "watch":
             error = self._make_worktree(item, rec, paths.setup)
         if item.template == "cleanup" and not rec["notes"] and not error:
             error = f"cleanup: no unused audit notes for {item.repo}"

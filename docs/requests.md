@@ -68,8 +68,9 @@ in the folder: `<<<<<<< <target>`, its old lines, `=======`, the new lines, `>>>
 marker on a line of its own (`request.parse_edits`). Both sides are whole lines; the old
 ones must occur exactly once in the control folder's current copy, an empty new side
 deletes them, and blocks for one file apply in order (`request.apply_edits`). A miss
-refuses the whole request (`edit 2 for state.md: its old lines are not found in the current
-file (first: '- 004'); nothing was applied`, or `found 3 times`). The body outside the
+refuses the whole request (`edit 2 for state.md: its old lines are not found (old text must
+be whole lines) in the current file (first: '- 004'); nothing was applied`, or `found 3 times`;
+113: a block whose old text was part of a line read only "not found"). The body outside the
 blocks is the message when `message:` is absent. Edited targets are listed in `targets:`
 like any other; one sent both as a file and as edits, or edits for a path not listed, is
 refused. Edits are never `identical`-waited: they apply against the live copy. Why: a review

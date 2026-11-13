@@ -100,7 +100,7 @@ def apply_edits(text: str, path: str, edits: list[tuple[str, str]]) -> str:
         count = text.count(old)
         if count != 1:
             first = old.split("\n", 1)[0][:80]
-            why = "not found" if not count else f"found {count} times (add a line to make it unique)"
+            why = "not found (old text must be whole lines)" if not count else f"found {count} times (add a line to make it unique)"
             raise RequestError(f"edit {n} for {path}: its old lines are {why} in the current file "
                                f"(first: {first!r}); nothing was applied")
         text = text.replace(old, new, 1)

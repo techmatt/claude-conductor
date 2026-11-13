@@ -18,8 +18,9 @@ template: self_audit          # optional; the only template a resume item may us
 ```
 
 - **Checked when it is parsed** (`items._resume`): the value is `<repo>/<NNN_name>` and
-  names this item's own repo; `readonly: false` is refused (a resume item is always
-  readonly); any template but `self_audit` is refused, and `template: self_audit`
+  names this item's own repo; an ask is always readonly (`readonly: false` refused); a
+  self-audit writes (113: it fixes what it finds and lands, *Self-audits write* below)
+  unless `readonly: true`; any template but `self_audit` is refused, and `template: self_audit`
   without `resume:` is refused. A body is required unless it is a self-audit.
 - **Checked against the queue** (`resume.problem`, from `state.scan` every tick): the
   original has a `finish` event with status `done`, `partial` or `red`; it is not
@@ -27,7 +28,7 @@ template: self_audit          # optional; the only template a resume item may us
   fail to launch). Otherwise the item is **invalid** with the reason (logged once per
   version of the file and reason, the queue held as for any invalid item). It becomes
   valid by itself once the original finishes.
-- **Scheduling.** It runs like any readonly item: in a repo with worktrees, no repo lock,
+- **Scheduling.** An ask runs like any readonly item: in a repo with worktrees, no repo lock,
   starting once queued, beside anything, early behind the head (with `worktrees = false`
   it waits for the repo like any readonly item there, though it still gets its own
   worktree); its named locks and `depends_on` apply. A reorder that would renumber the
@@ -37,11 +38,16 @@ template: self_audit          # optional; the only template a resume item may us
   everything else in the queue. Its own red **never holds** (111: its `red` carries
   `after_red: continue`): it is readonly, so there is nothing to protect; aicomplete 216, a
   post-audit launched into an API outage, held the queue a second time.
+- **Self-audits write** (113, Matt: fix the obvious in place, don't leave audit notes). A
+  self-audit not marked `readonly: true` is scheduled like any serial item instead: it takes
+  the repo, waits behind a red hold like the rest, follows `worktrees` (main checkout when
+  `false`), merges its fixes, and its red holds as any item's. Everything else here (fork,
+  record, *Resumed*, never staging, labels) is the same.
 
 ## The launch
 
-- **A fresh worktree at current `main`**, always, even in a repo with `worktrees = false`;
-  discarded at the end like any readonly item's. Setup runs as usual.
+- **A fresh worktree at current `main`**, always for an ask, even in a repo with
+  `worktrees = false`; discarded at the end like any readonly item's. Setup runs as usual.
 - **A fork, not a resume**: `claude -p … --resume <original session> --fork-session
   --session-id <new uuid>`. Verified on Claude Code 2.1.306: the fork's init and result
   lines carry the new id, it remembers the original, and a second fork of the original
@@ -63,9 +69,9 @@ template: self_audit          # optional; the only template a resume item may us
 
 ## The preamble
 
-The usual preamble, readonly paragraph included, plus a *Resumed* paragraph
+The usual preamble (an ask's with the readonly paragraph), plus a *Resumed* paragraph
 (`resume.RESUMED`): the session is its own run of the original, forked; this is a new
-readonly item whose report goes to the new path; the code may have moved on, with
+item, readonly and never merged (an ask) or landing like any item (a self-audit), whose report goes to the new path; the code may have moved on, with
 **what landed on `main` since** the original merged (or, never merged, since it
 started) as one line per commit (`git log` from `resume_since` to the new worktree's
 base, the newest 50); and **its own record** it may read, the one exception to the
@@ -74,8 +80,8 @@ preamble's rule against reading the control folder, as absolute paths: the origi
 the resume preamble), report, `.audit.md`, `.amend.md`, run log and stage log (each only if it exists), and
 an extract of the original's events, written at launch beside the resume item's
 prompt as `reports/<repo>__NNN_name.original.md` (one line per event: id, time, kind,
-detail). It answers each question by number. It writes only its report (and, as a
-self-audit, its notes).
+detail). It answers each question by number. An ask writes only its report; a self-audit
+also its notes and its fixes.
 
 ## The result
 

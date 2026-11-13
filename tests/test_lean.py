@@ -75,7 +75,7 @@ def test_a_self_audit_leftover_is_optional_and_a_readonly_template_has_none(env)
     def body(template, **meta):
         return executor.body(env.d.cfg, Item("code", "001_a", env.control / "x.md", num=1, body="", template=template, **meta))
     text = " ".join(body("self_audit", readonly=True).split())
-    assert "Optional here" in text and "only to scratch" in text and "inside the load budget" in text
+    assert "Optional here" in text and "its outputs in scratch" in text and "inside the load budget" in text
     assert "Leftover budget." not in body("bug_hunt", readonly=True)
     assert "run the next most useful step" in body("bug_hunt")
 

@@ -28,6 +28,11 @@ class Toaster:
         self._toaster.show_toast(toast)
 
 
+def _warnings(detail: dict) -> str | None:
+    from .inbox import warnings_text      # inbox's imports are heavy; only a finish needs it
+    return warnings_text(detail)
+
+
 def message(project: str, kind: str, item: str | None, repo: str | None, detail: dict) -> tuple[str, str] | None:
     """(title, body) for the event kinds that toast, else None. Each names project and item."""
     who = item or repo or ""
@@ -69,7 +74,7 @@ def message(project: str, kind: str, item: str | None, repo: str | None, detail:
                     f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}.")
         case "notify":
             return f"{project}: from the {detail.get('by') or 'planner'}", str(detail.get("text", ""))[:250]
-        case "finish" if (w := str(detail.get("warnings") or "").strip()) and w.lower().rstrip(".") != "none":
+        case "finish" if (w := _warnings(detail)):
             # A report's `warnings:` line: surfaced, never a hold (docs/warnings.md).
             return f"{project}: {who} raised warnings", w[:250]
         case "queue_empty":

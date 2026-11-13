@@ -25,7 +25,7 @@ def test_both_preambles_ask_about_a_split_ruling_and_a_play_changing_fix(env):
 
 
 def test_helper_briefs_quote_rulings_word_for_word(env):
-    assert "Helper briefs quote the prompt's rulings word for word." in flat(render(env, SHORT * 3))
+    assert "Helper briefs quote the prompt's rulings word for word and give each helper" in flat(render(env, SHORT * 3))
 
 
 def test_a_readonly_item_puts_its_records_in_carry_but_a_watch_is_not_told(env):

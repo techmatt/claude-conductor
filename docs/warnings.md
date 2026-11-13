@@ -21,6 +21,11 @@ a part without `<kind>:` counts as `other` (`inbox.warning_parts`). Every preamb
 light and watch) asks for it: the executor runs its repo's checks and reports what
 trips, and may raise any other warning it notices.
 
+A repo without checks is fine (113): the full preamble says so, and a part saying the repo
+has no *Warning checks* section is dropped wherever warnings show (`inbox.warnings_text`,
+`NO_CHECKS_RE`), toast included, so it neither leads a report nor counts as a repeat.
+fractal-wallpapers 043 and 044 each raised `docs: CLAUDE.md has no *Warning checks* section to run`.
+
 ## Declaring a project's checks
 
 Two places, either or both, no conductor change needed:

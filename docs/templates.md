@@ -1,6 +1,6 @@
 # Audits and templates
 
-A template ends with the leftover-budget line (`executor.LEFTOVER`, `preambles.md`), but not `watch` or a readonly one; `self_audit` gets `LEFTOVER_AUDIT`: optional, scratch-only, inside the load budget (047's speed pair ran all 12 threads).
+A template ends with the leftover-budget line (`executor.LEFTOVER`, `preambles.md`), but not `watch` or a readonly one; `self_audit` gets `LEFTOVER_AUDIT`: optional, a further check's outputs in scratch, inside the load budget (047's speed pair ran all 12 threads).
 
 Code-quality audits are conductor-owned texts, not prompts the planner retypes. They
 live in `src/conductor/templates/` (`cleanup.md`, `general_cleanup.md`, `test_cleanup.md`,
@@ -17,8 +17,8 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
 cause named in 2–3 reports: tests → test cleanup; searching → claude.md cleanup; a build or a
 failing tool → general cleanup.
 
-**Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
-`self_audit`); one that edits, deletes or moves anything is a *cleanup*. So `general_audit` became
+**Names.** *Audit* is kept for passes whose job is notes (`audit: true`, **post-audit**,
+`self_audit`), though since 113 they fix the obvious in place too; one whose job is to edit, delete or move is a *cleanup*. So `general_audit` became
 `general_cleanup` and `test_perf` `test_cleanup` (prompt 36), `disk_audit` `disk_cleanup` and
 `content_audit` `content_cleanup` (prompt 54); the old names are aliases (`audits.ALIASES`): an item
 queued under one runs the new text and is recorded under the new name, and an event or run
@@ -45,7 +45,8 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   call" (aicomplete 123 deferred 2, 129 deferred 6). Nobody reviews the other notes per item. Before finishing it
   implements each obvious note (a small, safe fix, a doc line), leaving notes only for a
   decision or a large change, and its report lists those it implemented (`executor.AUDIT_FIX`;
-  75, Matt: less churn for the cleanup; not in a readonly or template item). The item's `finish`
+  75, Matt: less churn for the cleanup; not in a readonly or template item). Since 113 every
+  writable item fixes the obvious in place (`preambles.md`); this line only adds the list. The item's `finish`
   event carries `audit: true` and lists the notes file among its paths. Once running,
   the `audit:` signal sends the same paragraph as a message instead (`signals.md`).
 - **`template: cleanup`**. The prompt after the preamble is `cleanup.md` with every
@@ -119,7 +120,9 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   unfixed for lack of time.
 - **`template: self_audit`** (only on a resume item, `resume.md`; **post-audit X**). The
   original's own session, forked, looks back over its run, from memory and its record,
-  and changes nothing. It behaves as `audit: true`: its notes, at the resume item's own
+  and fixes what is obvious in place before finishing (113: stale docs, small bugs, dead
+  code, its own or the run's findings; it commits and lands, `resume.md`), noting only what
+  needs Matt's decision or is large. It behaves as `audit: true`: its notes, at the resume item's own
   `.audit.md` path, start `Self-audit of <orig>.` and use the five non-decision headings plus
   *What happened vs. what was asked* (each divergence and when it started), *What
   misled you* (quoted, with the wording that would have worked, then concrete workflow
@@ -130,7 +133,8 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   names the original (`… : a self-audit of <orig>, written by its own session`). The
   report has **Summary** and **About conductor** (findings about the template,
   preamble, planner or tools, for the planner to carry to conductor's `planner-notes.md`). Not
-  exclusive: it may run beside anything.
+  exclusive, but serial like any writable item (113; `readonly: true` makes it a look that
+  runs beside anything).
 - **`template: watch`** (conductor writes these; `night-shift.md`). A short readonly look
   at the running items: a real stall or busy, on goal or drifting. Its `{{usage}}` is each
   executing item's prompt (quoted), outline, progress and recent events, the open questions

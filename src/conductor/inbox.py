@@ -131,9 +131,17 @@ def slow_text(detail: dict) -> str | None:
 
 
 def warnings_text(detail: dict) -> str | None:
-    """A finish's `warnings:` worth showing, or None when `none` or absent."""
+    """A finish's `warnings:` worth showing, or None when `none` or absent. A part saying
+    the repo has no *Warning checks* section is dropped: that is fine, not a warning (113)."""
     text = str(detail.get("warnings") or "").strip()
-    return text if text and text.lower().rstrip(".") != "none" else None
+    if not text or text.lower().rstrip(".") == "none":
+        return None
+    kept = [p.strip() for p in text.split(";") if p.strip() and not NO_CHECKS_RE.search(p)]
+    return "; ".join(kept) or None
+
+
+# "docs: CLAUDE.md has no *Warning checks* section to run" and the like.
+NO_CHECKS_RE = re.compile(r"\b(no|without|lacks?|missing)\b[^;]*warning[ _]checks", re.IGNORECASE)
 
 
 WARNING_KIND_RE = re.compile(r"^\**`?([A-Za-z][\w-]{0,23})`?\**\s*:\s*(.+)$")
