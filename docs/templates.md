@@ -13,6 +13,10 @@ folder, so whatever a template needs is inlined into the prompt (kept, as always
 `original`; `audit.md`'s `notes_path`). A template item gets the full preamble, a watch its own
 (`preambles.md`), and the template's text follows it unchanged.
 
+**Which one a `slow:` cause picks** (the planner, at start; moved from `planner.md` in 111): a
+cause named in 2–3 reports: tests → test cleanup; searching → claude.md cleanup; a build or a
+failing tool → general cleanup.
+
 **Names.** *Audit* is kept for passes that only read and take notes (`audit: true`, **post-audit**,
 `self_audit`); one that edits, deletes or moves anything is a *cleanup*. So `general_audit` became
 `general_cleanup` and `test_perf` `test_cleanup` (prompt 36), `disk_audit` `disk_cleanup` and

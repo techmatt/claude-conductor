@@ -9,6 +9,7 @@ grow. The preamble's tail names what is kept for the item's repo (`section`).
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from datetime import datetime
@@ -26,9 +27,11 @@ SECTION = """
 ---
 
 Kept reads. Earlier items in this repo left read outputs (their `out/keep/`), newest first.
-Reuse one instead of producing it again when its base still fits (say which in your report):
+Reuse one instead of producing it again when its base still fits (say which in your report).
+Seeds a read farmed are spent: a fresh read takes new ones.
 {rows}
 """
+SEEDS = Path("remote") / "seeds.jsonl"      # `farm-seeds`' ledger (`remote.client.note_seeds`)
 
 
 def root(cfg: Config, repo: str) -> Path:
@@ -78,12 +81,36 @@ def prune(cfg: Config, repo: str) -> list[str]:
     return dropped
 
 
+def seeds(cfg: Config, repo: str) -> dict[str, list[str]] | None:
+    """Item name → the seed ranges its `farm-seeds` runs spent (`first-last`, with args);
+    None when the project never farmed (no ledger)."""
+    out: dict[str, list[str]] = {}
+    try:
+        lines = (cfg.state_dir / SEEDS).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for ln in lines:
+        try:
+            d = json.loads(ln)
+            item_repo, _, name = str(d.get("item") or "").partition("/")
+            if item_repo == repo and name:
+                a, k = int(d["first"]), int(d["count"])
+                args = " ".join(d.get("args") or [])
+                out.setdefault(name, []).append(f"{a}-{a + k - 1}" + (f" ({args})" if args else ""))
+        except (ValueError, KeyError, TypeError):
+            continue
+    return out
+
+
 def section(cfg: Config, repo: str) -> str:
     """The prompt's *Kept reads* section for an item of `repo`, or nothing."""
-    rows = []
+    rows, spent = [], seeds(cfg, repo)
     for p in listed(cfg, repo):
         files = sorted(f.relative_to(p).as_posix() for f in p.rglob("*") if f.is_file())
         shown = ", ".join(files[:6]) + (f" and {len(files) - 6} more" if len(files) > 6 else "")
         when = clock(datetime.fromtimestamp(p.stat().st_mtime).astimezone())
-        rows.append(f"- `{p.resolve()}` ({p.name}, kept {when}): {shown}")
+        ranges = (spent or {}).get(p.name, [])
+        used = (f"; seeds spent: {', '.join(ranges[-4:])}" + (f" and {len(ranges) - 4} more" if len(ranges) > 4 else "")
+                if ranges else "; no seeds farmed" if spent is not None else "")
+        rows.append(f"- `{p.resolve()}` ({p.name}, kept {when}): {shown}{used}")
     return SECTION.format(rows="\n".join(rows)) if rows else ""

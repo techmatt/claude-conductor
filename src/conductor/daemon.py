@@ -6,13 +6,13 @@ so several repos (and disjoint items within one) run at once. The one exception 
 picker server (`picker`), whose handler threads touch only files and a queue that the
 loop drains into the event log.
 
-`Daemon` is this module plus eleven mixins, one per concern: `daemon_signals` (signal
+`Daemon` is this module plus a mixin per concern: `daemon_signals` (signal
 files and their verbs), `daemon_messages` (questions, progress, deliveries, amendments),
 `daemon_receipts` (a receipt per planner write), `daemon_reap` (leftover processes and
 worktrees), `daemon_merge` (merges and concluding an item), `daemon_setup` (a repo's
 setup commands, off the loop), `daemon_restart` (restarting itself when its code changes),
 `daemon_templates` (what a template item is handed), `daemon_watch` (the night shift),
-`daemon_push` (pushing main to a remote) and `daemon_memory` (memory sampling and its tells).
+`daemon_push`, `daemon_memory`, `daemon_machine`, `daemon_retros`, `daemon_api` (API outages).
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ from . import (audits, desktop, executor, git, globs, guard, inbox, items, load,
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
+from .daemon_api import ApiMixin, own_cost
 from .daemon_machine import MachineMixin
 from .daemon_memory import MemoryMixin
 from .daemon_merge import MergeMixin
@@ -106,7 +107,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
 
 
 class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
-             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin):
+             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin, ApiMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -952,7 +953,9 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         for run in list(self.runs.values()):
             if run.rec.get("phase") == "merge":
                 continue
-            if run.rec.get("phase") == "setup":
+            if run.rec.get("api_wait"):
+                self._api_tick(run)                 # daemon_api: an API failure waits, then resumes
+            elif run.rec.get("phase") == "setup":
                 self._poll_run_setup(run)
             elif run.exited():
                 self.finish(run)
@@ -971,6 +974,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         cfg, rec = self.cfg, run.rec
         item_id, repo = rec["item"], rec["repo"]
         self._guard_check(f"after {item_id} exited")
+        if not (killed or interrupted or launch_error) and self._api_wait(run):
+            return                                  # daemon_api: resumed after a wait, not judged
         self._reap(item_id, rec.get("worktree"), rec.get("started"), "its executor exited",
                    job=(rec.get("pid"), rec.get("create_time")))
         self.mem_told.pop(item_id, None)
@@ -988,12 +993,14 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         elif interrupted:
             reasons.append(f"interrupted: {rec.get('interrupted') or 'executor gone after a daemon restart'}"
                            + (" (after its resume)" if rec.get("continued") else "") + "; it left no result")
+        elif rec.get("api_exhausted"):
+            reasons.append(rec["api_exhausted"])
         elif result is None:
             reasons.append(f"executor left no result (exit code {exit_code})")
         elif result.get("is_error"):
             reasons.append(f"executor error: {result.get('subtype')} {str(result.get('result', ''))[:200]}".strip())
         header, problem = executor.read_header(Path(rec["report"]))
-        if problem:
+        if problem and not rec.get("api_exhausted"):       # no report is the API's doing too
             reasons.append(problem)
         repo_path = cfg.repos.get(repo)
         wt = Path(rec["worktree"]) if rec.get("worktree") else None
@@ -1033,7 +1040,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
             "picks": [r for v in (header or {}).get("picks", []) if (r := _pick_ref(repo, v))],
             "friction": (header or {}).get("friction"), "warnings": (header or {}).get("warnings"),
-            "exit_code": exit_code, "cost_usd": (result or {}).get("total_cost_usd"),
+            "exit_code": exit_code, "cost_usd": own_cost(rec, result),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }
         rec["exited"] = stamp()

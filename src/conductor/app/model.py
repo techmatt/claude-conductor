@@ -331,7 +331,7 @@ ACTIVITY_KINDS = {"start", "finish", "reviewed", "audit_used", "checkpoint", "as
                   "daemon_start", "daemon_stop", "progress", "tell", "amended", "delivered", "resolve",
                   "run_start", "run_ready", "run_open", "run_stop", "run_failed",
                   "pick_open", "pick_saved", "pick_failed", "opened", "open_refused", "notify", "closeout_push",
-                  "pause", "resume", "watch_answer"}
+                  "pause", "resume", "watch_answer", "api_retry"}
 ALWAYS_KINDS = RED_KINDS | {"warning", "push_failed"}
 
 
@@ -584,7 +584,9 @@ class Project:
                                  readonly=bool(rec.get("readonly")), port=rec.get("port"),
                                  alongside=rec.get("alongside"), beside=rec.get("beside") or [],
                                  resumed=resume_label(rec))
-                    if a.phase == "running" and (p := self.log.last("progress", item=a.item)):
+                    if wait := rec.get("api_wait"):     # daemon_api: stopped by the API, not stalled
+                        a.phase, a.progress = "waiting on API", f"try {wait.get('try')} at {clock(wait['at'])}: {wait.get('error')}"
+                    elif a.phase == "running" and (p := self.log.last("progress", item=a.item)):
                         a.progress = f"{progress_line(p)} · {clock(p.ts)}"
                         if drift := eta_drift(self.log, a.item):
                             a.progress += f" · {drift}"

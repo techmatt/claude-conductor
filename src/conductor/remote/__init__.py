@@ -35,7 +35,10 @@ PARAGRAPH = """
 project's seeded job ({native}, in `{folder}`) for that seed range and leaves at `<out file>`
 exactly what that command would, spread over any remote workers that are connected (locally when
 none is). Run seeded batches through it, not the native command. Its last stderr line says where
-the shards ran.
+the shards ran. Commit before you farm a change: a project's build may take only committed code
+(aicomplete 204 ran every read natively). `farm-seeds: error: the broker went away` (exit 3) is a
+failure, not a slow run: its finished shards are kept; re-run once the daemon is back, or run the
+native command for the range.
 """
 
 

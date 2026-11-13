@@ -114,7 +114,9 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   write-up): aicomplete 205 re-farmed 200's and 199's reads, ~15 minutes, because they went
   with the worktree. Each repo keeps its newest 3 items' (`KEEP_ITEMS`) and at most 2 GB
   (`KEEP_BYTES`; the newest always stays). Every non-watch prompt for that repo ends with a
-  *Kept reads* section naming each folder, its item, when it was kept and its files. A red
+  *Kept reads* section naming each folder, its item, when it was kept and its files, and (in a
+  project that farms) the seed ranges its `farm-seeds` runs spent, from the ledger
+  `.conductor/remote/seeds.jsonl` (111: 209 checked 204's read for reuse, its seeds spent). A red
   item's worktree is kept whole; a `worktrees = false` repo's `out/keep/` simply stays.
 
   *Leftover worktrees.* Removing a merged, readonly or discarded item's worktree can

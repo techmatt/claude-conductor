@@ -91,6 +91,7 @@ def prepare(cfg: Config, log: EventLog, rec: dict) -> str | None:
         return f"resume: {orig}'s session {sid} has no transcript in Claude Code's projects folder"
     run = original_run(cfg, orig)
     rec["resume_session"] = sid
+    rec["resume_cost"] = fin.detail.get("cost_usd") or 0     # the fork's result counts it: `own_cost`
     on_main = not run.get("worktree") and not run.get("readonly")     # `worktrees = false`: it committed to main
     if fin.detail.get("merged"):
         rec["resume_since"] = fin.detail["merged"]

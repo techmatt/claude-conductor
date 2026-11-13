@@ -34,7 +34,9 @@ template: self_audit          # optional; the only template a resume item may us
   original of a queued or proposed resume item is refused, as for `depends_on`. It
   **never stages** (a stage is a new session). Unlike other items it is **not held by
   a red**: asking a red item why it went red is the point. The red hold still stands for
-  everything else in the queue.
+  everything else in the queue. Its own red **never holds** (111: its `red` carries
+  `after_red: continue`): it is readonly, so there is nothing to protect; aicomplete 216, a
+  post-audit launched into an API outage, held the queue a second time.
 
 ## The launch
 
@@ -78,7 +80,10 @@ self-audit, its notes).
 ## The result
 
 Its `start` event carries `resume_of` and `resume_session`; its `finish` carries
-`resume_of` (and the new session id as `session_id`, so it can itself be resumed).
+`resume_of` (and the new session id as `session_id`, so it can itself be resumed). Its
+`cost_usd` is the fork's own: the result's `total_cost_usd` counts the original's session,
+so the original's `cost_usd` at launch (`resume_cost`) is taken off (111; 216 reported 211's
+$9.48).
 Every view names it the same way (`resume.label`): `resume of <orig>`, or
 `post-audit of <orig>` for a self-audit.
 

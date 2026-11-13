@@ -90,8 +90,11 @@ leases hold while its job is open. 161: a flat 60 s against 2-6 min shards re-ra
   Web Worker (a wasm run can't be interrupted) and the core goes idle. An idle core's poll
   also prompts a hello, so this holds in a hidden tab (its timers are throttled).
 - A broker that stops answering mid-job is waited for 45 s (`client.PATIENCE`: a restart
-  takes a few); one still gone then, or a main-box slot that fails: the job is closed and
-  the shards not yet in run locally.
+  takes a few); one still gone then fails the command at once (111): `farm-seeds: error: the
+  broker went away mid-job (N of M shards in, kept in <job>/shards)`, exit 3, nothing written
+  to the out file (aicomplete 209-211 each lost 6-12 min to the old silent fall back to one
+  shard at a time; the line ends a `wait_for` on its `fail` pattern). A main-box slot that
+  fails: the job is closed and the shards not yet in run locally.
 - `farm-seeds` calls the broker every 2 s while its job runs; a job not heard from in
   `fresh_seconds` is no longer served (a killed item's job never starves the next) and is
   dropped after `lease_seconds` (60 s when unset).

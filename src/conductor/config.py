@@ -90,6 +90,7 @@ class Config:
     toasts: bool = True
     doc_budget_kb: float = 15.0      # a tracked repo doc past this shows **due** in the digest (session.doc_facts)
     auto_retros: bool = True         # conductor queues a due workflow retro itself (daemon_retros, docs/retros.md)
+    api_retry_minutes: list[float] = field(default_factory=lambda: [2.0, 10.0, 30.0])  # waits before each API retry (docs/api-retry.md)
     # Memory (`memory.py`): sampled every N seconds (0: off); a level is commit at or over
     # a percent of its limit, or free RAM at or under a size (0 turns either off).
     memory_sample_seconds: float = 30.0
@@ -361,6 +362,7 @@ def load(control: Path) -> Config:
         foreground_seconds=float(defaults.get("foreground_seconds", 60.0)),
         toasts=bool(defaults.get("toasts", True)),
         auto_retros=_flag(defaults, "auto_retros", True),
+        api_retry_minutes=[float(x) for x in defaults.get("api_retry_minutes", [2, 10, 30])],
         doc_budget_kb=float(defaults.get("doc_budget_kb", 15.0)),
         **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS + NIGHT_KEYS},
         command=[str(x) for x in command],

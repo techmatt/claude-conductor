@@ -160,8 +160,9 @@ only in the environment (74). Stages and merge executors get none.
   conflicts resolve in the order locked rulings (CLAUDE.md, docs, the prompt), goal, done-when
   bars, method, the line that gave way named in the report, never asked about; method (read
   counts, screen order, tables) is a suggested route sized to the time budget, while lines
-  marked required and what keeps measurement honest (paired seeds, fresh seeds for a final
-  read) bind; each bar is scored strictly as written (outside a band is unmet) but not chased
+  marked required, the repo's CLAUDE.md *Working rules* steps (111: rulings, not method; 206
+  froze with 19 tests red) and what keeps measurement honest (paired seeds, fresh seeds for a
+  final read) bind; each bar is scored strictly as written (outside a band is unmet) but not chased
   once evidence shows it out of reach, reported unmet with its evidence and driver; a numeric
   target (tuning, calibration, a gate) starts with a ~30 min reachability check (put back what
   the new rules changed, or the strongest allowed lever to its limit), posting a miss as

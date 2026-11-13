@@ -46,6 +46,7 @@ command (`docs/restart.md`).
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (the cleanups, bug hunt, self audit, watch) |
 | `docs/night-shift.md` | Stall check, watch item, autopilot, the backlog and its draws, nightly budget |
+| `docs/api-retry.md` | API outages: an executor's API failure retried in its own session; `retry:` |
 | `docs/resume.md` | Resume items: asking a finished item's own session (forked); self-audit |
 | `docs/retros.md` | Workflow retros: when one is due, conductor queuing it, the digest's line |
 | `docs/warnings.md` | A report's `warnings:` line: a project's own checks, where warnings show |

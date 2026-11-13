@@ -16,6 +16,10 @@
     FAKE env <NAME>                          write `NAME=<its value>` into the report
     FAKE note <text>                         write <text> into the report (`\n` starts a new line)
     FAKE error                               emit an is_error result
+    FAKE api-error <n>                       the session's first <n> runs exit 1 on a Cloudflare 403,
+                                             as aicomplete 211 did (counted from its transcript)
+    FAKE cost <usd>                          add to the session's `total_cost_usd`, which counts every
+                                             prompt in its transcript, a fork's original's included
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
                                              the result text goes into the report
     FAKE progress <json arguments>           call the progress tool; its text goes into the report
@@ -97,9 +101,25 @@ def emit(obj):
     print(json.dumps(obj), flush=True)
 
 
+# Every prompt this session was sent, a fork's original's first: what `--resume` remembers.
+told = [json.loads(ln)["prompt"] for ln in mine.read_text(encoding="utf-8").splitlines()]     if mine is not None and mine.is_file() else [prompt]
+told_lines = [ln for p in told for ln in p.splitlines()]
+COST = sum(float(ln.split()[2]) for ln in told_lines if ln.startswith("FAKE cost "))
+
+
 def result(text="ok", is_error=False):
     emit({"type": "result", "subtype": "error_during_execution" if is_error else "success",
-          "is_error": is_error, "session_id": session, "result": text, "num_turns": 1, "total_cost_usd": 0})
+          "is_error": is_error, "session_id": session, "result": text, "num_turns": 1, "total_cost_usd": COST})
+
+
+API_FAILS = max([int(ln.split()[2]) for ln in told_lines if ln.startswith("FAKE api-error ")] or [0])
+if API_FAILS and sum(1 for p in told if p.startswith("Conductor: the Claude API dropped")) < API_FAILS:
+    # What Claude Code printed when Cloudflare refused its call (aicomplete 211, 1:48am).
+    line = "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"
+    emit({"type": "assistant", "message": {"content": [{"type": "text", "text": line}]}, "session_id": session})
+    result(line, is_error=True)
+    print(line, file=sys.stderr)
+    sys.exit(1)
 
 
 emit({"type": "system", "subtype": "init", "session_id": session})

@@ -76,6 +76,11 @@ executor never sees placement. It runs locally (and says why) outside a git repo
 an argument holds a space (the wasm side gets the arguments joined by spaces), or when
 the fingerprint command fails. The shims run Python with `-P`, so a file in the item's
 folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in arguments.
+The paragraph (111) also says to commit before farming a change (a project's build may take
+only committed code: aicomplete 204 ran every read natively and starved the box) and that
+`farm-seeds: error: the broker went away` (exit 3) is a failure, not a slow run
+(`remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
+`.conductor/remote/seeds.jsonl`, which the *Kept reads* rows read (`worktrees.md`).
 
 ## Placement
 

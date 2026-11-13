@@ -15,7 +15,8 @@ def test_the_full_preamble_carries_the_four_rules(env):
             "the done-when bars, the method") in text
     assert "never ask about such a conflict" in text
     assert "Method (read counts, screen order, which tables) is a suggested route" in text
-    assert "lines marked required, and what keeps measurement honest" in text
+    assert "lines marked required, the repo's CLAUDE.md *Working rules* steps (rulings, not method), " \
+           "and what keeps measurement honest" in text
     assert "outside a band is unmet) but don't chase one" in text
     assert "starts with a cheap reachability check, ~30 min" in text
     # the branches-not-stops line is folded in, not kept beside it

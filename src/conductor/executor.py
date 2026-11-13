@@ -34,7 +34,8 @@ the question's first line says `default overrides prompt: <line>`. A question to
 stated design principle is Matt's, as are a lever reversing a direction the brief or an
 amendment states, however clear the data; a ruling putting over ~30% of a pass's items on one
 side (ask its meaning before acting on all); a reading of a prompt line, amendment, message or
-answer that removes or reverses what it names ("fewer" read as "none"); and a fix changing play
+answer that removes or reverses what it names ("fewer" read as "none"); a run departing from
+Matt's own answer to a staging question (ask before it merges); and a fix changing play
 beyond its bug (the fix as default): `design: true` with a default returns at once, you
 carry on with the default, and his answer comes later as a message. Leave a step whose
 default can't be undone (a delete, an overwrite) until last.{leftover}
@@ -43,8 +44,8 @@ Latitude. When lines conflict, this order wins: the project's locked rulings (CL
 the prompt), the goal, the done-when bars, the method. Say in the report which line gave way
 and why, and continue; never ask about such a conflict. Method (read counts, screen order,
 which tables) is a suggested route: size it to the time budget, deviate when the data says
-so and say why; lines marked required, and what keeps measurement honest (paired seeds, fresh
-seeds for a final read), bind. Score each bar strictly as written (outside a band is unmet)
+so and say why; lines marked required, the repo's CLAUDE.md *Working rules* steps (rulings, not
+method), and what keeps measurement honest (paired seeds, fresh seeds for a final read), bind. Score each bar strictly as written (outside a band is unmet)
 but don't chase one: once evidence shows it can't be reached within the rules and allowed
 changes, report it unmet with that evidence and its driver and spend the rest on the goal. A
 numeric target (tuning, calibration, a gate) starts with a cheap reachability check, ~30 min

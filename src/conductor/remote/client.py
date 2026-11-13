@@ -7,8 +7,8 @@ command at once over the whole range. Otherwise the range is split into shards w
 not a worker is connected, so one that joins mid-job takes those still pending; the main
 box claims shards too (`main_slots` at once) and, once none is left unleased, re-runs one
 still out on a worker (the first copy back wins). A broker that restarts part-way is waited
-for (`PATIENCE`) and the job carries on; one that stays gone costs only speed: the shards not
-yet in run here."""
+for (`PATIENCE`) and the job carries on; one that stays gone fails the command at once
+(`BROKER_LOST`, exit 3), its finished shards kept in the job's folder."""
 
 from __future__ import annotations
 
@@ -35,6 +35,8 @@ BEAT_SECONDS = 2.0          # the job's heartbeat: a job the broker stops hearin
 BUILD_STALE_SECONDS = 45 * 60   # a build lock this old is a dead build's (two tries of 20 min)
 FAULT_VAR = "CONDUCTOR_REMOTE_FAULT"   # `node-hang`: the Node wasm reference hangs (tests, the sandbox walk)
 PATIENCE = 45.0             # a broker restarting (a handover, or the daemon starting one that died) is waited this long
+BROKER_LOST = "error"               # `farm-seeds: error: ...`, its stderr line when the broker stays gone (wait_for's `fail` ends on it)
+BROKER_LOST_EXIT = 3
 WIN = sys.platform == "win32"
 NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if WIN else {}
 
@@ -429,10 +431,18 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
         except BrokerDown:
             down.set()
     missing = [(a, k) for a, k in ranges if not shard_path(folder, a).exists()]
+    if missing and not errors:
+        # A failure, said at once: the silent one-shard-at-a-time fallback cost aicomplete
+        # 209-211 6-12 minutes each. The executor decides: re-run once the daemon is back, or
+        # run the native command itself at its own threads.
+        log.close()
+        say(f"{BROKER_LOST}: the broker went away mid-job ({len(ranges) - len(missing)} of {len(ranges)} "
+            f"shards in, kept in {folder / 'shards'}); nothing written to {out}. Re-run once the daemon "
+            "is back, or run the native command for the range")
+        return BROKER_LOST_EXIT
     if missing:
         _close(broker, jid)                      # no worker writes into this job any more
-        why = f"a main-box slot failed ({errors[0]})" if errors else "the broker went away"
-        say(f"{why}; running the {len(missing)} shard(s) not yet in here")
+        say(f"a main-box slot failed ({errors[0]}); running the {len(missing)} shard(s) not yet in here")
         for a, k in missing:
             tmp = folder / "main" / f"{a:012d}.out"
             code = run_native(r.native, cwd, a, k, tmp, args, log=log)
@@ -526,6 +536,28 @@ def main(argv: list[str] | None = None) -> int:
     if r is None:
         say(f"no [remote] settings (${settings.CONTROL_VAR} unset or no section)")
         return 2
+    code = _dispatch(r, first, count, out, args)
+    if code == 0:
+        note_seeds(r, first, count, args)
+    return code
+
+
+SEEDS = "seeds.jsonl"       # under the remote state folder: every finished run's item and seed range
+
+
+def note_seeds(r: settings.Remote, first: int, count: int, args: list[str]) -> None:
+    """One line per finished run: the item's *Kept reads* rows name the seeds its read spent
+    (aicomplete 209 checked 204's r90 read for reuse; its seeds were spent)."""
+    try:
+        r.state.mkdir(parents=True, exist_ok=True)
+        with open(r.state / SEEDS, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps({"item": os.environ.get(settings.ITEM_VAR, ""), "first": first, "count": count,
+                                 "args": args, "at": time.strftime("%Y-%m-%dT%H:%M:%S")}) + "\n")
+    except OSError:
+        pass
+
+
+def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str]) -> int:
     try:
         root, key = repo_key(Path.cwd())
     except (subprocess.CalledProcessError, OSError):

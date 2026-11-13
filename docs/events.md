@@ -21,6 +21,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd, questions (its plan's `Questions:` or `## Questions`, `questions.md`), questions_parsed (their count) |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
 | `merge` | an item's branch landed on main | branch, sha (main after), commits (the item's own: pre-merge main to sha), note; resolved (prose files a merge executor resolved); squashed (commits folded in) |
+| `api_retry` | an executor exited on an API failure and waits (`waiting`), its session resumed (`resumed`), or a `retry:` resumed a red item (`retry`; `api-retry.md`) | state, attempt, of, at, error, session_id; pid, deadline (resumed, retry); by (retry) |
 | `land` | a `land:` began, then landed | state, branch; sha, commits, note, resolved, squashed, hashes |
 | `resolve` | the rebase stopped on prose files only; a merge executor resolves them | files, step, commit (the one being replayed), session_id, pid, deadline, note |
 | `conflict` | the rebase onto main conflicted, or a merge executor failed (red) | branch, files, error, note; resolver (the merge executor's log); land (a `land:`) |
@@ -30,7 +31,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `recover` | restart found it finished while the daemon was down, a merge to resume, or a cut-off run resumed (`restart.md`) | note; continued, pid, cut, why, deadline |
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow, friction and warnings (as written, or null), pick (`<repo>/<path>` or null; picks: all, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd, turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow, friction and warnings (as written, or null), pick (`<repo>/<path>` or null; picks: all, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd (a resume item's: its fork's own), api_tries and retried (`api-retry.md`), turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
 | `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on; or an `audit_used:` signal (no item, `by`) | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red; external_data (its kept branch) |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: those whose own tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |

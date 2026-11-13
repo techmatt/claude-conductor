@@ -177,7 +177,8 @@ class SignalsMixin:
             elif key in ("clear", "push", "pause", "resume"):
                 if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit", "land"):
+            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit", "land",
+                         "retry"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "audit_used":
@@ -268,6 +269,8 @@ class SignalsMixin:
             self._tell(f"{value} {talk.OUTLINE_REQUEST}", rel, outline_request=True)
         elif key == "land":
             self._land(value, rel)                      # daemon_merge
+        elif key == "retry":
+            self._retry(value, rel)                     # daemon_api
         elif key == "audit":
             self._audit(value, rel)
         elif key == "audit_used":

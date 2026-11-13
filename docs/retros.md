@@ -13,7 +13,8 @@ planner to offer **post-audit X** and Matt to say yes (aicomplete 192 finished `
 self-audit was queued (its `retro` or `enqueue` event; its finish when it has neither, so
 what finishes while one runs counts toward the next). One is due when any of them:
 
-- went `partial` or `red`, or
+- went `partial` or `red`, unless every reason of its red is an API error or a failed
+  launch (111, `api-retry.md`: such an item is never the one picked either), or
 - ran past 1.5× its first ETA and 10 minutes over (`RETRO_OVERRUN`, measured from its
   `start` to the first `progress` with an `eta` or outline), or
 - at 12 of them with none of the above (`RETRO_FLOOR`).

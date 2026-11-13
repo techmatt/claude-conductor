@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import git, globs, inbox, nightshift, parked, resume
 from .audits import canonical
+from .daemon_api import api_only
 from .config import Config
 from .events import Event, EventLog
 from .state import View
@@ -299,7 +300,10 @@ def overrun(log: EventLog, fin: Event) -> float | None:
 
 
 def retro_trigger(log: EventLog, fin: Event) -> str | None:
-    """Why this item alone makes a workflow retro due, or None."""
+    """Why this item alone makes a workflow retro due, or None. A red that is only the API's
+    or a failed launch is none: there is no workflow to look back on (aicomplete 216)."""
+    if fin.detail.get("status") == "red" and api_only(fin.detail.get("reasons")):
+        return None
     if fin.detail.get("status") in ("partial", "red"):
         return str(fin.detail["status"])
     return f"ran {times:.1f}× its first ETA" if (times := overrun(log, fin)) else None
@@ -356,7 +360,8 @@ def retros(log: EventLog, view: View, repo: str) -> Retro:
     triggers = {ev.id: why for ev in since if (why := retro_trigger(log, ev))}
     due, parts = None, []
     if triggers or len(since) >= RETRO_FLOOR:
-        pool = [ev for ev in since if (ev.id in triggers or not triggers) and ev.item not in covered and _resumable(ev)]
+        pool = [ev for ev in since if (ev.id in triggers or not triggers) and ev.item not in covered and _resumable(ev)
+                and not (ev.detail.get("status") == "red" and api_only(ev.detail.get("reasons")))]
         if pool:
             (_, why), due = max(((friction_score(log, ev), ev) for ev in pool), key=lambda s: (s[0][0], s[1].id))
             trigger = triggers.get(due.id)

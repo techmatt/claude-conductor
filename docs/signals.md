@@ -1,6 +1,6 @@
 # Signals
 
-The verbs: read, clear, land, approve, cancel, reorder, review, reviewed, session_opened, tell,
+The verbs: read, clear, land, retry, approve, cancel, reorder, review, reviewed, session_opened, tell,
 outline, audit, audit_used, checkpoint, session, run, tool, pick, retire, open, notify, stop, restart, watch, push, autopilot, ack,
 pause, resume.
 
@@ -14,6 +14,7 @@ by: planner                  # optional: every event this file causes carries de
 read: 42                     # inbox read through event #42 (`latest` or `all` = everything so far)
 clear: sandbox               # release the sandbox queue after a red
 land: sandbox/003            # land a finished red item's kept branch on main (worktrees.md)
+retry: sandbox/003           # resume a finished red item's kept session in its kept worktree (api-retry.md)
 approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
@@ -113,6 +114,9 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
 - **land** — `land: <item>` (a finished item, resolved as for `reviewed`): its kept branch
   lands on `main` as one commit, and the hold its red put on the queue is released; see
   `worktrees.md`, *Landing a kept branch*.
+- **retry** — `retry: <item>` (a finished red item, resolved as for `reviewed`): its session
+  resumes in its kept worktree and the item finishes, merges and reports as usual; a non-red
+  finish clears its red's hold. `api-retry.md`, *`retry:`*.
 - **audit** — `audit: <item>` on a running item (resolved as for `tell`): conductor's own
   *Audit notes* text (`templates/audit.md`, the one `audit: true` gives at launch, with the
   item's notes path) sent as a tell marked `audit: true`; its run record gains `audit`, so

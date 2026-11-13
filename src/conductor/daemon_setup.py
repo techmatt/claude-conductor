@@ -178,6 +178,8 @@ class SetupMixin:
         harvest its result, else finish it as interrupted. `recover` and setup's both."""
         rec, item_id = run.rec, run.rec["item"]
         self.runs[item_id] = run
+        if proc is None and rec.get("api_wait"):
+            return                                       # daemon_api: still waiting out an API failure
         if proc is not None:
             run.proc = proc
             self.log.append("adopt", item=item_id, pid=proc.pid, session_id=rec["session_id"])

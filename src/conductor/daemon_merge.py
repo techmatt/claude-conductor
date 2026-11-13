@@ -273,7 +273,7 @@ class MergeMixin:
         cfg, rec = self.cfg, run.rec
         item_id, repo, out = rec["item"], rec["repo"], rec["outcome"]
         done_md = f"done/{repo}/{rec['name']}.md"
-        extra = {k: rec[k] for k in ("branch",) if rec.get(k)}
+        extra = {k: rec[k] for k in ("branch", "api_tries", "retried") if rec.get(k)}
         if out.get("merged"):
             extra["merged"] = out["merged"]
         if rec.get("template"):
@@ -308,11 +308,13 @@ class MergeMixin:
                             note=f"message #{msg.get('id')} was never delivered: the executor exited first")
         if text := self._outcome_stamp(rec):
             stamp_report(Path(rec["report"]), text)
+        # A resume item (ask, self-audit) is readonly: its red has nothing to protect, so never holds.
+        after_red = "continue" if rec.get("resume_of") else rec.get("after_red", "stop")
         if out["status"] == "red":
             # Its data outside git now matches the kept branch, not main: the inbox offers `land:`.
             outside = {"external_data": rec["branch"]} if rec.get("external_data") and rec.get("branch") else {}
             self.log.append("red", item=item_id, paths=[cfg.rel(Path(rec["report"]))],
-                            reasons=out["reasons"], after_red=rec.get("after_red", "stop"), **outside)
+                            reasons=out["reasons"], after_red=after_red, **outside)
         if out.get("conductor"):
             extra["conductor"] = out["conductor"]       # a red of conductor's making, landed anyway
         if rec.get("parked"):
@@ -326,8 +328,9 @@ class MergeMixin:
             friction=out.get("friction"), warnings=out.get("warnings"),
             session_id=rec["session_id"], exit_code=out["exit_code"],
             cost_usd=out["cost_usd"], turns=out["turns"],
-            needs_planner=rec.get("needs_planner", False), after_red=rec.get("after_red", "stop"), **extra,
+            needs_planner=rec.get("needs_planner", False), after_red=after_red, **extra,
         )
+        self._retry_cleared(run)                # daemon_api: a `retry:` that landed lifts its red's hold
         if rec.get("template") == "watch" and out["status"] != "red":
             self._watch_actions(rec)            # its tell, notify and draw lines (daemon_watch)
         rec["phase"] = "done"

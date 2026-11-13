@@ -333,6 +333,8 @@ def describe(ev: Event) -> str:
                 text += f", squashed from {d['squashed']}"
             if d.get("resolved"):
                 text += f"; prose conflict resolved in {', '.join(d['resolved'][:5])}"
+        case "api_retry":
+            text = f"{who} {d.get('note')}"
         case "land" if d.get("state") == "started":
             text = f"{who} landing `{d.get('branch')}` on main (`land:`)"
         case "land":
@@ -789,7 +791,9 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
                     ["alongside"] if rec.get("alongside") else []) + (
                     [f"beside {', '.join(rec['beside'])}"] if rec.get("beside") else []):
                 text += f" ({', '.join(tags)})"
-            if rec.get("phase", "exec") == "exec":
+            if wait := rec.get("api_wait"):
+                text += f" — **waiting on the API** ({wait.get('error')}): try {wait.get('try')} at {clock(wait['at'])}"
+            elif rec.get("phase", "exec") == "exec":
                 text += now_progress(log, item_id)
             running.append(text)
         staged = [f"{rec['name']} ({rec.get('phase')})" for rec in view.staged.values() if rec["repo"] == repo]

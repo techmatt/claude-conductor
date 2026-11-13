@@ -18,6 +18,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **open X** / **show me X** | Signal `open: folder\|reveal\|file <path>` (a path Matt names or the planner just wrote; `text`: a script unrun; `url`: a page). **ping me**: `notify: <text>`. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
+| **retry X** | Signal `retry: <repo>/<NNN_name>`: a finished red item's kept session resumes in its kept worktree, then finishes and merges as usual, releasing its red's hold (`docs/api-retry.md`). For a red the API caused (`API error` reason) once it is back; an outage's API failure is retried by itself first. |
 | **land X** | Signal `land: <repo>/<NNN_name>`: a finished red item's kept branch lands on `main` as one commit, releasing its red's hold. Only after its report is read with Matt. |
 | **content cleanup R** [extras] | Queues `template: content_cleanup` (body: Matt's extras); never a maintenance default. |
 | **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run into notes for the next cleanup; its **About conductor** goes to `planner-notes.md`. |

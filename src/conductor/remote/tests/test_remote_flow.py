@@ -107,7 +107,8 @@ def test_a_native_failure_fails_the_job(farm, capsys):
 
 
 @pytest.mark.slow           # a call caught mid-shutdown waits out its socket timeout
-def test_the_broker_dying_mid_job_finishes_the_rest_locally(farm, capsys, monkeypatch):
+def test_the_broker_dying_mid_job_fails_at_once(farm, capsys, monkeypatch):
+    """Not a silent fall back to one shard at a time (aicomplete 209-211: 6-12 min each)."""
     monkeypatch.setattr(client, "PATIENCE", 1.0)        # a broker that stays gone, after the wait for a restart
     farm.setup()
     farm.worker("lr1")
@@ -118,8 +119,9 @@ def test_the_broker_dying_mid_job_finishes_the_rest_locally(farm, capsys, monkey
         server.server_close()
     farm.once_a_job_is_open(die)
     code, out = farm.run(0, 100, "--sleep", "0.01")
-    assert (code, out) == (0, farm.local(0, 100))
-    assert "broker went away" in capsys.readouterr().err
+    assert code == client.BROKER_LOST_EXIT and not out
+    err = capsys.readouterr().err
+    assert "farm-seeds: error: the broker went away mid-job" in err and "shards in, kept in" in err
 
 
 def test_the_page_and_bundles_need_the_token_and_main_box_calls_need_loopback(farm):

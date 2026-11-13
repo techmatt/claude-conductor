@@ -169,7 +169,7 @@ class WatchMixin:
                     or rec.get("paused_at") or rec["repo"] in view.paused):
                 continue
             p = self.log.last("progress", item=item_id)
-            since = parse_stamp(p.ts if p else rec["started"])
+            since = max(parse_stamp(p.ts if p else rec["started"]), parse_stamp(rec.get("api_resumed") or rec["started"]))
             # Silent but a process of its own is still writing: a healthy long run (aicomplete 009).
             if (quiet and (at - since).total_seconds() >= quiet and not self.still_writing(item_id)
                     and not self._promised(item_id, at)):

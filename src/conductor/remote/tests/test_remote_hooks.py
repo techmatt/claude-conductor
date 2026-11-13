@@ -99,7 +99,8 @@ def test_a_remote_item_gets_farm_seeds_on_its_path(project, launches, no_broker)
     assert env[path_key].split(os.pathsep)[0] == str(bin_dir)
     assert env[settings.CONTROL_VAR] == str(p.control)
     assert env[settings.ITEM_VAR] == "code/001_job"           # the worker page names the item
-    assert prompt.rstrip().endswith("Its last stderr line says where\nthe shards ran.")
+    assert "Its last stderr line says where\nthe shards ran. Commit before you farm a change" in prompt
+    assert prompt.rstrip().endswith("or run the\nnative command for the range.")
     assert "`farm-seeds <first seed> <count> <out file> [args…]`" in prompt
     # The command on that PATH works: no broker answers, so it runs locally.
     exe = shutil.which(settings.COMMAND, path=env[path_key])
