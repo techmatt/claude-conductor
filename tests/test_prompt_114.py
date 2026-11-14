@@ -22,9 +22,10 @@ def test_both_preambles_say_a_soft_miss_is_done_and_partial_is_a_real_shortfall(
     full, light = flat(render(env, SHORT * 3)), flat(render(env, SHORT))
     assert "a soft-band or measurement miss that the done-when table reports is still `done`" in full
     assert ("planned work skipped or not delivered (an instruction declined with a reason included), "
-            "or a hard bar missed (a locked ruling, a required check, a feature that doesn't work)") in full
+            "or a hard bar missed, even within ~1 SE (a locked ruling, a required check, a feature that "
+            "doesn't work)") in full                      # 117: a hard bar ~1 SE short is partial (aicomplete 215)
     assert "a reported soft-band miss is done" in light
-    assert "planned work undelivered or a hard bar missed (ruling, required check, working feature)" in light
+    assert "planned work undelivered or any hard bar missed (ruling, required check, working feature)" in light
     assert "part met" not in full + light
 
 

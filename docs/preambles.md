@@ -45,7 +45,8 @@ its MCP and settings files, `wait_for` and message delivery: `executors.md`.
   is in the repo or a `package.json` at its root or one folder down (aicomplete's `web/`;
   74) has a `dev…` or `preview…` script (`executor.has_servers`); the *calibration* line
   (a freeze line posted before the gate, every done-when line met or unmet against the
-  prompt's number since 86, a missed band's SE gap first) when the item is `rules: true` or names a gate, band, target or seed count
+  prompt's number since 86, a missed band's SE gap first; since 117 a rules change's diff review before fresh seeds,
+  aicomplete 234 paid two bumps, and farmed seeds taken in the repo's ledger, 223 didn't) when the item is `rules: true` or names a gate, band, target or seed count
   (`executor.wants_calibrate`, 74).
 
 Template texts follow the preamble unchanged; a template item but a watch always gets the
@@ -100,7 +101,8 @@ only in the environment (74). Stages and merge executors get none.
   helper write-ups) go in a folder named for the item under the repo's results folder
   (`experiments/results/<item>/`), committed; ultracode helpers had put them in `out/`,
   git-ignored, and they were lost. Full preamble only. Read outputs a later item could
-  reuse go in `out/keep/`, which outlives the worktree (110; `worktrees.md`, *Kept reads*).
+  reuse go straight in `out/keep/`, which outlives the worktree; the preamble names where it is
+  kept, for the report to point at (110, 117; `worktrees.md`, *Kept reads*).
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
   runs at below-normal process priority and leaves at least 4 hardware threads free:
   simulation and test runs default to `load.run_threads()` threads (the box's less 4 and 2
@@ -108,30 +110,28 @@ only in the environment (74). Stages and merge executors get none.
   outside processes), half that while another item runs alongside; at most 2 heavy
   subagents (builds, sims, browsers) at once. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
   no constraint": light read-only reviewers and verifiers don't count
-  against the 2, but run in batches per dimension. A Workflow runs at most 10 agents (or the
-  prompt's number), finders and verifiers both, a hard count set before launch (68; `ultracode.md`).
+  against the 2, but run in batches per dimension. Any fan-out (a Workflow, a diff review) runs at most 10
+  agents in all (or the prompt's number), verifiers too, set before launch (68; 117: aicomplete 234 ran 16; `ultracode.md`).
   Not enforced: *Now*'s load line shows it broken; `load_high` logs under 2 free for ~3 min and messages only an
   item that is a real share of it (80); the next `progress` or `wait_for` return says when timing reads are inflated (`memory.md`).
   A load message is information (82): finish the unit in flight, start the next one smaller,
   never kill and relaunch running work for load alone.
-  The recipe (72, after wordwarriors 174): Git Bash `nice -n 10 <cmd>` gives `BELOW_NORMAL`
-  on Windows, inherited by children (measured `0x4000` in both); the full preamble adds the
-  PowerShell form.
+  The recipe (72): Git Bash `nice -n 10 <cmd>` gives `BELOW_NORMAL` on Windows, inherited by
+  children (measured); the full preamble adds the PowerShell form.
 - **Premises** (74, full only). A number or fact the prompt quotes is re-read from source
-  before use, a moved one reported; a timing read beside another item reports only ratios.
+  before use, a moved one reported; a timing read beside another item reports only ratios, and a
+  speed baseline is re-based only on a quiet box (117: aicomplete 215 re-based under load).
 - **`~/.claude`: config only** (74). Settings and permissions, never memory or a
-  `CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md`. Aicomplete 087 wrote a
-  memory into `~/.claude/projects/C--Code-aicomplete/memory/`, which loads into sessions
-  started in the main checkout (Matt's), not worktree executors or other projects.
+  `CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md` (aicomplete 087 wrote a
+  memory that loads only in Matt's main-checkout sessions).
 - **No elevation** (76, both). Nothing that needs elevation (UAC, an admin install or
-  service): a no-admin route, or the report says what needs Matt. Aicomplete 103's `samply`
-  raised a UAC consent prompt that sat unseen on the desktop, ~30 minutes lost before it
-  switched profilers. Conductor doesn't yet show a hang like that (`HANDOFF.md` *Open*).
+  service): a no-admin route, or the report says what needs Matt (aicomplete 103's `samply`
+  UAC prompt sat unseen ~30 minutes; conductor doesn't yet show such a hang: `HANDOFF.md` *Open*).
 - **Design asks** (79, both; the full one in *Asking and scope*): a ruling splitting a pass
   (over ~30% of its items on one side) and a fix changing play beyond its bug are `design:
   true` asks with a default (`questions.md`, *Design*).
 - **Status, clock, writable roots** (114, both). `partial` is a real shortfall, a reported
-  soft-band miss `done` (`reports.md`). "Plan from the clock in the last tool return, never
+  soft-band miss `done`, a hard bar missed even within ~1 SE `partial` (117, aicomplete 215; `reports.md`). "Plan from the clock in the last tool return, never
   from your own estimate" (aicomplete 213 guessed the time, stopped with 2 of 4 h unused).
   `write_roots` (`control-folder.md`; default `open_roots`) are named writable (`WRITES`) and
   the only-file line allows them (fractals 050 read it as "one path"); not readonly or watches.

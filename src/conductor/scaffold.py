@@ -145,4 +145,5 @@ def init(control: Path, project: str, repo_args: list[str]) -> tuple[str, list[s
     git.run(control, "init", "-q", "-b", "main")
     git.run(control, "add", "--", *tracked)
     git.run(control, "commit", "-q", "-m", f"conductor init: {project}", "--", *tracked)
+    notes.append(git.CONTROL_NO_REMOTE.format(name=control.name) + " (session.md says so until it has one)")
     return git.head(control), notes

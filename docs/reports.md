@@ -54,8 +54,8 @@ How a planner reads the header (`planner.md`, *Reading a report*, points here):
 
 - `blocks:` what the item blocks; `carry:` what `state.md` should change, folded in by request.
 - `partial` is a real shortfall (Matt, 2026-11-13; 114): planned work skipped or not
-  delivered, or a hard bar missed (a locked ruling, a required check, a feature that
-  doesn't work); nothing broken. A soft-band or measurement miss that the done-when table
+  delivered, or a hard bar missed, even within ~1 SE (a locked ruling, a required check, a feature that
+  doesn't work; 117, aicomplete 215); nothing broken. A `partial` Matt told to stop queues no retro (`retros.md`). A soft-band or measurement miss that the done-when table
   reports is `done`, so it queues no retro (aicomplete 213-215 went `partial` on soft
   misses alone). `red`: something broken or unsafe; with `after_red: stop` the repo's
   queue holds until **clear R**.

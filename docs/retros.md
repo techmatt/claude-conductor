@@ -14,7 +14,9 @@ self-audit was queued (its `retro` or `enqueue` event; its finish when it has ne
 what finishes while one runs counts toward the next). One is due when any of them:
 
 - went `partial` or `red`, unless every reason of its red is an API error or a failed
-  launch (111, `api-retry.md`: such an item is never the one picked either), or
+  launch (111, `api-retry.md`: such an item is never the one picked either), or a `partial`
+  that Matt or the planner told to stop (a `tell` with "stop", not conductor's own; 117:
+  aicomplete 226, stopped for a base change, got a retro; `session.told_to_stop`), or
 - ran past 1.5× its first ETA and 10 minutes over (`RETRO_OVERRUN`, measured from its
   `start` to the first `progress` with an `eta` or outline), or
 - at 12 of them with none of the above (`RETRO_FLOOR`).

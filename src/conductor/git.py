@@ -58,6 +58,9 @@ def has_remote(repo: Path) -> bool | None:
 
 
 NO_REMOTE = "{repo} has no remote: create its GitHub repo"
+# helium-hustle 003: every other project's control folder has a private remote; init said nothing.
+CONTROL_NO_REMOTE = ("the control folder has no remote: in it, `gh repo create {name} --private "
+                     "--source . --push`")
 _REMOTE_TTL = 60.0
 _remote_seen: dict[Path, tuple[float, bool | None]] = {}
 

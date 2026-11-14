@@ -43,9 +43,14 @@ def save(cfg: Config, repo: str, worktree: Path) -> Path | None:
     Where it went, or None (nothing to keep, or the move failed: never blocks a discard)."""
     src = Path(worktree) / KEEP_DIR
     try:
-        if not src.is_dir() or not any(src.iterdir()):
+        if not src.is_dir() or not (entries := list(src.iterdir())):
             return None
-        dest = root(cfg, repo) / Path(worktree).name
+        name = Path(worktree).name
+        # `out/keep/<item>/` alone (mirroring `out/<item>/`) would land doubled, kept/<repo>/<item>/<item>/
+        # (aicomplete 228, 233 hunted for it): its contents are the keep.
+        if len(entries) == 1 and entries[0].is_dir() and entries[0].name == name:
+            src = entries[0]
+        dest = root(cfg, repo) / name
         if dest.exists():
             shutil.rmtree(dest, ignore_errors=True)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +60,14 @@ def save(cfg: Config, repo: str, worktree: Path) -> Path | None:
         return None
     prune(cfg, repo)
     return dest
+
+
+def where(cfg: Config, item, run: dict) -> Path:
+    """Where an item's `out/keep/` ends up, named in its preamble so its report points there:
+    the kept folder once its worktree goes, else the main checkout's `out/keep/` itself."""
+    if wt := run.get("worktree"):
+        return root(cfg, item.repo).resolve() / Path(wt).name
+    return (cfg.repos[item.repo] / KEEP_DIR).resolve()
 
 
 def listed(cfg: Config, repo: str) -> list[Path]:

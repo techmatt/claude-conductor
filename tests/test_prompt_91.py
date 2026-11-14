@@ -47,7 +47,8 @@ def test_init_writes_main_for_a_repo_on_another_branch(tmp_path):
     assert cfg.opts("old").main == "master" and cfg.opts("ok").main == "main"
     assert 'main = "master"' in read_text(tmp_path / "proj-control" / "conductor.toml")
     assert notes == ['repo old: its branch is master, written as main = "master"',
-                     "old has no remote: create its GitHub repo (session.md says so until it has one)"]
+                     "old has no remote: create its GitHub repo (session.md says so until it has one)",
+                     "the control folder has no remote: in it, `gh repo create proj-control --private --source . --push` (session.md says so until it has one)"]
 
 
 def test_the_stub_state_md_has_every_section_in_order(tmp_path):
@@ -75,7 +76,8 @@ def test_session_md_names_a_repo_with_no_remote_until_it_has_one(env):
     env.signal("planner-2.signal", "by: planner\nsession: again")
     env.tick_until(lambda: len(env.events("checkpoint")) == 2)
     text = read_text(env.control / "session.md")
-    assert "no remote" not in text
+    assert "code has no remote" not in text
+    assert "**the control folder has no remote" in text     # 117: until the control folder has one too
 
 
 def test_remote_missing_caches_its_answer(tmp_path):

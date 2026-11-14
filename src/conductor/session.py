@@ -299,10 +299,23 @@ def overrun(log: EventLog, fin: Event) -> float | None:
     return ran / planned
 
 
+STOP_RE = re.compile(r"\bstop(ped|ping)?\b", re.IGNORECASE)
+
+
+def told_to_stop(log: EventLog, fin: Event) -> bool:
+    """Matt or the planner told the item to stop (a `tell:` saying so, not conductor's own):
+    a deliberate stop, so its `partial` is no workflow shortfall (aicomplete 226, stopped for
+    a base change, got 229_post_audit_226)."""
+    return any(e.item == fin.item and e.id < fin.id and e.detail.get("by") != "conductor"
+               and STOP_RE.search(str(e.detail.get("text") or "")) for e in log.query(kinds=["tell"], item=fin.item))
+
+
 def retro_trigger(log: EventLog, fin: Event) -> str | None:
     """Why this item alone makes a workflow retro due, or None. A red that is only the API's
     or a failed launch is none: there is no workflow to look back on (aicomplete 216)."""
     if fin.detail.get("status") == "red" and api_only(fin.detail.get("reasons")):
+        return None
+    if fin.detail.get("status") == "partial" and told_to_stop(log, fin):
         return None
     if fin.detail.get("status") in ("partial", "red"):
         return str(fin.detail["status"])
@@ -366,7 +379,8 @@ def retros(log: EventLog, view: View, repo: str) -> Retro:
     due, parts = None, []
     if triggers or len(since) >= RETRO_FLOOR:
         pool = [ev for ev in since if (ev.id in triggers or not triggers) and ev.item not in covered and _resumable(ev)
-                and not (ev.detail.get("status") == "red" and api_only(ev.detail.get("reasons")))]
+                and not (ev.detail.get("status") == "red" and api_only(ev.detail.get("reasons")))
+                and not (ev.detail.get("status") == "partial" and told_to_stop(log, ev))]
         if pool:
             (_, why), due = max(((friction_score(log, ev), ev) for ev in pool), key=lambda s: (s[0][0], s[1].id))
             trigger = triggers.get(due.id)
@@ -543,7 +557,9 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
             # Start step 6's access request copies these: guessed, one missing path fails it (84).
             f"Repos: {', '.join(f'`{p}`' for p in cfg.repos.values()) or 'none'}"
             # Until a repo has a remote, every digest says so (91); nothing about push or sync.
-            + "".join(f"\n\n**{git.NO_REMOTE.format(repo=r)}**" for r in git.remote_missing(cfg.repos, ttl=0)))
+            + "".join(f"\n\n**{git.NO_REMOTE.format(repo=r)}**" for r in git.remote_missing(cfg.repos, ttl=0))
+            + (f"\n\n**{git.CONTROL_NO_REMOTE.format(name=cfg.control.name)}**"
+               if git.has_remote(cfg.control) is False else ""))
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
     habits = planner_habits(cfg.control)
     out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]

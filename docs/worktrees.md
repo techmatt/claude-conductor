@@ -109,8 +109,10 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
 
   *Kept reads* (110, `kept.py`). Before any worktree is removed (merged, readonly,
   discarded, a leftover's retry), its `out/keep/` moves to `.conductor/kept/<repo>/<NNN_name>/`
-  (a move failing never blocks the removal). The full preamble tells an executor to put read
-  outputs a later item could reuse there (a farm's `games.jsonl`, its specs, a readonly
+  (a move failing never blocks the removal); an `out/keep/` holding only `<NNN_name>/` moves that folder's
+  contents, not a doubled `<NNN_name>/<NNN_name>/` (117: aicomplete 228, 233 hunted for theirs). The full
+  preamble names that kept path (`kept.where`; a `worktrees = false` repo's own `out/keep/`) for the report
+  to point at, and tells an executor to put read outputs a later item could reuse there (a farm's `games.jsonl`, its specs, a readonly
   write-up): aicomplete 205 re-farmed 200's and 199's reads, ~15 minutes, because they went
   with the worktree. Each repo keeps its newest 3 items' (`KEEP_ITEMS`) and at most 2 GB
   (`KEEP_BYTES`; the newest always stays). Every non-watch prompt for that repo ends with a

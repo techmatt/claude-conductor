@@ -56,7 +56,9 @@ inside your `paths:` if declared; a note or follow-up is only for what needs Mat
 
 Premises. A number or fact the prompt quotes may have moved since: re-read it from
 source before use; report any that had. A timing or speed read
-runs on a quiet box; with anything running beside you, report only ratios.
+runs on a quiet box; with anything running beside you, report only ratios, and re-base a
+speed baseline (`speed.py --update` and the like) only when the last `progress` or `wait_for`
+return showed nothing beside you.
 
 Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
 Call it at the start, with a first `eta` once you can, at milestones, as you launch any job
@@ -78,7 +80,8 @@ in `out/{item_name}/` (git-ignored) in your working directory, never %TEMP%: any
 is an earlier item's, never a fresh result; working papers the prompt asks for (per-card notes, helper write-ups)
 go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`.
 Read outputs a later item could reuse (a farm's `games.jsonl`, its specs, a readonly write-up) go
-in `out/keep/`: conductor keeps the last three items' when the worktree goes. Scripts go
+straight in `out/keep/` (no item subfolder); they are kept at `{kept}`, the path your report names
+for them. Scripts go
 in a file, then run; edit files with Write/Edit only, never a shell heredoc, `sed` or `-c`
 string. Heavy compute (sweeps, builds, test
 runs, subagent fan-out) runs at below-normal priority, which its children inherit (Bash:
@@ -90,8 +93,8 @@ Run a full test suite (`cargo test --workspace`) only between sims, never beside
 A load message is information: finish the unit in flight, start the next one smaller; never
 kill and relaunch work for load alone. At most 2 heavy subagents
 (builds, sims, browsers) at once, above any Workflow size or Ultracode cost note;
-light read-only reviewers don't count but run batched per dimension. A Workflow runs at
-most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
+light read-only reviewers don't count but run batched per dimension. Any fan-out (a Workflow,
+a diff review) runs at most 10 agents in all (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
 quote the prompt's rulings word for word and give each helper its own scratch path (`out/{item_name}/<helper>/`). Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
@@ -129,8 +132,8 @@ them before the report; no such section is fine, say nothing) and any other warn
 `perf`, `docs`, `security` or the repo's own). A warning never changes your status.
 `done`: goal met; a soft-band or measurement miss that the done-when table reports is still
 `done`. `partial`: a real shortfall, nothing broken: planned work skipped or not delivered (an
-instruction declined with a reason included), or a hard bar missed (a locked ruling, a required
-check, a feature that doesn't work). `red`: something broken or unsafe; this
+instruction declined with a reason included), or a hard bar missed, even within ~1 SE (a locked
+ruling, a required check, a feature that doesn't work). `red`: something broken or unsafe; this
 repo's queue should not continue without a look.
 {pick}
 The report leads with what changes for the planner: header, findings,
@@ -189,7 +192,7 @@ slow: none | <part> ~<time>, <why>, <fix>
 friction: none | <what slowed you>
 warnings: none | <kind>: <what CLAUDE.md's *Warning checks*{checks} or you caught>; …
 `done`: goal met (a reported soft-band miss is done). `partial`: planned work undelivered
-or a hard bar missed (ruling, required check, working feature). `red`: broken or unsafe; queue
+or any hard bar missed (ruling, required check, working feature). `red`: broken or unsafe; queue
 stops. Answer messages, amendments by number. End with `Report written to {report}`.
 
 {tail}"""
@@ -239,7 +242,9 @@ worktree has no `node_modules`: run `npm ci` in a package folder before its chec
 # The calibration line, for an item that names a gate, band, target or seed count, or bumps the rules.
 CALIBRATE = (" A calibration or tuning item posts a freeze line as progress before its gate:\n"
              "every done-when line, met or unmet, its frozen number against the prompt's; when a\n"
-             "frozen band misses its target, post the gap in SE and the rule being applied before any change.")
+             "frozen band misses its target, post the gap in SE and the rule being applied before any change.\n"
+             "A rules change runs its independent diff review before spending fresh seeds; seeds you farm are\n"
+             "spent: take them in the repo's seed ledger (`seeds.py --take` or its like) before the report.")
 CALIBRATE_RE = re.compile(r"\b(gates?|gated|bands?|targets?|seeds?|seed count)\b", re.IGNORECASE)
 
 PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest path relative to the repo root>\n"
@@ -584,7 +589,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         only = only[:-1] + ROOTS_TOO + "." if only.endswith(".") else only + ROOTS_TOO
     text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
-        free=load.FREE_THREADS, threads=load.run_threads(),
+        free=load.FREE_THREADS, threads=load.run_threads(), kept=kept.where(cfg, item, run).as_posix(),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
         writes=writes,

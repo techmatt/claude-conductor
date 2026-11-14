@@ -147,6 +147,8 @@ Each repo first (`scaffold.prepare_repo`, printed): missing or not a repo of its
 `git init -b main`, an empty commit, no remote; no commits: one on `main`; on another
 branch, no `main`: `main = "<branch>"`. Until a repo has a remote, `session.md` (under
 `Repos:`) and the app's repo header say `<repo> has no remote: create its GitHub repo`.
+Init's last line, and `session.md` until it has one, name the control folder's own missing
+remote with the command for a private one (`git.CONTROL_NO_REMOTE`; 117, helium-hustle 003).
 
 ## Control-folder guard
 
