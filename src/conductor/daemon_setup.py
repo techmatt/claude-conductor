@@ -205,6 +205,10 @@ class SetupMixin:
         paths = executor.RunPaths.for_item(cfg, item)
         stage, resume = rec.get("staged"), rec.get("resume")
         cwd = Path(rec["worktree"]) if rec["worktree"] else cfg.repos[item.repo]
+        try:                                # the preamble's `out/<item>/` (fractals 008, 010: old `out/` read as fresh)
+            (cwd / executor.SCRATCH / item.name).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         rec["repo_status"] = git.tracked_status(cwd) if item.readonly else None
         # Amendments written before the launch: into the prompt, or the resume message.
         amends = talk.take(cfg.control, item.id, "resume" if stage else "prompt")

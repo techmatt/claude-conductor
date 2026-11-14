@@ -179,7 +179,7 @@ START_TOOL = {
         "outlives your shell, and return at once. A Git Bash `&`, `nohup` or a `run_in_background` "
         "command dies when Claude Code ends or reaps that shell; this one is started detached by "
         "conductor (no parent, own process group), at below-normal priority, in your working "
-        "directory, stdin closed, output appended to `log`. Returns its Windows pid: wait with "
+        "directory, stdin closed, output to `log` (a fresh file: one already there moves aside). Returns its Windows pid: wait with "
         "`wait_for` (`pid`, plus `log` and `line` for its done line). Stop it before you finish; "
         "what an item leaves running in its worktree is stopped when it ends."
     ),
@@ -189,7 +189,7 @@ START_TOOL = {
             "command": {"type": "string", "description": ("The command line, run by Git Bash as your Bash tool "
                                                           "runs it (`nice` not needed), in your working directory.")},
             "log": {"type": "string", "description": ("Its output file, relative to your working directory "
-                                                      f"(default {SCRATCH}/<first word>-<time>.log).")},
+                                                      f"(default {SCRATCH}/<item>/<first word>-<time>.log).")},
         },
         "required": ["command"],
     },
@@ -212,6 +212,19 @@ def parse_outline(value) -> tuple[list[dict], str | None]:
         rows.append({"title": " ".join(row["title"].split())[:80],
                      "eta": " ".join(str(row.get("eta") or "").split())[:20], "done": done})
     return rows, None
+
+
+def fresh_log(path: Path) -> Path | None:
+    """`start` writes a fresh log: one already at `path` (an earlier item's or run's; fractals
+    008's `out/browser.log` opened with 007's rows) moves aside to `<stem>.<its time><suffix>`."""
+    try:
+        if not path.is_file():
+            return None
+        aside = path.with_name(f"{path.stem}.{datetime.fromtimestamp(path.stat().st_mtime):%m%d-%H%M%S}{path.suffix}")
+        path.replace(aside)
+        return aside
+    except OSError:
+        return None
 
 
 class Server:
@@ -335,13 +348,15 @@ class Server:
             return "`log` must be a path", True
         if not log:
             word = re.sub(r"[^A-Za-z0-9_-]+", "", Path(command.split()[0]).stem)[:20] or "job"
-            log = f"{SCRATCH}/{word}-{datetime.now():%H%M%S}.log"
+            log = f"{SCRATCH}/{self.item.rsplit('/', 1)[-1]}/{word}-{datetime.now():%H%M%S}.log"
         path = Path(log) if Path(log).is_absolute() else self.workdir / log
+        moved = fresh_log(path)
         try:
             job = procs.spawn_detached(procs.shell_argv(command), self.workdir, path, below_normal=True)
         except OSError as exc:
             return f"could not start it: {exc}", True
-        return (f"Started, pid {job.pid}, detached: it outlives your shell. Output: {log}. Wait with "
+        aside = f" An older log there moved to {moved.name}." if moved else ""
+        return (f"Started, pid {job.pid}, detached: it outlives your shell. Output: {log} (fresh).{aside} Wait with "
                 f"`wait_for` (pid {job.pid}, log {log!r}, line <its done line>)." + self._running_now()), False
 
     def _open_question(self, ref) -> tuple[questions.Question | None, str | None]:

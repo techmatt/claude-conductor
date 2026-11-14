@@ -20,7 +20,7 @@ that farmed has `remote: true` on its `start` event, however it got it.
 
 ## Shape
 
-- **The broker** (`broker.py`, its state in `board.py`) is its own process, started by the
+- **The broker** (`broker.py`, its state in `board.py`, its views in `board_views.py`) is its own process, started by the
   daemon at its start for a project with `[remote]`, and kept across a daemon restart
   unless the section changed. It exits once the daemon has been gone a minute. If it
   dies, the daemon starts it again within 10 s (one warning); its jobs carry on (`remote-url.md`).
@@ -137,7 +137,7 @@ planner's digest and the deadlines: `remote-diag.md`.
   fingerprint fails there, browsers are gated against the native reference (and
   `farm-seeds` says so). A worker that fails gets no shards for the commit; the failure,
   with the reference it missed, is in `.conductor/remote/gates.log`, the job's record and
-  `farm-seeds`' stderr, and the inbox's workers line counts it. A failure is not for
+  `farm-seeds`' stderr, and the inbox's workers line counts it with the reason (116). A failure is not for
   good (95): the worker re-gates under the same id when its page reloads or a
   local-remote worker restarts (the first hello says `fresh`), when a new broker takes up
   the board (a code change), or when the commit's reference changes.

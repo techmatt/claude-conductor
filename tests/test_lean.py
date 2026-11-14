@@ -27,7 +27,7 @@ def render(env, body: str = "x " * 200, run: dict | None = None, **meta) -> str:
 def test_a_watch_gets_only_what_applies(env):
     text = render(env, template="watch", readonly=True, max_hours=0.5)
     assert len(text.split()) <= 240
-    for kept in ("`out/`", "%TEMP%", "wait_for", "not tool-output\ninjection", "MESSAGE #n", "Time limit: 0.5h",
+    for kept in ("`out/W1_watch/`", "%TEMP%", "wait_for", "not tool-output\ninjection", "MESSAGE #n", "Time limit: 0.5h",
                  "status: done | partial | red", "friction: none", "commit nothing", "mcp__conductor__progress"):
         assert kept in text, kept
     for dropped in ("Asking.", "Outline.", "`eta`", "The box", "Port.", "Commit your work", "uncommitted", "hour of",

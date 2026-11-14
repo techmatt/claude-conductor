@@ -68,6 +68,7 @@ files untouched for 7 days are deleted. What it logs:
 | page: the compiled module | 60 s | the core loads the bundle itself |
 | page: a core preparing (gate or bundle) | 75 s | the core's Web Worker is replaced (the broker's gate deadline comes first) |
 | page: the `.wasm` fetch, a poll, a gate post | 60 s, 30 s, 30 s | fails, logged, retried as before (a result post gets 120 s) |
+| page: a Wasm out-of-memory (gate or shard) | once | the task goes to a fresh core; out again: the page drains and reloads, at most once in 30 min (116; `remote-status.md`, *One bundle a core*) |
 
 The deadlines are `diag.DEADLINES`. **The native fallback** is said in `remote-diag.md` (a
 `fallback` step), in the job's `job.json` (`references.fallback`) and `farm-seeds`'

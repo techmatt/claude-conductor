@@ -47,7 +47,9 @@ reaps that shell (aicomplete 188's farm). `start(command, log?)` runs `command` 
 Bash (`procs.git_bash`: `CLAUDE_CODE_GIT_BASH_PATH`, else beside `git`, never System32's WSL
 `bash`; `/bin/sh` elsewhere) via `procs.spawn_detached`: a launcher that exits at once, own
 process group, out of the job object where allowed, below-normal priority, stdin closed, in
-the working directory, output appended to `log` (default `out/<first word>-<HHMMSS>.log`).
+the working directory, output to `log` (default `out/<item>/<first word>-<HHMMSS>.log`). The log
+is always fresh (116): a file already at that path (fractals 008's `out/browser.log` opened with
+007's rows) moves aside to `<stem>.<MMDD-HHMMSS of its mtime><suffix>`, and the return says so.
 It returns at once with the Windows pid for `wait_for`. Its cwd is the worktree and its
 parent is gone, so the end-of-item reap (`procs.strays`) and the memory scan both count it.
 

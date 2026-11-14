@@ -203,6 +203,7 @@
   const loadTimes = [];             // per key: download, compile, first core ready (diagnostics)
   const best = {};                  // rk -> this tab's best ms a seed for that code and args
   const shards = [];                // the last 60 shard results, for diagnostics
+  const recycles = [];              // the last 40 cores replaced for a new bundle or out of memory (worker.js)
   const events = [];
   let ran = 0, wake = null, wakeWanted = false, firstWork = 0;
 
@@ -323,7 +324,7 @@
   // reload, paused, a core's error, or fetching / compiling / starting a bundle.
   function report() {
     const ts = Object.values(tiles), now = Date.now();
-    if (reloading) return { state: "draining", for: (now - reloading) / 1000 };
+    if (reloading) return { state: "draining", for: (now - reloading) / 1000, ...(reloadForMemory ? { why: "memory" } : {}) };
     if (paused) return { state: "paused" };
     const prep = ts.filter((t) => t.state === "prep" && t.step !== "gating");
     if (prep.length) {
@@ -401,6 +402,11 @@
     reloading = Date.now();
     savePrefs();
     log("a new version of this page is served: finishing running shards, then reloading", "warn");
+    drainAndReload();
+  }
+  function drainAndReload() {
+    reloading ||= Date.now();
+    savePrefs();
     for (const w of workers) w?.postMessage({ type: "drain" });
     const check = setInterval(() => {
       const busy = Object.values(tiles).some((t) => t.state === "run");
@@ -418,6 +424,21 @@
       workers[m.slot] = null; leaving.delete(m.slot); refill(m.slot); hello(); draw();
       return;
     }
+    // A core handing back a task for a fresh one (worker.js `recycle`: a new bundle, or out of
+    // memory): terminating it frees its Wasm memory; the new core runs that task first.
+    if (m.type === "recycle") {
+      workers[m.slot]?.terminate();
+      recycles.push({ at: new Date().toISOString(), core: m.slot + 1, why: m.why, key: m.task.key });
+      if (recycles.length > 40) recycles.shift();
+      plog("page", `core ${m.slot + 1}: replaced (${m.why}), its ${m.task.task} handed to the new core`);
+      if (/memory/.test(m.why)) log(`core ${m.slot + 1}: out of memory loading ${m.task.key.slice(0, 7)}; retrying in a fresh core`, "warn");
+      workers[m.slot] = startCore(m.slot, m.task);
+      if (leaving.has(m.slot)) workers[m.slot].postMessage({ type: "drain" });   // it runs the task, then leaves
+      setTile(m.slot, { state: "prep", step: "starting", key: m.task.key });
+      draw();
+      return;
+    }
+    if (m.type === "oom") { outOfMemory(m); return; }
     const task = m.job ? { job: m.job, shard: m.shard, first: m.first, count: m.count } : {};
     if (["idle", "busy", "gating", "gate", "need"].includes(m.type)) {
       polled = Date.now();                       // a core's poll got through
@@ -460,7 +481,8 @@
     else if (m.type === "hello") hello();
     else if (m.type === "gate") {
       setTile(m.slot, { state: "idle" });
-      lastGate = { key: m.key, state: m.pass ? "pass" : "fail", reference: m.reference || "native", value: m.pass ? m.value : "" };
+      lastGate = { key: m.key, state: m.pass ? "pass" : "fail", reference: m.reference || "native", value: m.pass ? m.value : "",
+                   why: m.pass ? undefined : String(m.value).slice(0, 200) };
       log(m.pass ? `fingerprint gate passed for ${m.key} (${short(m.value, 12)})` : `fingerprint gate FAILED for ${m.key}: got ${short(m.value, 24)}`, m.pass ? "ok" : "bad");
       hello();
     } else if (m.type === "shard") {
@@ -490,14 +512,33 @@
     }
   }
 
-  function startCore(slot) {
+  function startCore(slot, task = null) {
     const w = new Worker(base + "worker.js", { type: "module" });
     w.onmessage = onMessage;
     // A core that fails to load or throws at the top shows nothing else: log it.
     w.onerror = (e) => { log(`core ${slot + 1}: worker error: ${e.message || "failed to load worker.js"}`, "bad"); };
     w.onmessageerror = () => plog(`core${slot + 1}`, "a message could not be read (messageerror)");
-    w.postMessage({ type: "start", base, wid, slot, label: label() });
+    w.postMessage({ type: "start", base, wid, slot, label: label(), task });
     return w;
+  }
+
+  // A fresh core ran out of Wasm memory too (worker.js): what holds it is the tab itself, so
+  // the page reloads, its running shards finished first, at most once in OOM_RELOAD_MS. A
+  // reload's first hello re-gates what this worker failed. Past that, it stays as it is, the
+  // gate's reason ("load failed: RangeError ...") on the page, the broker's views and the inbox.
+  const OOM_RELOAD_MS = 30 * 60000;
+  let reloadForMemory = false;
+  function outOfMemory(m) {
+    const last = Number(store(sessionStorage, "oomReload") || 0);
+    if (reloading) return;
+    if (Date.now() - last < OOM_RELOAD_MS) {
+      log(`core ${m.slot + 1}: out of memory again within ${OOM_RELOAD_MS / 60000} min of a reload; not reloading again: ${m.text}`, "bad");
+      return;
+    }
+    store(sessionStorage, "oomReload", String(Date.now()));
+    reloadForMemory = true;
+    log(`core ${m.slot + 1}: a fresh core ran out of memory too (${m.text}): reloading the page`, "bad");
+    drainAndReload();
   }
 
   // No preparing step sits open-ended (98): a core preparing (a gate, or a shard's bundle) for
@@ -597,7 +638,8 @@
     if (gate) {
       const sym = gate.state === "pass" ? "✓" : gate.state === "fail" ? "✗" : "◌";
       $("gate").textContent = gate.state === "pending" ? `${sym} checking the ${gate.reference} reference` :
-        `${sym} ${gate.reference} reference ${short(gate.value)}` + (gate.state === "fail" ? " failed" : "");
+        `${sym} ${gate.reference} reference ${short(gate.value)}` + (gate.state === "fail" ? " failed" + (gate.why ? `: ${gate.why.slice(0, 80)}` : "") : "");
+      $("gate").title = gate.why || $("gate").textContent;
       $("gate").className = "chip " + (gate.state === "pass" ? "ok" : gate.state === "fail" ? "bad" : "warn");
     }
 
@@ -752,6 +794,8 @@
       name: myName || null, bundle: have, bundleLoads: loadTimes,
       tiles: Object.entries(tiles).map(([i, t]) => ({ core: +i + 1, state: t.state, step: t.step, key: t.key,
                                                       msPerSeed: t.msSeed ? +t.msSeed.toFixed(1) : null, text: t.text || undefined })),
+      gate: view?.gate || lastGate, coresReplaced: recycles,
+      lastOomReload: Number(store(sessionStorage, "oomReload") || 0) ? new Date(Number(store(sessionStorage, "oomReload"))).toISOString() : null,
       broker: view, recentShards: shards.slice(-40), events: events.slice(-100),
       notUploaded: upload.slice(-150).map((x) => `${new Date(x.t).toISOString()} ${x.s} ${x.m}`),
     };

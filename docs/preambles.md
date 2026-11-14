@@ -81,11 +81,11 @@ only in the environment (74). Stages and merge executors get none.
   its report or a question; its own default never un-skips it.
 - **Question defaults.** A default may not contradict a prompt line or amendment unless the
   question's first line says `default overrides prompt: <line>` (`questions.md`).
-- **Scratch** goes in `out/` in the working directory, never `%TEMP%` or anywhere outside
-  it. Conductor makes `out/` ignored before every launch and stage (`executor.SCRATCH`,
-  `git.ignore_locally`): unless a rule already ignores it, `/out/` goes into the repo's
-  `.git/info/exclude`, local to the clone and shared by its worktrees, never committed and
-  silent (a `warning` only if it fails; 72, after wordwarriors 172 and 175).
+- **Scratch**, bench and run output go in `out/<item>/` in the working directory, never
+  `%TEMP%`; anything else in `out/` is an earlier item's (116: fractals 008 and 010 read a
+  reused `out/parity`, `out/browser2` as fresh). The daemon makes `out/<item>/` at launch;
+  `out/keep/` stays shared. `out/` is ignored before every launch and stage
+  (`git.ignore_locally`: `/out/` in `.git/info/exclude`, never committed; 72).
 - **Scripts in files** (72; wordwarriors 174, aicomplete 074). A script is written with
   Write and run as a file, never a heredoc or `-c` string: an apostrophe broke quoted-delimiter
   heredocs in executor Bash. Since 82 file edits too go through Write/Edit only, never a shell
@@ -145,7 +145,7 @@ only in the environment (74). Stages and merge executors get none.
   the lead's doc edits; full only: an ultracode item never draws light). Words held.
 - **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
   (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`), and
-  (113) gives each helper its own scratch path, `out/<helper>/` (fractal-website 006: a
+  (113) gives each helper its own scratch path, `out/<item>/<helper>/` (fractal-website 006: a
   shared one let a helper overwrite another module's docstring).
 - **Fix the obvious in place** (113, Matt; both, ending *Latitude*): unless readonly, fix
   anything obvious found (stale doc line, small bug, dead code, own audit findings) before

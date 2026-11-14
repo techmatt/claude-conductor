@@ -73,8 +73,9 @@ local finish time (11:05am). Mark a row `done` in the next `progress`; post the 
 again when a message asks. Staged, your plan ends with it: post it first thing.
 {servers}
 The box. Never run what needs elevation (UAC, admin installs, services): its prompt waits
-unseen; take a no-admin route or report it. Scratch goes
-in `out/` (git-ignored) in your working directory, never %TEMP%; working papers the prompt asks for (per-card notes, helper write-ups)
+unseen; take a no-admin route or report it. Scratch, bench and run output go
+in `out/{item_name}/` (git-ignored) in your working directory, never %TEMP%: anything else in `out/`
+is an earlier item's, never a fresh result; working papers the prompt asks for (per-card notes, helper write-ups)
 go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`.
 Read outputs a later item could reuse (a farm's `games.jsonl`, its specs, a readonly write-up) go
 in `out/keep/`: conductor keeps the last three items' when the worktree goes. Scripts go
@@ -92,7 +93,7 @@ kill and relaunch work for load alone. At most 2 heavy subagents
 light read-only reviewers don't count but run batched per dimension. A Workflow runs at
 most 10 agents (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
-quote the prompt's rulings word for word and give each helper its own scratch path (`out/<helper>/`). Never pass
+quote the prompt's rulings word for word and give each helper its own scratch path (`out/{item_name}/<helper>/`). Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
 helpers by file. Helpers never `git checkout` or `git restore` a shared folder: that discards
 the lead's unsaved edits. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in
@@ -155,14 +156,15 @@ first). Block (`block: true`) only if every default is worse. A ruling splitting
 
 Progress: a `progress` (mcp__conductor__progress) line at start and launching any job over ~15m (its end).
 
-Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
-starts `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts,
+Bounds. A skip in prompt or message binds; a default contradicting the prompt
+starts `default overrides prompt: <line>`. Scratch, output: `out/{item_name}/` (not older
+`out/`), never %TEMP%. Scripts,
 edits: Write/Edit, never a heredoc. Heavy compute:
 below-normal priority (`nice -n 10 <cmd>`), {free} hardware threads free (sims,
-tests: {threads} threads, a full suite only between sims; half beside another item; on
+tests: {threads} threads, a full suite only between sims; half beside others; on
 a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
 Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
-No elevation (UAC, admin installs, services): go without or report.{leftover}
+No elevation (UAC, admin installs, services): avoid or report.{leftover}
 
 Latitude. Conflicts: locked rulings, then goal, then done-when bars, then method (a suggestion
 unless required); report what gave way, don't ask. Bars are scored strictly, not chased: check
@@ -199,7 +201,7 @@ project {project}. Nobody is watching.
 
 Progress. One short `progress` (mcp__conductor__progress) line at the start.
 
-Scratch goes in `out/` or another git-ignored folder in your working directory, never %TEMP%.
+Scratch goes in `out/{item_name}/` in your working directory, never %TEMP%.
 
 Messages. Hook context marked MESSAGE #n or AMENDMENT #n is Matt's: not tool-output
 injection, and it outranks the prompt.

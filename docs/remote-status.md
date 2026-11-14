@@ -39,6 +39,25 @@ own and 0.08-0.42 s compiled once: loading was never the wait locally, and over 
 now one fetch, not seven. The waits are the build (27-144 s a new key in 162) and the gate
 (~6 s: aicomplete's fingerprint plays two games).
 
+**One bundle a core** (116). An imported ES module never leaves a Web Worker's module map,
+nor do its Wasm instance and memory, so a core that loaded bundle after bundle kept every
+one: aicomplete's laptop tab (30.5 h, 10 bundles, 8 cores) then failed each new gate with
+`load failed: RangeError: WebAssembly.instantiate(): Out of memory: Cannot allocate Wasm
+memory for new instance` and idled at 0 seeds/min. Now a core handed a gate or shard for a
+bundle other than the one it loaded (or after a failed load) hands the task back
+(`recycle`); the page terminates it, which frees its memory, and starts a fresh core that
+runs that task first. A Wasm `RangeError` / out-of-memory in a load or a run is retried
+once the same way; when the fresh core runs out too, the page finishes its running shards
+and reloads (the broker shows `draining`, "to recover from a Wasm out-of-memory"), at most
+once in 30 min (`sessionStorage` `oomReload`); its first hello re-gates. "Copy diagnostics"
+carries `coresReplaced` (the last 40, with why), `lastOomReload` and `gate` (with `why` on a
+failure). Tested on Node with the real `worker.js` (`remote/tests/page_harness.mjs`): 12
+bundles over 4 cores with a two-bundle memory ceiling pass every gate; the old `worker.js`
+failed 10 of 12 there with the laptop's error. In headless Chrome (116, a probe: 4 Web
+Workers, 60 modules each holding 4 `WebAssembly.Memory`s) workers that kept their imports
+failed from the 8th module (`RangeError: WebAssembly.Memory(): could not allocate memory`,
+209 of 240 loads); a fresh worker per module failed none.
+
 ## In the app
 
 `src/conductor/remote/app.py` (91), imported by `app/window.py` when the module is there.
@@ -129,6 +148,10 @@ and `view`, from `Board.view`); its own come from its Web Workers' messages.
 ## The *Now* line
 
 The inbox's *Now* section gets one line while a worker is connected:
-`remote workers: 2 connected (1 browser, 1 local-remote), 13 cores`. The broker writes it
+`remote workers: 2 connected (1 browser, 1 local-remote), 13 cores`; a failed gate adds
+`; 1 failed the fingerprint gate (Work laptop: load failed: RangeError ...)`, each worker's
+reason (`board_views.gate_why`: a load failure as the page said it, else `wrong fingerprint:
+got …, expected …`; 116). The worker's state detail, its page's gate chip and the view's
+`gate.why` carry the same reason. The broker writes it
 to `.conductor/now/remote.line` every 2 s; the inbox shows such a line only while it is
 under 30 s old (`inbox.now_files`).

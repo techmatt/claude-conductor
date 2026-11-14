@@ -14,8 +14,16 @@
 //
 // Every step goes to the page's rolling log too (`note`), which the page uploads with its hello
 // for the broker's diagnostics (98): no step here waits without a deadline or goes unrecorded.
-let base = "", wid = "", slot = 0, running = true, label = "";
-let mod = null, modKey = null;
+//
+// One bundle a core (116): an imported ES module never leaves a worker's module map, nor do its
+// Wasm instance and memory, so a core that loaded bundle after bundle kept them all. aicomplete's
+// laptop tab (30 h, 10 bundles, 8 cores) then failed every instantiation with "Out of memory:
+// Cannot allocate Wasm memory" and idled. Now a core handed a task for another bundle hands it
+// back to the page (`recycle`), which replaces the core with a fresh one that runs that task
+// first. An out-of-memory error is retried once the same way; a second asks the page to reload.
+let base = "", wid = "", slot = 0, running = true, label = "", pending = null;
+let mod = null, modKey = null, tried = false;   // tried: this core imported a bundle (ok or not)
+const OOM = /RangeError|out of memory|Cannot allocate/i;
 let wanted = null;                    // {key, resolve}: the module asked of the page
 const MODULE_WAIT_MS = 60000;         // the page's module not here by then: the core loads the bundle itself
 
@@ -76,7 +84,7 @@ function fromPage(t, task) {
 
 async function load(t, task) {
   if (modKey === t.key) return mod;
-  mod = null; modKey = null;
+  mod = null; modKey = null; tried = true;
   const t0 = performance.now();
   const compiled = await fromPage(t, task);
   postMessage({ type: "loading", slot, key: t.key, step: "starting", ...task });
@@ -100,12 +108,20 @@ async function load(t, task) {
   throw first;
 }
 
+// Hand this task to a fresh core (the page terminates this one, freeing its Wasm memory).
+function recycle(t, why) {
+  note(`${t.task} ${t.key.slice(0, 7)}: ${why}; handing it to a fresh core`);
+  running = false;
+  postMessage({ type: "recycle", slot, task: t, why });
+}
+
 async function loop() {
   let misses = 0;
-  while (running) {
-    let t;
+  while (running || pending) {
+    let t = pending;
+    pending = null;
     const t0 = performance.now();
-    try {
+    if (!t) try {
       t = await api("poll", { worker: wid, label });
       polls.n++; polls.times.push(Math.round(performance.now() - t0));
       if (misses) postMessage({ type: "back", slot });
@@ -119,6 +135,10 @@ async function loop() {
       continue;
     }
     pollStats();
+    if ((t.task === "gate" || t.task === "shard") && tried && modKey !== t.key) {
+      recycle(t, modKey ? `a new bundle (this core has ${modKey.slice(0, 7)})` : "this core's last load failed");
+      return;
+    }
     if (t.task === "gate") {
       let value;
       const g0 = performance.now();
@@ -132,6 +152,10 @@ async function loop() {
       } catch (e) {
         value = "load failed: " + String(e);
         note(`gate ${t.key.slice(0, 7)}: ${value}`);
+        if (OOM.test(String(e))) {
+          if (!t.oom) { recycle({ ...t, oom: 1 }, "out of memory"); return; }
+          postMessage({ type: "oom", slot, text: String(e) });     // a fresh core ran out too: the page reloads
+        }
       }
       try {
         const r = await api("gate", { worker: wid, key: t.key, value });
@@ -152,6 +176,10 @@ async function loop() {
         if (typeof output !== "string") throw new Error(`run() returned ${typeof output}, not a string`);
       } catch (e) {
         ok = false; err = String(e); output = "";
+        if (OOM.test(err)) {         // the lease is still this worker's: a fresh core runs it once more
+          if (!t.oom) { recycle({ ...t, oom: 1 }, "out of memory"); return; }
+          postMessage({ type: "oom", slot, text: err });
+        }
       }
       const ms = performance.now() - t0;
       const line = `${new Date().toISOString()} slot ${slot} shard ${t.shard} seeds ${t.first}+${t.count} ` +
@@ -185,6 +213,7 @@ onmessage = (e) => {
   const m = e.data;
   if (m.type === "start") {
     ({ base, wid, slot, label } = m);
+    pending = m.task || null;          // a task a recycled core handed back: run before polling
     loop();
   } else if (m.type === "label") {
     label = m.label;
