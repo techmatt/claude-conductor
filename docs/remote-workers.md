@@ -82,6 +82,8 @@ only committed code: aicomplete 204 ran every read natively and starved the box)
 (`remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
 `.conductor/remote/seeds.jsonl`, which the *Kept reads* rows read (`worktrees.md`).
 
+The commit it runs from, its dirty-tree warning and `farm-seeds --cancel`: `farm-seeds.md`.
+
 ## Placement
 
 `remote-placement.md`: a job under `local_below_seconds` (or with no broker) runs

@@ -59,6 +59,7 @@ command (`docs/restart.md`).
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, picker server and page, saved choices |
 | `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, local-remote worker, removal |
+| `docs/farm-seeds.md` | `farm-seeds`: the commit it runs from, its dirty-tree warning, `--cancel` and stop signals |
 | `docs/remote-status.md` | The worker page; the app's chip, Workers tab |
 | `docs/remote-url.md` | The one worker URL: PC name, pinned token, handover |
 | `docs/remote-diag.md` | `remote-diag.md`, steps, page logs |

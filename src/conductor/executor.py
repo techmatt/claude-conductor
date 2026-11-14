@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import gzip
 import json
-import os
 import re
-import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,6 +13,7 @@ from . import audits, kept, load
 from . import parked as parked_mod
 from .config import Config
 from .items import Item
+from .runlog import DROPPED, compact_log, gz_path, gzip_log, open_log, read_result, stored_log  # noqa: F401 - callers' names
 from .util import clock, read_text
 
 PREAMBLE = """\
@@ -65,7 +63,8 @@ Call it at the start, with a first `eta` once you can, at milestones, as you lau
 expected to run over ~15 minutes (its expected end in the note), and when your estimate
 moves over a third. Estimate remaining work in round trips (~15 s) plus the
 repo's measured run times (README), an allowance per unknown; never tell time by them:
-every conductor tool return gives the clock and time left. An `eta` names its source in brackets:
+every conductor tool return gives the clock and time left. Plan from the clock in the last
+tool return, never from your own estimate. An `eta` names its source in brackets:
 `5:40pm (by rate)`, `7:10pm (to the cap)`.{calibrate}
 
 Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
@@ -106,7 +105,7 @@ you act on it. One arriving during `ask` returns it early, the question still
 open: act, then `ask` with `resume: "<id>"`. A message that answers an open question
 closes it: `progress` with `answered: "<id>"`.
 {calls}
-{workdir}{paths}{now}{beside}{resumed}
+{workdir}{paths}{writes}{now}{beside}{resumed}
 {audit}
 Time limit: {max_hours:g}h; killed at {deadline}, later by any time blocked or paused.
 
@@ -127,8 +126,10 @@ fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that
 `warnings:`, what the repo's warning checks trip (its CLAUDE.md *Warning checks*{checks}; run
 them before the report; no such section is fine, say nothing) and any other warning you notice, each led by a kind (`design`, `data`,
 `perf`, `docs`, `security` or the repo's own). A warning never changes your status.
-`done`: goal met. `partial`: part met, nothing broken, the rest follow-up (an
-instruction declined with a reason included). `red`: something broken or unsafe; this
+`done`: goal met; a soft-band or measurement miss that the done-when table reports is still
+`done`. `partial`: a real shortfall, nothing broken: planned work skipped or not delivered (an
+instruction declined with a reason included), or a hard bar missed (a locked ruling, a required
+check, a feature that doesn't work). `red`: something broken or unsafe; this
 repo's queue should not continue without a look.
 {pick}
 The report leads with what changes for the planner: header, findings,
@@ -148,17 +149,16 @@ A conductor executor: headless Claude Code, item {item_id},
 project {project}. Nobody is watching.
 
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
-default; it returns unanswered after {ask_minutes:g} min. It holds the
-session until then: start background work first. Block (`block: true`) only if every
-default is worse. A ruling splitting a pass (over ~30% of items one way) or a fix changing
-play beyond its bug: ask `design: true` (never waits).
+default (unanswered after {ask_minutes:g} min; it holds the session: background work
+first). Block (`block: true`) only if every default is worse. A ruling splitting a pass
+(over ~30% of items one way) or a fix changing play beyond its bug: ask `design: true` (never waits).
 
 Progress: a `progress` (mcp__conductor__progress) line at start and launching any job over ~15m (its end).
 
 Bounds. A skip in the prompt or a message binds; a default contradicting the prompt
 starts `default overrides prompt: <line>`. Scratch: `out/`, never %TEMP%. Scripts,
 edits: Write/Edit, never a heredoc. Heavy compute:
-below-normal priority (Bash: `nice -n 10 <cmd>`), {free} hardware threads free (sims,
+below-normal priority (`nice -n 10 <cmd>`), {free} hardware threads free (sims,
 tests: {threads} threads, a full suite only between sims; half beside another item; on
 a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
 Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
@@ -171,22 +171,24 @@ small obvious things in place.
 
 MESSAGE #n / AMENDMENT #n hook context: Matt's, outranking the prompt.
 {calls}
-{workdir}{paths}{port}{now}{beside}
+{workdir}{paths}{writes}{port}{now}{beside}
 
-Time limit: {max_hours:g}h; killed at {deadline}, later if blocked.
+Time limit: {max_hours:g}h; killed at {deadline}, later if blocked. Plan by the last tool
+return's clock, never your estimate.
 
 Write your report to exactly this path:
     {report}
-{only} Others there: reverted, red.
-Its header:
+{only}; others there: reverted, red.
+Header:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
 slow: none | <part> ~<time>, <why>, <fix>
 friction: none | <what slowed you>
 warnings: none | <kind>: <what CLAUDE.md's *Warning checks*{checks} or you caught>; …
-`done`: goal met. `partial`: part met, nothing broken. `red`: broken or unsafe; the queue stops. Answer messages,
-amendments by number. End with `Report written to {report}`.
+`done`: goal met (a reported soft-band miss is done). `partial`: planned work undelivered
+or a hard bar missed (ruling, required check, working feature). `red`: broken or unsafe; queue
+stops. Answer messages, amendments by number. End with `Report written to {report}`.
 
 {tail}"""
 
@@ -291,9 +293,9 @@ kills it 10 minutes later){bg}.
 """
 
 CALLS_LIGHT = """
-Short calls. Nothing foreground over ~{cap:g} s (a `timeout` of {cap_ms} or less):
+Short calls. Nothing foreground over ~{cap:g} s (`timeout` ≤ {cap_ms}):
 background longer work (`run_in_background`, `timeout` sized to the estimate; over 10m:
-mcp__conductor__start, never `&`), wait with `wait_for` (mcp__conductor__wait_for), never polls or ending your turn.
+mcp__conductor__start, never `&`), wait with mcp__conductor__wait_for, never polls or ending your turn.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"
@@ -309,9 +311,11 @@ LEFTOVER_FULL = (" Before finishing with over an hour of the time limit left, li
                  "unreachable, take the next step that advances it, in scope, and say what it was.")
 AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (as above); the report lists\n"
              "the notes you implemented.\n")
-LEFTOVER_LIGHT = " Goal unmet, over an hour left: take the next useful step."
+LEFTOVER_LIGHT = " Goal unmet, over an hour left: next useful step."
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."
+ONLY_LIGHT = "Nothing else outside the working directory"
+ROOTS_TOO = " and the writable folders above"        # `write_roots` named: they are allowed too
 ONLY_TWO = ("That file and the audit notes file named above are the only things you may write "
             "outside the working directory.")
 
@@ -325,9 +329,9 @@ touch the main checkout at {repo_path}. When you finish, conductor rebases this 
 onto `{main}` and fast-forwards `{main}` to it; uncommitted changes make the item red.{shared}"""
 
 WORKDIR_TREE_LIGHT = """\
-Your working directory is a worktree of `{repo}`: {cwd}, branch `{branch}`. Commit
-everything (uncommitted work is red); never touch `{main}` or the main
-checkout at {repo_path}.{shared}"""
+Working directory: a worktree of `{repo}`: {cwd}, branch `{branch}`. Commit
+everything (uncommitted is red); never touch `{main}` or the main
+checkout ({repo_path}).{shared}"""
 
 SHARED = ("\nShared with the main checkout (linked, not copied — a change there is a change "
           "everywhere): {names}.")
@@ -342,6 +346,12 @@ READONLY_TREE = READONLY.lstrip()      # says all a worktree item needs: it neve
 
 PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: conductor "
          "checks what the branch changed and marks anything else red, unmerged.{prose}")
+
+# `write_roots` (conductor.toml; default its `open_roots`): folders outside the repo items
+# routinely write. fractals 050 left `style gallery` unrun, believing it might write one path.
+WRITES = ("\nWritable outside the repo: {roots} (the project's `write_roots`). Write there as the "
+          "work needs (keeps, galleries, sync output); `paths:` covers only the repo.")
+WRITES_LIGHT = "\nWritable outside the repo: {roots}."
 
 PORT_VAR = "CONDUCTOR_PORT"
 
@@ -565,11 +575,17 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     pick = not light and not watch and wants_pick(item)
     running = run.get("running_beside")
     serves = not watch and bool(run.get("port")) and has_servers(cfg, item, run)
-    text = (WATCH if watch else LIGHT if light else PREAMBLE).format(
+    writes = ((WRITES_LIGHT if light else WRITES).format(roots=", ".join(f"`{p.as_posix()}`" for p in cfg.write_roots))
+              if cfg.write_roots and not item.readonly and not watch else "")
+    only = ONLY_TWO if keeps else ONLY_LIGHT if light else ONLY_ONE
+    if writes:
+        only = only[:-1] + ROOTS_TOO + "." if only.endswith(".") else only + ROOTS_TOO
+    text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
         free=load.FREE_THREADS, threads=load.run_threads(),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
+        writes=writes,
         port=PORT_LIGHT.format(port=run["port"]) if light and serves else "",
         calibrate=CALIBRATE if wants_calibrate(item) else "",
         now=RUNNING_NOW.format(items=", ".join(running) or "nothing") if running is not None else "",
@@ -578,7 +594,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         resumed=resumed,
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         + (AUDIT_FIX if item.audit and not item.readonly and not item.template else "") if keeps else "",
-        only=ONLY_TWO if keeps else ONLY_ONE,
+        only=only,
         calls=calls_text(cfg, item.repo, light or watch),
         servers=SERVERS.format(port=run["port"]) if not light and serves else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
@@ -729,125 +745,6 @@ def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False
             "--output-format", "stream-json", "--verbose", *session,
             *(["--mcp-config", str(mcp)] if mcp else []), *(["--settings", str(settings)] if settings else []),
             *cfg.args]
-
-
-def gz_path(log: Path) -> Path:
-    return log.with_name(log.name + ".gz")
-
-
-def stored_log(log: Path) -> Path | None:
-    """Where a run log is now: `log` itself, or `log.gz` once its item finished
-    (`gzip_log`), or None."""
-    for p in (log, gz_path(log)):
-        if p.is_file():
-            return p
-    return None
-
-
-def open_log(log: Path):
-    """A run log opened for reading in binary, gzipped or not; OSError when it has neither form."""
-    p = stored_log(log)
-    if p is None:
-        raise FileNotFoundError(str(log))
-    return gzip.open(p, "rb") if p.suffix == ".gz" else open(p, "rb")
-
-
-def read_result(log: Path) -> dict | None:
-    """The final `{"type": "result", ...}` line of a stream-json log, or None."""
-    if stored_log(log) is None:
-        return None
-    result = None
-    with open_log(log) as fh:
-        for raw in fh:
-            raw = raw.strip()
-            if not raw.startswith(b"{"):
-                continue
-            try:
-                obj = json.loads(raw)
-            except ValueError:
-                continue
-            if isinstance(obj, dict) and obj.get("type") == "result":
-                result = obj
-    return result
-
-
-COMPACT_MIN_BYTES = 1 << 20     # a log smaller than this is left as it is
-DROPPED = "dropped_by_conductor"
-
-
-def _compact(obj, top: bool = True) -> int:
-    """Strip the bulk out of one stream-json line in place: base64 payloads (an image
-    the executor read, twice over: the tool result and `tool_use_result.file`) and
-    `tool_use_result.originalFile` (a whole file before each edit). Returns the
-    characters dropped. Both are copies of files that stay in the repo."""
-    dropped = 0
-    if isinstance(obj, dict):
-        if top and isinstance(tur := obj.get("tool_use_result"), dict) \
-                and isinstance(tur.get("originalFile"), str) and len(tur["originalFile"]) > 1024:
-            dropped += len(tur["originalFile"])
-            tur["originalFile"], tur[DROPPED] = "", len(tur["originalFile"])
-        for key in ("data", "base64"):
-            value = obj.get(key)
-            if isinstance(value, str) and len(value) > 1024 and (key == "base64" or obj.get("type") == "base64"):
-                dropped += len(value)
-                obj[key], obj[DROPPED] = "", len(value)
-        for value in obj.values():
-            dropped += _compact(value, False)
-    elif isinstance(obj, list):
-        for value in obj:
-            dropped += _compact(value, False)
-    return dropped
-
-
-def compact_log(log: Path) -> tuple[int, int] | None:
-    """Shrink a finished item's stream-json log in place (see `_compact`); everything
-    conductor and the app read from it (the result line, what was said, each tool call)
-    stays. Returns (bytes before, bytes after), or None when it was left alone."""
-    try:
-        before = log.stat().st_size
-    except OSError:
-        return None
-    if before < COMPACT_MIN_BYTES:
-        return None
-    out, dropped = [], 0
-    with open(log, "rb") as fh:
-        for raw in fh:
-            try:
-                obj = json.loads(raw)
-            except ValueError:
-                out.append(raw)
-                continue
-            n = _compact(obj)
-            dropped += n
-            out.append(json.dumps(obj, ensure_ascii=False).encode("utf-8") + b"\n" if n else raw)
-    if not dropped:
-        return None
-    tmp = log.with_name(log.name + ".compact")
-    tmp.write_bytes(b"".join(out))
-    os.replace(tmp, log)
-    return before, log.stat().st_size
-
-
-GZIP_MIN_BYTES = 256 << 10      # a finished log smaller than this stays plain text
-
-
-def gzip_log(log: Path) -> tuple[int, int] | None:
-    """Replace a finished item's run log with `log.gz` (after `compact_log`): stream-json
-    shrinks ~10×, and a bug hunt's log is 8-23 MB even compacted. Every reader goes
-    through `stored_log` / `open_log`. Returns (bytes before, bytes after), or None."""
-    try:
-        before = log.stat().st_size
-    except OSError:
-        return None
-    if before < GZIP_MIN_BYTES:
-        return None
-    gz = gz_path(log)
-    tmp = gz.with_name(gz.name + ".tmp")
-    with open(log, "rb") as src, gzip.open(tmp, "wb", compresslevel=6) as dst:
-        shutil.copyfileobj(src, dst, 1 << 20)
-    os.replace(tmp, gz)
-    log.unlink()
-    return before, gz.stat().st_size
 
 
 def read_header(report: Path) -> tuple[dict | None, str | None]:

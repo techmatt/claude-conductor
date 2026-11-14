@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -37,6 +38,9 @@ FAULT_VAR = "CONDUCTOR_REMOTE_FAULT"   # `node-hang`: the Node wasm reference ha
 PATIENCE = 45.0             # a broker restarting (a handover, or the daemon starting one that died) is waited this long
 BROKER_LOST = "error"               # `farm-seeds: error: ...`, its stderr line when the broker stays gone (wait_for's `fail` ends on it)
 BROKER_LOST_EXIT = 3
+CANCELLED_EXIT = 130
+CANCEL = threading.Event()  # a stop signal or `farm-seeds --cancel`: the job closes, its native runs die
+OWNER = "owner.json"        # in a job's folder while its farm-seeds runs: pid, item (`--cancel` reads it)
 WIN = sys.platform == "win32"
 NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if WIN else {}
 
@@ -63,15 +67,18 @@ def resolve(argv: list[str], cwd: Path) -> list[str]:
 
 def run_native(argv: list[str], cwd: Path, first: int, count: int, out: Path, args: list[str],
                log=None, stop=None) -> int:
-    """The project's native command for one seed range. `stop()` true kills it (another copy won)."""
+    """The project's native command for one seed range. `stop()` true kills it (another copy
+    won), as does a cancel (`CANCEL`): -1. It dies with this process however that ends."""
+    from .. import procs
     cmd = resolve(settings.fill(argv, first=str(first), count=str(count), out=str(out), args=list(args)), cwd)
     p = subprocess.Popen(cmd, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=log or subprocess.DEVNULL,
                          stderr=log or subprocess.DEVNULL, **NO_WINDOW)
+    procs.die_with_me(p)
     while True:
         try:
             return p.wait(timeout=0.25)
         except subprocess.TimeoutExpired:
-            if stop and stop():
+            if CANCEL.is_set() or (stop and stop()):
                 p.kill()
                 p.wait()
                 return -1
@@ -338,6 +345,9 @@ def shard_path(folder: Path, first: int) -> Path:
 def run_local(r: settings.Remote, cwd: Path, first: int, count: int, out: Path, args: list[str], why: str) -> int:
     say(f"running locally ({why})")
     code = run_native(r.native, cwd, first, count, out, args, log=None)
+    if CANCEL.is_set():
+        say("cancelled")
+        return CANCELLED_EXIT
     if code != 0:
         say(f"the native command exited {code}")
     return code
@@ -358,6 +368,16 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
         return run_local(r, cwd, first, count, out, args, f"broker refused the job: {exc}")
     folder = r.state / "jobs" / jid
     (folder / "main").mkdir(parents=True, exist_ok=True)
+    (folder / OWNER).write_text(json.dumps({"pid": os.getpid(), "item": os.environ.get(settings.ITEM_VAR, "")}),
+                                encoding="utf-8", newline="\n")
+    try:
+        return _farm(r, cwd, key, broker, first, count, out, args, ranges, jid, folder, t0)
+    finally:
+        (folder / OWNER).unlink(missing_ok=True)
+
+
+def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, count: int, out: Path,
+          args: list[str], ranges: list[tuple[int, int]], jid: str, folder: Path, t0: float) -> int:
     failed: list[str] = []
     errors: list[str] = []
     down, ended = threading.Event(), threading.Event()
@@ -374,7 +394,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
                 pass
 
     def slot(n: int) -> None:
-        while not down.is_set():
+        while not down.is_set() and not CANCEL.is_set():
             try:
                 c = broker.call("claim", {"job": jid}, patience=PATIENCE)
             except BrokerDown:
@@ -417,8 +437,14 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        while t.is_alive():
+            t.join(0.25)                         # never a bare join: a stop signal must get through
     ended.set()
+    if CANCEL.is_set():
+        log.close()
+        _close(broker, jid)
+        say(f"cancelled: job {jid} closed, its native runs stopped; nothing written to {out}")
+        return CANCELLED_EXIT
     if failed:
         log.close()
         say("the native command failed: " + "; ".join(failed))
@@ -529,6 +555,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if argv[:1] == ["--build"] and len(argv) == 3 and r:
         return build_bundle(r, argv[1], Path(argv[2]))
+    if argv[:1] == ["--cancel"] and r:
+        return cancel(r, os.environ.get(settings.ITEM_VAR, ""), everyone="--all" in argv[1:])
     if len(argv) < 3 or not argv[0].isdigit() or not argv[1].isdigit():
         print(f"usage: {settings.COMMAND} <first seed> <count> <out file> [project args…]", file=sys.stderr)
         return 2
@@ -536,10 +564,67 @@ def main(argv: list[str] | None = None) -> int:
     if r is None:
         say(f"no [remote] settings (${settings.CONTROL_VAR} unset or no section)")
         return 2
-    code = _dispatch(r, first, count, out, args)
+    CANCEL.clear()
+    old = _on_stop(lambda *_: CANCEL.set())
+    try:
+        code = _dispatch(r, first, count, out, args)
+    finally:
+        _on_stop(old)
     if code == 0:
         note_seeds(r, first, count, args)
     return code
+
+
+STOP_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")   # SIGBREAK: Windows' Ctrl-Break, the console stop
+
+
+def _on_stop(handler) -> dict:
+    """Route every stop signal to `handler` (a dict from an earlier call restores each);
+    returns what was there. Off the main thread, nothing."""
+    old = {}
+    for name in STOP_SIGNALS:
+        if (sig := getattr(signal, name, None)) is None:
+            continue
+        try:
+            old[name] = signal.signal(sig, handler[name] if isinstance(handler, dict) else handler)
+        except (ValueError, OSError, KeyError, TypeError):
+            pass
+    return old
+
+
+def _is_farm(pid) -> bool:
+    import psutil
+    try:
+        return isinstance(pid, int) and pid != os.getpid() and "conductor.remote.client" in " ".join(
+            psutil.Process(pid).cmdline())
+    except psutil.Error:
+        return False
+
+
+def cancel(r: settings.Remote, item: str, everyone: bool = False, live: bool = True) -> int:
+    """`farm-seeds --cancel [--all]`: stop this item's running farm-seeds (every item's with
+    `--all`): its process tree is killed (its native shards with it) and its broker job closed,
+    so workers drop their shards at once. `live=False`: only jobs whose farm-seeds is already
+    gone (a hard kill), which each new run tidies first. Returns 0."""
+    from .. import procs
+    broker, n = Broker.find(r), 0
+    for owner in sorted((r.state / "jobs").glob(f"*/{OWNER}")):
+        try:
+            o = json.loads(owner.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        alive = _is_farm(o.get("pid"))
+        if (alive and not live) or (not everyone and live and o.get("item") != item):
+            continue
+        if alive:
+            procs.kill_tree(o["pid"])
+        if broker:
+            _close(broker, owner.parent.name)
+        owner.unlink(missing_ok=True)
+        n += 1
+    if live:
+        say(f"cancelled {n} run(s)" + ("" if everyone else f" of item {item or '(none)'}"))
+    return 0
 
 
 SEEDS = "seeds.jsonl"       # under the remote state folder: every finished run's item and seed range
@@ -557,12 +642,39 @@ def note_seeds(r: settings.Remote, first: int, count: int, args: list[str]) -> N
         pass
 
 
+DIRTY = "warning: uncommitted changes"   # its stderr line on a dirty tree
+
+
+def source(root: Path, key: str) -> None:
+    """Say which commit the native command runs from; on a dirty tree, warn: native builds
+    from the working tree, a wasm build may take only committed code, so mixed sources
+    would pass silently (aicomplete 213)."""
+    head, _, dirty = key.partition("-")
+    if not dirty:
+        say(f"native from commit {head}")
+        return
+    try:
+        lines = subprocess.run(["git", "status", "--porcelain"], cwd=str(root), capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", **NO_WINDOW).stdout.splitlines()
+    except OSError:
+        lines = []
+    names = [x[3:] for x in lines if x.strip()]
+    shown = ", ".join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else "")
+    say(f"native from commit {head} plus uncommitted changes")
+    say(f"{DIRTY} ({shown or 'untracked files'}): "
+        "the native exe is built from them, a wasm bundle may take only committed code, so shards can "
+        "run different code. Commit before you farm")
+
+
 def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str]) -> int:
     try:
         root, key = repo_key(Path.cwd())
     except (subprocess.CalledProcessError, OSError):
         root, key = Path.cwd(), ""
     cwd = root / r.dir if r.dir else root
+    cancel(r, "", live=False)                    # a hard-killed run's job, closed now, not at its heartbeat's end
+    if key:
+        source(root, key)
     if r.native_build:
         built = run_simple(r.native_build, cwd)
         if built.returncode != 0:

@@ -53,8 +53,12 @@ after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 How a planner reads the header (`planner.md`, *Reading a report*, points here):
 
 - `blocks:` what the item blocks; `carry:` what `state.md` should change, folded in by request.
-- `partial`: part of the goal; nothing broken, the rest is follow-up. `red`: something
-  broken or unsafe; with `after_red: stop` the repo's queue holds until **clear R**.
+- `partial` is a real shortfall (Matt, 2026-11-13; 114): planned work skipped or not
+  delivered, or a hard bar missed (a locked ruling, a required check, a feature that
+  doesn't work); nothing broken. A soft-band or measurement miss that the done-when table
+  reports is `done`, so it queues no retro (aicomplete 213-215 went `partial` on soft
+  misses alone). `red`: something broken or unsafe; with `after_red: stop` the repo's
+  queue holds until **clear R**.
 - A `conductor:` line under the header overrides `status:`: `NOT on main` (red after a
   `done` report; branch kept) or `landed on main … despite …` (conductor's own red; no
   hold). Kept work Matt wants lands with **land X**.

@@ -176,6 +176,48 @@ def _join_job(p: subprocess.Popen) -> None:
     k.DuplicateHandle(k.GetCurrentProcess(), job, int(p._handle), ctypes.byref(planted), 0, False, 2)
 
 
+_KILL_ON_CLOSE = 0x2000      # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+_EXTENDED_LIMITS = 9         # JobObjectExtendedLimitInformation
+_held: list[int] = []        # the one kill-on-exit job this process holds, once made
+
+
+def die_with_me(p: subprocess.Popen) -> None:
+    """Put a child in a job that dies with this process however it ends (a hard kill
+    included): `farm-seeds` stopped must not leave a native shard running and locking its
+    exe (aicomplete 212, 214). Nested inside the executor's job (Windows 8+). Elsewhere, and
+    on any failure, nothing: the caller's own stop handling still kills it."""
+    if not WINDOWS:
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class Basic(ctypes.Structure):
+        _fields_ = [("user_time", ctypes.c_int64), ("job_time", ctypes.c_int64), ("flags", wintypes.DWORD),
+                    ("min_ws", ctypes.c_size_t), ("max_ws", ctypes.c_size_t), ("active", wintypes.DWORD),
+                    ("affinity", ctypes.c_size_t), ("priority", wintypes.DWORD), ("scheduling", wintypes.DWORD)]
+
+    class Extended(ctypes.Structure):
+        _fields_ = [("basic", Basic), ("io", ctypes.c_uint64 * 6), ("process_mem", ctypes.c_size_t),
+                    ("job_mem", ctypes.c_size_t), ("peak_process", ctypes.c_size_t), ("peak_job", ctypes.c_size_t)]
+
+    k = _kernel32()
+    try:
+        if not _held:
+            job = k.CreateJobObjectW(None, None)
+            if not job:
+                return
+            info = Extended()
+            info.basic.flags = _KILL_ON_CLOSE
+            k.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+            if not k.SetInformationJobObject(job, _EXTENDED_LIMITS, ctypes.byref(info), ctypes.sizeof(info)):
+                k.CloseHandle(job)
+                return
+            _held.append(job)                    # never closed: closing it is the kill
+        k.AssignProcessToJobObject(_held[0], int(p._handle))
+    except (OSError, AttributeError):
+        pass
+
+
 def release_job(pid: int | None, created: float | None) -> None:
     """Close the handle this process holds on an executor's job (its item is done)."""
     if WINDOWS and pid and created is not None and (job := _JOBS.pop(_job_name(pid, created), None)):

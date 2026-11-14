@@ -25,7 +25,7 @@ def test_a_short_item_gets_the_light_preamble(env):
     assert len(SHORT.split()) < 80
     text = render(env, SHORT)
     assert len(text.split()) <= 430
-    assert "It holds the\nsession until then: start background work first" in text
+    assert "it holds the session: background work\nfirst" in text
     for kept in ("Nobody is watching", "mcp__conductor__ask", "AMENDMENT #n", "run_in_background",
                  "Time limit: 1h", "status: done | partial | red", "slow: none", "`red`:", "branch `conductor/001_a`"):
         assert kept in text

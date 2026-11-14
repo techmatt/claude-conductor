@@ -72,6 +72,8 @@ display_name = "Sandbox"      # session.md's "<display name> session N" (inbox.m
 locks = ["shared"]            # named locks items may take; must not clash with repo names
 worktree_root = "../conductor-sandbox-worktrees"   # default ../<project>-worktrees
 open_roots = ["C:/Code/gdrive-sync/sandbox"]  # more folders `open:` may act in (see open.md)
+write_roots = ["C:/Code/gdrive-sync/sandbox"] # folders outside the repos items may write, named in every
+                              # non-readonly preamble (preambles.md); default: open_roots; [] names none
 
 [defaults]
 max_hours = 2                 # per item unless the item sets max_hours

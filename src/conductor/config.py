@@ -122,6 +122,7 @@ class Config:
     targets: dict[str, RunTarget] = field(default_factory=dict)
     tools: dict[str, RunTarget] = field(default_factory=dict)   # `[tools.<name>]` (`targets.ToolRunner`)
     open_roots: list[Path] = field(default_factory=list)   # more folders `open:` may act in
+    write_roots: list[Path] = field(default_factory=list)  # folders outside the repos items may write (preambles)
     links: dict[str, str] = field(default_factory=dict)    # `[links]` name = URL, first in session.md
     display_name: str = ""     # `display_name`: how Matt's chat titles name it ("AIcomplete"); `name` falls back
 
@@ -342,6 +343,9 @@ def load(control: Path) -> Config:
     open_roots = data.get("open_roots", [])
     if not isinstance(open_roots, list) or not all(isinstance(x, str) and x for x in open_roots):
         raise ConfigError(f"{CONFIG_NAME}: `open_roots` must be a list of folder paths")
+    write_roots = data.get("write_roots", open_roots)      # unset: the open_roots ([] names none)
+    if not isinstance(write_roots, list) or not all(isinstance(x, str) and x for x in write_roots):
+        raise ConfigError(f"{CONFIG_NAME}: `write_roots` must be a list of folder paths")
 
     links = data.get("links", {})
     if not isinstance(links, dict) or not all(isinstance(v, str) and v.strip() for v in links.values()):
@@ -380,6 +384,7 @@ def load(control: Path) -> Config:
         targets=_targets(control, repos, data.get("run")),
         tools=_tools(repos, data.get("tools")),
         open_roots=[_resolve(control, x) for x in open_roots],
+        write_roots=[_resolve(control, x) for x in write_roots],
         links={str(k): v.strip() for k, v in links.items()},
         display_name=display_name.strip(),
     )

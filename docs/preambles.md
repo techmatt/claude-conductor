@@ -129,13 +129,12 @@ only in the environment (74). Stages and merge executors get none.
   switched profilers. Conductor doesn't yet show a hang like that (`HANDOFF.md` *Open*).
 - **Design asks** (79, both; the full one in *Asking and scope*): a ruling splitting a pass
   (over ~30% of its items on one side) and a fix changing play beyond its bug are `design:
-  true` asks with a default (`questions.md`, *Design*). Template words held: full 1,051 → 1,051,
-  light 294 → 308 (rendered under its 385 cap), paid for by tightening the skip, premises,
-  outline, messages, report-header and status lines.
-- **Words** (82): the full template plus *Short calls* held at 1,205 → 1,203 words, the light
-  one rendered at 385, its cap, paid for by the outline's done-marking, elevation,
-  `~/.claude`, `friction:` and moved-command lines, and in light the design-ask, report-path
-  and status lines.
+  true` asks with a default (`questions.md`, *Design*).
+- **Status, clock, writable roots** (114, both). `partial` is a real shortfall, a reported
+  soft-band miss `done` (`reports.md`). "Plan from the clock in the last tool return, never
+  from your own estimate" (aicomplete 213 guessed the time, stopped with 2 of 4 h unused).
+  `write_roots` (`control-folder.md`; default `open_roots`) are named writable (`WRITES`) and
+  the only-file line allows them (fractals 050 read it as "one path"); not readonly or watches.
 - **Telling time** (84, full, in *Progress*): remaining work is estimated in round trips
   (~15 s, measured ~16 s; it said 20–40 s), never the clock: `progress` and `wait_for`
   returns carry it and the time left to the cap (`progress.md`). Words held.
@@ -170,8 +169,7 @@ only in the environment (74). Stages and merge executors get none.
   target (tuning, calibration, a gate) starts with a ~30 min reachability check (put back what
   the new rules changed, or the strongest allowed lever to its limit), posting a miss as
   progress. The leftover check skips a bar shown unreachable. Light gets the same in three
-  lines. Words: full template 1,055 → 1,228; light rendered 385 → 428, its cap raised to 430
-  (cutting 43 more words would have cost existing rules).
+  lines; its cap rose to 430.
 - **Warnings** (109): every preamble's header gains `warnings: none | <kind>: <what tripped>[; …]`
   (`warnings.md`); full and light point at the repo's CLAUDE.md *Warning checks* and name its
   `warning_checks` commands (`executor.checks_text`), and say a warning never changes the status.
