@@ -175,17 +175,44 @@ def warning_repeats(view: View, repo: str, window: int = 5) -> dict[str, list[st
     return {k: ids for k, ids in named.items() if len(ids) >= 2}
 
 
+def _part_key(kind: str, text: str) -> tuple[str, str]:
+    return kind, " ".join(text.lower().split()).rstrip(".")
+
+
+def last_reviewed(view: View, repo: str, before: int) -> Event | None:
+    """`repo`'s newest reviewed report finished before event `before` (watches and resume
+    items aside): the baseline a standing warning is unchanged since."""
+    revs = [ev for i, ev in view.finishes.items() if ev.repo == repo and ev.id < before and view.reviewed(i)
+            and not view.is_watch(i) and not ev.detail.get("resume_of")]
+    return max(revs, key=lambda e: e.id, default=None)
+
+
 def warning_lines(view: View, finishes: list[Event]) -> list[str]:
     """The *Warnings* section: each finish among `finishes` whose report raised any, kind by
-    kind, then the kinds among them repeated in their repo's recent reports."""
+    kind, then the kinds among them repeated in their repo's recent reports. A warning
+    unchanged since its repo's last reviewed report is folded into one *standing* line per
+    repo, so the new ones stand out (115)."""
     from .session import SLOW_WINDOW      # session imports this module
-    out, kinds = [], {}
+    out, kinds, standing = [], {}, {}
     for ev in finishes:
         if not (parts := warning_parts(warnings_text(ev.detail))):
             continue
-        out.append(f"- {ev.item} ({ev.detail.get('status')}, finished {clock(ev.ts)}, #{ev.id}): "
-                   + "; ".join(f"**{k}**: {t}" for k, t in parts))
-        kinds.setdefault(ev.repo, set()).update(k for k, _ in parts)
+        base = last_reviewed(view, ev.repo, ev.id)
+        seen = {_part_key(k, t) for k, t in warning_parts(warnings_text(base.detail))} if base else set()
+        new = [(k, t) for k, t in parts if _part_key(k, t) not in seen]
+        for k, t in parts:
+            if _part_key(k, t) in seen:
+                stand = standing.setdefault(ev.repo, {"base": base, "parts": {}, "on": []})
+                stand["parts"].setdefault(_part_key(k, t), (k, t))
+                if _num(ev.item) not in stand["on"]:
+                    stand["on"].append(_num(ev.item))
+        if new:
+            out.append(f"- {ev.item} ({ev.detail.get('status')}, finished {clock(ev.ts)}, #{ev.id}): "
+                       + "; ".join(f"**{k}**: {t}" for k, t in new))
+            kinds.setdefault(ev.repo, set()).update(k for k, _ in new)
+    for repo, s in standing.items():
+        out.append(f"- standing in `{repo}`, unchanged since {_num(s['base'].item)} (reviewed), again on "
+                   f"{', '.join(s['on'])}: " + "; ".join(f"**{k}**: {t}" for k, t in s["parts"].values()))
     for repo, shown in kinds.items():
         if reps := {k: ids for k, ids in warning_repeats(view, repo, SLOW_WINDOW).items() if k in shown}:
             out.append(f"- repeated in `{repo}`'s last {SLOW_WINDOW} report(s): "

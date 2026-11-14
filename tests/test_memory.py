@@ -135,7 +135,7 @@ def test_pressure_pauses_starts_and_tells_running_items(env):
     assert ev.detail["level"] == "pressure" and ev.detail["was"] == "ok" and ev.detail["percent"] == 88
     tells = [e for e in env.events("tell") if e.detail.get("by") == "conductor"]
     assert len(tells) == 1 and tells[0].item == "code/001_busy" and "cut parallelism" in tells[0].detail["text"]
-    assert any("memory pressure" in t[0] for t in env.toasts)
+    assert not any("memory" in t[0] + t[1] for t in env.toasts)       # a warning: panel only (115)
     # The busy item gets the message and keeps running; the readonly one never starts.
     env.tick_until(lambda: env.events("delivered"))
     for _ in range(10):
@@ -146,7 +146,7 @@ def test_pressure_pauses_starts_and_tells_running_items(env):
     assert "PRESSURE: launches and stages paused" in (env.control / "inbox.md").read_text(encoding="utf-8")
     box["s"] = status(95, 10)
     env.tick_until(lambda: env.events("memory_critical"))
-    assert any("CRITICAL" in t[0] for t in env.toasts)
+    assert any("CRITICAL" in t[0] + t[1] for t in env.toasts)
     box["s"] = status(40, 10)
     env.tick_until(lambda: env.d.log.last("start", item="code/002_look"))
     assert [e.detail["level"] for e in env.events("memory")] == ["pressure", "ok"]
@@ -244,7 +244,8 @@ def test_a_dead_daemon_is_named_at_the_next_start(env):
         ev = d.log.last("daemon_died")
         assert ev.detail["pid"] == gone.pid and ev.detail["last_beat"] == "2026-10-20T02:16:30-07:00"
         assert ev.detail["memory"]["free"] == 1.9 and ev.detail["gap"]
-        assert any("had died" in t[0] for t in env.toasts)
+        d.flush_toasts(force=True)
+        assert any("had died" in t[0] for t in env.shown)
         assert state.daemon_info(env.cfg).alive
     finally:
         d.release()

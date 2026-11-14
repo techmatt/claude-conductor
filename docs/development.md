@@ -46,7 +46,7 @@ The remote workers' tests live in their module (`src/conductor/remote/tests/`, a
 `env.hold()`), `tests/test_review.py` the `review:` bundle.
 
 Where things live, beyond the obvious: `Daemon` is `daemon.py` plus `daemon_*` mixins
-(signals, messages, receipts, reap, merge, templates, watch, push, memory, `daemon_restart` for the self-restart, `daemon_setup`
+(signals, messages, receipts, reap, merge, templates, watch, push, memory, `daemon_toasts` (over `notify.Toasts`; tests read `env.toasts`, which flushes), `daemon_restart` for the self-restart, `daemon_setup`
 for setup runners and the second half of a launch or stage); `setup_run.py` is the
 runner; `review.py` renders `review.md`; `state.early_starts` picks readonly and
 `alongside` items that start behind the head (`tests/test_alongside.py`); `session.reports_past_marker` finds conductor's reports

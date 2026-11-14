@@ -407,6 +407,7 @@ def test_reorder_refuses_to_put_an_item_before_its_dependency(env):
 def test_reorder_never_reuses_an_id_that_ran(env):
     held(env)                                                 # done/code/001_bad
     env.queue("001_a", "FAKE report done")
+    env.d.enqueued.add("code/001_a")       # queued before 115, which now renumbers a taken number on arrival
     env.queue("004_bad", "FAKE report done")
     env.d.tick()
     send(env, "reorder: code 004 001")                        # 004_bad would become 001_bad

@@ -54,10 +54,7 @@ def test_warnings_lead_the_digests_and_never_hold(env):
     env.tick_until(lambda: env.finished("code/003_plain"))      # nothing held the queue
     assert env.finished("code/001_cards").detail["warnings"] == "design: capstone has a cheap source; perf: 40s turns"
     assert not env.events("hold") and not env.events("red")
-    raised = [t[:2] for t in env.toasts if "raised warnings" in t[0]]
-    assert raised == [(f"{env.d.cfg.project}: code/001_cards raised warnings",
-                       "design: capstone has a cheap source; perf: 40s turns"),
-                      (f"{env.d.cfg.project}: code/002_tune raised warnings", "design: same power on every board")]
+    assert not any("capstone" in t + b or "same power" in t + b for t, b, _ in env.toasts)    # 115: panel only
 
     send(env, "by: planner\nsession: start", "planner.signal")
     text = (env.control / "session.md").read_text(encoding="utf-8")
@@ -82,5 +79,6 @@ def test_warnings_lead_the_digests_and_never_hold(env):
 
 
 def test_a_finish_without_warnings_does_not_toast():
-    assert notify.message("p", "finish", "code/1", "code", {"warnings": "none"}) is None
-    assert notify.message("p", "finish", "code/1", "code", {}) is None
+    for detail in ({"warnings": "none"}, {"warnings": "design: x"}, {}):
+        n = notify.note("finish", "code/1", "code", detail)
+        assert n.line == "code/1 done" and n.body == ""

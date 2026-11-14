@@ -98,20 +98,23 @@ def test_a_waiting_request_has_a_pending_receipt_saying_what_it_waits_for(env):
     assert receipt(env, "requests/20261021-1101-after")[0]["outcome"] == "accepted"
 
 
-def test_a_shared_number_is_named_in_the_receipt_and_never_guessed(env):
+def test_a_taken_number_is_renumbered_and_the_receipt_says_so(env):
     env.queue("080_watch", "FAKE report done", depends_on="001_gone")      # conductor's, say: holds
     env.d.tick()
     env.queue("080_feature", "do it")
     env.queue("081_next", "do it", depends_on="080")
     env.d.tick()
-    meta, _ = receipt(env, "queue/code/080_feature.md")
-    assert meta["result"] == ("queued as code/080_feature; starts now; "      # 080_feature sorts first
-                              "its number is also code/080_watch's: name it in full, never by number")
+    # 115: a new item never takes a number in use; it gets the repo's next one.
+    assert not (env.control / "queue" / "code" / "080_feature.md").exists()
+    assert (env.control / "queue" / "code" / "082_feature.md").is_file()
+    meta, _ = receipt(env, "queue/code/080_feature.md")                    # where the planner wrote it
+    assert meta["result"].startswith("queued as code/082_feature; ")
+    assert meta["result"].endswith("; renumbered from 080_feature: its number was already code/080_watch's")
+    [ev] = [e for e in env.events("enqueue") if e.item == "code/082_feature"]
+    assert ev.detail["renumbered_from"] == "080_feature" and "shares_number" not in ev.detail
     from conductor import items, state
     known = state.scan(env.d.cfg, env.d.log).known()
-    assert items.resolve_ref("080", "code", known) is None
-    assert items.resolve_ref("080_feature", "code", known) == "code/080_feature"
-    assert sorted(items.ref_matches("080", "code", known)) == ["code/080_feature", "code/080_watch"]
+    assert items.resolve_ref("080", "code", known) == "code/080_watch"
 
 
 def test_queue_item_rewrite_and_amendment_receipts(env):

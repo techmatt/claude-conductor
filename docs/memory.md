@@ -83,7 +83,7 @@ doesn't flap: found live, Alienware's `OCControl.Service` on this box grew its p
 memory by ~3 GiB a minute and was recycled near 9–10 GiB, swinging free RAM by gigabytes
 every few minutes. Free RAM is the main signal: with an auto-managed page file Windows grows
 the commit limit on demand, so commit sat at 87% through an ordinary test run on this
-box (limit 36.6 GiB idle, 40.6 under load), which is why the commit defaults are high. On each change the daemon logs `memory` (into or out of pressure) or
+box (limit 36.6 GiB idle, 40.6 under load), which is why the commit defaults are high. On each change the daemon logs `memory` (into or out of pressure; panel only since 115) or
 `memory_critical` (red, toasted). Each names the commit, limit, percent and free GiB,
 the five biggest item × kind rows, the three biggest process names outside conductor's
 items (a full scan, so only on a change), the load, and what conductor does now.

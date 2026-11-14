@@ -265,8 +265,8 @@ def test_question_flagging_a_default_over_the_prompt(env):
     env.d.process_questions()
     [taken] = env.events("default")
     assert "nobody answered; **default overrides prompt: skip the sweep**" in inbox.describe(taken)
-    from conductor.notify import message
-    assert "default overrides prompt" in message("p", "ask", "code/001_x", "code", ask.detail)[1]
+    from conductor.notify import note
+    assert note("ask", "code/001_x", "code", ask.detail) is None         # 115: it has a default, so panel only
 
 
 def test_answer_receipt_marks_a_flagged_question(env):

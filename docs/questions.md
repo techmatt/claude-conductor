@@ -40,7 +40,7 @@ Options:
   the question's first line says `default overrides prompt: <line>` (aicomplete 009's
   unanswered 1am ask reversed the prompt's "skip it"). A flagged question with a default
   is marked: `overrides_prompt` on its `ask` and later events, bold on its inbox line and
-  its `ask` and `default` lines, in its toast, and in an answer's receipt. Conductor can't
+  its `ask` and `default` lines, and in an answer's receipt (a question with a default never toasts since 115). Conductor can't
   judge a contradiction: the mark is the executor's to make, and a skip still binds. So
   since 68 a question or default naming an amendment (`amendment`, `amended`, by number or
   in words), with a default it could take and no flag, is refused once with a reminder to

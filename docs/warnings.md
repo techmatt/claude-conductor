@@ -23,7 +23,7 @@ trips, and may raise any other warning it notices.
 
 A repo without checks is fine (113): the full preamble says so, and a part saying the repo
 has no *Warning checks* section is dropped wherever warnings show (`inbox.warnings_text`,
-`NO_CHECKS_RE`), toast included, so it neither leads a report nor counts as a repeat.
+`NO_CHECKS_RE`), so it neither leads a report nor counts as a repeat.
 fractal-wallpapers 043 and 044 each raised `docs: CLAUDE.md has no *Warning checks* section to run`.
 
 ## Declaring a project's checks
@@ -58,10 +58,15 @@ A new project is offered checks for its domain at setup (`claude-ai-new-project.
   finished <clock>, #<id>): **<kind>**: <text>; …`, then for each repo a line counting
   the kinds shown that repeat in its last five reports: `- repeated in `<repo>`'s last 5
   report(s): design ×3 (205, 206, 207)`. A line leaves once its report is reviewed.
+- **Standing warnings fold** (115): a part (kind and text, case and spacing aside) that
+  its repo's last reviewed report also raised is left off its item's line and shown once
+  per repo, `- standing in `<repo>`, unchanged since <num> (reviewed), again on <nums>:
+  **<kind>**: <text>; …`, so new warnings stand out. An item with only standing parts has
+  no line of its own; a changed number is a new warning. aicomplete raised the same three
+  on all seven reports of 11-13.
 - **Maintenance facts** (`session.md`): per repo, ``- `warnings:` kinds repeated in the
   last N report(s): <kind> (<numbers>); …`` or `none`, like `slow:` and `friction:`.
-- **A toast** for each finish whose report raised any: "<project>: <item> raised
-  warnings", the line as its body (`inbox.md`, *Toasts*).
+- **No toast** since 115: warnings are panel only (`inbox.md`, *Toasts*).
 
 The planner raises a `warnings:` line to Matt first, with the item's own judgement
 (`planner.md`, *Reading a report*).

@@ -47,6 +47,7 @@ from .daemon_retros import RetrosMixin
 from .daemon_setup import SetupMixin
 from .daemon_signals import SIGNAL_SETTLE_SECONDS, SignalsMixin
 from .daemon_templates import TemplatesMixin
+from .daemon_toasts import ToastsMixin
 from .daemon_watch import WatchMixin
 from .events import QUESTION_KINDS, Event, EventLog
 from .util import clock, duration, file_hash, now, parse_stamp, retry_io, stamp, write_text
@@ -107,13 +108,15 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
 
 
 class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
-             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin, ApiMixin):
+             TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin, ApiMixin,
+             ToastsMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
         self.echo = echo
         self.notifier = notifier if notifier is not None else notify.Toaster()
         self._init_receipts()                     # before the log: every event may be a receipt's
+        self._init_toasts()
         self.log = EventLog(cfg.events_db, on_append=self._on_event)
         self.runs: dict[str, Run] = {}              # executing, or finished and waiting to merge
         self.stages: dict[str, Run] = {}            # staging processes still running
@@ -189,14 +192,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._receipt_event(ev)
         if self.echo:
             self.echo(f"{clock(ev.ts)} #{ev.id} {inbox.describe(ev)}")
-        if not (self.cfg.toasts and self.notifier):
-            return
-        msg = notify.message(self.cfg.project, ev.kind, ev.item, ev.repo, ev.detail)
-        if msg:
-            try:
-                self.notifier(*msg, f"{self.cfg.project}#{ev.id}")
-            except Exception as exc:     # a toast never stops the daemon
-                self.log.append("warning", note=f"toast for #{ev.id} ({ev.kind}) failed: {exc!r}")
+        self._toast_event(ev)                # daemon_toasts
 
     def acquire(self) -> None:
         """Take `.conductor/daemon.json`. A clean stop removes it, so one left by a dead
@@ -326,6 +322,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             except Exception:           # noqa: BLE001 - never in the way of releasing the lock
                 pass
             self.write_inbox(force=True)
+            self.flush_toasts(force=True)
             self.release()
 
     def _recover_in_place(self, exc: OSError) -> None:
@@ -374,6 +371,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.queue_retros()             # daemon_retros
         self.schedule()
         self.write_inbox()
+        self.flush_toasts()             # daemon_toasts
 
     def _active(self) -> dict[str, Run]:
         """Executor processes that may be running: guard attribution covers these. Never
@@ -578,6 +576,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
     # ---------------------------------------------------------------- scheduling
     def schedule(self) -> None:
         view = state.scan(self.cfg, self.log)
+        if self.renumber_taken(view):           # daemon_retros: a new file never shares a number
+            view = state.scan(self.cfg, self.log)
         self.check_reviewed_reports(view)
         for d in view.stray:
             key = f"queue/{d.name}"
@@ -600,6 +600,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                     self.enqueued.add(item.id)
                     meta = item.meta()
                     meta["paths_declared"] = meta.pop("paths")      # `paths` is the event's own column
+                    meta |= self._renumbered.pop(item.id, {})
                     if shared := [i for i in items.ref_matches(str(item.num), repo, view.known())
                                   if i != item.id and item.num]:
                         meta["shares_number"] = shared              # its receipt says: name it in full

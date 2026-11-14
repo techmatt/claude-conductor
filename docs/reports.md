@@ -45,7 +45,7 @@ line (`inbox.md`, *Maintenance facts*).
 `warnings:` (109) is what the repo's warning checks tripped and any other warning the
 executor noticed, each part led by a kind: `design: capstone has a cheap source; perf:
 40s turns`. It never changes the status. It leads the inbox, `session.md` and
-`review.md` under *Warnings*, counted per kind, and toasts: `warnings.md`. Parked edits an item carries are answered just
+`review.md` under *Warnings*, counted per kind, one unchanged since the last reviewed report folded into a *standing* line (no toast): `warnings.md`. Parked edits an item carries are answered just
 after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 
 ## For the planner

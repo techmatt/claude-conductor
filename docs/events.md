@@ -11,7 +11,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `load_high` | under `load_warn_free_threads` (2) free for 3 samples and `load_warn_seconds` (180), again every `load_tell_minutes` (15) while it lasts (`memory.md`); inbox only, no toast (70); messages only an item that is a real share of the load (80) | free, keep, items (told now), causes (items that are a real share), load, caution |
 | `memory` / `memory_critical` | the memory level changed (`memory_critical`, red: to critical) | level, was, commit, limit (GiB), percent, free (GiB), top (item, kind, count, private_mb), others (name, count, private_mb), load (cpu, top: who, cpu, item, of; `memory.md`), action |
 | `reaped` | processes an item left in its worktree were killed | context, processes (pid, name, kind, private_mb), private_mb |
-| `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`; not `remote`: `start`); `shares_number` (the other items with its number), if any; starts (when it will start and why: `receipts.md`); parked (the parked edits it will carry as the queue stands); warning (a `depends_on` that can't be met) |
+| `enqueue` | an item is first seen in `queue/` | its front-matter fields (`paths` as `paths_declared`, `resume` as `resume_of`; not `remote`: `start`); `renumbered_from` and `number_taken_by` (its file's number was in use: renamed, `items.md`); `shares_number` (older logs: the other items with its number); starts (when it will start and why: `receipts.md`); parked (the parked edits it will carry as the queue stands); warning (a `depends_on` that can't be met) |
 | `edited` | a queued item's file changed before it launched (it runs the new text) | staged (its stage is discarded and redone); amendments (ids still standing); launching (the write landed mid-launch, which was undone); starts (only when the rewrite moved its start); warning |
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, an item is set aside (its dependency cancelled), or a merge waits (reason changed) | reason; merge; alone (only this item holds) |
@@ -61,7 +61,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `open_refused` | an `open:` target failed its check (not red; the signal file goes on) | verb, target (as given), reason; by |
 | `notify` | a `notify:` signal or a watch's action raised a toast | text, by; item (a watch's) |
 | `approve` | a `proposed/` item moved into its queue | item, from |
-| `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept; dependents and warning (queued items that depend on it) |
+| `cancel` | a queued or proposed item set aside in `.conductor/cancelled/` | from (`queue`/`proposed`), kept; dependents and warning (queued items that depend on it); retro_of (a retro conductor queued: never queued again, `retros.md`) |
 | `reorder` | items of a queue (repo) or of `proposed` renumbered | before, after (names in queue order); note (finished after a restart) |
 | any signal-caused event | a signal file had `by:` | by |
 | `ask` | a question file appeared | question (id), text, block, default, deadline, deadline_clock; design (held for Matt, `questions.md`); overrides_prompt (its first line's flag, here and on the question's later events: `questions.md`) |
@@ -69,7 +69,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `default` | the default deadline passed unanswered | question, text (the default), outcome, reason, waited_seconds |
 | `late` | an answer file after a default or close | question, text, outcome, note; by |
 | `question_closed` | resolved with no answer: item finished, the tool call cancelled, or a message answered it (`by_message`) | question, text, outcome, reason, waited_seconds |
-| `queue_empty` | an item finished and its repo has nothing queued or running | last |
+| `queue_empty` | an item finished and its repo has nothing queued or running (no toast since 115: the finish's says it) | last |
 | `watch_flag` | the night shift's check flagged something (`night-shift.md`) | flag (`quiet`, `eta`, `question`, `blocked`, `backlog`, `memory`, `run_failed`), key, text; watch (`skipped: <why>` for a stall no watch looked at) |
 | `watch_answer` | a watch's `answer:` action answered a question | question, text, source, watch |
 | `pause` / `resume` | a `pause:` / `resume:` signal (`night-shift.md`, *Pause*) | repo; items, by; paused_seconds (resume) |

@@ -599,6 +599,8 @@ class SignalsMixin:
         retry_io(os.replace, src, dest)
         kept = self.cfg.rel(dest)
         extra = {k: v for k, v in extra.items() if v}
+        if origin == "queue" and (retro := self.log.last("retro", item=item_id)):
+            extra["retro_of"] = retro.detail.get("of")      # never queued again (session.retros, 115)
         self.log.append("cancel", item=item_id, repo=repo, paths=[rel, kept], kept=kept, **{"from": origin}, **extra)
 
     def _drop_stage(self, repo: str, name: str, reason: str) -> None:

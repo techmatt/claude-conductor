@@ -32,7 +32,7 @@ def test_blocking_question_answered_by_file(env):
     assert q.path.name == "code__001_ask__1.md"
     inbox = (env.control / "inbox.md").read_text(encoding="utf-8")
     assert inbox.index("## Questions") < inbox.index("## Now") and q.id in inbox
-    assert env.toasts[0][0] == "test: question from code/001_ask"
+    assert env.toasts[0][0] == "test: question from 001_ask"       # one repo: the bare name
     # Past its deadline while blocked: no kill. The deadline is pulled in to 3s from now
     # rather than waited out; the answer then moves it later by the time spent blocked.
     run = env.d.runs["code/001_ask"]
@@ -82,16 +82,17 @@ def test_question_closed_when_item_dies(env):
 
 
 @pytest.mark.slow
-def test_toasts_for_red_hold_and_empty_queue(env):
+def test_toasts_for_red_hold_and_a_finish_with_its_queue_state(env):
     env.queue("001_bad", "FAKE report red")
     env.queue("002_next", "FAKE report done")
     env.tick_until(lambda: env.events("hold"))
-    titles = [t for t, _, _ in env.toasts]
-    assert "test: code/001_bad is red; queue `code` HELD (`clear: code`)" in titles
-    assert "test: code/002_next held" in titles
+    said = "\n".join(t + "\n" + b for t, b, _ in env.toasts)
+    assert "001_bad red · queue `code` HELD (`clear: code`)" in said and "002_next held" in said
     env.signal("clear.txt", "clear: code")
     env.tick_until(lambda: env.events("queue_empty"))
-    assert env.toasts[-1][0] == "test: queue `code` is empty" and "code/002_next" in env.toasts[-1][1]
+    # One toast per finish, the queue state merged in; no separate "queue is empty" toast.
+    assert env.toasts[-1][0] == "test: 002_next done · queue now empty"
+    assert not any("is empty" in t for t, _, _ in env.toasts)
     assert all(tag.startswith("test#") for _, _, tag in env.toasts)
 
 
@@ -101,6 +102,7 @@ def test_failing_toast_is_logged_not_fatal(env):
     env.d.notifier = broken
     env.queue("001_bad", "FAKE report red")
     env.tick_until(lambda: env.finished("code/001_bad"))
+    env.d.flush_toasts(force=True)                  # the finish's toast waits to name its queue state
     assert any("toast" in w.detail["note"] for w in env.events("warning"))
 
 

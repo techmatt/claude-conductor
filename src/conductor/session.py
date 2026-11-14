@@ -344,7 +344,12 @@ def retros(log: EventLog, view: View, repo: str) -> Retro:
     audits += [(0, i, "running", None) for i, rec in view.running.items()
                if rec.get("repo") == repo and rec.get("template") == "self_audit"]
     audits += [(0, it.id, "queued", None) for it in view.queued.get(repo, []) if it.template == "self_audit"]
+    # A retro conductor queued and Matt cancelled stays cancelled (115): its item is covered and
+    # the cancel counts as a marker, so what finished before it never brings one back.
+    gone = [e for e in log.query(kinds=["retro"]) if e.repo == repo and e.item in view.cancelled]
+    audits += [(0, e.item, "cancelled", None) for e in gone]
     covered = {ev.detail.get("resume_of") for ev in view.finishes.values() if ev.detail.get("template") == "self_audit"}
+    covered |= {e.detail.get("of") for e in gone}
     covered |= {rec.get("resume_of") for rec in view.running.values() if rec.get("template") == "self_audit"}
     covered |= {it.resume_of for q in view.queued.values() for it in q if it.template == "self_audit"}
     marked = []
@@ -353,7 +358,7 @@ def retros(log: EventLog, view: View, repo: str) -> Retro:
         marked.append((first.id if first else fin.id if fin else 1 << 62, item, how, fin))
     ran = [m for m in marked if m[2] == "ran"]
     last = max(ran, key=lambda m: m[3].id)[3] if ran else None
-    pend = max((m for m in marked if m[2] != "ran"), default=None, key=lambda m: m[0])
+    pend = max((m for m in marked if m[2] in ("running", "queued")), default=None, key=lambda m: m[0])
     floor = max((m[0] for m in marked), default=0)
     since = sorted((ev for ev in view.finishes.values() if ev.repo == repo and ev.id > floor
                     and not ev.detail.get("template") and not ev.detail.get("resume_of")), key=lambda e: e.id)

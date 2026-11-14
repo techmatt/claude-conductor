@@ -78,11 +78,18 @@ class Env:
             shutil.copytree(template / name, root / name)
         self.cfg = config.load(self.control)
         self.lines: list[str] = []
-        self.toasts: list[tuple[str, str, str]] = []
+        self.shown: list[tuple[str, str, str]] = []
         self.d = self.new_daemon()
 
     def notifier(self, title: str, body: str, tag: str) -> None:
-        self.toasts.append((title, body, tag))
+        self.shown.append((title, body, tag))
+
+    @property
+    def toasts(self) -> list[tuple[str, str, str]]:
+        """Every toast so far, what is pending flushed now: a test reads them without
+        waiting out the settle and coalesce windows (`notify.Toasts`)."""
+        self.d.flush_toasts(force=True)
+        return self.shown
 
     def new_daemon(self) -> daemon.Daemon:
         d = daemon.Daemon(config.load(self.control), echo=self.lines.append, notifier=self.notifier)

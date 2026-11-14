@@ -38,6 +38,12 @@ Each tick after a `finish`, `pause`, `resume` or `retro` event, for each repo:
   `template: self_audit`, no body, and logged as a `retro` event (`of`, `why`,
   `by: conductor`). It fixes the obvious in place and lands like any serial item (113,
   `resume.md`), so a red's retro waits behind its hold until `clear:`.
+- **A cancel sticks** (115): `cancel:` of a retro conductor queued records `retro_of` on
+  its `cancel` event, its item counts as covered and the cancel as a marker, so it is never
+  queued again and nothing that finished before it brings one back; a later trigger still
+  gets its own. (aicomplete: cancelling 220_post_audit_215 re-queued it as
+  222_post_audit_215, which shared 222 with 222_sim_players; a new item no longer takes a
+  number in use either: `items.md`.)
 
 It is not a night-shift draw: autopilot does not gate it, nor does the time of day.
 `[defaults] auto_retros = false` in `conductor.toml` turns it off; then the digest marks

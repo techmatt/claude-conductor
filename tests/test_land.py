@@ -78,8 +78,8 @@ def test_a_kept_red_branch_with_merge_commits_lands_with_land(env):
     fin = env.finished("code/001_g")
     assert fin.detail["status"] == "red" and fin.detail["report_status"] == "done"
     assert "NOT on main: branch `conductor/001_g` kept; `land: code/001_g` lands it" in report(env, "001_g")
-    [toast] = [t for t in env.toasts if "is red" in t[0]]
-    assert "queue `code` HELD" in toast[0]
+    [toast] = [t for t in env.toasts if "001_g red" in t[0] + t[1]]
+    assert "001_g red · queue `code` HELD (`clear: code`)" in toast[0] + toast[1]
     assert state.scan(env.d.cfg, env.d.log).red_hold["code"].item == "code/001_g"
     # The recovery 099 tried by hand: two branches that each regenerate g.txt, merged in.
     # Replayed commit by commit onto a main that moved, they conflict; squashed, they don't.

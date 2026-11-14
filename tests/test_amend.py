@@ -157,7 +157,7 @@ def test_finished_items_refuse_amendments(env, capsys):
     [ref] = env.events("amend_refused")
     assert ref.detail["state"] == "finished" and "a new item" in ref.detail["reason"]
     assert p.exists() and not env.events("amended")
-    assert "refused" in describe(ref) and any("refused" in t for t, _, _ in env.toasts)
+    assert "refused" in describe(ref) and any("refused" in t + b for t, b, _ in env.toasts)
     # A restarted daemon does not refuse it again; a changed file is refused anew.
     env.d.log.close()
     env.d = env.new_daemon()

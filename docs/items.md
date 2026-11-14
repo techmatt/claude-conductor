@@ -55,6 +55,13 @@ An unquoted `depends_on: 001` is the YAML integer 1; conductor matches bare numb
 numerically, so it still resolves. A number two items share (`receipts.md`)
 names neither: a `depends_on` on it holds.
 
+**A new item never takes a number in use** (115): a queue file whose number an item of its
+repo already has (queued and enqueued, running or done; cancelled ones aside) is renamed
+to the repo's next number (`nightshift.queue_name`) before it is enqueued; its `enqueue`
+carries `renumbered_from` and `number_taken_by`, and its receipt stays at the name written
+(`receipts/queue/<repo>/<old name>.md`), saying `renumbered from <old>: its number was
+already <id>'s`. Of two new files with one number in a tick, the later in name order moves.
+
 A `depends_on` that can never be met in order is flagged when the item is queued or
 rewritten, not only as a hold once it is the head: the receipt stays `accepted` and gains
 a `warning` naming each such dependency and why (later in the same queue; already ended

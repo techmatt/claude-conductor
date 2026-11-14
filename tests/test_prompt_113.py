@@ -52,8 +52,7 @@ def test_a_missing_warning_checks_section_is_no_warning():
     assert inbox.warnings_text({"warnings": said}) == "data: 4 of 12 drafts miss the band"
     only = {"warnings": "docs: CLAUDE.md has no *Warning checks* section to run", "status": "done"}
     assert inbox.warnings_text(only) is None
-    assert notify.message("p", "finish", "code/043_x", "code", only) is None
-    assert notify.message("p", "finish", "code/043_x", "code", {"warnings": said})[1].startswith("data: 4 of 12")
+    assert "warning" not in notify.note("finish", "code/043_x", "code", only).body     # 115: never toasted
 
 
 def test_a_refused_edit_block_says_old_text_must_be_whole_lines():

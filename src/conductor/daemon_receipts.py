@@ -118,6 +118,10 @@ class ReceiptsMixin:
                 shared = d.get("shares_number")
                 starts = f"; {d['starts']}" if d.get("starts") else ""
                 starts += f"; {d['parked']}" if d.get("parked") else ""
+                if old := d.get("renumbered_from"):     # the receipt stays at the name written (115)
+                    rel = f"queue/{ev.repo}/{old}.md"
+                    starts += (f"; renumbered from {old}: its number was already "
+                               f"{', '.join(d.get('number_taken_by') or [])}'s")
                 self._write_receipt(rel, [ev], result=f"queued as {ev.item}{starts}" + (
                     f"; its number is also {', '.join(shared)}'s: name it in full, never by number"
                     if shared else ""), warning=d.get("warning"))
