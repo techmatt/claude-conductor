@@ -280,7 +280,7 @@ class ProjectView(QWidget):
                 s.clicked.connect(lambda _=False, n=name: self.stop_target(n))
                 self.run_bar.addWidget(s)
                 self.stop_buttons[name] = s
-        colours = {"up": theme.GREEN, "starting": theme.AMBER, "down": theme.MUTED}
+        colours = {"up": theme.GREEN, "starting": theme.AMBER, "down": theme.MUTED, "taken": theme.RED}
         for name, st in snap.targets.items():
             b = self.run_buttons[name]
             t = self.project.cfg.targets.get(name)
@@ -288,7 +288,9 @@ class ProjectView(QWidget):
             if b.text() != text:
                 b.setText(text)
                 b.setStyleSheet(f"QPushButton {{ color: {colours.get(st, theme.MUTED)}; font-weight: bold; }}")
-            b.setToolTip(f"{'Open' if st == 'up' else 'Start, then open'} {t.url if t else ''} "
+            b.setToolTip(f"Something else holds {t.url if t else 'its port'}: a run says what (run_failed) "
+                         "and opens nothing" if st == "taken" else
+                         f"{'Open' if st == 'up' else 'Start, then open'} {t.url if t else ''} "
                          "(a `run:` signal; the daemon must be running)")
             self.stop_buttons[name].setVisible(st in ("up", "starting"))
 

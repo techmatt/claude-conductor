@@ -20,6 +20,10 @@ import pytest
 REPO = Path(__file__).resolve().parent
 TMP_ROOT = REPO.parent / f"{REPO.name}-pytest-tmp"
 
+# The machine's port-block registry (portblocks.py) is never read or written by a test, nor
+# by a daemon one starts; the tests of port blocks point it at a file of their own.
+os.environ["CONDUCTOR_PORTS"] = "off"
+
 
 def _writable(fn, path, _exc) -> None:
     """Git's object files are read-only, which stops `rmtree` on Windows."""

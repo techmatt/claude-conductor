@@ -517,6 +517,33 @@ def _outermost(p: psutil.Process, marker: str, cmdline: list[str] | None) -> boo
         return False
 
 
+def listeners(port: int) -> set[int] | None:
+    """The pids listening on local TCP `port`, any address; None when the table can't be read."""
+    try:
+        return {c.pid for c in psutil.net_connections(kind="tcp")
+                if c.status == psutil.CONN_LISTEN and c.laddr and c.laddr.port == port and c.pid}
+    except (psutil.Error, OSError):
+        return None
+
+
+def tree(pid: int, created: float | None = None) -> set[int]:
+    """`pid` and every descendant, while that exact process lives; else empty."""
+    if not alive(pid, created):
+        return set()
+    try:
+        root = psutil.Process(pid)
+        return {pid, *(c.pid for c in root.children(recursive=True))}
+    except psutil.Error:
+        return set()
+
+
+def name(pid: int) -> str:
+    try:
+        return psutil.Process(pid).name()
+    except psutil.Error:
+        return "a process"
+
+
 def kill_tree(pid: int) -> None:
     """Hard-kill a process and every descendant, and everything in its job (`spawn`)."""
     try:

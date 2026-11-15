@@ -12,8 +12,9 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from . import config as config_mod
 from . import git
-from .config import RUNTIME, Config
+from .config import CONFIG_NAME, RUNTIME, Config
 from .util import FrontMatterError, read_text, split_front_matter
 
 REQUEST_WAIT_SECONDS = 60.0  # how long after request.md appears its missing targets are waited for
@@ -270,6 +271,14 @@ def ready(d: Path, control: Path | None = None) -> Request | Waiting:
             raise RequestError(f"edits for {t}: the control folder has no readable copy ({exc}); "
                                "send it as a whole file") from None
         req.edited[t] = apply_edits(current, t, blocks)
+    if CONFIG_NAME in req.targets:      # refused before it lands, not committed and then ignored
+        new = req.edited.get(CONFIG_NAME)
+        if new is None:
+            new = _normalize((req.dir / CONFIG_NAME).read_bytes()).decode("utf-8-sig", errors="replace")
+        try:
+            config_mod.parse(control, new)
+        except config_mod.ConfigError as exc:
+            raise RequestError(f"the new {CONFIG_NAME} would not load: {exc}; nothing was applied") from None
     if not req.edits and identical(control, req):
         if _settled(d, req.files) < SAME_WAIT_SECONDS:
             return Waiting(f"a changed copy: every target is identical to HEAD so far ({', '.join(req.targets)})", waited)

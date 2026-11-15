@@ -6,7 +6,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import globs
+from . import globs, portblocks
 
 CONFIG_NAME = "conductor.toml"
 
@@ -126,6 +126,7 @@ class Config:
     write_roots: list[Path] = field(default_factory=list)  # folders outside the repos items may write (preambles)
     links: dict[str, str] = field(default_factory=dict)    # `[links]` name = URL, first in session.md
     display_name: str = ""     # `display_name`: how Matt's chat titles name it ("AIcomplete"); `name` falls back
+    ports: range | None = None  # `ports = "5260-5279"`: this project's port block (portblocks.py)
 
     @property
     def name(self) -> str:
@@ -297,13 +298,38 @@ def _targets(control: Path, repos: dict[str, Path], raw) -> dict[str, RunTarget]
     return out
 
 
-def load(control: Path) -> Config:
+def _declared_ports(cfg: Config, data: dict) -> list[tuple[str, int]]:
+    """Every local port the config names, with where: run targets' and tools' URLs, a
+    command's `--port N`, `[remote] port` (its default when left out)."""
+    out = []
+    for kind, table in (("run", cfg.targets), ("tools", cfg.tools)):
+        for t in table.values():
+            urls = dict.fromkeys((t.url, t.ready))
+            out += [(f"{kind}.{t.name}", p) for u in urls if (p := portblocks.local_port(u))]
+            out += [(f"{kind}.{t.name} command", p) for p in portblocks.command_ports(t.command)]
+    remote = data.get("remote")
+    if isinstance(remote, dict):
+        port = remote.get("port", portblocks.REMOTE_DEFAULT_PORT)
+        if isinstance(port, int) and port:
+            out.append(("[remote] port" + ("" if "port" in remote else " (its default)"), port))
+    return list(dict.fromkeys(out))
+
+
+def load(control: Path, claim: bool = True) -> Config:
+    """Load and check `control`'s conductor.toml; `claim` records its port block in the
+    machine's registry (portblocks.py)."""
     control = Path(control).resolve()
     cfg_file = control / CONFIG_NAME
     if not cfg_file.is_file():
         raise ConfigError(f"no {CONFIG_NAME} in {control}")
+    return parse(control, cfg_file.read_text(encoding="utf-8-sig"), claim)
+
+
+def parse(control: Path, text: str, claim: bool = False) -> Config:
+    """`text` as `control`'s conductor.toml: a request's new copy is checked here before it applies."""
+    control = Path(control).resolve()
     try:
-        data = tomllib.loads(cfg_file.read_text(encoding="utf-8-sig"))
+        data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{CONFIG_NAME}: {exc}") from exc
 
@@ -361,7 +387,11 @@ def load(control: Path) -> Config:
     command = executor.get("command", ["claude"])
     if isinstance(command, str):
         command = [command]
-    return Config(
+    try:
+        block = portblocks.parse(data["ports"]) if "ports" in data else None
+    except portblocks.BlockError as exc:
+        raise ConfigError(f"{CONFIG_NAME}: {exc}") from None
+    cfg = Config(
         control=control,
         project=project,
         repos=repos,
@@ -389,4 +419,10 @@ def load(control: Path) -> Config:
         write_roots=[_resolve(control, x) for x in write_roots],
         links={str(k): v.strip() for k, v in links.items()},
         display_name=display_name.strip(),
+        ports=block,
     )
+    try:
+        portblocks.check(control, project, block, _declared_ports(cfg, data), claim)
+    except portblocks.BlockError as exc:
+        raise ConfigError(f"{CONFIG_NAME}: {exc}") from None
+    return cfg

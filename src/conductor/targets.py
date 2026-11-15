@@ -4,9 +4,11 @@ started on request and opened in the default browser.
     .conductor/run-<name>.json    the process conductor started: pid, create_time, started
     .conductor/run-<name>.log     its stdout and stderr, appended
 
-One process per target. A run request opens the URL at once when the target already
-answers; otherwise it starts the process (unless the recorded one is still alive and
-just not answering yet), and `poll` opens the URL once the ready URL answers — or logs
+One process per target. Something other than the target's own recorded process tree on its
+port (another project's server, a stray) fails the request with `run_failed` naming it, and
+nothing opens. A run request opens the URL at once when the target already answers;
+otherwise it starts the process (unless the recorded one is still alive and just not
+answering yet; one started from an older command is replaced), and `poll` opens the URL once the ready URL answers — or logs
 `run_failed` with the log's tail when the process dies or `ready_seconds` pass.
 
 Tools (`[tools.<name>]`, the `tool:` signal, the app's Tools menu) run the same way through
@@ -26,7 +28,7 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import procs
+from . import portblocks, procs
 from .config import Config, RunTarget
 from .util import stamp, write_text
 
@@ -77,8 +79,43 @@ def process(cfg: Config, name: str, prefix: str = "run") -> dict | None:
     return None
 
 
+def who(cfg: Config, pid: int) -> str:
+    """Name the process holding a port: a run target or tool conductor started, in this project
+    or another with a port block, else its process name and pid."""
+    controls = [(cfg.control, cfg.project)] + [(c, p) for _, c, p in portblocks.held()
+                                               if c.resolve() != cfg.control.resolve()]
+    for control, project in controls:
+        for f in sorted((control / ".conductor").glob("*-*.json")):
+            kind, _, name = f.stem.partition("-")
+            if kind not in ("run", "tool"):
+                continue
+            try:
+                rec = json.loads(f.read_text(encoding="utf-8"))
+                if pid in procs.tree(rec["pid"], rec.get("create_time")):
+                    return f"{project}'s {'tool' if kind == 'tool' else 'run target'} {name} (pid {pid})"
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    return f"{procs.name(pid)} (pid {pid}), which conductor did not start"
+
+
+def taken(cfg: Config, t: RunTarget, prefix: str = "run") -> str | None:
+    """Why `t` can't count as up or start: something other than its own recorded process tree
+    listens on its ready URL's port. None when the port is free or ours, or not on this machine."""
+    port = portblocks.local_port(t.ready)
+    if port is None or not (pids := procs.listeners(port)):
+        return None
+    rec = process(cfg, t.name, prefix)
+    mine = procs.tree(rec["pid"], rec.get("create_time")) if rec else set()
+    if strangers := sorted(pids - mine):
+        return f"port {port} is held by {who(cfg, strangers[0])}"
+    return None
+
+
 def status(cfg: Config, t: RunTarget, timeout: float = PROBE_SECONDS) -> str:
-    """`up` (answers), `starting` (our process is alive, not answering yet) or `down`."""
+    """`up` (our process answers), `starting` (it is alive, not answering yet), `taken`
+    (something else holds its port) or `down`."""
+    if taken(cfg, t):
+        return "taken"
     if answers(t.ready, timeout):
         return "up"
     return "starting" if process(cfg, t.name) else "down"
@@ -137,6 +174,10 @@ class Runner:
 
     def request(self, name: str, by: str | None = None) -> None:
         t = self.target(name)
+        if why := taken(self.cfg, t, self.prefix):
+            self.pending.pop(name, None)
+            self._failed(t, by, f"{why}; nothing was started or opened")
+            return
         if answers(t.ready):
             self.pending.pop(name, None)
             self._open(t, by)
@@ -144,7 +185,13 @@ class Runner:
         if name in self.pending:
             return                          # already starting: the open follows when ready
         now = time.monotonic()
-        if rec := self._record(name):
+        rec = self._record(name)
+        if rec and "command" in rec and rec["command"] != t.command:
+            self._kill(name)                # started under an older conductor.toml (a moved port): replaced
+            self.log.append("run_stop", target=name, pid=rec["pid"],
+                            note="its command changed in conductor.toml; starting the new one", **self._by(by))
+            rec = None
+        if rec:
             note = f"pid {rec['pid']} is alive but not answering yet; waiting for it"
             self.log.append("run_start", paths=[self.cfg.rel(self._log_path(name))], target=name,
                             pid=rec["pid"], reused=True, note=note, **self._by(by))
@@ -184,7 +231,10 @@ class Runner:
             if t is None:                   # dropped from conductor.toml meanwhile
                 self.pending.pop(name)
                 continue
-            if answers(t.ready):
+            if why := taken(self.cfg, t, self.prefix):
+                self.pending.pop(name)
+                self._failed(t, p.by, f"{why}; nothing was opened (conductor's own process, if alive, is left running)")
+            elif answers(t.ready):
                 self.pending.pop(name)
                 waited = round(time.monotonic() - p.started, 1)
                 self.log.append("run_ready", target=name, waited_seconds=waited, **self._by(p.by))

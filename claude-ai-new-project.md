@@ -31,7 +31,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
    - Per repo: `shared` untracked folders and `setup` commands its worktrees need (setup runs off the daemon loop: `docs/executors.md`, *Setup*); `worktrees` / `stage`. **Cue for `worktrees = false`:** for an existing repo, one names-only listing of its root decides it: a `.venv`, build outputs, per-checkout config or sibling paths mean `worktrees = false` and `stage = false`, and its contract item reports what a worktree would need; switching later is a request. A new repo starts with worktrees on.
    - Each code repo's `CLAUDE.md` standing contract, as a first queued prompt for that repo (below).
 
-   **Later**, as needed: a `[run.<name>]` target once there is something to run (*Run targets*); `[tools.<name>]` (`docs/app.md`, *Project tools*); `push = true` once the repo has a remote Matt wants backed up (`docs/push.md`); `prose` globs if the default doesn't fit (`docs/items.md`); `append_only` logs (`docs/worktrees.md`); `background` globs (`docs/progress.md`).
+   **Later**, as needed: a `[run.<name>]` target once there is something to run (*Run targets*; its port from the project's block); `[tools.<name>]` (`docs/app.md`, *Project tools*); `push = true` once the repo has a remote Matt wants backed up (`docs/push.md`); `prose` globs if the default doesn't fit (`docs/items.md`); `append_only` logs (`docs/worktrees.md`); `background` globs (`docs/progress.md`).
 
    The contract holds:
    - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
@@ -69,7 +69,7 @@ The memory line (*Now*'s first line, the app header, `conductor status`) reads `
 
 ## Run targets
 
-A project's runnable thing (a dev server, the game) is a `[run.<name>]` table in `conductor.toml` (`docs/run-targets.md`), set by request with the command and URL the repo's README gives. `run: X stop` is also how to free files a dev server holds before an item that moves them. Matt has the app's **Run X** / **Stop X** buttons and never types the commands. A local tool Matt looks at (a card viewer) is a `[tools.<name>]` table instead (`docs/app.md`, *Project tools*): a Repos-tab button, signal `tool: X`, stopped with the daemon.
+A project's runnable thing (a dev server, the game) is a `[run.<name>]` table in `conductor.toml` (`docs/run-targets.md`), set by request with the command and URL the repo's README gives. **Ports:** `conductor init` gives the project a block of 20 (`ports = "5320-5339"` in `conductor.toml`, printed by init); every port a target, tool or `[remote]` names goes in it, run targets and tools from its first port, `[remote] port` its last, a script's fixed port overridden from the command (`-- --port N --strictPort`). A port outside it, or in another project's block, is refused naming that project (`docs/control-folder.md`, *Port blocks*). `run: X stop` is also how to free files a dev server holds before an item that moves them. Matt has the app's **Run X** / **Stop X** buttons and never types the commands. A local tool Matt looks at (a card viewer) is a `[tools.<name>]` table instead (`docs/app.md`, *Project tools*): a Repos-tab button, signal `tool: X`, stopped with the daemon.
 
 ## Picks
 

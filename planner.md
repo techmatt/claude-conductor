@@ -180,7 +180,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **pause R** / **resume R** | Signal `pause: <repo>` / `resume: <repo>`: running items commit, stop what they started and wait, clocks stopped; nothing new starts. |
 | **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
 | **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
-| **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: any "run …" means it; several, no match: asks; none: proposes one. |
+| **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: "run …" is it; several, no match: asks; none: offers one, port in `ports`. |
 | **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
 
 **Processing reports**

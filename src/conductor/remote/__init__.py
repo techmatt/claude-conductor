@@ -73,7 +73,8 @@ def keep_broker(control: Path, warn) -> None:
 
 
 def _start_broker(control: Path, warn) -> tuple[str, object]:
-    """("none" | "kept" | "started", the settings or None)."""
+    """("none" | "kept" | "started" | "replaced" (one under other settings killed first), the
+    settings or None)."""
     from . import settings
     try:
         r = settings.load(control)
@@ -86,6 +87,7 @@ def _start_broker(control: Path, warn) -> tuple[str, object]:
 
     from .. import procs
     info_path = r.state / "broker.json"
+    did = "started"
     try:
         info = json.loads(info_path.read_text(encoding="utf-8"))
         p = psutil.Process(int(info["pid"]))
@@ -94,6 +96,7 @@ def _start_broker(control: Path, warn) -> tuple[str, object]:
                 return "kept", r
             p.kill()                             # started under other settings
             p.wait(5)
+            did = "replaced"                     # not a crash: keep_broker says nothing
     except (OSError, ValueError, KeyError, TypeError, psutil.Error):
         pass
     info_path.unlink(missing_ok=True)
@@ -103,7 +106,7 @@ def _start_broker(control: Path, warn) -> tuple[str, object]:
     # Its pid at once, so the next check sees it starting rather than starting another.
     info_path.write_text(json.dumps({"pid": new.pid, "digest": r.digest(), "starting": True}) + "\n",
                          encoding="utf-8", newline="\n")
-    return "started", r
+    return did, r
 
 
 def pin_token(r) -> None:

@@ -74,6 +74,7 @@ worktree_root = "../conductor-sandbox-worktrees"   # default ../<project>-worktr
 open_roots = ["C:/Code/gdrive-sync/sandbox"]  # more folders `open:` may act in (see open.md)
 write_roots = ["C:/Code/gdrive-sync/sandbox"] # folders outside the repos items may write, named in every
                               # non-readonly preamble (preambles.md); default: open_roots; [] names none
+ports = "5200-5219"           # this project's port block (Port blocks, below); init writes the next free one
 
 [defaults]
 max_hours = 2                 # per item unless the item sets max_hours
@@ -128,8 +129,32 @@ args = []                     # extra arguments, e.g. ["--model", "opus"]
 Repo names may not contain `__` or slashes (report names are `<repo>__<item>.md`).
 `worktree_root` must lie outside the control folder and every repo; worktrees live at
 `<worktree_root>/<repo>/<NNN_name>`. Unknown keys in a repo table are an error.
-A request that changes `conductor.toml` reloads it; an invalid one is logged red and
-the previous config stays in force.
+A request that changes `conductor.toml` is loaded before it applies (`config.parse`): one
+that would not load fails (`request_failed`, "the new conductor.toml would not load: …;
+nothing was applied") and nothing is committed (119). One that loads is applied and reloaded.
+
+## Port blocks
+
+Each control folder owns a block of 20 local ports, `ports = "5260-5279"` (blocks from 5200
+up, aligned: 5200-5219, 5220-5239, …), and every port the project names lies in it: run
+targets' and tools' `url`/`ready` ports on this machine, a command's `--port N`, and
+`[remote] port` (its default 8770 when left out, so a `[remote]` sets one). Convention: the
+block's first ports for run targets and tools, its last for `[remote]`. A script with a fixed
+port gets its block's one from the command (`npm run cards -- --port 5260 --strictPort`).
+
+One registry on the machine, `~/.conductor/ports.json` (`portblocks.py`), records which
+control folder holds which block; every load of a `conductor.toml` checks against it and
+records its own. An entry counts only while that folder's `conductor.toml` still declares the
+block, so a deleted project or a moved block frees it with nothing to clean up. Refused, with
+the error naming both sides: a port outside the block ("tools.cards names port 5180, outside
+this project's block 5320-5339"), a port in another project's block ("… in aicomplete's block
+5260-5279 (C:/Code/aicomplete-control)"), a block another project holds, and a port with no
+block set (the error gives the next free one). `$CONDUCTOR_PORTS` names another registry file;
+`off` turns the check off (the test suite does, `conftest.py`).
+
+Blocks (119): sandbox 5200, corelight 5220, wordwarriors 5240, aicomplete 5260, fractals
+5280, workbench 5300, helium-hustle 5320. Executors' `CONDUCTOR_PORT` comes from the OS's
+ephemeral range (49152 up on Windows), above every block.
 
 ## conductor init
 
@@ -137,7 +162,8 @@ the previous config stays in force.
 conductor init C:\Code\<project>-control --project <project> --repo app=C:\Code\app [--repo …]
 ```
 
-creates the folder: `conductor.toml` (the project; per repo a `[repos.<name>]` table, its
+creates the folder: `conductor.toml` (the project; `ports`, the next free port block,
+claimed in the registry and named in a printed line; per repo a `[repos.<name>]` table, its
 path (relative, `../app`, beside it), `push = false`; `max_hours = 2`,
 `ask_default_minutes = 10`), a stub `state.md` (every section `planner.md` expects, in
 order; *Maintenance* `never` per template and repo), `.gitignore`,

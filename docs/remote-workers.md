@@ -26,7 +26,7 @@ that farmed has `remote: true` on its `start` event, however it got it.
   dies, the daemon starts it again within 10 s (one warning); its jobs carry on (`remote-url.md`).
   By hand: `python -m conductor.remote.broker <control> [--stay] [--after <pid>]`; `--stay`
   serves with no daemon (tests, a manual run), `--after` is a handover.
-- **LAN only, one shared token.** It binds `bind:port` (default `0.0.0.0:8770`) and serves
+- **LAN only, one shared token.** It binds `bind:port` (default `0.0.0.0:8770`, outside every port block, so a `[remote]` sets its own) and serves
   every path under `/w/<token>/`: the worker page, the wasm bundles and the job API.
   Workers pull: they poll for shards and post results; a worker never listens. The main
   box's own calls (jobs, claims, bundles, status) are taken from loopback only, without an
@@ -173,7 +173,7 @@ planner's digest and the deadlines: `remote-diag.md`.
 `broker.json` (pid, port, `url`, `url_ip`, `local`, settings digest, `handover`; just its pid and
 `starting` until it serves), `status.json` (the app's view, every 2 s), `board.json` (the board,
 every 2 s, for the next broker), `broker.log` (a port already taken
-shows here: give each project its own `port`), `token` (the generated one, before it is pinned), `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
+shows here; `port` lies in the project's port block, its last port by convention: `control-folder.md`, *Port blocks*), `token` (the generated one, before it is pinned), `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
 `<commit>.build.log`), `jobs/<job>/` (shards, logs capped at 2 MB per worker, `job.json`;
 removed after 7 days), `gates.log`, `steps.log` and `workers/` (`remote-diag.md`).
 

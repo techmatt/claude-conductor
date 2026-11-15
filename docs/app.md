@@ -102,18 +102,22 @@ its own line. Before 83 the app never restarted itself, and a clipped header lab
 ```
 [tools.cards]
 label = "Card viewer"          # menu text (default: the name)
-run = "python -m http.server 8765"   # a string runs through the shell; or a list
-cwd = "aicomplete/tools/viewer"      # a repo's main checkout, plus an optional subfolder; left out: the only repo
-url = "http://localhost:8765/"       # opened once it answers
+run = "npm run cards -- --port 5260 --strictPort"   # a string runs through the shell; or a list
+cwd = "aicomplete/web"               # a repo's main checkout, plus an optional subfolder; left out: the only repo
+url = "http://localhost:5260/cards.html"   # opened once it answers; its port in the project's block
 ```
 
 Any other key is refused, and `cwd` must name a repo (required with several); `rename-repo`
-rewrites it. A tool's port is never handed to an executor.
+rewrites it. A tool's port is never handed to an executor, and lies in the project's port
+block (`control-folder.md`, *Port blocks*): a script with a fixed port is given its block's
+one from `run` (`-- --port N`), not edited.
 
 The header's **Tools ▾**, beside **Autopilot ▾**, lists them; a project with none shows no
 menu. A running tool (from its record, with no probe) has a green dot, and **Stop** beside it
 writes `tool: <name> stop` (`run_stop`, its process tree killed). Choosing one writes
 `tool: <name>`, so the daemon must be running:
+- **Its port held by something else** (not the tool's own recorded process tree): `run_failed`
+  naming the holder, and nothing starts or opens (`run-targets.md`, *Who holds the port*).
 - **Not answering:** `run` starts as a conductor-owned process at below-normal priority,
   everything it starts included, output in `.conductor/tool-<name>.log`, record in
   `tool-<name>.json`. When `url` answers (60s at most) it opens in the default browser.

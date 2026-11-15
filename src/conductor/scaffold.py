@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from . import config as config_mod
-from . import git
+from . import git, portblocks
 from .config import CONFIG_NAME, RUNTIME
 from .session import MAINTENANCE
 from .util import write_text
@@ -37,8 +37,12 @@ def _repo_value(control: Path, repo: Path) -> str:
     return rel.as_posix() if rel.parts.count("..") <= 1 else repo.as_posix()
 
 
-def conductor_toml(project: str, repos: dict[str, str], mains: dict[str, str] | None = None) -> str:
-    lines = [f"project = {_toml_str(project)}", "locks = []", "", "[defaults]",
+def conductor_toml(project: str, repos: dict[str, str], mains: dict[str, str] | None = None,
+                   ports: range | None = None) -> str:
+    lines = [f"project = {_toml_str(project)}", "locks = []"]
+    if ports is not None:
+        lines.append(f'ports = "{portblocks.text(ports)}"   # this project\'s port block: run targets, tools, [remote] port')
+    lines += ["", "[defaults]",
              "max_hours = 2", "ask_default_minutes = 10"]
     for name, value in repos.items():       # `push = true`: main goes to the remote after each merge
         lines += ["", f"[repos.{name}]", f"path = {_toml_str(value)}", "push = false"]
@@ -129,8 +133,12 @@ def init(control: Path, project: str, repo_args: list[str]) -> tuple[str, list[s
             notes.append(git.NO_REMOTE.format(repo=name) + " (session.md says so until it has one)")
 
     control.mkdir(parents=True, exist_ok=True)
+    block = portblocks.next_free() if portblocks.registry_path() else None
+    if block is not None:
+        notes.append(f"port block {portblocks.text(block)} (`ports` in {CONFIG_NAME}): every port a run target, "
+                     "tool or [remote] names goes in it")
     tracked = {
-        CONFIG_NAME: conductor_toml(project, repos, mains),
+        CONFIG_NAME: conductor_toml(project, repos, mains, block),
         "state.md": state_md(project, repos),
         ".gitignore": gitignore(),
         ".gitattributes": GITATTRIBUTES,
