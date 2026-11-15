@@ -64,7 +64,7 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      and a one-line note saying so; left out when the section is absent or empty. Habit
      lines filed under *Pending fixes* were relayed as fixes every start;
    - **Maintenance facts**: first `**due** trim state` when the control `state.md` is
-     past 25 KB (`STATE_TRIM_KB`), with its growth and `fold:` lines (`receipts.md`); then per repo, with no judgement: for each template (bug hunt,
+     past `state_budget_kb` (40 KB; `[defaults]`), with its growth and `fold:` lines (`receipts.md`); then per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's
@@ -115,7 +115,7 @@ Its header names the current checkpoint (see *Checkpoints*).
 First **Questions**: every open ask, regardless of the read
 mark, a `design` one marked held for Matt; one whose item finished last, marked "item finished: an answer
 records a ruling" (83). **Staged plans' questions**, standing the same way
-until the item launches (`questions.md`). **Warnings**: each unreviewed report's
+until the item launches, or marked answered once an amendment is on file (`questions.md`). **Warnings**: each unreviewed report's
 `warnings:` line by kind, then per-kind repeats in its repo's last five reports
 (`warnings.md`). Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`

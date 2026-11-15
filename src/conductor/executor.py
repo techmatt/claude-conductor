@@ -96,7 +96,8 @@ kill and relaunch work for load alone. At most 2 heavy subagents
 light read-only reviewers don't count but run batched per dimension. Any fan-out (a Workflow,
 a diff review) runs at most 10 agents in all (or the prompt's number), finders and verifiers both, set before launch;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
-quote the prompt's rulings word for word and give each helper its own scratch path (`out/{item_name}/<helper>/`). Never pass
+quote the prompt's rulings word for word and give each helper its own scratch path (`out/{item_name}/<helper>/`); a read-only one (Explore, Plan)
+can't write, so its findings come back inline: brief a helper that must write files as general-purpose. Never pass
 `isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
 helpers by file. Helpers never `git checkout` or `git restore` a shared folder: that discards
 the lead's unsaved edits. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in

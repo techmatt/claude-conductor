@@ -33,7 +33,6 @@ SLOW_WINDOW = 5     # a `slow:` (or `friction:`) part named in two or more of a 
 RETRO_FLOOR = 12    # non-template items finished since the last workflow retro before one is due regardless
 RETRO_OVERRUN = 1.5     # a run this many times its first ETA (and `RETRO_OVERRUN_MINUTES` over) makes one due
 RETRO_OVERRUN_MINUTES = 10
-STATE_TRIM_KB = 25      # `state.md` past this: **trim state** is due (planner.md, *state.md is status*)
 SIZES = "doc_sizes.json"    # in `.conductor/`: each digest's doc sizes, for the next one's growth
 
 
@@ -239,7 +238,7 @@ def doc_growth(cfg: Config) -> tuple[dict[str, int], dict[str, int] | None]:
 
 def size_line(key: str, sizes: dict[str, int], prev: dict[str, int] | None, budget_kb: float,
               trim: str) -> str | None:
-    """`- **due** <trim>: `<file>` 61.0 KB, budget 25 KB, +2.0 KB since the last digest`,
+    """`- **due** <trim>: `<file>` 61.0 KB, budget 40 KB, +2.0 KB since the last digest`,
     or None when the file is absent or within its budget."""
     if (size := sizes.get(key)) is None or size <= budget_kb * 1024:
         return None
@@ -456,9 +455,9 @@ def fold_candidates(text: str) -> list[str]:
     return [line for _, line in sorted(found, key=lambda f: -f[0])[:FOLD_SHOW]]
 
 
-def state_size(control: Path, targets: list[str]) -> dict:
-    """For a request that wrote `state.md` and left it past `STATE_TRIM_KB`: its size and the
-    lines to fold (`fold_candidates`), for the request event and its receipt; else {}."""
+def state_size(control: Path, targets: list[str], budget_kb: float) -> dict:
+    """For a request that wrote `state.md` and left it past `budget_kb` (`[defaults] state_budget_kb`):
+    its size, the budget and the lines to fold (`fold_candidates`), for the request event and its receipt; else {}."""
     if "state.md" not in targets:
         return {}
     try:
@@ -466,9 +465,9 @@ def state_size(control: Path, targets: list[str]) -> dict:
     except (OSError, UnicodeDecodeError):
         return {}
     size = len(text.encode("utf-8"))
-    if size <= STATE_TRIM_KB * 1024:
+    if size <= budget_kb * 1024:
         return {}
-    return {"state_kb": round(size / 1024, 1), "fold": fold_candidates(text)}
+    return {"state_kb": round(size / 1024, 1), "state_budget_kb": budget_kb, "fold": fold_candidates(text)}
 
 
 def state_warning(detail: dict) -> str | None:
@@ -476,7 +475,7 @@ def state_warning(detail: dict) -> str | None:
     if not detail.get("state_kb"):
         return None
     fold = detail.get("fold") or []
-    return (f"state.md is {detail['state_kb']:g} KB, past its {STATE_TRIM_KB} KB budget: "
+    return (f"state.md is {detail['state_kb']:g} KB, past its {detail.get('state_budget_kb', 40):g} KB budget: "
             + (f"fold these lines' sub-bullets into the line as it now stands (fold state): {'; '.join(fold)}"
                if fold else "trim state is due"))
 
@@ -563,7 +562,7 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
     habits = planner_habits(cfg.control)
     out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]
-    if state_line := size_line("state.md", *docs, STATE_TRIM_KB, "trim state"):
+    if state_line := size_line("state.md", *docs, cfg.state_budget_kb, "trim state"):
         out.append(state_line)
         try:
             out += [f"  - fold: {f}" for f in fold_candidates(read_text(cfg.control / "state.md"))]

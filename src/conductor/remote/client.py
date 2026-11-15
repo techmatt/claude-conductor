@@ -564,6 +564,11 @@ def main(argv: list[str] | None = None) -> int:
     if r is None:
         say(f"no [remote] settings (${settings.CONTROL_VAR} unset or no section)")
         return 2
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)    # aicomplete 238, 240: a missing out/keep/ crashed the merge
+    except OSError as exc:
+        say(f"can't make the output folder {out.parent}: {exc}")
+        return 2
     CANCEL.clear()
     old = _on_stop(lambda *_: CANCEL.set())
     try:

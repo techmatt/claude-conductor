@@ -563,11 +563,18 @@ def saved_line(c: dict) -> str:
 
 
 def staged_questions(log: EventLog, view: View) -> list[str]:
-    """What each item staged and not launched yet asks in its plan (`questions.plan_questions`)."""
+    """What each item staged and not launched yet asks in its plan (`questions.plan_questions`).
+    One with an amendment on file since it staged shows as answered, its questions not listed
+    (118: 237's were relayed to Matt as open after the amendment answering them)."""
     out = []
     for item_id, rec in view.staged.items():
         ev = log.last("staged", item=item_id) if rec.get("phase") == "staged" else None
         if ev and ev.detail.get("questions"):
+            if (amend := log.last("amended", item=item_id)) and amend.id > ev.id:
+                n = len(ev.detail["questions"])
+                out.append(f"- `{item_id}`, staged {clock(ev.ts)}: its {n} question{'s' * (n != 1)} "
+                           f"answered by amendment #{amend.id} ({clock(amend.ts)})")
+                continue
             out.append(f"- `{item_id}`, staged {clock(ev.ts)}, asks before it launches (answer: an amendment):")
             out += [f"  > {q}" for q in ev.detail["questions"]]
     return out

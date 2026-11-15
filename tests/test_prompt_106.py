@@ -26,20 +26,34 @@ def state_text(pad_kb: int = 0) -> str:
 def test_fold_candidates_names_lines_with_sub_bullets_biggest_first():
     [line] = session.fold_candidates(state_text())
     assert line.startswith('*Open*: "**Card rules**: settled as of r62, holds" (3 sub-bullets, 3 dated, ')
-    assert session.state_size(Path("."), ["docs/plan.md"]) == {}
+    assert session.state_size(Path("."), ["docs/plan.md"], 40) == {}
 
 
 def test_a_request_leaving_state_past_budget_warns_with_the_lines_to_fold(env):
     d = env.control / "requests" / "20261111-1000-state"
     d.mkdir(parents=True)
     (d / "request.md").write_text("---\ntargets: [state.md]\nmessage: \"state: design talk\"\n---\n", encoding="utf-8")
-    (d / "state.md").write_text(state_text(pad_kb=26), encoding="utf-8")
+    (d / "state.md").write_text(state_text(pad_kb=41), encoding="utf-8")
     env.d.tick()
     meta, _ = receipt(env, "requests/20261111-1000-state")
-    assert meta["outcome"] == "accepted" and "past its 25 KB budget: fold these lines" in meta["warning"]
+    assert meta["outcome"] == "accepted" and "past its 40 KB budget: fold these lines" in meta["warning"]
     assert "**Card rules**" in meta["warning"]
     req = env.events("request")[-1].detail
-    assert req["state_kb"] > 25 and len(req["fold"]) == 1
+    assert req["state_kb"] > 40 and len(req["fold"]) == 1
+
+
+def test_a_request_leaving_state_under_state_budget_kb_has_no_warning_and_no_due_line(env):
+    """118: the budget is `[defaults] state_budget_kb`, default 40 (was a fixed 25)."""
+    d = env.control / "requests" / "20261114-2130-state"
+    d.mkdir(parents=True)
+    (d / "request.md").write_text("---\ntargets: [state.md]\nmessage: \"state: 30 KB\"\n---\n", encoding="utf-8")
+    (d / "state.md").write_text(state_text(pad_kb=30), encoding="utf-8")
+    env.d.tick()
+    meta, _ = receipt(env, "requests/20261114-2130-state")
+    assert meta["outcome"] == "accepted" and not meta.get("warning")
+    sizes, prev = session.doc_growth(env.d.cfg)
+    assert session.size_line("state.md", sizes, prev, env.d.cfg.state_budget_kb, "trim state") is None
+    assert session.state_size(env.control, ["state.md"], 25)["state_budget_kb"] == 25   # a lower key warns again
 
 
 def test_start_runs_a_job_detached_that_outlives_the_server(tmp_path):

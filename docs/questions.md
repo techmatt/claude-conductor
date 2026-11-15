@@ -99,6 +99,9 @@ after aicomplete 090's four were lost under one). They ride the `staged` event
 parsed from its plan*) and the inbox
 and digest list them under *Staged plans' questions* until the item launches; an amendment
 answers them (066's "96 games or 96 a cell?" sat unread through a 48-minute lock wait).
+Once an amendment is on file since it staged, its entry is one line, "its N questions
+answered by amendment #id", the questions no longer quoted (118: 237's were relayed to Matt
+as open after the answer was sent).
 
 The ask server resolves the question by creating `<id>.result.json` exclusively
 (`outcome`: `answered` | `default` | `cancelled` | `by_message`, `text`, `at`, `by`); the daemon only

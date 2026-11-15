@@ -85,6 +85,7 @@ merge_minutes = 10            # a merge executor resolving prose is killed after
 foreground_seconds = 60       # a foreground shell call is backgrounded after this; 0 = off (progress.md)
 toasts = true                 # Windows desktop notifications (inbox.md, Toasts)
 doc_budget_kb = 15            # a repo doc past this is **due** in session.md (inbox.md)
+state_budget_kb = 40          # state.md past this: request receipt warning, **due** trim state (receipts.md)
 auto_retros = true            # queue a due workflow retro unasked (retros.md)
 api_retry_minutes = [2, 10, 30]  # an API failure resumes the session after each wait; [] = red at once (api-retry.md)
 memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (memory.md)

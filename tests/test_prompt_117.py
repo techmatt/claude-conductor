@@ -64,3 +64,9 @@ def test_preamble_lines_for_baselines_status_fanout_and_seeds(env):
     assert "runs its independent diff review before spending fresh seeds" in full
     assert "`seeds.py --take` or its like" in full
     assert len(render(env, SHORT).split()) <= 430
+
+
+def test_118_read_only_helpers_return_findings_inline(env):
+    full = flat(render(env, "x " * 400, max_hours=2.0))
+    assert "a read-only one (Explore, Plan) can't write, so its findings come back inline" in full
+    assert len(render(env, SHORT).split()) <= 430

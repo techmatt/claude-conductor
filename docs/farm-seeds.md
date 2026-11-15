@@ -4,6 +4,11 @@ What `farm-seeds` says about the code it runs, and how a run is stopped without 
 work behind (114; `src/conductor/remote/client.py`). The command itself, its shims and
 the item's prompt paragraph: `remote-workers.md`, *The executor interface*.
 
+## Its output file
+
+`<out file>`'s folder is made first if missing (118: aicomplete 238 farmed 1,152 games,
+then crashed at its merge because `out/keep/` didn't exist).
+
 ## The commit it runs from
 
 Its first stderr line names the commit the native command runs from:

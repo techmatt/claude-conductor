@@ -87,11 +87,14 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   new-project doc requires. Changes to how executors work go under **Deferred**. The
   report is short: **Cut**, **Fixed**, **Deferred**.
 - **`template: content_cleanup`** (prompt 49, was `content_audit`; **content cleanup R**, on Matt's word only, never a
-  *Maintenance* default). Every word, picture and line the user meets, checked against who
-  the project's docs say plays it: what is ambiguous, too rare or wrong for that audience is
-  stored (out of play), reworded or flagged, each pool kept workable (its size and spread).
-  Design-level calls go under **Deferred**. The report has **Moved** (by pool, each with a
-  reason), **Pools** (sizes before and after) and **Deferred**. It edits, so it is exclusive.
+  *Maintenance* default). The content its audience meets, checked against who the
+  project's docs say that is: player-facing content by default, or docs when the body names
+  them (118: aicomplete 239, a docs trim, had to map player wording onto docs). What is
+  ambiguous, too rare or wrong for that audience (in docs, also stale, duplicated or
+  misplaced) is stored (out of play), moved, cut, reworded or flagged, each *set* (a pool,
+  a kind of line, a doc or section) kept workable. Design-level calls go under **Deferred**.
+  The report has **Moved** (by set, each with a reason), **Pools** (each set's size before
+  and after) and **Deferred**. It edits, so it is exclusive.
 - **`template: bug_hunt`**. Run the project as its intended users would (whoever its
   docs say they are), find what is broken, confusing, ugly or slow, fix the clear bugs
   and list the rest. The method: build or extend a reusable checker kept in the repo

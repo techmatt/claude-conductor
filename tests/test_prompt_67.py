@@ -79,6 +79,13 @@ def test_a_staged_plans_questions_reach_the_inbox_until_it_launches(env):
     env.tick_until(lambda: "## Staged plans' questions" in (env.control / "inbox.md").read_text(encoding="utf-8"))
     text = (env.control / "inbox.md").read_text(encoding="utf-8")
     assert "> 96 games or 96 a cell?" in text and "asks 1 question" in inbox.describe(ev)
+    # 118: an amendment on file since it staged answers them; they no longer read as open.
+    (env.control / "queue" / "code" / "002_next.amend.md").write_text("---\nby: planner\n---\n96 a cell.\n",
+                                                                      encoding="utf-8")
+    env.tick_until(lambda: env.events("amended"))
+    env.tick_until(lambda: "answered by amendment #" in (env.control / "inbox.md").read_text(encoding="utf-8"))
+    text = (env.control / "inbox.md").read_text(encoding="utf-8")
+    assert "> 96 games or 96 a cell?" not in text and "its 1 question answered by amendment" in text
 
 
 def test_wait_for_stops_on_a_failure_line_and_a_dead_worker(env, tmp_path):

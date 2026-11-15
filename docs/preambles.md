@@ -143,10 +143,10 @@ only in the environment (74). Stages and merge executors get none.
   --workspace`) runs only between sims, never beside one (142 saturated 12 threads; both
   preambles); helpers never `git checkout` or `git restore` a shared folder (144's discarded
   the lead's doc edits; full only: an ultracode item never draws light). Words held.
-- **Helper briefs** (79, full): a brief to subagents quotes the prompt's rulings word for word
-  (aicomplete 111's paraphrase turned a ceiling into a target band; `ultracode.md`), and
-  (113) gives each helper its own scratch path, `out/<item>/<helper>/` (fractal-website 006: a
-  shared one let a helper overwrite another module's docstring).
+- **Helper briefs** (79, full): quote the prompt's rulings verbatim (aicomplete 111's
+  paraphrase made a cap a target band; `ultracode.md`); (113) each helper gets its own
+  scratch path `out/<item>/<helper>/` (fractal-website 006: a shared one let a helper
+  overwrite another's docstring); (118) a read-only one (Explore, Plan) answers inline.
 - **Fix the obvious in place** (113, Matt; both, ending *Latitude*): unless readonly, fix
   anything obvious found (stale doc line, small bug, dead code, own audit findings) before
   finishing, even at extra time, inside `paths:`; a note only for Matt's decisions or large

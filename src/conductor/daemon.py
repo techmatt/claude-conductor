@@ -549,7 +549,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                         guard.restore(self.cfg.control, self.cfg.state_dir, self.snapshot)
                     continue
                 self.log.append("request", paths=req.targets, request=d.name, message=req.message,
-                                targets=req.targets, no_change=sha is None, **session.state_size(self.cfg.control, req.targets),
+                                targets=req.targets, no_change=sha is None, **session.state_size(self.cfg.control, req.targets, self.cfg.state_budget_kb),
                                 **({"identical": True} if req.identical else {}))
                 if sha:
                     self.log.append("commit", paths=req.targets, scope="control", sha=sha,

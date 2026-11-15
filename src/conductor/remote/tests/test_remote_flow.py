@@ -51,6 +51,13 @@ def test_with_no_worker_the_main_box_runs_every_shard(farm, capsys):
     assert "main box 5 (native)" in capsys.readouterr().err
 
 
+def test_an_out_file_in_a_missing_folder_gets_its_folder_made(farm):
+    """aicomplete 238, 240: `out/keep/` didn't exist, so the merge crashed after the farming."""
+    farm.setup(main_slots="2")
+    code, out = farm.run(0, 30, out="out/keep/new/seeds.txt")
+    assert (code, out) == (0, farm.local(0, 30))
+
+
 def test_a_worker_joining_mid_job_takes_pending_shards(farm):
     farm.setup()
     threading.Timer(0.5, farm.worker, args=("late",), kwargs={"cores": 2}).start()
