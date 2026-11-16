@@ -81,6 +81,7 @@ def test_the_taskbar_turns_orange_while_a_report_waits_and_clears_on_review(qapp
     win.refresh()
     assert win.windowTitle() == "🟠 Conductor · 1 to review" and win._badge == ("wait", 0)
     assert tray_hub(win.status, 1) == "orange" and win.tabs.tabBar().tabTextColor(0).name() == "#c2410c"
+    assert win.tabs.tabBar().property("signal") == "orange"     # 121: selected, it stays orange
     env.queue("002_x", env.hold())
     env.tick_until(lambda: env.d.log.last("start", item="code/002_x"))
     win.refresh()
@@ -90,9 +91,33 @@ def test_the_taskbar_turns_orange_while_a_report_waits_and_clears_on_review(qapp
     env.d.log.append("reviewed", item="code/001_x", status="done", by="planner")
     win.refresh()
     assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == ("run", 1)
+    assert win.tabs.tabBar().property("signal") == ""
     env.release()
     win._quitting = True
     win.close()
+
+
+def test_a_selected_tab_with_a_signal_draws_in_its_colour(qapp):
+    """121: the style sheet drew a selected tab `TEXT`, hiding an open question in bold black."""
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QTabBar
+
+    from conductor.app import theme
+    bar = QTabBar()
+    bar.setStyleSheet(theme.QSS)
+    bar.addTab("aicomplete WWWW")
+    bar.setTabTextColor(0, QColor(theme.ORANGE))
+
+    def orange_pixels() -> int:
+        img = bar.grab().toImage()
+        return sum(1 for x in range(img.width()) for y in range(img.height())
+                   if (c := img.pixelColor(x, y)).red() > 150 and c.green() < 110 and c.blue() < 60)
+    assert orange_pixels() == 0                 # selected, no mark: TEXT
+    theme.mark_selected(bar)
+    assert bar.property("signal") == "orange" and orange_pixels() > 10
+    bar.setTabTextColor(0, QColor(theme.MUTED))
+    theme.mark_selected(bar)
+    assert bar.property("signal") == "" and orange_pixels() == 0
 
 
 def test_a_tab_turns_while_its_project_moves_and_not_when_paused():

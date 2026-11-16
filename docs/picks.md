@@ -26,6 +26,10 @@ paragraph goes in only when the item's body could produce candidates (it names a
                        {"key": "1", "image": "hero/alt1.png", "label": "warmer"}]}]}
 ```
 
+The paragraph also sets the images' scale (121): each shows a few pieces at a size where
+they can be judged (close-ups, a couple of cards), never a whole-UI sheet; more rows or
+options rather than shrunk content. helium-hustle 018's whole-panel sheets cost a redo round.
+
 It is named by its ref, `<repo>/<path relative to the repo root>` (normalised: `\`
 becomes `/`, `.` and doubled separators go), and read from the repo's **main
 checkout**, never a worktree. Validation, on every `pick:`; the error names the place

@@ -171,9 +171,9 @@ only in the environment (74). Stages and merge executors get none.
   progress. The leftover check skips a bar shown unreachable. Light gets the same in three
   lines; its cap rose to 430.
 - **Warnings** (109): every preamble's header gains `warnings: none | <kind>: <what tripped>[; …]`
-  (`warnings.md`); full and light point at the repo's CLAUDE.md *Warning checks* and name its
-  `warning_checks` commands (`executor.checks_text`), and say a warning never changes the status.
-  Full adds (113) that a repo with no such section is fine and says nothing.
-  Light folds the pointer into its header line and holds its 430 cap, paid for by shorter
-  `slow:`, unmet-bar, message, design-ask and header-intro lines. Its report-path line stays
+  (`warnings.md`); full and light name the repo's CLAUDE.md *Warning checks* and its
+  `warning_checks` (`executor.checks_text`), and say a warning never changes the status.
+  Full adds (113) that no such section is fine and (121) asks for `<kind>: unchanged from
+  main: …` for one as on main (light: no room under its cap). Light folds the pointer into its header line
+  under its 430 cap (shorter `slow:`, unmet-bar, message and design-ask lines). Its report-path line stays
   word for word: `tests/fake_claude.py` and the restart preamble find the path by it.

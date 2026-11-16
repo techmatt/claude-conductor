@@ -38,6 +38,7 @@ def test_a_readonly_item_puts_its_records_in_carry_but_a_watch_is_not_told(env):
 
 def test_the_picker_schema_says_rows_start_unselected():
     assert "Rows start with nothing selected (leave out `default`): Matt selects the few he likes." in flat(executor.PICK)
+    assert "never a whole-UI sheet; split into more rows or options rather than shrink" in flat(executor.PICK)   # 121
 
 
 def test_append_only_is_a_repo_option_of_relative_globs(tmp_path):

@@ -98,6 +98,10 @@ QTabBar::tab {{ background: transparent; padding: 7px 18px 6px 18px;
                border: none; border-bottom: 3px solid transparent; margin-right: 2px; }}
 QTabBar::tab:hover:!selected {{ background: {HOVER}; }}
 QTabBar::tab:selected {{ color: {TEXT}; font-weight: bold; border-bottom: 3px solid {ACCENT}; }}
+/* …unless the selected tab carries a signal (`mark_selected`): an open question stays orange. */
+QTabBar[signal="red"]::tab:selected {{ color: {RED}; }}
+QTabBar[signal="orange"]::tab:selected {{ color: {ORANGE}; }}
+QTabBar[signal="amber"]::tab:selected {{ color: {AMBER}; }}
 
 QPushButton {{ background: {BASE}; color: {TEXT}; border: 1px solid {INPUT_BORDER}; border-radius: 4px;
               padding: 5px 14px; }}
@@ -194,3 +198,17 @@ def repolish(w) -> None:
     w.style().unpolish(w)
     w.style().polish(w)
     w.update()
+
+
+SIGNALS = {RED: "red", ORANGE: "orange", AMBER: "amber"}
+
+
+def mark_selected(bar) -> None:
+    """Keep a signal colour on the selected tab: the style sheet draws a selected tab `TEXT`,
+    which hid a project's open question behind bold black (121). Call after any
+    `setTabTextColor` and on `currentChanged`; repolishes only when the signal moved."""
+    i = bar.currentIndex()
+    sig = SIGNALS.get(bar.tabTextColor(i).name(), "") if i >= 0 else ""
+    if bar.property("signal") != sig:
+        bar.setProperty("signal", sig)
+        repolish(bar)

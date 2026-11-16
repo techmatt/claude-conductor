@@ -55,4 +55,5 @@ Gaps nobody plans to fix unless they bite. Each says what would change that. A l
 ## Costs
 
 - **Run logs** are compacted, then gzipped (54); nothing is dropped. If the gzipped total grows too fast, drop logs of items reviewed long ago.
+- **Defender takes ~15-18% of the box through a full test lane** (104), per process launch; no exclusion covers it, so only fewer spawns would cut it.
 - **A Claude Docs tab exported into a prompt costs double tokens** (base64 inline, re-emitted into a shell command). An export saved straight to a file the bridge commits would be cheaper.

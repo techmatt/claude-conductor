@@ -122,7 +122,7 @@ message: "state: v0.2"
 
 ## Reading a report
 
-A report opens with `status: done | partial | red`, `blocks:`, `carry:`, `slow:`, `friction:`, `warnings:`, `pick:`; each line's reading: `docs/reports.md` *For the planner*. Always: `partial` = real shortfall (a reported soft-band miss is `done`; a hard bar ~1 SE short isn't); a `warnings:` line (the digests' *Warnings*; unchanged ones fold to a *standing* line) is raised to Matt first, by kind, with the item's judgement; never a hold; `red` with `after_red: stop` holds the repo's queue until **clear R** (an `API error` red: **retry X**); a `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**); `pick:` → **pick X**.
+A report opens with `status: done | partial | red`, `blocks:`, `carry:`, `slow:`, `friction:`, `warnings:`, `pick:`; each line's reading: `docs/reports.md` *For the planner*. Always: `partial` = real shortfall (a reported soft-band miss is `done`; a hard bar ~1 SE short isn't); a `warnings:` line (the digests' *Warnings*; unchanged ones fold to a *standing* or repeat line) is raised to Matt first, by kind, with the item's judgement; never a hold; `red` with `after_red: stop` holds the repo's queue until **clear R** (an `API error` red: **retry X**); a `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**); `pick:` → **pick X**.
 
 Don't summarize a report back: say what it changes, what the planner got wrong and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right; flag only decisions that block upcoming work.
 

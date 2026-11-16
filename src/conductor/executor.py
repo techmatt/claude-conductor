@@ -131,7 +131,8 @@ warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that cost time or tokens;
 `warnings:`, what the repo's warning checks trip (its CLAUDE.md *Warning checks*{checks}; run
 them before the report; no such section is fine, say nothing) and any other warning you notice, each led by a kind (`design`, `data`,
-`perf`, `docs`, `security` or the repo's own). A warning never changes your status.
+`perf`, `docs`, `security` or the repo's own). A warning the same as on main, or from a check
+measuring nothing this item touched, reads `<kind>: unchanged from main: <text>`. A warning never changes your status.
 `done`: goal met; a soft-band or measurement miss that the done-when table reports is still
 `done`. `partial`: a real shortfall, nothing broken: planned work skipped or not delivered (an
 instruction declined with a reason included), or a hard bar missed, even within ~1 SE (a locked
@@ -271,7 +272,10 @@ will use for the choice; keys are unique within a row and row ids within the fil
 WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional. To ask which of
 a row's options go forward (keep or drop each), give the row `"kind": "many"`; Matt toggles
 each tile, and his choice comes back as the list of kept keys. Rows start with nothing
-selected (leave out `default`): Matt selects the few he likes. Generated picker images go in a shared folder when
+selected (leave out `default`): Matt selects the few he likes. Each image shows a few
+pieces at a size where they can be judged (close-ups, a couple of cards), never a
+whole-UI sheet; split into more rows or options rather than shrink content to fit.
+Generated picker images go in a shared folder when
 the repo has one; commit build output for a picker only if the prompt says to. Never
 delete a picker's manifest or images, an earlier round's included: conductor retires
 them once a later round, named `<name>_r<N>`, is saved.

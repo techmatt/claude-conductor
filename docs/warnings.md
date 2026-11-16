@@ -17,12 +17,12 @@ warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 A header line beside `slow:` and `friction:` (`reports.md`), read the same way: only
 straight after the first three lines, absent is no problem, `none` is none. The kind is
 one word (`design`, `data`, `perf`, `docs`, `security`, or anything a project defines);
-a part without `<kind>:` counts as `other` (`inbox.warning_parts`). Every preamble (full,
+a part without `<kind>:` counts as `other` (`warns.warning_parts`). Every preamble (full,
 light and watch) asks for it: the executor runs its repo's checks and reports what
 trips, and may raise any other warning it notices.
 
 A repo without checks is fine (113): the full preamble says so, and a part saying the repo
-has no *Warning checks* section is dropped wherever warnings show (`inbox.warnings_text`,
+has no *Warning checks* section is dropped wherever warnings show (`warns.warnings_text`,
 `NO_CHECKS_RE`), so it neither leads a report nor counts as a repeat.
 fractal-wallpapers 043 and 044 each raised `docs: CLAUDE.md has no *Warning checks* section to run`.
 
@@ -64,6 +64,15 @@ A new project is offered checks for its domain at setup (`claude-ai-new-project.
   **<kind>**: <text>; …`, so new warnings stand out. An item with only standing parts has
   no line of its own; a changed number is a new warning. aicomplete raised the same three
   on all seven reports of 11-13.
+- **Unchanged from main** (121): the full preamble (light has no room) asks for `<kind>: unchanged
+  from main: <text>` when a warning is the same as on main or its check measures nothing
+  the item touched. Such a part (`warns.unchanged`: the marker, or a paraphrase like "the
+  same as on main", "pre-existing", "unchanged by this item", "changes no rules") leaves its
+  item's line and shows once in the repeat line, `balance, unchanged from main on 016, 017`,
+  even when its kind repeats in no other report; an event line shows it unbolded. A new or
+  changed warning still leads. helium-hustle's balance misses led seven reviews (014-020),
+  each worded differently, so the *standing* fold never matched. Parts split on `;` outside
+  parentheses only (019 wrote "(pre-existing; this item changes no rules)").
 - **Maintenance facts** (`session.md`): per repo, ``- `warnings:` kinds repeated in the
   last N report(s): <kind> (<numbers>); …`` or `none`, like `slow:` and `friction:`.
 - **No toast** since 115: warnings are panel only (`inbox.md`, *Toasts*).

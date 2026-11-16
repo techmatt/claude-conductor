@@ -13,6 +13,8 @@ from .request import is_closeout
 from .resume import label as resume_label
 from .state import View, decide
 from .util import clock, now, parse_stamp
+from .warns import (NO_CHECKS_RE, unchanged, warning_lines, warning_parts,  # noqa: F401  (callers' `inbox.*`)
+                    warning_repeats, warnings_text)
 
 ETA_SLACK = timedelta(minutes=5)    # an `eta` this close to the outline's finish is not drift
 ETA_LATE = timedelta(minutes=30)    # an `eta` past the outline's finish by this much is
@@ -130,96 +132,6 @@ def slow_text(detail: dict) -> str | None:
     return slow if slow and slow.lower().rstrip(".") != "none" else None
 
 
-def warnings_text(detail: dict) -> str | None:
-    """A finish's `warnings:` worth showing, or None when `none` or absent. A part saying
-    the repo has no *Warning checks* section is dropped: that is fine, not a warning (113)."""
-    text = str(detail.get("warnings") or "").strip()
-    if not text or text.lower().rstrip(".") == "none":
-        return None
-    kept = [p.strip() for p in text.split(";") if p.strip() and not NO_CHECKS_RE.search(p)]
-    return "; ".join(kept) or None
-
-
-# "docs: CLAUDE.md has no *Warning checks* section to run" and the like.
-NO_CHECKS_RE = re.compile(r"\b(no|without|lacks?|missing)\b[^;]*warning[ _]checks", re.IGNORECASE)
-
-
-WARNING_KIND_RE = re.compile(r"^\**`?([A-Za-z][\w-]{0,23})`?\**\s*:\s*(.+)$")
-
-
-def warning_parts(text: str | None) -> list[tuple[str, str]]:
-    """`design: capstone cheap; perf: 40s turn` → [("design", "capstone cheap"), ("perf", "40s turn")].
-    A part with no `<kind>:` lead is kind `other`."""
-    out = []
-    for part in (text or "").split(";"):
-        if not (part := part.strip()):
-            continue
-        m = WARNING_KIND_RE.match(part)
-        out.append((m[1].lower(), m[2].strip()) if m else ("other", part))
-    return out
-
-
-def _num(item: str) -> str:
-    return item.split("/", 1)[1].split("_", 1)[0]
-
-
-def warning_repeats(view: View, repo: str, window: int = 5) -> dict[str, list[str]]:
-    """Kind → the item numbers naming it, among `repo`'s last `window` reports (resume
-    items aside); only kinds named in two or more."""
-    fins = sorted((ev for ev in view.finishes.values() if ev.repo == repo and not ev.detail.get("resume_of")),
-                  key=lambda e: e.id)[-window:]
-    named: dict[str, list[str]] = {}
-    for ev in fins:
-        for kind in dict.fromkeys(k for k, _ in warning_parts(warnings_text(ev.detail))):
-            named.setdefault(kind, []).append(_num(ev.item))
-    return {k: ids for k, ids in named.items() if len(ids) >= 2}
-
-
-def _part_key(kind: str, text: str) -> tuple[str, str]:
-    return kind, " ".join(text.lower().split()).rstrip(".")
-
-
-def last_reviewed(view: View, repo: str, before: int) -> Event | None:
-    """`repo`'s newest reviewed report finished before event `before` (watches and resume
-    items aside): the baseline a standing warning is unchanged since."""
-    revs = [ev for i, ev in view.finishes.items() if ev.repo == repo and ev.id < before and view.reviewed(i)
-            and not view.is_watch(i) and not ev.detail.get("resume_of")]
-    return max(revs, key=lambda e: e.id, default=None)
-
-
-def warning_lines(view: View, finishes: list[Event]) -> list[str]:
-    """The *Warnings* section: each finish among `finishes` whose report raised any, kind by
-    kind, then the kinds among them repeated in their repo's recent reports. A warning
-    unchanged since its repo's last reviewed report is folded into one *standing* line per
-    repo, so the new ones stand out (115)."""
-    from .session import SLOW_WINDOW      # session imports this module
-    out, kinds, standing = [], {}, {}
-    for ev in finishes:
-        if not (parts := warning_parts(warnings_text(ev.detail))):
-            continue
-        base = last_reviewed(view, ev.repo, ev.id)
-        seen = {_part_key(k, t) for k, t in warning_parts(warnings_text(base.detail))} if base else set()
-        new = [(k, t) for k, t in parts if _part_key(k, t) not in seen]
-        for k, t in parts:
-            if _part_key(k, t) in seen:
-                stand = standing.setdefault(ev.repo, {"base": base, "parts": {}, "on": []})
-                stand["parts"].setdefault(_part_key(k, t), (k, t))
-                if _num(ev.item) not in stand["on"]:
-                    stand["on"].append(_num(ev.item))
-        if new:
-            out.append(f"- {ev.item} ({ev.detail.get('status')}, finished {clock(ev.ts)}, #{ev.id}): "
-                       + "; ".join(f"**{k}**: {t}" for k, t in new))
-            kinds.setdefault(ev.repo, set()).update(k for k, _ in new)
-    for repo, s in standing.items():
-        out.append(f"- standing in `{repo}`, unchanged since {_num(s['base'].item)} (reviewed), again on "
-                   f"{', '.join(s['on'])}: " + "; ".join(f"**{k}**: {t}" for k, t in s["parts"].values()))
-    for repo, shown in kinds.items():
-        if reps := {k: ids for k, ids in warning_repeats(view, repo, SLOW_WINDOW).items() if k in shown}:
-            out.append(f"- repeated in `{repo}`'s last {SLOW_WINDOW} report(s): "
-                       + "; ".join(f"{k} ×{len(ids)} ({', '.join(ids)})" for k, ids in reps.items()))
-    return out
-
-
 def describe(ev: Event) -> str:
     """One line for an event, used by the inbox and `conductor events`."""
     d = ev.detail
@@ -243,8 +155,9 @@ def describe(ev: Event) -> str:
                 text += f" · slow: {slow}"
             if (friction := (d.get("friction") or "").strip()) and friction.lower().rstrip(".") != "none":
                 text += f" · friction: {friction}"
-            if warned := warnings_text(d):
-                text += f" · **warnings: {warned}**"
+            if warned := warnings_text(d):     # unchanged from main throughout: not bold (121)
+                quiet = all(unchanged(t) for _, t in warning_parts(warned))
+                text += f" · warnings: {warned}" if quiet else f" · **warnings: {warned}**"
             if refs := picks.refs(d):
                 text += f" · pick: {', '.join(refs)}"
             if d.get("parked_done") or d.get("parked_back"):

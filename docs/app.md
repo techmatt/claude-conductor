@@ -146,7 +146,9 @@ taskbar's. At 24 px and below the links and nodes are drawn bolder so the shape 
 reads. The app sets its own AppUserModelID (`conductor.app`, `procs.set_app_id`), so the
 taskbar shows this icon rather than Python's. Each project's tab carries the icon with
 its hub red (needs Matt), orange (waiting for review), gold (running) or slate (idle);
-an unselected tab's name is red or orange to match (the selected tab's stays dark).
+its name is red or orange to match, selected (bold) or not: the style sheet draws a selected
+tab dark unless its bar's `signal` property says otherwise (`theme.mark_selected`, 121; an
+open question had shown bold black). Every tab bar in the app does the same.
 
 **Tab motion.** While a project has an item moving (executing, setup, merge and
 concluding included, or a stage still staging, in a repo that isn't paused), its tab's name leads with the title's turning

@@ -161,6 +161,7 @@ class ProjectView(QWidget):
         for name, panel in self.panels.items():
             self.tabs.addTab(panel, name.capitalize())
             panel.open_item.connect(self.open_item)
+        self.tabs.currentChanged.connect(lambda _: theme.mark_selected(self.tabs.tabBar()))
         lay.addWidget(self.tabs, 1)
         self.head = head
         self.remote = remote_app.RemoteStatus(self) if remote_app else None
@@ -208,6 +209,7 @@ class ProjectView(QWidget):
             bar.setTabTextColor(1, QColor(theme.MUTED))
         self.tabs.setTabText(3, f"Proposed ({len(snap.proposed)} to approve)" if snap.proposed else "Proposed")
         bar.setTabTextColor(3, QColor(theme.AMBER if snap.proposed else theme.MUTED))
+        theme.mark_selected(bar)
         held = [rs for rs in snap.repos if rs.red]
         if held:
             what = " · ".join(f"{rs.name} <b style='color:{theme.RED}'>HELD</b> (red {(rs.red.item or '?').rsplit('/', 1)[-1]})"
@@ -386,7 +388,8 @@ class MainWindow(QMainWindow):
         self.stale = stale.Watcher(None)            # off; `app.main` arms it with the app's code version
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
-        self.empty = QLabel("No project yet. Add a control folder with “Add project…”.")
+        self.tabs.currentChanged.connect(lambda _: theme.mark_selected(self.tabs.tabBar()))
+        self.empty =QLabel("No project yet. Add a control folder with “Add project…”.")
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         central = QWidget()
         cl = QVBoxLayout(central)
@@ -509,6 +512,7 @@ class MainWindow(QMainWindow):
             kind = status.tab_kind(self._good[folder])
             self.tabs.setTabIcon(idx, state_icon(kind))
             self.tabs.tabBar().setTabTextColor(idx, QColor(TAB_COLOURS.get(kind, theme.MUTED)))
+        theme.mark_selected(self.tabs.tabBar())
         self._good = {f: s for f, s in self._good.items() if f in self.views}
         due = restart_due(self._good.values())
         probe = self.stale.poll()                     # the checkout moved past this app's code
