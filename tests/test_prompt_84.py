@@ -252,6 +252,6 @@ def test_decision_notes_are_read_however_the_heading_is_marked(tmp_path, notes, 
 def test_the_taskbar_shows_running_work_whatever_else_holds():
     """fractals 033 ran under "● Conductor · pick · 1 to review" and a plain taskbar icon."""
     st = status.summarize([snap(running=1, picks=1, unreviewed=1)])
-    assert st.title() == "● Conductor · pick · 1 running · 1 to review" and st.badge == "need"
+    assert st.title() == "◐ 1 running · Conductor · pick · 1 to review" and st.badge == "need"     # 127
     alone = status.summarize([snap(running=2)])
-    assert alone.badge is None and alone.title(0) == "◐ Conductor · 2 running"     # 124: the title says it alone
+    assert alone.badge is None and alone.title(0) == "◐ 2 running · Conductor"     # 124: the title says it alone

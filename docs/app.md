@@ -153,8 +153,7 @@ open question had shown bold black). Every tab bar in the app does the same.
 **Tab motion.** While a project has an item moving (executing, setup, merge and
 concluding included, or a stage still staging, in a repo that isn't paused), its tab's name leads with the title's turning
 glyph, ◐ ◓ ◑ ◒ once a second (`status.moving`, `status.tab_text`), whichever tab is
-selected. It turns on while that project needs Matt (the hub says that; the title holds
-still), stops when the item finishes or its repo is paused, and rides the refresh, so a
+selected. It turns on while that project needs Matt (the hub says that), stops when the item finishes or its repo is paused, and rides the refresh, so a
 still row of tabs means nothing is running anywhere.
 
 **Window title**: the most urgent thing across every open project, cheap enough to ride
@@ -162,13 +161,16 @@ the refresh:
 
 | State | Title |
 |---|---|
-| Needs Matt: a blocking question, a red hold, a picker waiting, a daemon down with work | `● Conductor · 1 question` (`· red`, `· pick`, `· daemon down`; counts when more than one) |
-| Items running (a stage still staging counts; a staged item waiting with its plan doesn't) | `◐ Conductor · 2 running`, the glyph turning ◐ ◓ ◑ ◒ once a second |
+| Items running (a stage still staging counts; a staged item waiting with its plan doesn't), whatever else holds | `◐ 2 running · Conductor · pick · 1 to review`, the glyph turning ◐ ◓ ◑ ◒ once a second |
+| Nothing running, something needs Matt: a blocking question, a red hold, a picker waiting, a daemon down with work | `● Conductor · 1 question` (`· red`, `· pick`, `· daemon down`; counts when more than one) |
 | Nothing running, something waiting | `🟠 Conductor · 2 to review · 1 open question` |
 | Idle | `Conductor` |
 
-Needs Matt ranks above running and holds still. The glyph's timer (`TURN_MS`) runs
-only while the title or a tab turns. A project whose refresh fails part-way keeps its last whole
+Running leads (127): glyph and count come before the app's name, so a taskbar button
+cut to its first words still says it (one cut `● Conductor · pick · 1 running` to
+`• Conductor · pick ...`). What needs Matt follows, red on the badge. The glyph's timer
+(`TURN_MS`) runs while anything runs or a tab turns; running leaves the title on the
+first refresh after the last item ends. A project whose refresh fails part-way keeps its last whole
 snapshot in the title. The header's state line above the tabs is unchanged.
 
 **Waiting** (81): an unreviewed report or any open question (non-blocking and design
@@ -180,8 +182,8 @@ badge over its bottom-right corner, orange and still with nothing running, orang
 turning (its bright half going round ◐ ◓ ◑ ◒ with the title) while items run too, red
 while something needs Matt, none while items only run or nothing does (124, Matt: the
 gold running badge duplicated the title's turning glyph; 85 dropped it, 120 restored it,
-124 drops it again). The title's `N running` stays beside what needs Matt
-(`● Conductor · pick · 1 running · 1 to review`; 84). A project tab's hub
+124 drops it again). The title's `N running` shows beside what needs Matt (84), and
+leads it (127). A project tab's hub
 and name turn orange the same way (`status.tab_kind`). A `reviewed` event or the
 question's answer clears it on the next refresh (`Status.badge`, `status.summarize`).
 

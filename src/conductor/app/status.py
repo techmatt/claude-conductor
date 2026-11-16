@@ -29,11 +29,15 @@ class Status:
     running: int = 0            # items with a live session, whatever `kind` is (84)
 
     def title(self, tick: int = 0) -> str:
-        parts = self.parts + self.wait_parts
-        if self.kind == "idle":
-            return f"{WAIT} {APP} · {' · '.join(parts)}" if self.waiting else APP
-        glyph = NEED if self.kind == "need" else GLYPHS[tick % len(GLYPHS)]
-        return f"{glyph} {APP} · {' · '.join(parts)}"
+        """Running leads whenever anything runs, needs Matt or not (127): the turning glyph
+        and the count come before the app's name, so a taskbar button cut to a few words
+        still shows it. Otherwise a still mark (red's dot, orange's) or the bare name."""
+        rest = [p for p in self.parts if not p.endswith(" running")] + self.wait_parts
+        if self.running:
+            return " · ".join([f"{GLYPHS[tick % len(GLYPHS)]} {self.running} running", APP, *rest])
+        if self.kind == "idle" and not self.waiting:
+            return APP
+        return f"{NEED if self.kind == 'need' else WAIT} {APP} · {' · '.join(rest)}"
 
     @property
     def badge(self) -> str | None:
@@ -92,11 +96,12 @@ def summarize(snaps: list[Snapshot]) -> Status:
                 wait_parts=[f"{reviews} to review"] * bool(reviews)
                 + [f"{held} open question{'s' * (held != 1)}"] * bool(held))
     if asks or reds or picks or down:
-        parts = [f"{asks} question{'s' * (asks != 1)}"] * bool(asks)
+        parts = [f"{n} running"] * bool(n)                    # running leads (127)
+        parts += [f"{asks} question{'s' * (asks != 1)}"] * bool(asks)
         parts += [("red" if reds == 1 else f"{reds} red")] * bool(reds)
         parts += [("pick" if picks == 1 else f"{picks} picks")] * bool(picks)
         parts += ["daemon down"] * bool(down)
-        return Status("need", parts + [f"{n} running"] * bool(n), **wait)
+        return Status("need", parts, **wait)
     if n:
         return Status("running", [f"{n} running"], **wait)
     return Status("idle", [], **wait)
