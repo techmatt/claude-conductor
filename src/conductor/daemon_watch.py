@@ -37,6 +37,7 @@ ACTIONS = ("tell", "answer", "notify", "draw")
 ANSWER_RE = re.compile(r"^(\S+)\s+(.+?)\s*\(source:\s*([^)]+)\)\s*$")    # `<question> <answer> (source: <where>)`
 FOOTER_RE = re.compile(r"^`?report written to\b", re.IGNORECASE)     # every report's last line, often under `## Actions`
 MAX_ACTIONS = 6
+WATCH_TELLS = 2         # watch tells one item may get; a further one becomes a notify (122)
 QUIET_GRACE = timedelta(minutes=5)      # past a promised time, how long a silent item still has
 WATCH_FRONT = ("---\nrepo: {repo}\nreadonly: true\ntemplate: watch\nmax_hours: {hours:g}\n"
                "after_red: continue\nstage: false\n---\n")
@@ -316,7 +317,9 @@ class WatchMixin:
                 if verb == "draw" and (hold := nightshift.autopilot_holds(self.cfg, self.log)):
                     raise ValueError(f"{hold}: recommended only")
                 with self._attributed("watch"):
-                    if verb == "tell":
+                    if verb == "tell" and (held := self._tell_held(value)):
+                        self.log.append("notify", item=item_id, paths=[rel], text=held, held_tell=True)
+                    elif verb == "tell":
                         self._tell(value, rel)
                     elif verb == "answer":
                         self._watch_answer(value, item_id, rel)
@@ -329,6 +332,19 @@ class WatchMixin:
             except Exception as exc:        # noqa: BLE001 - a bad action never stops its item concluding
                 self.log.append("warning", item=item_id, paths=[rel], action=s,
                                 note=f"watch action `{s}` not carried out: {exc}")
+
+    def _tell_held(self, value: str) -> str | None:
+        """The round cap (122): an item the watch has told `WATCH_TELLS` times gets no more
+        tells from it; the line goes to Matt as a toast instead. The template asks for a
+        notify after two tells on one issue; conductor can't judge "the same issue", so its
+        backstop counts every watch tell to the item: by a third, Matt should look anyway."""
+        ref, _, text = value.partition(" ")
+        run = self._running_target(ref, "tell")
+        told = [e for e in self.log.query(item=run.item_id, kinds=["tell"]) if e.detail.get("by") == "watch"]
+        if len(told) < WATCH_TELLS:
+            return None
+        ids = ", ".join(f"#{e.id}" for e in told)
+        return f"{run.item_id} already had {len(told)} watch tells ({ids}); the watch's next, held for you: {text.strip()}"
 
     def _watch_answer(self, value: str, watch_id: str, rel: str) -> None:
         """`answer: <question> <answer> (source: <where>)`: an open question answered only with

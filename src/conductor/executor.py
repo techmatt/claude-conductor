@@ -751,7 +751,7 @@ def hook_settings(cfg: Config, item: Item) -> str:
     from .procs import console_python
     from .talk import hook_settings as settings
     data = json.loads(settings(console_python(), cfg.control, item.id, cfg.foreground_seconds,
-                               cfg.opts(item.repo).background))
+                               cfg.opts(item.repo).background, readonly=item.readonly))
     if item.ultracode:
         data["ultracode"] = True
     return json.dumps(data, indent=1)

@@ -21,10 +21,12 @@ JSON), and prints nothing otherwise. A writing call (any agent's) naming paths i
 control folder has them noted in `.conductor/touch/<repo>__<NNN_name>.jsonl`, which the
 tamper guard reads to tell which running item changed which tracked file.
 
-    python -m conductor.talk pre --cap <seconds> [--background=<glob> ...]
+    python -m conductor.talk pre --cap <seconds> --control <folder> [--readonly] [--background=<glob> ...]
 
-is its PreToolUse hook on `Workflow`, denying a script over the agent cap (`fanout.py`),
-and on Bash and PowerShell, which keeps every call short enough for a
+is its PreToolUse hook on the shell, file, Agent and Workflow tools. It denies a Workflow
+script over the agent cap (`fanout.py`) and any call breaking a preamble rule a hook can
+check (`rules.py`: shell edits, %TEMP%, worktree isolation, a helper's git discard …).
+On Bash and PowerShell it also keeps every call short enough for a
 message to get in: a command matching a `background` glob runs with `run_in_background`,
 and any other foreground call's `timeout` is capped (Claude Code moves a command still
 running at its timeout to the background rather than killing it).
@@ -283,20 +285,22 @@ def waited(msg: dict) -> int | None:
 
 
 # ---------------------------------------------------------------- the hook
+PRE_TOOLS = (*SHELL_TOOLS, "Workflow", "Agent", "Task", "Write", "Edit", "MultiEdit", "NotebookEdit")
+
+
 def hook_settings(python: str, control: Path, item: str, cap_seconds: float = 0,
-                  background: list[str] = ()) -> str:
+                  background: list[str] = (), readonly: bool = False) -> str:
     """The executor's `--settings`: a PostToolUse hook on every tool, and the PreToolUse
-    hook on `Workflow` (the agent cap, `fanout.py`) and, with a cap or `background` globs,
-    on the shell tools."""
+    hook on the shell, file, Agent and Workflow tools: the rules it denies (`rules.py`,
+    the agent cap in `fanout.py`) and the shell cap and `background` globs."""
     hooks = {"PostToolUse": [{"matcher": "", "hooks": [{
         "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
         "args": ["-m", "conductor.talk", "hook", "--control", str(control), "--item", item],
     }]}]}
-    shells = cap_seconds > 0 or bool(background)
-    hooks["PreToolUse"] = [{"matcher": "|".join((*SHELL_TOOLS, "Workflow") if shells else ("Workflow",)), "hooks": [{
+    hooks["PreToolUse"] = [{"matcher": "|".join(PRE_TOOLS), "hooks": [{
         "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
-        "args": ["-m", "conductor.talk", "pre", "--cap", f"{cap_seconds:g}",
-                 *(f"--background={g}" for g in background)],
+        "args": ["-m", "conductor.talk", "pre", "--cap", f"{cap_seconds:g}", "--control", str(control),
+                 *(["--readonly"] if readonly else []), *(f"--background={g}" for g in background)],
     }]}]
     return json.dumps({"hooks": hooks}, indent=1)
 
@@ -325,11 +329,12 @@ def pre_tool(event: dict, cap_seconds: float, background: list[str]) -> dict | N
     return tool | {"timeout": cap}       # no timeout means Claude Code's default, 2 minutes
 
 
-def pre_hook(event: dict, cap_seconds: float, background: list[str]) -> str | None:
-    """What the PreToolUse hook prints: the rewritten input, a Workflow call's denial
-    (`fanout.check`), or None."""
-    from .fanout import check
-    if why := check(event):
+def pre_hook(event: dict, cap_seconds: float, background: list[str], control: Path | None = None,
+             readonly: bool = False) -> str | None:
+    """What the PreToolUse hook prints: a denial (a Workflow over the agent cap,
+    `fanout.check`, or a preamble rule, `rules.check`), the rewritten input, or None."""
+    from . import fanout, rules
+    if why := fanout.check(event) or rules.check(event, control, readonly):
         return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                   "permissionDecisionReason": why}})
     tool = pre_tool(event, cap_seconds, background)
@@ -434,6 +439,8 @@ def main(argv: list[str] | None = None) -> int:
     pre = sub.add_parser("pre")
     pre.add_argument("--cap", type=float, default=0)
     pre.add_argument("--background", action="append", default=[])
+    pre.add_argument("--control")
+    pre.add_argument("--readonly", action="store_true")
     args = p.parse_args(argv)
     try:
         raw = sys.stdin.buffer.read().decode("utf-8", "replace")     # the hook input
@@ -446,7 +453,8 @@ def main(argv: list[str] | None = None) -> int:
     event = event if isinstance(event, dict) else {}     # the message hook treats it as the lead's
     try:
         if args.cmd == "pre":
-            out = pre_hook(event, args.cap, args.background) if event else None
+            out = pre_hook(event, args.cap, args.background, Path(args.control) if args.control else None,
+                           args.readonly) if event else None
         else:
             out = hook(Path(args.control), args.item, event)
     except Exception as exc:            # a hook never breaks the executor's tool call

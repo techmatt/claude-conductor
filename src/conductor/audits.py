@@ -141,11 +141,78 @@ def decisions(path: Path) -> list[str]:
     return [n for n in out if not NOTHING.fullmatch(n)]
 
 
-def render_notes(cfg: Config, ids: list[str], finishes: dict[str, Event]) -> str:
+BULLET_RE = re.compile(r"^\s{0,3}[-*]\s+(.*\S)")
+WORD_RE = re.compile(r"[a-z0-9_]{3,}")
+STOP = frozenset("the and for not that this with was are but its it's has have from into than then when which "
+                 "would could should only also each one any all".split())
+SAME = 0.6              # word overlap (Jaccard) at which two bullets raise the same problem
+HANDLED_NOTES = 30      # how many of the newest handled notes a cleanup's are checked against
+
+
+def _words(text: str) -> frozenset[str]:
+    return frozenset(w for w in WORD_RE.findall(text.lower().replace("`", "")) if w not in STOP)
+
+
+def same_problem(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Do two notes' bullets (as `_words`) raise the same problem? Whole-word overlap: a
+    rewording shares most of its words; a short bullet must match outright."""
+    if not a or not b:
+        return False
+    if min(len(a), len(b)) < 4:
+        return a == b
+    return len(a & b) / len(a | b) >= SAME
+
+
+def _bullet_words(text: str) -> list[frozenset[str]]:
+    return [_words(m.group(1)) for ln in text.splitlines() if (m := BULLET_RE.match(ln))]
+
+
+def render_notes(cfg: Config, ids: list[str], finishes: dict[str, Event], handled: list[Path] = ()) -> str:
     """The notes a cleanup was handed, inlined for its prompt: executors never see the
-    control folder."""
-    parts = []
+    control folder. Deduped (122): a bullet raising what one of the `handled` notes (those
+    an earlier cleanup used) raised is left out, so a cleanup never re-raises it; a bullet
+    repeating an earlier one in this batch is merged into it, which then names every
+    item that raised it, so the cleanup fixes the class at once."""
+    old = []
+    for path in handled:
+        try:
+            old += _bullet_words(read_text(path))
+        except (OSError, UnicodeDecodeError):
+            continue
+    seen: list[tuple[frozenset[str], list[str], list[str], int]] = []   # words, lines, also-by, line index
+    dropped, notes = 0, []
     for item_id in ids:
+        repo, _, name = item_id.partition("/")
+        try:
+            text = read_text(note_path(cfg, repo, name)).strip()
+        except (OSError, UnicodeDecodeError) as exc:
+            notes.append((item_id, [f"(could not read the notes: {exc})"]))
+            continue
+        lines, skipping = [], False
+        for ln in text.splitlines():
+            if m := BULLET_RE.match(ln):
+                w = _words(m.group(1))
+                if any(same_problem(w, o) for o in old):
+                    dropped, skipping = dropped + 1, True
+                    continue
+                if hit := next((s for s in seen if same_problem(w, s[0])), None):
+                    hit[2].append(name)
+                    skipping = True
+                    continue
+                skipping = False
+                seen.append((w, lines, [], len(lines)))
+            elif skipping and ln.strip() and ln[:1].isspace():
+                continue                    # a dropped bullet's continuation line
+            else:
+                skipping = False
+            lines.append(ln)
+        notes.append((item_id, lines))
+    for _, lines, also, at in seen:
+        if also:
+            lines[at] += f" (raised again by {', '.join(dict.fromkeys(also))}: one problem; fix it everywhere)"
+    parts = []
+    for item_id, lines in notes:
+        repo, _, name = item_id.partition("/")
         repo, _, name = item_id.partition("/")
         ev = finishes.get(item_id)
         when = f", finished {ev.detail.get('status')} {clock(ev.ts)}" if ev else ""
@@ -153,11 +220,11 @@ def render_notes(cfg: Config, ids: list[str], finishes: dict[str, Event]) -> str
             when += f": a self-audit of {ev.detail['resume_of']}, written by its own session"
         elif ev and ev.detail.get("resume_of"):
             when += f": notes from a resume of {ev.detail['resume_of']}"
-        try:
-            text = read_text(note_path(cfg, repo, name)).strip()
-        except (OSError, UnicodeDecodeError) as exc:
-            text = f"(could not read the notes: {exc})"
+        text = "\n".join(lines).strip() or "(every bullet repeats an earlier note)"
         parts.append(f"### Notes from {item_id}{when}\n\n{text}\n")
+    if dropped:
+        parts.append(f"({dropped} bullet{'s' if dropped > 1 else ''} left out: an earlier cleanup already "
+                     "handled the same problem. Don't raise it again.)\n")
     return "\n".join(parts)
 
 

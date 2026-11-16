@@ -6,6 +6,9 @@
     FAKE report <done|partial|red|none>      (default done)
     FAKE write <path> <text>                 write a file (absolute, or relative to cwd); its hooks
                                              see a `Write` call with `file_path` and `content`
+    FAKE pre <tool> <json input>             run the PreToolUse hooks matching <tool> as Claude Code
+                                             would; `ASK RESULT: PRE <tool>: deny <why> | allow | none`
+    FAKE helper-pre <tool> <json input>      the same for a subagent's call (`agent_id` set)
     FAKE audit <text>                        append a line to the audit notes file the preamble names
     FAKE commit <file> <text>                write <file> in cwd and commit it
     FAKE append|prepend <file> <text>        add a line at the end or start of <file> and commit it
@@ -258,6 +261,23 @@ for ln in lines:
                 time.sleep(0.2)
         case "report":
             status = parts[2]
+        case "pre" | "helper-pre":                          # `FAKE pre <tool> <json input>`
+            event = {"hook_event_name": "PreToolUse", "tool_name": parts[2], "session_id": session,
+                     "cwd": os.getcwd(), "tool_input": json.loads(parts[3])}
+            if parts[1] == "helper-pre":
+                event |= {"agent_id": "a0fake0subagent", "agent_type": "general-purpose"}
+            verdict = "none"
+            for group in settings.get("hooks", {}).get("PreToolUse", []):
+                if not re.fullmatch(group.get("matcher") or ".*", parts[2]):
+                    continue
+                for h in group.get("hooks", []):
+                    out = subprocess.run([h["command"], *h.get("args", [])], capture_output=True, text=True,
+                                         input=json.dumps(event), encoding="utf-8",
+                                         timeout=h.get("timeout", 60)).stdout
+                    if out.strip():
+                        hs = json.loads(out)["hookSpecificOutput"]
+                        verdict = f"{hs['permissionDecision']} {hs.get('permissionDecisionReason', '')}".strip()
+            answers.append(f"PRE {parts[2]}: {verdict}")
         case "write":                                       # as Write: it makes the folders
             Path(parts[2]).parent.mkdir(parents=True, exist_ok=True)
             Path(parts[2]).write_text(parts[3] + "\n", encoding="utf-8")

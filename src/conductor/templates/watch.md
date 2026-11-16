@@ -22,6 +22,9 @@ What you may do, as action lines that conductor carries out after you exit:
   progress for 40 minutes: post where you are", "the goal is X; leave Y"). Only when it
   would help; never to hurry a healthy item. Cite the prompt line a tell enforces, so it
   needs no decoding. A tell never answers a question an item is waiting on; `answer:` does.
+  Read the tells it already got (listed under it): never send one matching a tell it got,
+  however worded. After two tells to one item about the same issue, use `notify:` to Matt
+  instead of a third; conductor turns any third watch tell to an item into a notify.
 - `answer: <question id> <answer> (source: <where it was said>)`: answer an open question,
   but **only** with an answer Matt or the planner already gave: a message to the item (its
   events), a ruling in its prompt, or an amendment. Name that source. A question nobody has

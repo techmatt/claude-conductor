@@ -170,7 +170,7 @@ def test_hook_prints_context_once(tmp_path):
     settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x"))
     [group] = settings["hooks"]["PostToolUse"]
     assert group["matcher"] == "" and group["hooks"][0]["args"][:3] == ["-m", "conductor.talk", "hook"]
-    assert settings["hooks"]["PreToolUse"][0]["matcher"] == "Workflow"     # the agent cap, always (120)
+    assert settings["hooks"]["PreToolUse"][0]["matcher"] == "|".join(talk.PRE_TOOLS)   # agent cap, rules (120, 122)
 
 
 def test_only_the_lead_takes_mail(tmp_path, monkeypatch, capsys):
@@ -227,12 +227,14 @@ def test_pre_hook_keeps_shell_calls_short(tmp_path):
     assert run({"command": "npm test", "run_in_background": True}) is None
     assert run({"file_path": "x"}, "Read") is None
     assert talk.pre_tool({"tool_name": "Bash", "tool_input": {"command": "ls"}}, 0, []) is None
-    out = json.loads(talk.pre_hook({"tool_name": "Bash", "tool_input": waiter}, 60, []))["hookSpecificOutput"]
+    build = {"command": "npm run build", "timeout": 600000}
+    out = json.loads(talk.pre_hook({"tool_name": "Bash", "tool_input": build}, 60, []))["hookSpecificOutput"]
     assert out["hookEventName"] == "PreToolUse" and out["updatedInput"]["timeout"] == 60000
+    assert "deny" in talk.pre_hook({"tool_name": "Bash", "tool_input": waiter}, 60, [])   # a poll loop (122)
     settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x", 60, bg))
     [group] = settings["hooks"]["PreToolUse"]
-    assert group["matcher"] == "Bash|PowerShell|Workflow"
-    assert group["hooks"][0]["args"] == ["-m", "conductor.talk", "pre", "--cap", "60",
+    assert group["matcher"] == "|".join(talk.PRE_TOOLS)
+    assert group["hooks"][0]["args"] == ["-m", "conductor.talk", "pre", "--cap", "60", "--control", str(tmp_path),
                                          "--background=npm test*", "--background=*playwright test*"]
     assert talk.main(["pre", "--cap", "60"]) == 0       # stdin is empty under pytest: prints nothing
 

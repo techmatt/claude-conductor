@@ -28,10 +28,10 @@ Steps 4 and 5 go out in the same turn. A refused guess or an ungranted repo: req
 
 ## The bridge
 
-- One missing path fails a whole access request ("can't be granted"): first list a maybe-missing path's parent (names only).
-- Reading stages a snapshot: re-stage a file that may have changed, passing its staged `mtimeMs` as `expectedMtimeMs` to replace it. A re-stage can briefly show the old copy ("dispatched"): check `mtimeMs`, else read again. LF line endings always.
-- Each upload goes once, to a fresh workspace path: one written twice can send its first copy.
-- A conductor prompt: read `prompts\ledger.md`'s tail, then write `prompts\inbox\<YYYYMMDD-HHMMSS>-<project>-<slug>.md` (local time), unnumbered: running numbers it. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`.
+- One missing path fails a whole access request: first list a maybe-missing path's parent (names only).
+- Reading stages a snapshot: re-stage a changed file, passing its staged `mtimeMs` as `expectedMtimeMs` to replace it. A re-stage can briefly show the old copy ("dispatched"): check `mtimeMs`, else read again. LF line endings always.
+- Upload once, to a fresh path: one written twice can send its first copy.
+- A conductor prompt: read `prompts\ledger.md`'s tail, then write `prompts\inbox\<YYYYMMDD-HHMMSS>-<project>-<slug>.md` (local time), unnumbered: running numbers it. Never edit its `HANDOFF.md`: the marker and *Open* lines go in its `planner-notes.md`; conductor ideas not yet planned: `planner-ideas.md`.
 - **After a write, stage its receipt in a later call than the write** (same batch: too soon), never the inbox: `receipts\` + the write's path, extension `.md` (`receipts\requests\<stamp>.md`; a signal's `receipts\signals\planner-<stamp>.md`, not `.signal.md`; an answer file gets none). `accepted` with `result` (a `warning`: a `depends_on` that will hold, a cancel's dependents: act now), `pending` (what holds it) or `refused` with `reason`. None: re-stage once, then tell Matt the daemon may be off (`docs/receipts.md`).
 - **Never list a control folder or repo root recursively**, nor `reports\`: files are named below; stage a report by name.
 - The bridge can't delete or run commands: that takes a signal, a request, a queue item (in a code repo), or a command Matt runs. Opening a folder, file or URL for Matt is **open X**, never computer use.

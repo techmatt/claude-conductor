@@ -57,7 +57,7 @@ The `--mcp-config` names one stdio server, `conductor`, run by the daemon's own 
 (`python -m conductor.ask_server --control … --item … --default-minutes … --session-id …
 --workdir …`); its tools are `ask` (`questions.md`), `progress` (`progress.md`), `wait` (a
 paused item), `wait_for` and `start`. The
-`--settings` file holds the PostToolUse message hook and the PreToolUse *Short calls* and Workflow agent-cap hook (`progress.md`), and
+`--settings` file holds the PostToolUse message hook and the PreToolUse hook (*Short calls*, `progress.md`; the agent cap and preamble-rule denials, `hooks.md`), and
 `"ultracode": true` for an `ultracode` item. A stage gets neither file.
 
 **Delivery.** The message hook (`progress.md`) runs after every tool call, a

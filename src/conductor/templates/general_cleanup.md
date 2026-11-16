@@ -7,7 +7,9 @@ Any audit notes earlier items left are at the very end of this text, oldest firs
    headings, as you go: what is poorly structured, what would slow the next person down
    and why (time, tokens, context), what the earlier notes and your own audit had to
    re-read or re-derive, what should be refactored or cleaned up, and what CLAUDE.md or
-   README should say. Concrete notes with file names, not impressions.
+   README should say. Concrete notes with file names, not impressions. Notes on the same
+   problem (tagged `raised again by …`, or ones you spot) are one entry naming the class,
+   fixed everywhere at once; never re-raise what an earlier cleanup handled.
 2. Carry out whatever is clear and well defined: refactors, restructuring, dead code,
    naming, CLAUDE.md and README improvements; for each re-read or re-derived note, add
    the doc line, index or script that would have cached it. Keep behaviour unchanged unless you find

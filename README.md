@@ -41,6 +41,7 @@ command (`docs/restart.md`).
 | `docs/push.md` | Pushing main and the control folder, `push:`, closeout; failures |
 | `docs/executors.md` | Launching an executor: MCP and settings files, `wait_for`, delivery, long calls, setup |
 | `docs/preambles.md` | What it is told: the full, light or watch preamble, its port, scope, scratch and load |
+| `docs/hooks.md` | The preamble rules its PreToolUse hook enforces, and the ledger of those left as text |
 | `docs/reports.md` | The report's header and an item's outcome |
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |

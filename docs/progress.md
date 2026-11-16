@@ -114,9 +114,10 @@ run made 20 such calls of 1–10 minutes, about 113 minutes in all. Two parts:
   (an idle session takes no message).
   The full form adds that a background call's `timeout` is a kill limit, not a wait, so a
   long build starts detached and is waited on (aicomplete 069 lost one to a 59 s timeout).
-- A **PreToolUse hook** on `Bash|PowerShell|Workflow` in the same `--settings` file
-  (`Workflow` alone when the shell part is off: the agent cap, `fanout.py`, `ultracode.md`):
-  `<python> -m conductor.talk pre --cap <foreground_seconds> --background=<glob> …`.
+- A **PreToolUse hook** in the same `--settings` file, on the shell, file, Agent and Workflow
+  tools: first the denials (the agent cap, `fanout.py`, `ultracode.md`; the preamble rules,
+  `rules.py`, `hooks.md`), then this cap:
+  `<python> -m conductor.talk pre --cap <foreground_seconds> --control <folder> --background=<glob> …`.
   A call already `run_in_background` is left alone. A command matching one of the
   repo's `background` globs (`fnmatch` on the whole command with runs of whitespace
   collapsed, case-sensitive, `*` crossing spaces: `npm test*`, `*playwright test*`)
@@ -124,8 +125,8 @@ run made 20 such calls of 1–10 minutes, about 113 minutes in all. Two parts:
   `timeout` is missing (Claude Code's default is 2 minutes) or longer than the cap gets
   `timeout` = the cap. It prints `{"hookSpecificOutput": {"hookEventName":
   "PreToolUse", "permissionDecision": "allow", "updatedInput": …}}`, or nothing.
-  `foreground_seconds = 0` with no globs drops the shell matchers and the paragraph. A
-  `Workflow` call over the agent cap gets `"permissionDecision": "deny"` with the reason (120).
+  `foreground_seconds = 0` with no globs drops the paragraph and the rewrite (the denials
+  stay). A denied call gets `"permissionDecision": "deny"` with the reason (120, 122).
 
 What makes the cap safe (Claude Code 2.1.304, `-p`): a foreground Bash call that
 reaches its `timeout` is not killed but **moved to the background** ("Command did not

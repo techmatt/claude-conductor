@@ -3,7 +3,10 @@ was poorly structured, what took longer than expected, what was re-read or re-de
 what should be refactored, and what the repo's CLAUDE.md or README should say. Act on them.
 
 1. Read every note, then check each one against the code as it is now: some may already
-   be fixed, contradict each other, or be wrong.
+   be fixed, contradict each other, or be wrong. Notes on the same problem (conductor tags
+   repeats `raised again by …`; merge any it missed) are one entry: name the class
+   ("stale paths in docs/") and fix it everywhere at once. Never re-raise a problem an
+   earlier cleanup handled (conductor already left those out).
 2. Carry out whatever is clear and well defined: refactors, restructuring, dead code,
    naming, CLAUDE.md and README improvements; for each re-read or re-derived note, add
    the doc line, index or script that would have cached it. Keep behaviour unchanged unless a note

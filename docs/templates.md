@@ -51,7 +51,13 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   the `audit:` signal sends the same paragraph as a message instead (`signals.md`).
 - **`template: cleanup`**. The prompt after the preamble is `cleanup.md` with every
   *unused* note of the repo inlined, oldest first, each headed `### Notes from <item>,
-  finished <status> <time>`; then, after `---` and "The planner adds, for this item:",
+  finished <status> <time>`, **deduped** (122, `audits.render_notes`; general cleanups too): a
+  bullet raising what one of the repo's 30 newest *used* notes raised is left out (a count
+  line says so), so no cleanup re-raises what an earlier one handled; a bullet repeating an
+  earlier one in the batch is merged into it, tagged `raised again by <items>: one problem;
+  fix it everywhere`, and the template has the cleanup report it as one entry naming the
+  class. "The same" is whole-word overlap (Jaccard ≥ 0.6, exact under 4 words), so a
+  heavy rewording can slip through; then, after `---` and "The planner adds, for this item:",
   the item's own body, if any. The executor carries out what is clear and well
   defined and defers every design-level call (its report lists them under
   **Deferred**, with options and a recommendation, any that is Matt's own, by taste, scope or a

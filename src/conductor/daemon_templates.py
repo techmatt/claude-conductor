@@ -29,7 +29,10 @@ class TemplatesMixin:
         if not rec.get("notes"):
             return ""
         finishes = {i: ev for i in rec["notes"] if (ev := self.log.last("finish", item=i))}
-        return audits.render_notes(self.cfg, rec["notes"], finishes)
+        view = state.scan(self.cfg, self.log)
+        handled = [n.path for n in audits.notes(self.cfg, rec["repo"], view.finishes, view.audit_used, include_used=True)
+                   if n.used_by is not None and n.item not in rec["notes"]][-audits.HANDLED_NOTES:]
+        return audits.render_notes(self.cfg, rec["notes"], finishes, handled)
 
     def _template_usage(self, rec: dict) -> str:
         """`{{usage}}`: a disk cleanup's measurements or a watch's view; nothing for the rest."""
@@ -89,6 +92,10 @@ class TemplatesMixin:
                                                                       for e in prog) or "- none yet"))
             evs = [e for e in self.log.query(item=item_id) if e.kind not in QUIET_KINDS][-EVENT_LINES:]
             parts.append("Recent events:\n" + "\n".join(f"- {clock(e.ts)} #{e.id} {inbox.describe(e)}" for e in evs))
+            tells = self.log.query(item=item_id, kinds=["tell"])
+            parts.append("Tells it already got (every one; a third from the watch becomes a notify):\n" + (
+                "\n".join(f"- {clock(e.ts)} #{e.id} by {e.detail.get('by', '?')}: {e.detail.get('text', '')}"
+                          for e in tells) or "- none"))
             out.append("\n\n".join(parts))
         if not live:
             out.append("No item is executing now.")

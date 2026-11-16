@@ -61,7 +61,11 @@ drifting. Its report (short: **Items**, **Recommend**, **Actions**) never waits 
 (not when red), at most six, attributed `by: watch` (`none` and the closing `Report written
 to …` line, which sits under `## Actions` as the last heading, are not actions):
 - `tell: <repo>/<NNN_name> <line>`: a `tell` (`progress.md`, *Messages*; it never answers a
-  question: `questions.md`);
+  question: `questions.md`). **Round cap** (122): the watch's view lists every tell each item
+  got; the template forbids repeating one, however worded, and after two on one issue asks
+  for `notify:` instead. Conductor can't judge "the same issue", so its backstop counts: an
+  item that already had `WATCH_TELLS` (2) watch tells gets none more, and the line becomes a
+  `notify` (`held_tell: true`, naming the earlier tells' ids) for Matt;
 - `answer: <question id> <answer> (source: <where>)`: answers an open question **only** with
   an answer Matt or the planner already gave (a message, a ruling in the item's prompt or
   an amendment), naming it; the answer file says so, and `watch_answer` (question, text,

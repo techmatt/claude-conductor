@@ -1,7 +1,8 @@
 # Preambles
 
 What conductor tells an executor before the item body (`executor.py`); how it is launched,
-its MCP and settings files, `wait_for` and message delivery: `executors.md`.
+its MCP and settings files, `wait_for` and message delivery: `executors.md`. Rules its
+PreToolUse hook enforces (shell edits, `%TEMP%`, isolation, helpers' git, more): `hooks.md`.
 
 **Three preambles**, chosen by conductor, never by front-matter:
 
@@ -87,11 +88,9 @@ only in the environment (74). Stages and merge executors get none.
   reused `out/parity`, `out/browser2` as fresh). The daemon makes `out/<item>/` at launch;
   `out/keep/` stays shared. `out/` is ignored before every launch and stage
   (`git.ignore_locally`: `/out/` in `.git/info/exclude`, never committed; 72).
-- **Scripts in files** (72; wordwarriors 174, aicomplete 074). A script is written with
-  Write and run as a file, never a heredoc or `-c` string: an apostrophe broke quoted-delimiter
-  heredocs in executor Bash. Since 82 file edits too go through Write/Edit only, never a shell
-  heredoc, `sed` or `-c` string: fractals 025 and website 003 broke Python and JS by patching
-  through a heredoc, which turned `"\n"` into a real newline, despite their `CLAUDE.md`s.
+- **Scripts in files** (72; wordwarriors 174, aicomplete 074): written with Write, run as a
+  file. Since 82 edits too go through Write/Edit only (fractals 025, website 003 broke code
+  patching through a heredoc); hooked since 122 (`hooks.md`).
 - **Background timeouts** (82, both, in *Short calls*). Every `run_in_background` call sets a
   `timeout` sized to its estimate with margin (left out, Claude Code kills it at 10 minutes:
   fractals 026's and website 003's render chains died mid-run); a job that may outrun that
@@ -139,10 +138,8 @@ only in the environment (74). Stages and merge executors get none.
   (~15 s, measured ~16 s; it said 20–40 s), never the clock: `progress` and `wait_for`
   returns carry it and the time left to the cap (`progress.md`). Words held.
 - **Aicomplete's notes of 11-07 to 11-08** (86): every conductor tool return gives the clock
-  (143 froze early, believing 1 h of 2h40m was left); a full test suite (`cargo test
-  --workspace`) runs only between sims, never beside one (142 saturated 12 threads; both
-  preambles); helpers never `git checkout` or `git restore` a shared folder (144's discarded
-  the lead's doc edits; full only: an ultracode item never draws light). Words held.
+  (143 froze early); a full test suite runs only between sims (142 saturated 12 threads);
+  helpers never `git checkout` or `git restore` a shared folder (144; hooked since 122).
 - **Helper briefs** (79, full): quote the prompt's rulings verbatim (aicomplete 111's
   paraphrase made a cap a target band; `ultracode.md`); (113) each helper gets its own
   scratch path `out/<item>/<helper>/` (fractal-website 006: a shared one let a helper
