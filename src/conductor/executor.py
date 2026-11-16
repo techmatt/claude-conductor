@@ -726,8 +726,15 @@ def hook_settings(cfg: Config, item: Item) -> str:
     and neither does a message (hook context) or a later edit of this file."""
     from .procs import console_python
     from .talk import hook_settings as settings
+    names, flags = [], []
+    try:
+        from . import remote             # optional (docs/remote-workers.md): a `remote` item's farm reminder
+        if remote.wants(cfg.control, item):
+            names, flags = remote.native_hint(cfg.control)
+    except ImportError:
+        pass
     data = json.loads(settings(console_python(), cfg.control, item.id, cfg.foreground_seconds,
-                               cfg.opts(item.repo).background, readonly=item.readonly))
+                               cfg.opts(item.repo).background, readonly=item.readonly, native=names, flags=flags))
     if item.ultracode:
         data["ultracode"] = True
     return json.dumps(data, indent=1)

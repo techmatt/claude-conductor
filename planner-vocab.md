@@ -24,6 +24,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **post-audit X** [extras] | Queues `resume: <repo>/<NNN_name>`, `template: self_audit` (body: extras): X's session audits its own run, fixes the obvious in place and lands it (serial, waits behind a red hold), noting the rest for the next cleanup; its **About conductor** goes to `planner-notes.md`. |
 | **art round X: ids** | Writes the candidate item: `art:alts` for those ids, a picker manifest under a new name, ending at `pick:`. |
 | **review cards** / **tool X** | Signal `tool: <name>`: starts that `[tools.<name>]` if needed and opens it (`tool: <name> stop` stops it; `docs/app.md`, *Project tools*). |
+| **test workers** | `[remote]` only: Matt presses **Test workers** on the app's Workers tab (a browser joined first), or a Claude Code session runs `conductor remote test <control>`: conductor's own job, no project build; per worker offered / finished / credited shards, s a shard, overtaken, matched, in `remote-diag.md` *Worker test* (`docs/remote-status.md`). |
 | **use remote workers** | `[remote]` only: default since 105 under `[remote] default = true` (`remote: false` opts out), else `remote: true`; seeded batches via `farm-seeds` (`docs/remote-workers.md`). |
 | **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |

@@ -144,7 +144,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` (a taken number is renumbered: see its receipt); a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, retry, open, ping me, ultracode X, process all, defaults all, post-audit, art round, review cards / tool X, park / resume project, rename repo, use remote workers) are in `planner-vocab.md`: read it only for those, or a phrase not here.
+`NNN_name` may be shortened to `NNN` (a taken number is renumbered: see its receipt); a queued item may carry its repo as `repo/NNN_name`. **Rare ops** (backlog, show backlog, watch now, autopilot, stop conductor, show events, postmortem, reorder, push, fill until, content / test / claude.md / disk space cleanup, land, retry, open, ping me, ultracode X, process all, defaults all, post-audit, art round, review cards / tool X, park / resume project, rename repo, use / test remote workers) are in `planner-vocab.md`: read it only for those or a phrase not here.
 
 **Session and inbox**
 

@@ -44,12 +44,12 @@ TURN_MS = 1000                  # the running title's glyph, and the taskbar and
 
 def tray_hub(st: status.Status, tick: int) -> str:
     """The tray's hub: red when something needs Matt, orange when something waits for
-    review or an answer, gold while items run, slate when quiet (120: idle was gold, and
-    a gold-and-dim pulse at 16 px read as idle). The tray carries the taskbar's turning
-    badge too (`Status.badge`), so running shows by motion as well as colour."""
+    review or an answer, slate otherwise, items running or not (124 dropped 120's gold
+    for running: the title's turning glyph says it). The tray carries the taskbar's badge
+    too (`Status.badge`)."""
     if st.kind == "need":
         return "red"
-    return "orange" if st.waiting else "gold" if st.kind == "running" else "slate"
+    return "orange" if st.waiting else "slate"
 
 
 def state_icon(kind: str) -> QIcon:
@@ -546,7 +546,7 @@ class MainWindow(QMainWindow):
 
     def _show_status(self) -> None:
         """The title, and the same badge on the window's (taskbar's) icon and the tray's:
-        gold and turning while items run, orange when something waits for review or an
+        none while items only run (the title turns), orange when something waits for review or an
         answer, red when something needs Matt (the tray's hub coloured to match, `tray_hub`).
         Needs Matt holds still. Each project tab leads
         with the same turning glyph while it has an item moving (`status.moving`)."""

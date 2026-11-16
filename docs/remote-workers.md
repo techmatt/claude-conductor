@@ -84,6 +84,14 @@ only committed code: aicomplete 204 ran every read natively and starved the box)
 
 The commit it runs from, its dirty-tree warning and `farm-seeds --cancel`: `farm-seeds.md`.
 
+A `remote` item that runs the native sim itself (the `native` executable's name, or any
+executable under `out/`, with a seed range or game count: the flags `native` puts before
+`{first}` and `{count}`, or two numbers in a row) gets one reminder to use `farm-seeds`
+through the message hook, never a denial: a native run is the fallback (124: aicomplete
+249 ran every read as `sim.exe experiment … --games 4` through `start`, and the idle browser
+got nothing). Each such call is logged in `.conductor/touch/<item>.native.jsonl`
+(`rules.native_run`, `talk.farm_note`; `hooks.md`).
+
 ## Placement
 
 `remote-placement.md`: a job under `local_below_seconds` (or with no broker) runs
@@ -175,7 +183,8 @@ planner's digest and the deadlines: `remote-diag.md`.
 every 2 s, for the next broker), `broker.log` (a port already taken
 shows here; `port` lies in the project's port block, its last port by convention: `control-folder.md`, *Port blocks*), `token` (the generated one, before it is pinned), `bin/`, `bundles/<commit>/` (with `wasm.fingerprint`; and
 `<commit>.build.log`), `jobs/<job>/` (shards, logs capped at 2 MB per worker, `job.json`;
-removed after 7 days), `gates.log`, `steps.log` and `workers/` (`remote-diag.md`).
+removed after 7 days), `gates.log`, `steps.log` and `workers/` (`remote-diag.md`),
+`selftest.json` and `selftest.log` (the worker test: `remote-status.md`).
 
 ## Removing it
 

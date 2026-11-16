@@ -40,6 +40,7 @@ import os
 import re
 import sys
 import threading
+import time
 from fnmatch import fnmatchcase
 from pathlib import Path
 
@@ -289,13 +290,17 @@ PRE_TOOLS = (*SHELL_TOOLS, "Workflow", "Agent", "Task", "Write", "Edit", "MultiE
 
 
 def hook_settings(python: str, control: Path, item: str, cap_seconds: float = 0,
-                  background: list[str] = (), readonly: bool = False) -> str:
+                  background: list[str] = (), readonly: bool = False, native: list[str] = (),
+                  flags: list[str] = ()) -> str:
     """The executor's `--settings`: a PostToolUse hook on every tool, and the PreToolUse
     hook on the shell, file, Agent and Workflow tools: the rules it denies (`rules.py`,
-    the agent cap in `fanout.py`) and the shell cap and `background` globs."""
+    the agent cap in `fanout.py`) and the shell cap and `background` globs. `native` and
+    `flags` (a `remote` item, 124): the message hook reminds it once to farm instead
+    (`rules.native_run`)."""
     hooks = {"PostToolUse": [{"matcher": "", "hooks": [{
         "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
-        "args": ["-m", "conductor.talk", "hook", "--control", str(control), "--item", item],
+        "args": ["-m", "conductor.talk", "hook", "--control", str(control), "--item", item,
+                 *(f"--native={n}" for n in native), *(f"--native-flag={f}" for f in flags)],
     }]}]}
     hooks["PreToolUse"] = [{"matcher": "|".join(PRE_TOOLS), "hooks": [{
         "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
@@ -415,19 +420,42 @@ def touched_since(control: Path, item: str, since: str) -> list[str]:
     return out
 
 
-def hook(control: Path, item: str, event: dict | None = None) -> str | None:
+def hook(control: Path, item: str, event: dict | None = None, native: list[str] = (),
+         flags: list[str] = ()) -> str | None:
     """What the hook prints: the PostToolUse output carrying waiting messages, or None.
     A subagent's call takes nothing: a helper reads the context as untrusted injected
     text and the lead never sees it (Word Warriors 059), so mail waits for the lead.
-    Any call that wrote naming the control folder is noted first (`note_touch`)."""
+    Any call that wrote naming the control folder is noted first (`note_touch`). A
+    `remote` item running the native sim directly gets the farm reminder once (`farm_note`)."""
     note_touch(control, item, event or {})
     if subagent_call(event or {}):
         return None
+    remind = farm_note(control, item, event or {}, native, flags) if native else None
     messages = take(control, item, "hook")
-    if not messages:
+    if not messages and not remind:
         return None
-    return json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
-                                              "additionalContext": context_text(messages)}})
+    text = "\n\n".join(t for t in (remind, context_text(messages) if messages else "") if t)
+    return json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}})
+
+
+def farm_file(control: Path, item: str) -> Path:
+    return Path(control) / ".conductor" / "touch" / f"{_key(item)}.native.jsonl"
+
+
+def farm_note(control: Path, item: str, event: dict, native: list[str], flags: list[str]) -> str | None:
+    """A `remote` item's call that ran the native sim with seeds (`rules.native_run`): logged
+    every time in `.conductor/touch/<item>.native.jsonl`, and the reminder (which asks for a
+    `friction:` line) the first time only."""
+    from . import rules
+    cmd = rules.native_run(event, native, flags)
+    if not cmd:
+        return None
+    path = farm_file(control, item)
+    first = not path.exists()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps({"at": time.time(), "tool": event.get("tool_name"), "command": cmd}) + "\n")
+    return rules.FARM_REMINDER.format(cmd=f"`{cmd[:80]}`") if first else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -436,6 +464,8 @@ def main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("hook")
     h.add_argument("--control", required=True)
     h.add_argument("--item", required=True)
+    h.add_argument("--native", action="append", default=[])
+    h.add_argument("--native-flag", action="append", default=[])
     pre = sub.add_parser("pre")
     pre.add_argument("--cap", type=float, default=0)
     pre.add_argument("--background", action="append", default=[])
@@ -456,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
             out = pre_hook(event, args.cap, args.background, Path(args.control) if args.control else None,
                            args.readonly) if event else None
         else:
-            out = hook(Path(args.control), args.item, event)
+            out = hook(Path(args.control), args.item, event, args.native, args.native_flag)
     except Exception as exc:            # a hook never breaks the executor's tool call
         print(f"conductor hook: {exc!r}", file=sys.stderr)
         return 0

@@ -18,7 +18,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import cores as policy, diag, placement
+from . import cores as policy, diag, placement, selftest
 from .board_views import (BUILD_STUCK_SECONDS, GATE_SECONDS, GATE_TRIES, STATES, STEPS,  # noqa: F401 - callers' names
                           Views, _short, gate_why)
 
@@ -31,6 +31,7 @@ LEASE_FLOOR = 60.0              # a derived lease is never shorter than this
 LEASE_FACTOR = 4.0              # a derived lease: this many times a shard's expected time
 POLL_FRESH = 5.0                # a worker's free cores not polling for this long aren't waited for (placement)
 OVERDUE = 1.5                   # a remote shard out this many times its worker's expected time: a main slot copies it (103)
+PAST_KEPT = 200                 # forgotten workers whose counts are kept for a reconnect
 
 
 @dataclass
@@ -89,10 +90,15 @@ class Job:
     rates: dict[str, float] = field(default_factory=dict)   # worker id -> its ms a seed in this job (moving average)
     tags: dict[str, int] = field(default_factory=dict)      # "shard:worker" -> a browser's cores when it was handed out
     failed: list[str] = field(default_factory=list)         # workers that failed a shard here: no more of its shards
+    tally: dict[str, dict] = field(default_factory=dict)    # worker id -> offered, finished, credited, ms, overtaken, mismatched (124)
 
     @property
     def complete(self) -> bool:
         return all(s.done for s in self.shards)
+
+    def count(self, wid: str, what: str, n: float = 1) -> None:
+        t = self.tally.setdefault(wid, {})
+        t[what] = t.get(what, 0) + n
 
 
 @dataclass
@@ -178,6 +184,7 @@ class Board(Views):
         self._handed: set[tuple[str, str]] = set()   # (job, worker): its first shard is in the steps log
         self.plans: dict[str, policy.Plan] = {}       # a browser's name -> its core count (`cores.py`)
         self.start_cores = max(1, start_cores)
+        self.past: dict[str, dict] = {}    # a forgotten worker's counts, by id: a reconnect takes them up (124)
         self._n = 0
         self._notes = 0
 
@@ -195,10 +202,11 @@ class Board(Views):
             now = self.clock()
             for old in [w for w in self.workers.values()
                         if w.kind != "main" and now - w.last_seen > WORKER_FORGET_SECONDS]:
-                del self.workers[old.id]
+                self._remember(self.workers.pop(old.id))
             w = self.workers.get(wid)
             if w is None or w.kind != kind:
                 w = self.workers[wid] = Worker(wid, kind, first_seen=now)
+                self._recall(w)
             gap = min(now - w.last_seen, self.fresh_seconds) if w.last_seen else 0.0   # connected time since
             w.cores, w.label, w.last_seen = max(0, min(int(cores), 1024)), str(label)[:80], now
             w.report = _report(report, now)
@@ -218,6 +226,20 @@ class Board(Views):
                     self._note_cores(w, why, now)
                 reply |= {"cores": p.cores, "why": p.why}
             return reply
+
+    def _remember(self, w: Worker) -> None:
+        """A worker forgotten after an hour's silence keeps its counts under its id, so a
+        reconnect (a laptop asleep overnight) carries on from them. aicomplete's b370663d983
+        won 35 shards at 4:25-4:54am, slept, and rejoined at 8:31am credited with 0 (124)."""
+        self.past[w.id] = {"kind": w.kind, "shards": w.shards, "day": w.day, "today": w.today,
+                           "first_seen": w.first_seen, "last_seen": w.last_seen}
+        for old in sorted(self.past, key=lambda x: self.past[x]["last_seen"])[:-PAST_KEPT]:
+            del self.past[old]
+
+    def _recall(self, w: Worker) -> None:
+        p = self.past.pop(w.id, None)
+        if p and p["kind"] == w.kind:
+            w.shards, w.day, w.today, w.first_seen = p["shards"], p["day"], p["today"], p["first_seen"]
 
     def _fresh(self, w: Worker, now: float) -> bool:
         return now - w.last_seen <= self.fresh_seconds
@@ -298,6 +320,7 @@ class Board(Views):
                     continue                     # a faster worker is expected to finish what is free sooner
                 s = free[0]
                 s.leases[wid] = now
+                job.count(wid, "offered")
                 if w.hw:
                     job.tags[f"{s.id}:{wid}"] = w.cores
                 if (job.id, wid) not in self._handed:
@@ -370,7 +393,8 @@ class Board(Views):
 
     def _payload(self, job: Job, w: Worker) -> dict:
         if w.engine == "wasm":
-            return {"bundle": f"bundle/{job.key}/", "module": self.bundle_js, "wasm": self._wasm_file(job.key)}
+            module = selftest.MODULE if selftest.is_test(job.key) else self.bundle_js
+            return {"bundle": f"bundle/{job.key}/", "module": module, "wasm": self._wasm_file(job.key)}
         return {"native": job.native}
 
     def _wasm_file(self, key: str) -> str:
@@ -437,6 +461,10 @@ class Board(Views):
             if w.kind == "main":
                 job.seen = self.clock()
             s = job.shards[shard_id]
+            if ok and selftest.is_test(job.key) and output != selftest.expected(s.first, s.count).encode():
+                ok = False                         # the worker test checks every copy: a wrong one never lands
+                job.count(wid, "mismatched")
+            holders = [x for x in s.leases if x != wid]
             s.leases.pop(wid, None)
             if log:
                 self._append(job.folder / "logs" / f"{wid}.log", log[-LOG_CHARS:], cap=LOG_FILE_CAP)
@@ -451,8 +479,15 @@ class Board(Views):
             self._plan_result(job, s, w, ok, ms)
             if not ok and w.kind != "main" and wid not in job.failed:
                 job.failed.append(wid)             # 167: a laptop failed every shard of a spec its bundle lacked
+            if ok:
+                job.count(wid, "finished")
+                job.count(wid, "ms", ms)
             if s.done or not ok:
                 return False
+            job.count(wid, "credited")
+            if w.kind == "main":                   # the main box's copy beat these workers' (124)
+                for x in holders:
+                    job.count(x, "overtaken")
             done = {"worker": wid, "kind": w.kind, "engine": w.engine, "label": w.label, "ms": round(ms)}
             path = job.folder / "shards" / f"{s.first:012d}.out"
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -575,6 +610,7 @@ class Board(Views):
                 return {"wait": True}
             s = free[0]
             s.leases["main"] = now
+            job.count("main", "offered")
             rerun = bool(s.leases.keys() - {"main"})
             if rerun:
                 self.reruns = [t for t in self.reruns if now - t < 3600] + [now]
@@ -604,6 +640,8 @@ class Board(Views):
             return {"complete": job.complete, "done": [s.id for s in job.shards if s.done],
                     "shards": [{"first": s.first, "count": s.count, **(s.done or {})} for s in job.shards],
                     "gate_failures": list(job.gate_failures),
+                    "tally": {k: dict(v) for k, v in job.tally.items()},
+                    "labels": {k: w.label for k in job.tally if (w := self.workers.get(k))},
                     "fingerprints": {"native": self.keys[job.key].fingerprint, "wasm": self.keys[job.key].wasm or None}}
 
     def close(self, job_id: str) -> None:
@@ -695,7 +733,7 @@ class Board(Views):
         their gates. A worker mid-shard posts its result to the new broker and it counts."""
         with self.lock:
             data = {"at": self.clock(), "n": self._n, "gate_fails": self.gate_fails, "reruns": self.reruns,
-                    "plans": {k: asdict(v) for k, v in self.plans.items()}, "ratios": self.ratios,
+                    "plans": {k: asdict(v) for k, v in self.plans.items()}, "ratios": self.ratios, "past": self.past,
                     "workers": [asdict(w) for w in self.workers.values()],
                     "keys": {k: asdict(v) for k, v in self.keys.items()},
                     "jobs": [asdict(j) | {"folder": str(j.folder)} for j in self.jobs.values()]}
@@ -717,6 +755,7 @@ class Board(Views):
             n = int(data["n"])
             plans = {k: policy.Plan(**v) for k, v in (data.get("plans") or {}).items()}
             ratios = {str(k): float(v) for k, v in (data.get("ratios") or {}).items() if float(v) > 0}
+            past = {str(k): dict(v) for k, v in (data.get("past") or {}).items()}
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return False
         for w in workers.values():
@@ -724,6 +763,7 @@ class Board(Views):
         with self.lock:
             self.workers, self.keys, self.jobs, self._n, self.plans = workers, keys, jobs, n, plans
             self.ratios = ratios          # a known name keeps its plan whatever `start_cores` is now (103)
+            self.past = past
             self.gate_fails, self.reruns = list(data.get("gate_fails") or []), list(data.get("reruns") or [])
         return True
 

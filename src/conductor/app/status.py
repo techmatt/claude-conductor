@@ -38,14 +38,14 @@ class Status:
     @property
     def badge(self) -> str | None:
         """The taskbar's and the tray's mark: `need` (red), `wait` (orange, still), `turn`
-        (orange, turning: running and waiting), `run` (gold, turning: running alone) or
-        None (quiet). 85 dropped 84's gold `run` as redundant with the title; 120 brought
-        it back: a taskbar with combined buttons shows no title, and the icon read idle."""
+        (orange, turning: running and waiting) or None (running alone, or quiet). 124 drops
+        the gold `run` again (Matt, 11-16; reverses 120): it duplicated the title's turning
+        glyph, as Claude Code's own window shows it."""
         if self.kind == "need":
             return "need"
         if self.waiting:
             return "turn" if self.running else "wait"
-        return "run" if self.running else None
+        return None
 
 
 def _needs(snap: Snapshot) -> tuple[int, int, int, int]:

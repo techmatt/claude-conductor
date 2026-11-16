@@ -461,6 +461,16 @@ def cmd_events(args) -> int:
     return 0
 
 
+def cmd_remote(args) -> int:
+    """`remote test`: the built-in worker test (docs/remote-status.md, *Worker test*)."""
+    try:
+        from .remote import selftest
+    except ImportError:
+        print("conductor: remote workers are not installed", file=sys.stderr)
+        return 2
+    return selftest.run(_control(args.control))
+
+
 def cmd_app(args) -> int:
     from .app import main as app_main     # PySide6 is imported only here
     folders = [_control(f) for f in args.folders]
@@ -565,6 +575,10 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--path", help="the checkout's new folder; moved there if it is still at the old one")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_rename_repo)
+    sp = sub.add_parser("remote", help="remote workers: `test` runs the built-in worker test on the broker")
+    sp.add_argument("action", choices=["test"])
+    sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.set_defaults(fn=cmd_remote)
     sp = sub.add_parser("app", help="the desktop app (tray icon, one tab per control folder)")
     sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
     sp.set_defaults(fn=cmd_app)

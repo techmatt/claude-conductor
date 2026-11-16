@@ -40,6 +40,7 @@ and not enforced.
 | `~/.claude`: config only, never memory or a `CLAUDE.md`; lessons in `carry:` | 74 (aicomplete 087) | hook; "lessons go in `carry:`" in full |
 | Only the report (and `write_roots`) in the control folder | —, 114 (`write_roots`) | hook (file tools) and the tamper guard; one line in each |
 | Readonly items commit nothing | 79 | hook; the readonly line |
+| A `remote` item farms seeded runs, not the native sim directly | 124 (aicomplete 249) | the message hook: one reminder, never a denial (a native run is the fallback; `remote-workers.md`) |
 
 ### In the preamble text
 

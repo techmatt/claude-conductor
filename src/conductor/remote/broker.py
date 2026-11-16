@@ -33,7 +33,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import diag, settings
+from . import diag, selftest, settings
 from .board import Board
 
 PAGE = Path(__file__).with_name("page")
@@ -326,7 +326,7 @@ def write_status(r: settings.Remote, info: dict, board: Board) -> None:
     try:
         status = {"at": time.time(), "pid": info["pid"], "port": info["port"], "url": info["url"],
                   "url_ip": info.get("url_ip"), "started": info["started"], "handover": info.get("handover", False),
-                  "main_slots": r.main_slots, **board.panel()}
+                  "main_slots": r.main_slots, "selftest": selftest.read(r.state), **board.panel()}
         tmp = r.state / "status.json.tmp"
         tmp.write_text(json.dumps(status) + "\n", encoding="utf-8", newline="\n")
         os.replace(tmp, r.state / "status.json")

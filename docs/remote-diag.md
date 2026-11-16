@@ -19,6 +19,8 @@ leaves it alone); it stays after the broker exits. It holds:
   deadline, or ended `failed`, `timeout` or `fallback`, with its stderr tail and that
   worker's page lines up to that moment.
 - **Bundle steps (main box)**: the last 8 build, Node reference and fallback steps.
+- **Worker test**: the last built-in worker test's result, a line per worker
+  (`remote-status.md`, *Worker test*).
 - **Per worker**: its last 30 events, the page's lines and the broker's steps interleaved
   by time (source `page`, `coreN`, or `broker`).
 

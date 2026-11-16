@@ -244,6 +244,17 @@ def render(project: str, panel: dict, state: Path, now: float | None = None) -> 
     prep = [r for r in runs if r["step"] in ("build", "reference", "fallback")][-8:]
     out += ["", "## Bundle steps (main box)", ""]
     out += [f"- {_step_text(r, now)}" for r in prep] or ["None in the last 6 hours."]
+    from . import selftest                       # the built-in worker test's last result (124)
+    test = selftest.read(state)
+    out += ["", "## Worker test", ""]
+    if not test:
+        out.append("Never run (`conductor remote test <control>`, or **Test workers** in the app).")
+    elif test.get("running"):
+        out.append(f"Running since {_hm(test['at'])}.")
+    else:
+        out.append(f"{_hm(test['at'])}: " + ("passed" if test.get("ok") else f"failed: {test.get('note', '')}")
+                   + (f" in {test['seconds']:.0f} s" if test.get("seconds") is not None else ""))
+        out += [f"- {selftest.line(w)}" for w in test.get("workers") or []]
     for w in rows:
         if w["kind"] == "main":
             continue

@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QHeaderView, QLabel, Q
 from ..app import theme
 from ..app.widgets import muted
 from ..util import clock, parse_stamp
-from . import settings
+from . import selftest, settings
 
 STALE_SECONDS = 10.0            # status.json older than this: the broker isn't serving
 RECENT_SECONDS = 300.0          # a gate failure, a broker restart or a re-run this recent is amber
@@ -202,8 +202,19 @@ class JobBar(QWidget):
         p.end()
 
 
+def test_text(result: dict | None, now: float) -> str:
+    """The Workers tab's line for the last worker test (`selftest.json`)."""
+    if not result:
+        return "Test workers runs a built-in job on the connected workers (no project build)."
+    if result.get("running") and now - result.get("at", 0) < selftest.TIMEOUT + 60:
+        return f"Worker test running since {when(result['at'])}…"
+    head = (f"Worker test {when(result['at'])}: " + ("passed" if result.get("ok") else f"failed: {result.get('note', '')}")
+            + (f" in {result['seconds']:.0f} s" if result.get("seconds") is not None else ""))
+    return "\n".join([head, *("  " + selftest.line(w) for w in result.get("workers") or [])])
+
+
 class WorkersPanel(QWidget):
-    def __init__(self, copy):
+    def __init__(self, copy, test=None):
         super().__init__()
         lay = QVBoxLayout(self)
         top = QHBoxLayout()
@@ -212,8 +223,18 @@ class WorkersPanel(QWidget):
         self.copy_btn = QPushButton("Copy worker link")
         self.copy_btn.clicked.connect(copy)
         top.addWidget(self.copy_btn)
+        self.test_btn = QPushButton("Test workers")
+        self.test_btn.setToolTip("Run conductor's built-in job on the connected workers: offered, finished and "
+                                 "credited shards per worker, and whether each result matched")
+        if test:
+            self.test_btn.clicked.connect(test)
+        top.addWidget(self.test_btn)
         top.addStretch(1)
         lay.addLayout(top)
+        self.test = QLabel()
+        self.test.setTextFormat(Qt.TextFormat.PlainText)        # worker names are typed on the page
+        self.test.setWordWrap(True)
+        lay.addWidget(self.test)
         self.job = QLabel()
         self.job.setTextFormat(Qt.TextFormat.PlainText)
         self.job.setWordWrap(True)
@@ -245,6 +266,10 @@ class WorkersPanel(QWidget):
             self.broker.setText(f"Broker <b style='color:{theme.GREEN}'>up</b> since {when(status['started'])} "
                                 f"· port {status['port']}")
             self.copy_btn.setEnabled(True)
+        result = (status or {}).get("selftest")
+        running = bool(result and result.get("running") and now - result.get("at", 0) < selftest.TIMEOUT + 60)
+        self.test_btn.setEnabled(chip.colour != "red" and bool(status) and not running)
+        self.test.setText(test_text(result, now))
         self.problem.setText(" · ".join(chip.problems))
         self.problem.setVisible(bool(chip.problems))
         job = status.get("job") if status else None
@@ -287,7 +312,7 @@ class RemoteStatus:
         at = view.head.indexOf(view.daemon_label) + 1
         view.head.insertWidget(at, self.chip)
         view.head.insertWidget(at + 1, self.copy_btn)
-        self.panel = WorkersPanel(self.copy_link)
+        self.panel = WorkersPanel(self.copy_link, self.run_test)
         self.url = ""
         self._show(False)
 
@@ -338,6 +363,24 @@ class RemoteStatus:
 
     def open_tab(self) -> None:
         self.view.tabs.setCurrentWidget(self.panel)
+
+    def run_test(self) -> None:
+        """**Test workers**: `conductor remote test`, detached (its output in `selftest.log`);
+        the tab shows its result from `selftest.json` as the broker's status carries it."""
+        from .. import procs
+        from ..procs import console_python
+        r = self.section()
+        if r is None:
+            return
+        try:
+            procs.spawn_detached([console_python(), "-m", "conductor.remote.selftest", str(self.control)],
+                                 self.control, r.state / "selftest.log")
+        except OSError as exc:
+            self.view.notify(f"The worker test did not start: {exc}")
+            return
+        self.panel.test_btn.setEnabled(False)
+        self.panel.test.setText("Worker test starting…")
+        self.view.notify("Worker test started: results show here in a minute or two")
 
     def copy_link(self) -> None:
         if self.url:

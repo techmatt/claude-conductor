@@ -177,17 +177,17 @@ The title adds it to the other parts (`· 1 to review`, `· 1 open question`) an
 nothing running, leads with an orange dot. A window title can't be coloured, so the
 colour lives on the icon: the **taskbar** (the window's icon, `icon.window_icon`) gets a
 badge over its bottom-right corner, orange and still with nothing running, orange and
-turning (its bright half going round ◐ ◓ ◑ ◒ with the title) while items run too, gold
-and turning while items run alone, red while something needs Matt, none when quiet (85
-dropped 84's gold badge as redundant with the title; 120 brought it back: with combined
-taskbar buttons no title shows, and "2 running" read idle). The title's `N running` stays beside what needs Matt
+turning (its bright half going round ◐ ◓ ◑ ◒ with the title) while items run too, red
+while something needs Matt, none while items only run or nothing does (124, Matt: the
+gold running badge duplicated the title's turning glyph; 85 dropped it, 120 restored it,
+124 drops it again). The title's `N running` stays beside what needs Matt
 (`● Conductor · pick · 1 running · 1 to review`; 84). A project tab's hub
 and name turn orange the same way (`status.tab_kind`). A `reviewed` event or the
 question's answer clears it on the next refresh (`Status.badge`, `status.summarize`).
 
 **Tray.** The taskbar's badge, and the same states on the icon's hub: red when something
-needs Matt, orange when something waits (a review or a question), gold while items run,
-slate when quiet (120: a gold-and-dim pulse read as idle at 16 px, and idle was gold too).
+needs Matt, orange when something waits (a review or a question), slate otherwise, items
+running or not (124; 120's gold for running is gone).
 Its tooltip lists each project's state; clicking opens the window. Closing the window
 hides it to the tray; *Quit* in the tray menu exits. Neither touches a daemon or an
 executor. Without a system tray, closing the window quits.

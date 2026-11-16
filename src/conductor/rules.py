@@ -167,6 +167,42 @@ def check(event: dict, control: Path | None = None, readonly: bool = False) -> s
     return None
 
 
+START_TOOL = "mcp__conductor__start"
+TOKEN_RE = re.compile(r"""[^\s'"]+|"[^"]*"|'[^']*'""")
+COUNTS_RE = re.compile(r"(?:^|\s)--?(?:seeds?|games?|count|first|runs)\b[=\s]*\d|\b\d+\.\.\d+\b"
+                       r"|\s\d+\s+\d+(?:\s|$)", re.IGNORECASE)    # a flag, a range, or a positional `first count`
+FARM_REMINDER = ("conductor: this item is `remote`: a seeded run of the project's native sim ({cmd}) runs on "
+                 "the main box alone, and the idle remote workers get nothing. Run seeded batches through "
+                 "`farm-seeds <first seed> <count> <out file> [args…]` (same output); a native run is the "
+                 "fallback when it can't farm. Say in `friction:` why, if you keep running it directly.")
+
+
+def native_run(event: dict, names: list[str], flags: list[str]) -> str | None:
+    """A `remote` item's shell or `start` call running the project's `[remote] native`
+    executable (`names`: its base name; or any executable under `out/`, a copy of it) with a
+    seed range or game count (`flags`: what the native command puts before `{first}` and
+    `{count}`): the command, else None. Never a denial: a native run is the documented
+    fallback (124: aicomplete 249 ran every read as `sim.exe experiment … --games 4`)."""
+    tool, ti = event.get("tool_name"), event.get("tool_input")
+    if not isinstance(ti, dict) or tool not in (*SHELL_TOOLS, START_TOOL) or not isinstance(cmd := ti.get("command"), str):
+        return None
+    if "farm-seeds" in cmd:
+        return None
+    wanted = {n.lower() for n in names}
+    exe = False
+    for tok in TOKEN_RE.findall(strip_heredocs(cmd)[0]):
+        path = _norm(tok.strip("'\""))
+        base = path.rsplit("/", 1)[-1]
+        stem = base[:-4] if base.endswith(".exe") else base
+        if stem in wanted or (base.endswith(".exe") and (path.startswith("out/") or "/out/" in path)):
+            exe = True
+            break
+    if not exe:
+        return None
+    seeded = COUNTS_RE.search(cmd) or any(re.search(rf"(?:^|\s){re.escape(f)}[=\s]*\d", cmd) for f in flags)
+    return " ".join(cmd.split())[:160] if seeded else None
+
+
 def _isolation(what: str) -> str:
     return (f"conductor: refused: no `isolation: worktree` for a {what}: it lands in the main checkout. "
             "Run it without isolation and split helpers by file.")

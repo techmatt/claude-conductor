@@ -148,6 +148,24 @@ def wants(control: Path, item) -> bool:
         return False
 
 
+def native_hint(control: Path) -> tuple[list[str], list[str]]:
+    """For the message hook's farm reminder (`rules.native_run`, 124): the `[remote] native`
+    executable's base name, and the flags it puts before `{first}` and `{count}` (aicomplete:
+    `--seed`, `--games`). Empty on any error or without the section."""
+    try:
+        from . import settings
+        r = settings.load(control)
+        if not r or not r.native:
+            return [], []
+        name = r.native[0].replace("\\", "/").rsplit("/", 1)[-1]
+        name = name[:-4] if name.lower().endswith(".exe") else name
+        flags = [r.native[i - 1] for i, a in enumerate(r.native)
+                 if i and a in ("{first}", "{count}") and r.native[i - 1].startswith("-")]
+        return [name], flags
+    except Exception:                            # noqa: BLE001 - a reminder, never in the way of a launch
+        return [], []
+
+
 def item_launch(control: Path, prompt: Path, item: str = "") -> dict[str, str]:
     """For a `remote: true` item: its extra environment (the `farm-seeds` folder first on
     PATH, and its id for the worker page), with the paragraph added to its prompt. Nothing

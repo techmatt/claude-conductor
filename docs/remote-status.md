@@ -89,8 +89,30 @@ adding the section brings the chip and tab, removing it takes them.
   …`, a worker's error); a table, the main box first: worker (its name from the page), kind and engine, cores (the main box's
   `main_slots` as slots), state (*One state*: `preparing · compiling the bundle for 810ce37 · 12 s`,
   `working · 2 shards out`), last seen (`local` for the main box: the broker's own machine), shards today (won, by local date). Workers the broker has
-  forgotten (an hour unheard) drop out. The broker learns the running items from
+  forgotten (an hour unheard) drop out; their counts are kept by id, so one that rejoins (a
+  laptop asleep overnight) carries on from them (124: aicomplete's tab won 35 shards at
+  4:25-4:54am and rejoined at 8:31am showing 0). The broker learns the running items from
   `running/<repo>/<name>.run.json` every 2 s (`broker.running_items`).
+- **Test workers** (124, *Worker test* below) on the tab's top row, and the last result
+  under it: a line per worker.
+
+## Worker test
+
+`conductor remote test <control>` (or **Test workers**) runs conductor's own farm job on
+the project's broker, with no project build, gate command or `native_build`
+(`remote/selftest.py`): 40 shards of 4 seeds of a 32-bit LCG busy-loop (`selftest.js`,
+~7 ms a seed in Chrome, ~1.3 s in Python), its bundle served from
+`bundles/selftest-<hash>/`. Browsers gate and run it as any bundle; the main box runs the
+same loop in Python, so it takes part (and overtakes) as in a real job; local-remote
+workers sit it out (they run the project's native command). Every copy is checked on the
+broker as it lands (`selftest.expected` jumps the LCG ahead), so a wrong one never lands.
+It needs a browser connected, and stops after 3 minutes. Per worker it reports shards
+offered, finished and credited (won), seconds a shard, copies the main box overtook, and
+results that didn't match (`Job.tally`, in the job's `state`). The result goes to
+`.conductor/remote/selftest.json` (the app's tab, via `status.json`) and `remote-diag.md`;
+the app's run logs to `selftest.log`. Exit 0 passed (complete, all matched, a remote worker
+credited), 1 failed, 2 couldn't start. Sandbox, 124: a headless Chrome tab was offered,
+finished and credited 39 of 40 shards (0.02 s a shard), the main box 1 (5.1 s); 5 s in all.
 - **The item row**: a farming item's Note starts with `farming 18/36` (first, so a long
   progress line can't elide it).
 

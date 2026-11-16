@@ -42,8 +42,8 @@ def test_something_waiting_for_review_marks_orange_whatever_else_holds():
     # Running too: the ticker turns, and so does the badge, orange.
     both = status.summarize([snap(running=1, unreviewed=1)])
     assert both.title(1) == "◓ Conductor · 1 running · 1 to review" and both.badge == "turn"
-    # Running alone: a gold turning badge (120 brought back what 85 dropped); quiet: none.
-    assert status.summarize([snap(running=1)]).badge == "run" and status.summarize([snap()]).badge is None
+    # Running alone, or quiet: no badge (124 drops 120's gold one: the title turns).
+    assert status.summarize([snap(running=1)]).badge is None and status.summarize([snap()]).badge is None
     # Needs Matt stays red; a blocking question is waiting too, so it is counted once there.
     need = status.summarize([snap(asks=1, unreviewed=1)])
     assert need.title() == "● Conductor · 1 question · 1 to review" and need.badge == "need" and need.waiting == 2
@@ -65,8 +65,7 @@ def test_the_taskbar_badge_reads_on_the_smallest_icon(qapp):
     turns = {icon.image(32, badge="turn", tick=t).pixelColor(26, 21).name() for t in range(4)}
     assert len(turns) == 2              # the filled half moves round: bright, then dim, at one spot
     assert icon.icon(badge="turn", tick=1) is icon.icon(badge="turn", tick=5)      # cached per step
-    run = icon.image(32, badge="run").pixelColor(26, 26)                           # 120: gold, not orange
-    assert run.red() > 120 and run.green() > 90 and run.blue() < 90 and run.name() != icon.image(32, badge="turn").pixelColor(26, 26).name()
+    assert icon.TURNING == ("turn",)                                                 # 124: no gold `run`
 
 
 def test_the_taskbar_turns_orange_while_a_report_waits_and_clears_on_review(qapp, env, tmp_path):
@@ -90,7 +89,7 @@ def test_the_taskbar_turns_orange_while_a_report_waits_and_clears_on_review(qapp
     assert win._badge == ("turn", 1) and [tray_hub(win.status, t) for t in (0, 1)] == ["orange", "orange"]
     env.d.log.append("reviewed", item="code/001_x", status="done", by="planner")
     win.refresh()
-    assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == ("run", 1)
+    assert win.windowTitle() == "◓ Conductor · 1 running" and win._badge == (None, 0)
     assert win.tabs.tabBar().property("signal") == ""
     env.release()
     win._quitting = True
@@ -159,7 +158,7 @@ def test_the_window_title_follows_running_and_red(qapp, env, tmp_path):
     assert win.windowTitle() == "◐ Conductor · 1 running" and win.turner.isActive()
     win._turn()
     assert win.windowTitle() == "◓ Conductor · 1 running"
-    assert [tray_hub(win.status, t) for t in (0, 1)] == ["gold", "gold"] and win._badge == ("run", 1)
+    assert [tray_hub(win.status, t) for t in (0, 1)] == ["slate", "slate"] and win._badge == (None, 0)   # 124
     env.d.log.append("red", item="code/001_x", reasons=["boom"], after_red="stop")
     win.refresh()
     assert win.windowTitle() == "● Conductor · red · 1 running"     # what runs still shows (84)
