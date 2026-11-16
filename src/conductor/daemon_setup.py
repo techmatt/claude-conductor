@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import executor, git, items, parked, picks, procs, talk, worktrees
+from . import executor, git, items, parked, picks, procs, questions, talk, worktrees
 from . import resume as resume_items           # `resume` here is a staged item's move record
 from .util import file_hash, now, parse_stamp, retry_io, stamp, write_text
 
@@ -223,11 +223,14 @@ class SetupMixin:
                              for n, e in enumerate(parked.take(cfg.control, item), 1)]
         # Fixed at the first launch, so a restart's new launch or a later round can't change them.
         rec.setdefault("choices", picks.section(cfg, item.needs_pick))
+        if stage and "stage_defaults" not in rec:         # unanswered staging questions (120)
+            rec["stage_defaults"] = questions.unanswered_stage(self.log, item.id)
         write_text(paths.prompt, executor.build_prompt(cfg, item, paths, item.max_hours or cfg.max_hours,
                                                        parse_stamp(rec["deadline"]), rec, resume,
                                                        notes=self._notes_text(rec), usage=self._template_usage(rec),
                                                        amends=[m for m in amends if talk.is_amend(m)], beside=warn,
-                                                       resumed=resumed, parked=rec["parked"], choices=rec["choices"]))
+                                                       resumed=resumed, parked=rec["parked"], choices=rec["choices"],
+                                                       defaults=rec.get("stage_defaults") or []))
         write_text(paths.mcp, executor.mcp_config(cfg, item, rec["session_id"], rec.get("worktree") or cfg.repos[item.repo]))
         write_text(paths.settings, executor.hook_settings(cfg, item))
         md_path = run.md_path
@@ -256,6 +259,8 @@ class SetupMixin:
             extra["notes"] = rec["notes"]
         if resume:
             extra |= {"resumed": True, "landed": resume["landed"]}
+        if rec.get("stage_defaults"):
+            extra["stage_defaults"] = rec["stage_defaults"]
         if item.alongside:
             extra["alongside"] = item.alongside
         if rec.get("remote"):

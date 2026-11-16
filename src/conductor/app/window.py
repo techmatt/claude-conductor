@@ -39,16 +39,17 @@ AUTOPILOT = {                   # mode → menu label, what it means
 }
 HUBS = {"need": "red", "waiting": "orange", "running": "gold", "idle": "slate"}   # a project tab's icon (`status.tab_kind`)
 TAB_COLOURS = {"need": theme.RED, "waiting": theme.ORANGE}     # an unselected project tab's label; else MUTED
-TURN_MS = 1000                  # the running title's glyph, the tray's pulse, the taskbar badge's turn
+TURN_MS = 1000                  # the running title's glyph, and the taskbar and tray badges' turn
 
 
 def tray_hub(st: status.Status, tick: int) -> str:
-    """The tray's hub: red when something needs Matt; while items run, pulsing gold, or
-    orange when something waits for review too; still orange when only that waits."""
+    """The tray's hub: red when something needs Matt, orange when something waits for
+    review or an answer, gold while items run, slate when quiet (120: idle was gold, and
+    a gold-and-dim pulse at 16 px read as idle). The tray carries the taskbar's turning
+    badge too (`Status.badge`), so running shows by motion as well as colour."""
     if st.kind == "need":
         return "red"
-    hue = "orange" if st.waiting else "gold"
-    return ({"orange": "orange_dim", "gold": "dim"}[hue] if tick % 2 else hue) if st.kind == "running" else hue
+    return "orange" if st.waiting else "gold" if st.kind == "running" else "slate"
 
 
 def state_icon(kind: str) -> QIcon:
@@ -375,7 +376,7 @@ class MainWindow(QMainWindow):
         self._good: dict[Path, Snapshot] = {}      # each project's last snapshot read whole: the title's
         self._tick = 0
         self._badge: tuple = (None, 0)              # the window icon's badge, as last set
-        # Only while items run: turns the title's glyph and pulses the tray's hub.
+        # Only while items run: turns the title's glyph and the icons' badges.
         self.turner = QTimer(self)
         self.turner.timeout.connect(self._turn)
         self.settings = settings or QSettings("conductor", "conductor-app")
@@ -540,9 +541,10 @@ class MainWindow(QMainWindow):
         self._show_status()
 
     def _show_status(self) -> None:
-        """The title, the window's (taskbar's) badge and the tray's icon: the gold hub
-        pulses while items run, orange when something waits for review too, and turns
-        red when something needs Matt. Needs Matt holds still. Each project tab leads
+        """The title, and the same badge on the window's (taskbar's) icon and the tray's:
+        gold and turning while items run, orange when something waits for review or an
+        answer, red when something needs Matt (the tray's hub coloured to match, `tray_hub`).
+        Needs Matt holds still. Each project tab leads
         with the same turning glyph while it has an item moving (`status.moving`)."""
         self.setWindowTitle(self.status.title(self._tick))
         for folder, view in self.views.items():
@@ -555,7 +557,7 @@ class MainWindow(QMainWindow):
             self._badge = badge
             self.setWindowIcon(icon.window_icon(*badge))
         if self.tray:
-            self.tray.setIcon(icon.icon(tray_hub(self.status, self._tick)))
+            self.tray.setIcon(icon.icon(tray_hub(self.status, self._tick), *badge))
 
     # ------------------------------------------------------------ tray
     def has_tray(self) -> bool:

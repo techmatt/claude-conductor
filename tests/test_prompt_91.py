@@ -46,9 +46,10 @@ def test_init_writes_main_for_a_repo_on_another_branch(tmp_path):
     notes, cfg = _init(tmp_path, f"old={tmp_path / 'old'}", f"ok={tmp_path / 'ok'}")
     assert cfg.opts("old").main == "master" and cfg.opts("ok").main == "main"
     assert 'main = "master"' in read_text(tmp_path / "proj-control" / "conductor.toml")
-    assert notes == ['repo old: its branch is master, written as main = "master"',
+    assert notes[:-1] == ['repo old: its branch is master, written as main = "master"',
                      "old has no remote: create its GitHub repo (session.md says so until it has one)",
                      "the control folder has no remote: in it, `gh repo create proj-control --private --source . --push` (session.md says so until it has one)"]
+    assert notes[-1].startswith("start access: proj's repos")
 
 
 def test_the_stub_state_md_has_every_section_in_order(tmp_path):

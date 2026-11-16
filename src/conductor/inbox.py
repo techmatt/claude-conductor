@@ -563,9 +563,11 @@ def saved_line(c: dict) -> str:
 
 
 def staged_questions(log: EventLog, view: View) -> list[str]:
-    """What each item staged and not launched yet asks in its plan (`questions.plan_questions`).
-    One with an amendment on file since it staged shows as answered, its questions not listed
-    (118: 237's were relayed to Matt as open after the amendment answering them)."""
+    """Staging questions as open rulings, each with its default (`questions.plan_questions`):
+    an item staged and not launched yet, then one that launched on its defaults (its `start`
+    carries `stage_defaults`), shown while it runs and until its report is reviewed (120:
+    helium 011's and aicomplete 234's shipped on defaults unseen). A staged one with an
+    amendment on file since it staged shows as answered, unquoted (118)."""
     out = []
     for item_id, rec in view.staged.items():
         ev = log.last("staged", item=item_id) if rec.get("phase") == "staged" else None
@@ -576,7 +578,13 @@ def staged_questions(log: EventLog, view: View) -> list[str]:
                            f"answered by amendment #{amend.id} ({clock(amend.ts)})")
                 continue
             out.append(f"- `{item_id}`, staged {clock(ev.ts)}, asks before it launches (answer: an amendment):")
-            out += [f"  > {q}" for q in ev.detail["questions"]]
+            out += questions.default_lines(ev.detail["questions"])
+    for item_id in dict.fromkeys([*view.running, *(f.item for f in view.unreviewed())]):
+        if (st := log.last("start", item=item_id)) and (qs := st.detail.get("stage_defaults")):
+            state = "running" if item_id in view.running else "finished, report unreviewed"
+            out.append(f"- `{item_id}` launched {clock(st.ts)} on its defaults, {state} "
+                       f"(a ruling now: an amendment while it runs, else a follow-up):")
+            out += questions.default_lines(qs)
     return out
 
 
@@ -788,7 +796,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
             out.append(f"  {'Matt' if q.design else 'Answer'}: write `questions/{q.id}.answer.md`.")
     if staged_qs := staged_questions(log, view):
         # Live too: an amendment answers them, before the item launches.
-        out += ["", "## Staged plans' questions", *staged_qs]
+        out += ["", "## Staging questions: open rulings", *staged_qs]
     from . import session        # imports this module
     unreviewed, theirs = view.unreviewed(), session.conductor_reports(root)
     if warned := warning_lines(view, unreviewed):

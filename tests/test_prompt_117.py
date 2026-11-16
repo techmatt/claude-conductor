@@ -52,8 +52,8 @@ def test_a_partial_told_to_stop_makes_no_retro(env):
 def test_init_names_the_control_folder_with_no_remote(tmp_path):
     # session.md's line until it has one: test_prompt_91's session test.
     _, notes = scaffold.init(tmp_path / "proj-control", "proj", [f"code={tmp_path / 'code'}"])
-    assert notes[-1] == git.CONTROL_NO_REMOTE.format(name="proj-control") + " (session.md says so until it has one)"
-    assert "gh repo create proj-control --private --source . --push" in notes[-1]
+    assert notes[-2] == git.CONTROL_NO_REMOTE.format(name="proj-control") + " (session.md says so until it has one)"
+    assert "gh repo create proj-control --private --source . --push" in notes[-2]
 
 
 def test_preamble_lines_for_baselines_status_fanout_and_seeds(env):

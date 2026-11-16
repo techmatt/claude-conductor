@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import inbox, picks, session
 from .config import Config
-from .events import Event
+from .events import Event, EventLog
 from .executor import RunPaths
 from .resume import label as resume_label
 from .state import View
@@ -52,15 +52,19 @@ def _item_section(cfg: Config, view: View, ev: Event) -> list[str]:
     return out + _inline(paths.report)
 
 
-def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: Path | None = None) -> Bundle:
-    """The bundle for `review: all` (`item_id` None) or `review: <item>` (one finished item)."""
+def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: Path | None = None,
+           log: EventLog | None = None) -> Bundle:
+    """The bundle for `review: all` (`item_id` None) or `review: <item>` (one finished item).
+    With `log`, staging questions still open as rulings follow the warnings (120)."""
     root = root or session.CONDUCTOR_ROOT
     finishes = [view.finishes[item_id]] if item_id else view.unreviewed()
     what = item_id or "all"
+    rulings = inbox.staged_questions(log, view) if log else []
     out = [f"# Review — {cfg.project}", "",
            f"Written for `{rel}` at {clock(now())}: `review: {what}`. Nothing is marked reviewed: "
            "`reviewed:` comes only from processing a report read in full, as process X / process all does.",
            *(["", "## Warnings", *warned] if (warned := inbox.warning_lines(view, finishes)) else []),
+           *(["", "## Staging questions: open rulings", *rulings] if rulings else []),
            "", "## Unreviewed reports" if not item_id else "## Report",
            *(inbox.unreviewed_lines(view, finishes, picks.saved_at(cfg, view), cfg) or ["- none"])]
     bundle = Bundle("", items=[ev.item for ev in finishes])

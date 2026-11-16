@@ -114,8 +114,9 @@ sees one render or the next, never a splice; each heading and event line appears
 Its header names the current checkpoint (see *Checkpoints*).
 First **Questions**: every open ask, regardless of the read
 mark, a `design` one marked held for Matt; one whose item finished last, marked "item finished: an answer
-records a ruling" (83). **Staged plans' questions**, standing the same way
-until the item launches, or marked answered once an amendment is on file (`questions.md`). **Warnings**: each unreviewed report's
+records a ruling" (83). **Staging questions: open rulings**, standing the same way,
+each with its default: a staged item's until an amendment answers them, then one that launched on
+its defaults until its report is reviewed (`questions.md`; also in `review.md`). **Warnings**: each unreviewed report's
 `warnings:` line by kind, then per-kind repeats in its repo's last five reports
 (`warnings.md`). Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`

@@ -467,7 +467,7 @@ class SignalsMixin:
             item_id, view = None, state.scan(self.cfg, self.log)
         else:
             item_id, view = self._finished_item("review", value)
-        bundle = review_mod.render(self.cfg, view, rel, item_id)
+        bundle = review_mod.render(self.cfg, view, rel, item_id, log=self.log)
         write_text(self.cfg.path("review.md"), bundle.text)
         self.log.append("review", item=item_id, paths=[rel, "review.md"], which=item_id or "all",
                         items=bundle.items, conductor=bundle.conductor)

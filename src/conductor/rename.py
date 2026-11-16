@@ -264,6 +264,9 @@ def rename(control: Path, old: str, new: str, path: str | None = None) -> list[s
                    moved=new_path != old_path, sha=sha, by="cli")
     finally:
         log.close()
+    from .scaffold import start_access           # lazy: scaffold pulls in session and its imports
+    if access := start_access(control, cfg.project, list(config_mod.load(control).repos.values())):
+        done.append(access)
     return done
 
 

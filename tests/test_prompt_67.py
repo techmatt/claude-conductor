@@ -76,9 +76,9 @@ def test_a_staged_plans_questions_reach_the_inbox_until_it_launches(env):
     env.tick_until(lambda: env.events("staged"))
     [ev] = env.events("staged")
     assert ev.detail["questions"] == ["96 games or 96 a cell?"]
-    env.tick_until(lambda: "## Staged plans' questions" in (env.control / "inbox.md").read_text(encoding="utf-8"))
+    env.tick_until(lambda: "## Staging questions: open rulings" in (env.control / "inbox.md").read_text(encoding="utf-8"))
     text = (env.control / "inbox.md").read_text(encoding="utf-8")
-    assert "> 96 games or 96 a cell?" in text and "asks 1 question" in inbox.describe(ev)
+    assert "> 96 games or 96 a cell? — **default**: none named" in text and "asks 1 question" in inbox.describe(ev)
     # 118: an amendment on file since it staged answers them; they no longer read as open.
     (env.control / "queue" / "code" / "002_next.amend.md").write_text("---\nby: planner\n---\n96 a cell.\n",
                                                                       encoding="utf-8")
@@ -86,6 +86,42 @@ def test_a_staged_plans_questions_reach_the_inbox_until_it_launches(env):
     env.tick_until(lambda: "answered by amendment #" in (env.control / "inbox.md").read_text(encoding="utf-8"))
     text = (env.control / "inbox.md").read_text(encoding="utf-8")
     assert "> 96 games or 96 a cell?" not in text and "its 1 question answered by amendment" in text
+    env.release()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    assert "stage_defaults" not in env.d.log.last("start", item="code/002_next").detail    # answered: none stand
+
+
+def test_split_default():
+    assert questions.split_default("Oracle in the ladder? (default: yes, as 010 did)") == \
+        ("Oracle in the ladder?", "yes, as 010 did")
+    assert questions.split_default("Which seed? Default: 7.") == ("Which seed?", "7")
+    assert questions.split_default("Which seed?") == ("Which seed?", None)
+
+
+def test_unanswered_staging_questions_launch_with_defaults_and_stay_open_rulings(env):
+    """120 (helium 012, aicomplete 244): the resume message says the defaults stand, and
+    the digests keep them as open rulings while it runs and until its report is reviewed."""
+    env.queue("001_long", env.hold())
+    env.tick_until(lambda: env.events("start"))
+    go2 = (env.root / "go2").as_posix()
+    env.queue("002_next", f"FAKE stage-question Oracle in the ladder? (default: yes)\nFAKE wait-for {go2} 180\n"
+              "FAKE report done\n", depends_on="[001_long]")
+    env.tick_until(lambda: env.events("staged"))
+    env.release()
+    env.tick_until(lambda: env.d.log.last("start", item="code/002_next"))
+    st = env.d.log.last("start", item="code/002_next")
+    assert st.detail["stage_defaults"] == ["Oracle in the ladder? (default: yes)"]
+    prompt = RunPaths.for_name(env.d.cfg, "code", "002_next").prompt.read_text(encoding="utf-8")
+    assert "Staging questions unanswered: defaults stand" in prompt
+    assert "> Oracle in the ladder? — **default**: yes" in prompt
+    inbox_md = lambda: (env.control / "inbox.md").read_text(encoding="utf-8")     # noqa: E731
+    env.tick_until(lambda: "launched" in inbox_md() and "on its defaults, running" in inbox_md())
+    (env.root / "go2").touch()
+    env.tick_until(lambda: env.finished("code/002_next"))
+    env.tick_until(lambda: "on its defaults, finished, report unreviewed" in inbox_md())
+    from conductor import review, state
+    text = review.render(env.d.cfg, state.scan(env.d.cfg, env.d.log), "r", log=env.d.log).text
+    assert "## Staging questions: open rulings" in text and "**default**: yes" in text
 
 
 def test_wait_for_stops_on_a_failure_line_and_a_dead_worker(env, tmp_path):

@@ -26,6 +26,10 @@ repaired and pruned. Then:
 - **Committed:** `conductor.toml` (the table, `repo =` lines, a tool's `cwd`; `path` when it
   moved) and `state.md` (the same spellings), as `rename repo <old> -> <new>`, with the
   guard re-snapshotted so the next start sees no drift.
+- **Start access** (120): when the project's repos are no longer just `C:\Code\<project>`,
+  its last line is `start access: …`, the line Matt's saved start preference needs so
+  `planner.md` *Start* step 2 asks for the right paths (`scaffold.start_access`; `conductor
+  init` prints the same).
 
 Executors' own files (reports, logs, prompts) and item bodies are history and keep
 their text. Transcripts are found by session id, so `open` and `resume:` are

@@ -106,18 +106,18 @@ only in the environment (74). Stages and merge executors get none.
 - **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
   runs at below-normal process priority and leaves at least 4 hardware threads free:
   simulation and test runs default to `load.run_threads()` threads (the box's less 4 and 2
-  of headroom: 6 here; 73, after aicomplete #3405 ran at the 8 allowed and was killed beside
-  outside processes), half that while another item runs alongside; at most 2 heavy
+  of headroom: 6 here; 73), half that while another item runs alongside; at most 2 heavy
   subagents (builds, sims, browsers) at once. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
   no constraint": light read-only reviewers and verifiers don't count
   against the 2, but run in batches per dimension. Any fan-out (a Workflow, a diff review) runs at most 10
-  agents in all (or the prompt's number), verifiers too, set before launch (68; 117: aicomplete 234 ran 16; `ultracode.md`).
-  Not enforced: *Now*'s load line shows it broken; `load_high` logs under 2 free for ~3 min and messages only an
+  agents in all (or fewer if the prompt says), verifiers too (68; 117: aicomplete 234 ran 16): a
+  Workflow fanning out without `const MAX_AGENTS = <n>`, n ≤ 10, is denied at launch (120; `ultracode.md`).
+  The rest is not enforced: *Now*'s load line shows it broken; `load_high` logs under 2 free for ~3 min and messages only an
   item that is a real share of it (80); the next `progress` or `wait_for` return says when timing reads are inflated (`memory.md`).
   A load message is information (82): finish the unit in flight, start the next one smaller,
   never kill and relaunch running work for load alone.
   The recipe (72): Git Bash `nice -n 10 <cmd>` gives `BELOW_NORMAL` on Windows, inherited by
-  children (measured); the full preamble adds the PowerShell form.
+  children; the full preamble adds the PowerShell form.
 - **Premises** (74, full only). A number or fact the prompt quotes is re-read from source
   before use, a moved one reported; a timing read beside another item reports only ratios, and a
   speed baseline is re-based only on a quiet box (117: aicomplete 215 re-based under load).

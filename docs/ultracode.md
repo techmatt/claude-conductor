@@ -31,7 +31,9 @@ the Workflow tool is present in every `-p` session; only the opt-in differs.
 2 heavy subagents at once, light reviewers batched, and at most 10 agents per Workflow, finders and
 verifiers both, unless the prompt gives another number (`preambles.md`, *Load budget*). "Every
 substantive task" decides when to use a workflow, never how big one is (aicomplete 068 ran 22
-agents against "about 10", ~800k tokens). The count is a preamble rule; conductor doesn't enforce it.
+agents against "about 10", ~800k tokens). Since 120 conductor enforces what it can see before a
+Workflow runs (`fanout.py`): a script that fans out must declare `const MAX_AGENTS = <n>`, n ≤ 10,
+or its call is denied with the reason and the executor rewrites it; the run itself isn't counted.
 A helper's brief quotes the prompt's rulings word for word, never a paraphrase (79: aicomplete
 111's helpers read a paraphrased price ceiling as a target band).
 

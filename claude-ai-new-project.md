@@ -20,7 +20,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
 
 ## Starting a new project
 
-1. Matt names the project and its code repos. Nothing is authored before every name is fixed. Recommend naming the main code repo after the project (`C:\Code\<project>`): session start's access request guesses it, so a different name costs a fallback each start.
+1. Matt names the project and its code repos. Nothing is authored before every name is fixed. Recommend naming the main code repo after the project (`C:\Code\<project>`): session start's access request guesses it. Otherwise init prints a `start access:` line: Matt adds it to his saved start preference, or each start costs a refused request and a fallback.
 2. The planner gives Matt the one command that creates the control folder, and Matt runs it in `C:\Code\claude-conductor`:
    `uv run conductor init C:\Code\<project>-control --project <project> --repo <name>=C:\Code\<repo> …`
    It writes and commits the control folder (refusing one with files in it), makes a missing code repo with no remote, and prints what it did (`docs/control-folder.md`). Until a repo has a remote, `session.md` says `<repo> has no remote: create its GitHub repo`, and likewise for the control folder (with its `gh repo create … --private` line); relay both. A repo Matt already made on GitHub is cloned first, over HTTPS (`gh auth git-credential`; SSH isn't set up), then init.

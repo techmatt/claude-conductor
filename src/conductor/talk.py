@@ -23,7 +23,8 @@ tamper guard reads to tell which running item changed which tracked file.
 
     python -m conductor.talk pre --cap <seconds> [--background=<glob> ...]
 
-is its PreToolUse hook on Bash and PowerShell, which keeps every call short enough for a
+is its PreToolUse hook on `Workflow`, denying a script over the agent cap (`fanout.py`),
+and on Bash and PowerShell, which keeps every call short enough for a
 message to get in: a command matching a `background` glob runs with `run_in_background`,
 and any other foreground call's `timeout` is capped (Claude Code moves a command still
 running at its timeout to the background rather than killing it).
@@ -284,18 +285,19 @@ def waited(msg: dict) -> int | None:
 # ---------------------------------------------------------------- the hook
 def hook_settings(python: str, control: Path, item: str, cap_seconds: float = 0,
                   background: list[str] = ()) -> str:
-    """The executor's `--settings`: a PostToolUse hook on every tool, and with a cap or
-    `background` globs, the PreToolUse hook on the shell tools."""
+    """The executor's `--settings`: a PostToolUse hook on every tool, and the PreToolUse
+    hook on `Workflow` (the agent cap, `fanout.py`) and, with a cap or `background` globs,
+    on the shell tools."""
     hooks = {"PostToolUse": [{"matcher": "", "hooks": [{
         "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
         "args": ["-m", "conductor.talk", "hook", "--control", str(control), "--item", item],
     }]}]}
-    if cap_seconds > 0 or background:
-        hooks["PreToolUse"] = [{"matcher": "|".join(SHELL_TOOLS), "hooks": [{
-            "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
-            "args": ["-m", "conductor.talk", "pre", "--cap", f"{cap_seconds:g}",
-                     *(f"--background={g}" for g in background)],
-        }]}]
+    shells = cap_seconds > 0 or bool(background)
+    hooks["PreToolUse"] = [{"matcher": "|".join((*SHELL_TOOLS, "Workflow") if shells else ("Workflow",)), "hooks": [{
+        "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
+        "args": ["-m", "conductor.talk", "pre", "--cap", f"{cap_seconds:g}",
+                 *(f"--background={g}" for g in background)],
+    }]}]
     return json.dumps({"hooks": hooks}, indent=1)
 
 
@@ -324,7 +326,12 @@ def pre_tool(event: dict, cap_seconds: float, background: list[str]) -> dict | N
 
 
 def pre_hook(event: dict, cap_seconds: float, background: list[str]) -> str | None:
-    """What the PreToolUse hook prints: the rewritten input, or None."""
+    """What the PreToolUse hook prints: the rewritten input, a Workflow call's denial
+    (`fanout.check`), or None."""
+    from .fanout import check
+    if why := check(event):
+        return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                  "permissionDecisionReason": why}})
     tool = pre_tool(event, cap_seconds, background)
     if tool is None:
         return None

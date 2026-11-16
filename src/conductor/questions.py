@@ -229,6 +229,37 @@ def plan_questions(plan: str) -> list[str]:
     return [q[:PLAN_QUESTION_CHARS] for q in out[:PLAN_QUESTIONS]]
 
 
+PLAN_DEFAULT_RE = re.compile(r"[\s(;,—-]*\bdefault\b\s*[:=]\s*(.+?)[)\s.]*$", re.IGNORECASE)
+
+
+def split_default(q: str) -> tuple[str, str | None]:
+    """A staged question and the default its plan named (`... (default: X)`), if any."""
+    if m := PLAN_DEFAULT_RE.search(q):
+        return q[:m.start()].rstrip(), m.group(1).strip()
+    return q, None
+
+
+def unanswered_stage(log, item_id: str) -> list[str]:
+    """The questions of `item_id`'s last stage that no amendment answered: none written
+    since it staged (118 folds an answered stage into one line). Its launch carries these
+    into the resume message and its `start` event (`stage_defaults`), so the digests keep
+    them as open rulings until the report is reviewed (120)."""
+    ev = log.last("staged", item=item_id)
+    if not ev or not ev.detail.get("questions"):
+        return []
+    amend = log.last("amended", item=item_id)
+    return [] if amend and amend.id > ev.id else list(ev.detail["questions"])
+
+
+def default_lines(qs: list[str], indent: str = "  ") -> list[str]:
+    """`> question` then its default, for a digest or the resume message."""
+    out = []
+    for q in qs:
+        text, default = split_default(q)
+        out.append(f"{indent}> {text} — **default**: {default or 'none named; the executor chose'}")
+    return out
+
+
 def read_answer(q: Question, settle: float = ANSWER_SETTLE_SECONDS) -> str | None:
     """The answer text once the file has stopped changing; front-matter, if any, is dropped."""
     p = q.answer_path

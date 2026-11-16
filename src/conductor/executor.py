@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import audits, kept, load
+from . import audits, kept, load, questions
 from . import parked as parked_mod
 from .config import Config
 from .items import Item
@@ -94,7 +94,8 @@ A load message is information: finish the unit in flight, start the next one sma
 kill and relaunch work for load alone. At most 2 heavy subagents
 (builds, sims, browsers) at once, above any Workflow size or Ultracode cost note;
 light read-only reviewers don't count but run batched per dimension. Any fan-out (a Workflow,
-a diff review) runs at most 10 agents in all (or the prompt's number), finders and verifiers both, set before launch;
+a diff review) runs at most 10 agents in all (or fewer if the prompt says), finders and verifiers both: a Workflow
+script that fans out declares `const MAX_AGENTS = <n>` (n ≤ 10) and slices to fit, or conductor refuses it;
 Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
 quote the prompt's rulings word for word and give each helper its own scratch path (`out/{item_name}/<helper>/`); a read-only one (Explore, Plan)
 can't write, so its findings come back inline: brief a helper that must write files as general-purpose. Never pass
@@ -392,7 +393,8 @@ While staging:
 - nothing long and nothing that holds heavy resources: no builds, no test suites, no
   servers, no GPU work; at most {stage_minutes:g} minutes in all;
 - do not ask questions now (there is no ask tool yet); list them in your plan under a line
-  `Questions:`, one `- ` bullet each: they reach the planner before you launch.
+  `Questions:`, one `- ` bullet each, ending `(default: <what you will do unanswered>)`:
+  they reach the planner before you launch.
 
 Then write your plan for executing the prompt as your final message, ending with its
 outline: the sections you will work through, a few words each, the report last. Stop. When
@@ -410,6 +412,14 @@ You have the lock now. Conductor moved your worktree from {old} to the current `
 at {new}{landed}. Check what landed since you staged and adjust your plan, re-deriving
 any time, rate or baseline the prompt quotes from it, then execute the prompt you read
 while staging. Everything below now applies.
+
+"""
+
+STAGE_DEFAULTS = """\
+Staging questions unanswered: defaults stand. Nobody answered these from your plan, so take
+the default you named for each; where one turns out to shape the work (its cost, a bar, a
+design), say so in your report, since the planner sees them as rulings still open:
+{lines}
 
 """
 
@@ -566,7 +576,8 @@ class RunPaths:
 def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, deadline: datetime,
                  run: dict | None = None, resume: dict | None = None, notes: str = "",
                  usage: str = "", amends: list[dict] = (), beside: list[tuple[str, str]] = (),
-                 resumed: str = "", parked: list[dict] = (), choices: str = "") -> str:
+                 resumed: str = "", parked: list[dict] = (), choices: str = "",
+                 defaults: list[str] = ()) -> str:
     """The execution preamble and the item body; with `resume` (old/new base, landed
     count), the message that resumes a staged session instead. `notes`: a cleanup's
     audit notes, inlined; `usage`: a disk cleanup's control-folder sizes and worktrees;
@@ -574,7 +585,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     (id, gist) of each item it is warned about starting beside (`BESIDE`); `resumed`: a
     resume item's paragraph on its original (`resume.paragraph`); `parked`: the parked edits
     it carries (`parked.section`); `choices`: a `needs_pick` item's saved choices
-    (`picks.section`)."""
+    (`picks.section`); `defaults`: its stage's unanswered questions (`STAGE_DEFAULTS`)."""
     run = run or {}
     prose = cfg.opts(item.repo).prose
     keeps = audits.writes_notes(item.meta())
@@ -620,6 +631,8 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
               if n else "; nothing landed since you staged")
     head = RESUME_HEAD.format(old=resume["old"][:10], new=resume["new"][:10], main=cfg.opts(item.repo).main,
                               landed=landed)
+    if defaults:
+        head += STAGE_DEFAULTS.format(lines="\n".join(questions.default_lines(list(defaults), "")))
     tail = (RESUME_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
     return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + extra + tail
 

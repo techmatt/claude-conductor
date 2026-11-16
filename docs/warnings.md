@@ -52,8 +52,8 @@ A new project is offered checks for its domain at setup (`claude-ai-new-project.
 
 - The `finish` event carries `warnings` as written (`events.md`); `conductor events`
   and the inbox's event lines add ` · **warnings: …**`.
-- **`## Warnings`** in `inbox.md` and `session.md` (after *Questions* and *Staged plans'
-  questions*, before *Unreviewed reports*) and in `review.md` (before *Unreviewed
+- **`## Warnings`** in `inbox.md` and `session.md` (after *Questions* and *Staging questions:
+  open rulings*, before *Unreviewed reports*) and in `review.md` (before *Unreviewed
   reports*): one line per unreviewed finish that raised any, `- <item> (<status>,
   finished <clock>, #<id>): **<kind>**: <text>; …`, then for each repo a line counting
   the kinds shown that repeat in its last five reports: `- repeated in `<repo>`'s last 5

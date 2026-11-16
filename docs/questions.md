@@ -93,15 +93,23 @@ Options:
   only from one Matt or the planner already gave, naming its source; `watch_answer` logs it.
 
 **A stage has no ask tool**, so its questions go in its plan under a `Questions:` line or a
-`## Questions` heading, one bullet each (`questions.plan_questions`; the heading since 75,
-after aicomplete 090's four were lost under one). They ride the `staged` event
-(`questions`, and `questions_parsed`, whose 0 the inbox line shows as *no questions
-parsed from its plan*) and the inbox
-and digest list them under *Staged plans' questions* until the item launches; an amendment
-answers them (066's "96 games or 96 a cell?" sat unread through a 48-minute lock wait).
-Once an amendment is on file since it staged, its entry is one line, "its N questions
-answered by amendment #id", the questions no longer quoted (118: 237's were relayed to Matt
-as open after the answer was sent).
+`## Questions` heading, one bullet each ending `(default: …)` (`questions.plan_questions`;
+the heading since 75, after aicomplete 090's four were lost under one). They ride the
+`staged` event (`questions`, and `questions_parsed`, whose 0 the inbox line shows as *no
+questions parsed from its plan*), and the inbox, `session.md` and `review.md` list them
+under *Staging questions: open rulings*, each with its default (`questions.split_default`;
+"none named" without one); an amendment answers them (066's "96 games or 96 a cell?" sat
+unread through a 48-minute lock wait). Once an amendment is on file since it staged, its
+entry is one line, "its N questions answered by amendment #id", the questions no longer
+quoted (118: 237's were relayed to Matt as open after the answer was sent).
+
+**Unanswered at launch** (120: helium 011 and aicomplete 234 shipped on defaults unseen,
+one costing 20 min a ladder run): a staged item launching with no amendment since it staged
+gets *Staging questions unanswered: defaults stand* in its resume message, listing each with
+its default, and its `start` event carries them (`stage_defaults`). The digests keep them
+under the same heading, "launched on its defaults", while it runs (answer: an amendment,
+delivered as a message) and after it finishes until its report is reviewed (a ruling for a
+follow-up).
 
 The ask server resolves the question by creating `<id>.result.json` exclusively
 (`outcome`: `answered` | `default` | `cancelled` | `by_message`, `text`, `at`, `by`); the daemon only

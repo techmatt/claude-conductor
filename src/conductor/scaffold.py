@@ -94,6 +94,17 @@ def prepare_repo(name: str, path: Path) -> tuple[str | None, str | None]:
         raise InitError(f"repo {name}: {exc}") from exc
 
 
+def start_access(control: Path, project: str, repo_paths: list[Path]) -> str | None:
+    """planner.md *Start* step 2 asks for `C:\\Code\\<project>` unless Matt's saved start
+    preference lists the project's repos (120: fractals' were refused every session). The
+    line that preference needs when they differ, else None."""
+    if [Path(p).resolve() for p in repo_paths] == [Path(control).resolve().parent / project]:
+        return None
+    paths = ", ".join(f"`{Path(p).resolve()}`" for p in repo_paths)
+    return (f"start access: {project}'s repos aren't `{Path(control).resolve().parent / project}`, so Matt's "
+            f"saved start preference lists them for step 2: `{project}` → {paths} (planner.md *Start*)")
+
+
 def init(control: Path, project: str, repo_args: list[str]) -> tuple[str, list[str]]:
     """Create and commit the folder, first creating any code repo that is missing or has no
     commits. Returns (commit sha, what was created or adjusted). Never overwrites."""
@@ -154,4 +165,6 @@ def init(control: Path, project: str, repo_args: list[str]) -> tuple[str, list[s
     git.run(control, "add", "--", *tracked)
     git.run(control, "commit", "-q", "-m", f"conductor init: {project}", "--", *tracked)
     notes.append(git.CONTROL_NO_REMOTE.format(name=control.name) + " (session.md says so until it has one)")
+    if access := start_access(control, project, list(paths.values())):
+        notes.append(access)
     return git.head(control), notes

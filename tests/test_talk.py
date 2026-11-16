@@ -170,7 +170,7 @@ def test_hook_prints_context_once(tmp_path):
     settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x"))
     [group] = settings["hooks"]["PostToolUse"]
     assert group["matcher"] == "" and group["hooks"][0]["args"][:3] == ["-m", "conductor.talk", "hook"]
-    assert "PreToolUse" not in settings
+    assert settings["hooks"]["PreToolUse"][0]["matcher"] == "Workflow"     # the agent cap, always (120)
 
 
 def test_only_the_lead_takes_mail(tmp_path, monkeypatch, capsys):
@@ -231,7 +231,7 @@ def test_pre_hook_keeps_shell_calls_short(tmp_path):
     assert out["hookEventName"] == "PreToolUse" and out["updatedInput"]["timeout"] == 60000
     settings = json.loads(talk.hook_settings("py", tmp_path, "code/001_x", 60, bg))
     [group] = settings["hooks"]["PreToolUse"]
-    assert group["matcher"] == "Bash|PowerShell"
+    assert group["matcher"] == "Bash|PowerShell|Workflow"
     assert group["hooks"][0]["args"] == ["-m", "conductor.talk", "pre", "--cap", "60",
                                          "--background=npm test*", "--background=*playwright test*"]
     assert talk.main(["pre", "--cap", "60"]) == 0       # stdin is empty under pytest: prints nothing
