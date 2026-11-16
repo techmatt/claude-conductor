@@ -279,18 +279,18 @@ def test_answer_receipt_marks_a_flagged_question(env):
     assert "its default overrode the prompt: skip it" in read_text(env.control / "receipts" / "questions" / f"{q.id}.answer.md")
 
 
-FULL_LINES = ("A skip in the prompt binds", "default overrides prompt", "`out/`", "%TEMP%", "below-normal priority",
-              "4 hardware threads", "At most 2 heavy subagents", "half that while another item", "`~/.claude`",
+FULL_LINES = ("A skip in the prompt or a message binds", "default overrides prompt", "`out/`", "%TEMP%", "below-normal priority",
+              "4 hardware threads", "At most 2 heavy subagents", "half that while another item", "`carry:`",
               "over an hour of the time limit", "mcp__conductor__wait_for")
-LIGHT_LINES = ("A skip in prompt or message", "default overrides prompt", "`out/`", "%TEMP%", "below-normal priority", "4 hardware threads",
-               "at most 2 heavy", "half beside others", "`~/.claude`", "over an hour left", "mcp__conductor__wait_for")
+LIGHT_LINES = ("A skip in prompt or message", "default overrides prompt", "`out/001_a/`", "%TEMP%", "`nice -n 10`",
+               "threads, a full suite only between sims", "over an hour left", "mcp__conductor__wait_for")
 
 
 def test_both_preambles_carry_the_rules(env):
-    full = render(env, SHORT * 3)
-    assert "Outline." in full and all(s in full for s in FULL_LINES), [s for s in FULL_LINES if s not in full]
-    light = render(env, SHORT)
-    assert "Outline." not in light and all(s in light for s in LIGHT_LINES), [s for s in LIGHT_LINES if s not in light]
+    full = " ".join(render(env, SHORT * 3).split())
+    assert "`outline`" in full and all(s in full for s in FULL_LINES), [s for s in FULL_LINES if s not in full]
+    light = " ".join(render(env, SHORT).split())
+    assert "`outline`" not in light and all(s in light for s in LIGHT_LINES), [s for s in LIGHT_LINES if s not in light]
 
 
 def test_templates_carry_the_leftover_line_but_a_watch(env):

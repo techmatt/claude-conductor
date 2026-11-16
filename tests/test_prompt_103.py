@@ -109,11 +109,11 @@ def test_progress_answered_closes_the_open_question_a_message_answered(env):
 
 def test_the_preambles_ask_for_a_progress_line_on_a_long_job_and_for_closing(env):
     full = flat(render(env, SHORT * 3))
-    assert "as you launch any job expected to run over ~15 minutes (its expected end in the note)" in full
-    assert 'A message that answers an open question closes it: `progress` with `answered: "<id>"`' in full
+    assert "on launching a job over ~15 minutes (its expected end in the note)" in full
+    assert 'One that answers an open question closes it: `progress` with `answered: "<id>"`' in full
     light = flat(render(env, SHORT))
-    assert "line at start and launching any job over ~15m (its end)" in light
-    assert len(light.split()) <= 430
+    assert "line at start and on launching a job over ~15m" in light
+    assert len(light.split()) <= 400
 
 
 # ------------------------------------------------------------------ test temp beside the repo

@@ -29,7 +29,7 @@ the Workflow tool is present in every `-p` session; only the opt-in differs.
 
 **Fan-out.** The preamble's subagent rule wins over Workflow's and Ultracode's own notes: at most
 2 heavy subagents at once, light reviewers batched, and at most 10 agents per Workflow, finders and
-verifiers both, unless the prompt gives another number (`preambles.md`, *Load budget*). "Every
+verifiers both, unless the prompt gives another number (`hooks.md`, the ledger). "Every
 substantive task" decides when to use a workflow, never how big one is (aicomplete 068 ran 22
 agents against "about 10", ~800k tokens). Since 120 conductor enforces what it can see before a
 Workflow runs (`fanout.py`): a script that fans out must declare `const MAX_AGENTS = <n>`, n ≤ 10,
@@ -39,6 +39,10 @@ A helper's brief quotes the prompt's rulings word for word, never a paraphrase (
 
 **No `isolation: worktree`.** Claude Code puts an Agent or Workflow helper's worktree in
 the main checkout's `.claude/worktrees`, even from an item's worktree (aicomplete 040),
-and the preamble forbids touching the main checkout. So the full preamble says to leave
-it off and split helpers by file; there is no setting for the folder, only a `WorktreeCreate`
-hook that would take over creating the worktree.
+and the preamble forbids touching the main checkout. The hook refuses it (122; `hooks.md`);
+there is no setting for the folder, only a `WorktreeCreate` hook that would take over
+creating the worktree.
+
+**Diff review.** Every writable full item reviews its diff before its report (123,
+`preambles.md`); an ultracode item's adversarial review counts as that review, and its
+report carries the same `Diff review: N found, M fixed, K rejected (why)` line.

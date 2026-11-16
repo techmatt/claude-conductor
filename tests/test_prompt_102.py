@@ -13,22 +13,20 @@ def test_the_full_preamble_carries_the_four_rules(env):
     text = flat(render(env, SHORT * 3 + " Tune the bonus until the band is 45-85."))
     assert ("this order wins: the project's locked rulings (CLAUDE.md, docs, the prompt), the goal, "
             "the done-when bars, the method") in text
-    assert "never ask about such a conflict" in text
-    assert "Method (read counts, screen order, which tables) is a suggested route" in text
-    assert "lines marked required, the repo's CLAUDE.md *Working rules* steps (rulings, not method), " \
-           "and what keeps measurement honest" in text
-    assert "outside a band is unmet) but don't chase one" in text
-    assert "starts with a cheap reachability check, ~30 min" in text
-    # the branches-not-stops line is folded in, not kept beside it
-    assert text.count("the only hard stop is a prompt's wrong-repo guard") == 1
+    assert "never ask about it" in text
+    assert "Method is a suggested route, sized to the time budget" in text
+    assert "lines marked required, the repo's CLAUDE.md *Working rules* and *Measurement* below bind" in text
+    assert "Paired seeds for a comparison, fresh seeds for a final read" in text
+    assert "Score each bar strictly as written, but don't chase one" in text
+    assert "is reachable before working toward it" in text
+    assert text.count("only hard stop is a prompt's wrong-repo guard") == 1
     assert "Decide anything you don't ask about" not in text
     # the leftover check no longer pushes a bar already shown out of reach
-    assert "for one unmet and not shown unreachable, take the next step" in text
+    assert "one unmet and not shown unreachable" in text
 
 
 def test_the_light_preamble_carries_them_short(env):
     text = flat(render(env, SHORT))
-    assert "Conflicts: locked rulings, then goal, then done-when bars, then method" in text
-    assert "(a suggestion unless required); report what gave way, don't ask" in text
-    assert "Bars are scored strictly, not chased: check a numeric target is reachable first" in text
-    assert len(text.split()) <= 430
+    assert "Conflicts: locked rulings, goal, done-when bars, method; report what gave way, don't ask" in text
+    assert "Score bars strictly; check a numeric target is reachable before chasing it" in text
+    assert len(text.split()) <= 400

@@ -11,7 +11,7 @@ from conductor import config, session
 
 from test_preamble import SHORT, render
 
-CLOCK = "Plan from the clock in the last tool return, never from your own estimate."
+CLOCK = "Plan from the clock in the last tool return, never your own estimate."
 
 
 def flat(text: str) -> str:
@@ -41,8 +41,8 @@ def test_a_soft_band_only_miss_reported_done_queues_no_retro(env):
 
 def test_both_preambles_carry_the_clock_line(env):
     full, light = flat(render(env, SHORT * 3)), flat(render(env, SHORT))
-    assert CLOCK in full and "Plan by the last tool return's clock, never your estimate." in light
-    assert len(light.split()) <= 430
+    assert CLOCK in full and "Plan by the last tool return's clock." in light
+    assert len(light.split()) <= 400
 
 
 def _toml(env, line: str) -> config.Config:

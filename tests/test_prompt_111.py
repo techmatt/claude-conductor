@@ -130,5 +130,5 @@ def test_the_preamble_binds_working_rules_and_asks_before_departing_from_an_answ
     text = executor.build_prompt(env.d.cfg, item, executor.RunPaths.for_item(env.cfg, item), 1.0,
                                  datetime(2026, 11, 13, 9), {"worktree": None, "branch": None, "base": None})
     flat = " ".join(text.split())
-    assert "CLAUDE.md *Working rules* steps (rulings, not method)" in flat
+    assert "the repo's CLAUDE.md *Working rules* and *Measurement* below bind" in flat
     assert "a run departing from Matt's own answer to a staging question (ask before it merges)" in flat

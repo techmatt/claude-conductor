@@ -11,10 +11,10 @@ def flat(text: str) -> str:
 
 def test_every_preamble_names_the_items_own_scratch_folder(env):
     full, light = flat(render(env, SHORT * 3)), flat(render(env, SHORT))
-    assert "Scratch, bench and run output go in `out/001_a/`" in full
+    assert "Scratch and run output go in `out/001_a/`" in full
     assert "anything else in `out/` is an earlier item's, never a fresh result" in full
-    assert "Scratch, output: `out/001_a/` (not older `out/`), never %TEMP%." in light
-    assert len(light.split()) <= 430
+    assert "Scratch: `out/001_a/`." in light
+    assert len(light.split()) <= 400
     watch = flat(render(env, SHORT, template="watch"))
     assert "Scratch goes in `out/001_a/`" in watch
 

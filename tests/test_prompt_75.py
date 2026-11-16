@@ -32,10 +32,10 @@ def test_an_audit_item_gets_the_note_rule_done_when_check_and_parked_line(env):
     text = executor.build_prompt(env.cfg, item, paths, 4.0, datetime(2026, 11, 3, 17), run,
                                  parked=[{"n": 1, "text": "rename hardware to Chips"}])
     assert "implement each obvious note yourself" in text and "notes you implemented" in text
-    assert "list each done-when item\nagainst its measured result" in text
+    assert "check each done-when item against\nits measured result" in text
     assert "whatever the prompt's\nown file limits say" in text
     plain = render(env, SHORT * 3)
-    assert "obvious note" not in plain and "list each done-when item" in plain
+    assert "obvious note" not in plain and "check each done-when item" in plain
     assert "obvious note" not in render(env, SHORT * 3, audit=True, readonly=True)
 
 

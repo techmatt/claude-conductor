@@ -18,10 +18,10 @@ def flat(text: str) -> str:
 
 def test_both_preambles_and_the_self_audit_fix_the_obvious_in_place(env):
     full, light = flat(render(env, SHORT * 3)), flat(render(env, SHORT))
-    assert "Unless readonly, fix anything obvious you find in place before you finish, even at some extra time" in full
-    assert "a note or follow-up is only for what needs Matt's decision or is large" in full
-    assert "Unless readonly, fix small obvious things in place." in light
-    assert "give each helper its own scratch path (`out/001_a/<helper>/`)" in full
+    assert "Unless readonly, fix what is small and obvious (a stale doc line, a small bug, dead code) in place" in full
+    assert "notes are for Matt's decisions and large work" in full
+    assert "Unless readonly, fix small obvious things." in light
+    assert "its own scratch path `out/001_a/<helper>/`" in full
     body = flat(executor.body(env.d.cfg, Item("code", "002_a", env.control / "x.md", num=2, body="",
                                               template="self_audit", resume_of="code/001_a")))
     assert "Fix what is obvious in place, before you finish, even at some extra time" in body

@@ -145,8 +145,7 @@ def test_wait_for_returns_carry_the_clock_too(env):
 
 def test_the_preamble_estimates_in_round_trips_but_never_tells_time_by_them(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "Estimate remaining work in round trips (~15 s)" in full
-    assert "never tell time by them: every conductor tool return gives the clock and time left" in full   # 86
+    assert "Plan from the clock in the last tool return, never your own estimate" in full   # 86, 114; 123 cut the round trips
     assert "20–40 s" not in full and "run `date` before every" not in full
 
 

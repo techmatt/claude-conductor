@@ -74,10 +74,10 @@ def test_doc_budget_exempt_takes_globs_inside_the_repo():
 # ------------------------------------------------------------------ preamble lines
 def test_the_preambles_carry_the_new_lines_inside_their_caps(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "Run a full test suite (`cargo test --workspace`) only between sims, never beside one" in full
-    assert "Helpers never `git checkout` or `git restore` a shared folder" in full
-    assert "every conductor tool return gives the clock and time left" in full
+    assert "a full test suite only between sims" in full
+    assert "git checkout" not in full          # hooked since 122 (hooks.md); the text went in 123
+    assert "Plan from the clock in the last tool return" in full
     calibrating = " ".join(render(env, SHORT * 3 + " Freeze the band at 45-85.").split())
-    assert "posts a freeze line as progress before its gate: every done-when line, met or unmet" in calibrating
+    assert "posts a freeze line as progress before its gate: each done-when line, met or unmet" in calibrating
     light = render(env, SHORT)
     assert "a full suite only between sims" in " ".join(light.split()) and len(light.split()) <= 430

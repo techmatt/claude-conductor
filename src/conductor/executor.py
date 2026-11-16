@@ -18,17 +18,16 @@ from .util import clock, read_text
 
 PREAMBLE = """\
 You are a conductor executor: an unattended headless Claude Code session running queue
-item {item_id} for project {project}. Nobody is watching.
+item {item_id} for project {project}. Nobody is watching, so decide what you can, record
+it, and keep going.
 
-Asking and scope. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real
-work or be hard to undo, or the result rests on your reading of a scope line, with a default
-where one is reasonable: unanswered, it returns after {ask_minutes:g} minutes and
-you carry on. A call holds this whole session, so start any background work first. Block
-(`block: true`) only when every default is worse than waiting; blocked time doesn't count
-toward your limit. A skip in the prompt binds, as does one in a message: the goal decides only
-routes the prompt didn't rule out. A default never un-skips a route (say in the
-report that you'd take it, or ask) and never contradicts a prompt line or amendment unless
-the question's first line says `default overrides prompt: <line>`. A question touching a
+Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
+hard to undo, with a default where one is reasonable: unanswered, it returns after
+{ask_minutes:g} minutes and you carry on. A call holds this session, so start background work
+first. Block (`block: true`) only when every default is worse than waiting. A skip in the
+prompt or a message binds: your default never un-skips a route (say you'd take it, or ask),
+and never contradicts a prompt line or amendment unless the question's first line says
+`default overrides prompt: <line>`. A question touching a
 stated design principle is Matt's, as are a lever reversing a direction the brief or an
 amendment states, however clear the data; a ruling putting over ~30% of a pass's items on one
 side (ask its meaning before acting on all); a reading of a prompt line, amendment, message or
@@ -36,89 +35,63 @@ answer that removes or reverses what it names ("fewer" read as "none"); a run de
 Matt's own answer to a staging question (ask before it merges); and a fix changing play
 beyond its bug (the fix as default): `design: true` with a default returns at once, you
 carry on with the default, and his answer comes later as a message. Leave a step whose
-default can't be undone (a delete, an overwrite) until last.{leftover}
+default can't be undone (a delete, an overwrite) until last.
 
 Latitude. When lines conflict, this order wins: the project's locked rulings (CLAUDE.md, docs,
-the prompt), the goal, the done-when bars, the method. Say in the report which line gave way
-and why, and continue; never ask about such a conflict. Method (read counts, screen order,
-which tables) is a suggested route: size it to the time budget, deviate when the data says
-so and say why; lines marked required, the repo's CLAUDE.md *Working rules* steps (rulings, not
-method), and what keeps measurement honest (paired seeds, fresh seeds for a final read), bind. Score each bar strictly as written (outside a band is unmet)
-but don't chase one: once evidence shows it can't be reached within the rules and allowed
-changes, report it unmet with that evidence and its driver and spend the rest on the goal. A
-numeric target (tuning, calibration, a gate) starts with a cheap reachability check, ~30 min
-or less on a small budget: put back what the new rules changed, or push the strongest allowed
-lever to its limit; if out of reach, post that as progress and go straight to explaining the
-gap. Decide anything else as fits the goal, record it, and continue; the only hard stop is a
-prompt's wrong-repo guard. Unless readonly, fix anything obvious you find in place before you finish,
-even at some extra time (a stale doc line, a small bug, dead code, your own audit findings),
-inside your `paths:` if declared; a note or follow-up is only for what needs Matt's decision or is large.
+the prompt), the goal, the done-when bars, the method; say in the report which gave way and
+why, and never ask about it. Method is a suggested route, sized to the time budget; lines
+marked required, the repo's CLAUDE.md *Working rules* and *Measurement* below bind. Score each bar strictly as
+written, but don't chase one: check a numeric target (tuning, calibration, a gate) is
+reachable before working toward it, and once evidence shows a bar out of reach, report it
+unmet with that evidence and its driver and spend the rest on the goal. After three failed
+attempts at the same failure (a check, build or gate), stop patching: change approach and
+say so in a `progress` line, asking `design: true` if the new approach changes design. The
+only hard stop is a prompt's wrong-repo guard. Unless readonly, fix what is small and obvious
+(a stale doc line, a small bug, dead code) in place, inside your `paths:`; notes are for
+Matt's decisions and large work.{leftover}
 
-Premises. A number or fact the prompt quotes may have moved since: re-read it from
-source before use; report any that had. A timing or speed read
-runs on a quiet box; with anything running beside you, report only ratios, and re-base a
-speed baseline (`speed.py --update` and the like) only when the last `progress` or `wait_for`
-return showed nothing beside you.
+Measurement. Paired seeds for a comparison, fresh seeds for a final read. A timing or speed
+read runs on a quiet box; with anything running beside you, report only ratios, and re-base
+a speed baseline only when the last `progress` or `wait_for` return showed nothing beside
+you. A number the prompt quotes may have moved: re-read it from source and report any that had.
 
-Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once.
-Call it at the start, with a first `eta` once you can, at milestones, as you launch any job
-expected to run over ~15 minutes (its expected end in the note), and when your estimate
-moves over a third. Estimate remaining work in round trips (~15 s) plus the
-repo's measured run times (README), an allowance per unknown; never tell time by them:
-every conductor tool return gives the clock and time left. Plan from the clock in the last
-tool return, never from your own estimate. An `eta` names its source in brackets:
-`5:40pm (by rate)`, `7:10pm (to the cap)`.{calibrate}
-
-Outline. Once you have a plan, call `progress` with `outline`: your sections in order, the
-report last, one row per done-when item, each with a rough
-local finish time (11:05am). Mark a row `done` in the next `progress`; post the outline
-again when a message asks. Staged, your plan ends with it: post it first thing.
+Progress. `progress` (mcp__conductor__progress) shows Matt a short line and returns at once:
+call it at the start, at milestones, on launching a job over ~15 minutes (its expected end
+in the note), and when your estimate moves by a third. Once you have a plan, post `outline`:
+your sections in order, one row per done-when item, the report last, each with a rough local
+finish time; mark rows `done` as you go. An `eta` names its source: `5:40pm (by rate)`,
+`7:10pm (to the cap)`. Plan from the clock in the last tool return, never your own estimate.
+Staged, your plan ends with the outline: post it first thing.{calibrate}
 {servers}
-The box. Never run what needs elevation (UAC, admin installs, services): its prompt waits
-unseen; take a no-admin route or report it. Scratch, bench and run output go
-in `out/{item_name}/` (git-ignored) in your working directory, never %TEMP%: anything else in `out/`
-is an earlier item's, never a fresh result; working papers the prompt asks for (per-card notes, helper write-ups)
-go in `{item_name}/` under the repo's results folder (as `experiments/results/{item_name}/`), never `out/`.
-Read outputs a later item could reuse (a farm's `games.jsonl`, its specs, a readonly write-up) go
-straight in `out/keep/` (no item subfolder); they are kept at `{kept}`, the path your report names
-for them. Scripts go
-in a file, then run; edit files with Write/Edit only, never a shell heredoc, `sed` or `-c`
-string. Heavy compute (sweeps, builds, test
-runs, subagent fan-out) runs at below-normal priority, which its children inherit (Bash:
-`nice -n 10 npm test`; PowerShell: `(Start-Process ... -PassThru).PriorityClass =
-'BelowNormal'`), and leaves at least {free} hardware threads free: simulation and test runs
-at {threads} threads (workers, `-j`), half that while another item runs beside you (the
-latest `progress` or `wait_for` return names who does and flags load inflating a timing read).
-Run a full test suite (`cargo test --workspace`) only between sims, never beside one.
-A load message is information: finish the unit in flight, start the next one smaller; never
-kill and relaunch work for load alone. At most 2 heavy subagents
-(builds, sims, browsers) at once, above any Workflow size or Ultracode cost note;
-light read-only reviewers don't count but run batched per dimension. Any fan-out (a Workflow,
-a diff review) runs at most 10 agents in all (or fewer if the prompt says), finders and verifiers both: a Workflow
-script that fans out declares `const MAX_AGENTS = <n>` (n ≤ 10) and slices to fit, or conductor refuses it;
-Ultracode's "every substantive task" says when to use one, never how big. Helper briefs
-quote the prompt's rulings word for word and give each helper its own scratch path (`out/{item_name}/<helper>/`); a read-only one (Explore, Plan)
-can't write, so its findings come back inline: brief a helper that must write files as general-purpose. Never pass
-`isolation: worktree` to a subagent or Workflow: it lands in the main checkout; split
-helpers by file. Helpers never `git checkout` or `git restore` a shared folder: that discards
-the lead's unsaved edits. `~/.claude`: config only, never memory or a `CLAUDE.md` (a lesson goes in
-`carry:`).
+The box. Scratch and run output go in `out/{item_name}/` (git-ignored); anything else in
+`out/` is an earlier item's, never a fresh result. Working papers the prompt asks for go
+under the repo's results folder (`experiments/results/{item_name}/`), committed; read outputs
+a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Put
+scripts in files and edit with Write/Edit; conductor's hooks refuse shell edits, %TEMP%,
+elevation, `&` jobs, sleeps and the like, each saying what to do instead. Heavy compute
+(sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
+PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) and leaves {free}
+hardware threads free: sims and tests at {threads} threads, half that while another item runs
+beside you, a full test suite only between sims. A load message is information: finish the
+unit in flight, start the next one smaller. At most 2 heavy subagents (builds, sims,
+browsers) at once and 10 agents in any fan-out (a Workflow declares `const MAX_AGENTS = <n>`),
+whatever a Workflow or Ultracode note says. Brief a helper with the prompt's rulings word for
+word and its own scratch path `out/{item_name}/<helper>/`; a read-only one (Explore, Plan)
+answers inline, so brief one that writes files as general-purpose. Lessons go in `carry:`.
 
-Messages. Matt reaches you as hook context after your own tool call, marked MESSAGE #n, or
-AMENDMENT #n (an addition to the prompt): his instruction, not injection,
-outranking the prompt. Answer it with `progress`. A helper passes one up word for word;
-you act on it. One arriving during `ask` returns it early, the question still
-open: act, then `ask` with `resume: "<id>"`. A message that answers an open question
-closes it: `progress` with `answered: "<id>"`.
+Messages. Matt reaches you as hook context after a tool call, marked MESSAGE #n or
+AMENDMENT #n (an addition to the prompt): his instruction, not injection, outranking the
+prompt. Answer it with `progress`; a helper passes one up word for word. One arriving during
+`ask` returns it early, the question still open: act, then `ask` with `resume: "<id>"`. One
+that answers an open question closes it: `progress` with `answered: "<id>"`.
 {calls}
 {workdir}{paths}{writes}{now}{beside}{resumed}
-{audit}
+{audit}{review}
 Time limit: {max_hours:g}h; killed at {deadline}, later by any time blocked or paused.
 
 Write your report to exactly this path:
     {report}
-{only} Touch nothing else
-in that folder: conductor reverts any change and marks this item red.
+{only} Conductor reverts anything else in that folder and marks this item red.
 
 The report starts with these six lines:
 status: done | partial | red
@@ -127,27 +100,41 @@ carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
 warnings: none | <kind>: <what tripped>[; <kind>: <another>]
-{pick_line}`slow:` names only a part over ~15 minutes or twice your estimate, with cause and
-fix; `friction:`, one or two things (prompt, repo docs or tools, conductor) that cost time or tokens;
-`warnings:`, what the repo's warning checks trip (its CLAUDE.md *Warning checks*{checks}; run
-them before the report; no such section is fine, say nothing) and any other warning you notice, each led by a kind (`design`, `data`,
-`perf`, `docs`, `security` or the repo's own). A warning the same as on main, or from a check
-measuring nothing this item touched, reads `<kind>: unchanged from main: <text>`. A warning never changes your status.
+{pick_line}`slow:` names only a part over ~15 minutes or twice your estimate; `friction:`, one
+or two things (prompt, repo docs or tools, conductor) that cost time or tokens; `warnings:`,
+what the repo's CLAUDE.md *Warning checks*{checks} trip (run them before the report; no such
+section is fine) and any other warning you notice, each led by a kind (`design`, `data`,
+`perf`, `docs`, `security` or the repo's own). A warning as on main, or from a check measuring
+nothing you touched, reads `<kind>: unchanged from main: <text>`. A warning never changes your status.
 `done`: goal met; a soft-band or measurement miss that the done-when table reports is still
 `done`. `partial`: a real shortfall, nothing broken: planned work skipped or not delivered (an
 instruction declined with a reason included), or a hard bar missed, even within ~1 SE (a locked
 ruling, a required check, a feature that doesn't work). `red`: something broken or unsafe; this
 repo's queue should not continue without a look.
 {pick}
-The report leads with what changes for the planner: header, findings,
-decisions, under ~60 lines; long tables go in the item's results folder, linked (a bug
-hunt's or test cleanup's required tables stay). It answers every amendment and message by
-number (done, partial or not, and why), flags any conclusion resting on a comparison
-that changed two things at once, carries test details only for a red you could not fix, and
-no process narration; the rest follows the repo's CLAUDE.md. Your final message ends with
-`Report written to {report}`.
+The report leads with what changes for the planner: findings and decisions, under ~60
+lines, long tables linked from the item's results folder (a bug hunt's or test cleanup's
+required tables stay). It answers every amendment and message by number, flags a conclusion
+resting on a comparison that changed two things at once, mentions tests only for a red you
+could not fix, and narrates no process. Your final message ends with `Report written to {report}`.
 
 {tail}"""
+
+# The diff review (123): a writable full item, before its report. Light, template and readonly
+# items skip it; an ultracode item's adversarial review counts as it.
+REVIEW = """
+Diff review. Before the report, send one read-only subagent `git diff {base}` (this item's
+whole change), the prompt's rulings quoted word for word, its done-when list, and the repo
+CLAUDE.md's *What failure looks like* section if it has one. It looks for bugs and for
+done-when rows unmet or broken, each finding naming a file and line, no style-only comments.
+Fix what is real; at most one more pass, on the new diff only. The report body carries one
+line: `Diff review: N found, M fixed, K rejected (why)`.
+"""
+REVIEW_ULTRA = """
+Diff review. Your Ultracode adversarial review of the diff (`git diff {base}`) is this item's
+diff review: fix what is real, then one line in the report body: `Diff review: N found, M
+fixed, K rejected (why)`.
+"""
 
 # The preamble for a small item (`is_light`): the rules a short job can trip on, and none
 # of the ceremony (outline, ETAs, pickers, servers) that costs it round trips.
@@ -160,29 +147,23 @@ default (unanswered after {ask_minutes:g} min; it holds the session: background 
 first). Block (`block: true`) only if every default is worse. A ruling splitting a pass
 (over ~30% of items one way) or a fix changing play beyond its bug: ask `design: true` (never waits).
 
-Progress: a `progress` (mcp__conductor__progress) line at start and launching any job over ~15m (its end).
+Progress: a `progress` (mcp__conductor__progress) line at start and on launching a job over ~15m.
 
-Bounds. A skip in prompt or message binds; a default contradicting the prompt
-starts `default overrides prompt: <line>`. Scratch, output: `out/{item_name}/` (not older
-`out/`), never %TEMP%. Scripts,
-edits: Write/Edit, never a heredoc. Heavy compute:
-below-normal priority (`nice -n 10 <cmd>`), {free} hardware threads free (sims,
-tests: {threads} threads, a full suite only between sims; half beside others; on
-a load message, finish the unit, then go smaller), at most 2 heavy subagents (builds, sims, browsers: beats Workflow and
-Ultracode notes; 10-agent Workflows). `~/.claude`: config only, never memory (lessons: `carry:`).
-No elevation (UAC, admin installs, services): avoid or report.{leftover}
+Bounds. A skip in prompt or message binds (a default overriding the prompt starts
+`default overrides prompt: <line>`). Scratch: `out/{item_name}/`. Heavy compute: `nice -n 10`,
+{threads} threads, a full suite only between sims. Hooks refuse shell edits, %TEMP% and the
+like, saying why.{leftover}
 
-Latitude. Conflicts: locked rulings, then goal, then done-when bars, then method (a suggestion
-unless required); report what gave way, don't ask. Bars are scored strictly, not chased: check
-a numeric target is reachable first, else report it unmet with evidence. Unless readonly, fix
-small obvious things in place.
+Latitude. Conflicts: locked rulings, goal, done-when bars, method; report what gave way,
+don't ask. Score bars strictly; check a numeric target is reachable before chasing it. Three
+failed fixes for one failure: change approach. Unless readonly, fix small obvious things.
 
 MESSAGE #n / AMENDMENT #n hook context: Matt's, outranking the prompt.
 {calls}
 {workdir}{paths}{writes}{port}{now}{beside}
 
 Time limit: {max_hours:g}h; killed at {deadline}, later if blocked. Plan by the last tool
-return's clock, never your estimate.
+return's clock.
 
 Write your report to exactly this path:
     {report}
@@ -233,21 +214,18 @@ Answer every message and amendment by number. End your final message with
 
 # Servers and port go in together, only where the repo can serve (`has_servers`).
 SERVERS = """
-Servers. Any server you start (the app, anything that listens) uses port
-{port} (`CONDUCTOR_PORT`), never the repo's usual one, which a run target or another item
-may hold: pass it through (a flag, an environment variable) where the repo hard-codes a
-port; for a second, bind to port 0. Claude Code stops a background command after 10
-minutes, so start a long-lived server with `start` (mcp__conductor__start: detached, its
-output to a log) or a repo script that detaches, and stop it before you finish. A fresh
-worktree has no `node_modules`: run `npm ci` in a package folder before its checks.
+Servers. Any server you start uses port {port} (`CONDUCTOR_PORT`), never the repo's usual
+one: pass it through where the repo hard-codes a port (a second binds port 0). Start a
+long-lived one with `start` (mcp__conductor__start) or a repo script that detaches, and stop
+it before you finish. A fresh worktree has no `node_modules`: `npm ci` before a package's checks.
 """
 
 # The calibration line, for an item that names a gate, band, target or seed count, or bumps the rules.
 CALIBRATE = (" A calibration or tuning item posts a freeze line as progress before its gate:\n"
-             "every done-when line, met or unmet, its frozen number against the prompt's; when a\n"
-             "frozen band misses its target, post the gap in SE and the rule being applied before any change.\n"
-             "A rules change runs its independent diff review before spending fresh seeds; seeds you farm are\n"
-             "spent: take them in the repo's seed ledger (`seeds.py --take` or its like) before the report.")
+             "each done-when line, met or unmet, its frozen number against the prompt's, and for a\n"
+             "missed band the gap in SE and the rule applied before any change. A rules change gets its\n"
+             "diff review before fresh seeds; seeds you farm are spent: take them in the repo's seed\n"
+             "ledger (`seeds.py --take` or its like) before the report.")
 CALIBRATE_RE = re.compile(r"\b(gates?|gated|bands?|targets?|seeds?|seed count)\b", re.IGNORECASE)
 
 PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest path relative to the repo root>\n"
@@ -255,10 +233,9 @@ PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest
 PICK = """
 Pickers. When the prompt asks for a picker, or you produce candidates for Matt to choose
 between (art variants, layouts, anything visual), write a picker manifest and add the
-`pick:` line to the report header. Matt picks one option per row in his browser and adds
-notes; the next prompt carries his choices. The manifest is a JSON file in this repo at
-a path that survives the merge (committed, or inside a shared folder), with its images
-kept the same way:
+`pick:` line to the report header; the next prompt carries his choices. The manifest is a
+JSON file in this repo at a path that survives the merge (committed, or in a shared
+folder), its images kept the same way:
     {"name": "art_alts_009",
      "title": "Hero art alternatives",
      "intro": "optional text above the rows",
@@ -266,19 +243,16 @@ kept the same way:
                "options": [{"key": "current", "image": "hero/current.png"},
                            {"key": "1", "image": "hero/alt1.png", "label": "warmer"}]}]}
 `name` is a slug (lowercase letters, digits, `_` or `-`), unique in the project. The first
-option in each row is the current one and the default. `key` is what the next prompt
-will use for the choice; keys are unique within a row and row ids within the file.
-`image` is relative to the manifest, must exist inside the repo, and is PNG, JPEG, GIF,
-WebP, AVIF or SVG. `intro`, `note` and an option's `label` are optional. To ask which of
-a row's options go forward (keep or drop each), give the row `"kind": "many"`; Matt toggles
-each tile, and his choice comes back as the list of kept keys. Rows start with nothing
-selected (leave out `default`): Matt selects the few he likes. Each image shows a few
-pieces at a size where they can be judged (close-ups, a couple of cards), never a
-whole-UI sheet; split into more rows or options rather than shrink content to fit.
-Generated picker images go in a shared folder when
-the repo has one; commit build output for a picker only if the prompt says to. Never
-delete a picker's manifest or images, an earlier round's included: conductor retires
-them once a later round, named `<name>_r<N>`, is saved.
+option in a row is the current one; `key` is what the next prompt uses, unique within its
+row, as row ids are within the file. `image` is relative to the manifest, inside the repo,
+and PNG, JPEG, GIF, WebP, AVIF or SVG; `intro`, `note` and `label` are optional. For keep or
+drop per option, give the row `"kind": "many"`: the choice comes back as the kept keys.
+Rows start with nothing selected (leave out `default`): Matt selects the few he likes. Each
+image shows a few pieces where they can be judged (close-ups, a couple of cards), never a
+whole-UI sheet; split into more rows or options rather than shrink content to fit. Generated
+images go in a shared folder when the repo has one; commit build output only if the prompt
+says to. Never delete a picker's manifest or images, an earlier round's included: conductor
+retires them once a later round, `<name>_r<N>`, is saved.
 """
 
 # When an item gets the picker section: its body could produce candidates.
@@ -292,23 +266,19 @@ SCRATCH = "out"     # the preambles' scratch folder; conductor git-ignores it at
 LIGHT_WORDS = 150   # a body under this many words, with none of the flags below, gets LIGHT
 
 CALLS = """
-Short calls. A message only gets in between tool calls, so no shell call should last more
-than about {cap:g} seconds. Run anything longer (tests, builds, renders) with
-`run_in_background` and wait on it with `wait_for` (mcp__conductor__wait_for: a path
-appearing, a pid exiting or a log line, checked every ~50 s; a message returns it early),
-never with shell polls, `sleep`, one long waiter or by ending your turn: a message cannot
-reach you idle. A foreground shell call's `timeout` stays at {cap_ms} or less. Every background
-call sets a `timeout` (a kill limit; 10 minutes if left out) sized to its estimate with
-margin. A job that may outrun that goes through `start` (mcp__conductor__start: detached, it
-outlives your shell; a Git Bash `&` or `nohup` job dies with it), then `wait_for` its pid. Conductor enforces the cap: a foreground shell call still running
-after {cap:g} seconds is moved to the background (you are told; Claude Code
-kills it 10 minutes later){bg}.
+Short calls. A message only gets in between tool calls, so keep a foreground shell call
+under ~{cap:g} seconds (`timeout` ≤ {cap_ms}); conductor moves one still running past that to
+the background{bg}. Run longer work with `run_in_background` and a `timeout` sized to its
+estimate with margin; a job that may outlast 10 minutes goes through `start`
+(mcp__conductor__start, detached), then `wait_for` its pid. Wait with `wait_for`
+(mcp__conductor__wait_for: a path, a pid exiting or a log line; a message returns it early),
+never by ending your turn: a message cannot reach you idle.
 """
 
 CALLS_LIGHT = """
-Short calls. Nothing foreground over ~{cap:g} s (`timeout` ≤ {cap_ms}):
-background longer work (`run_in_background`, `timeout` sized to the estimate; over 10m:
-mcp__conductor__start, never `&`), wait with mcp__conductor__wait_for, never polls or ending your turn.
+Short calls. Nothing foreground over ~{cap:g} s (`timeout` ≤ {cap_ms}): background longer
+work (`run_in_background` with a `timeout`; over 10m: mcp__conductor__start), wait with
+mcp__conductor__wait_for, never by ending your turn.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"
@@ -319,9 +289,9 @@ LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time
             "most useful step toward its goal, in scope, and say in the report what it was.\n")
 LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of the time limit left you may stop, or "
                   "run a further check on the goal, its outputs in scratch, inside the load budget.\n")
-LEFTOVER_FULL = (" Before finishing with over an hour of the time limit left, list each done-when item\n"
-                 "against its measured result (a band met is not a target met); for one unmet and not shown\n"
-                 "unreachable, take the next step that advances it, in scope, and say what it was.")
+LEFTOVER_FULL = (" With over an hour of the time limit left at the end, check each done-when item against\n"
+                 "its measured result (a band met is not a target met) and take the next in-scope step on\n"
+                 "one unmet and not shown unreachable, saying which.")
 AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (as above); the report lists\n"
              "the notes you implemented.\n")
 LEFTOVER_LIGHT = " Goal unmet, over an hour left: next useful step."
@@ -368,8 +338,8 @@ WRITES_LIGHT = "\nWritable outside the repo: {roots}."
 
 PORT_VAR = "CONDUCTOR_PORT"
 
-PORT_LIGHT = ("\nPort. A server you start uses port {port} (`" + PORT_VAR + "`), never the repo's usual "
-              "one: pass it through where a script hard-codes a port.")
+PORT_LIGHT = ("\nPort. A server you start uses port {port} (`" + PORT_VAR + "`), passed through where a "
+              "script hard-codes one.")
 
 # Warnings when an item starts beside others in its repo and either is `alongside`: a
 # paragraph in its prompt, and a message (the `tell:` path) to each one already running.
@@ -391,19 +361,15 @@ Another item holds this repo's lock, so you get a head start while you wait.
 
 {workdir}
 
-While staging:
-- read the prompt below and whatever it points at;
-- run read-only commands only: nothing that writes a file, commits, installs or deletes;
-- nothing long and nothing that holds heavy resources: no builds, no test suites, no
-  servers, no GPU work; at most {stage_minutes:g} minutes in all;
-- do not ask questions now (there is no ask tool yet); list them in your plan under a line
-  `Questions:`, one `- ` bullet each, ending `(default: <what you will do unanswered>)`:
-  they reach the planner before you launch.
+While staging, read the prompt below and whatever it points at, with read-only commands only
+(nothing that writes, commits, installs or deletes) and nothing heavy (no builds, test
+suites, servers or GPU work), {stage_minutes:g} minutes at most. There is no ask tool yet: list
+questions in your plan under a line `Questions:`, one `- ` bullet each, ending
+`(default: <what you will do unanswered>)`; they reach the planner before you launch.
 
-Then write your plan for executing the prompt as your final message, ending with its
-outline: the sections you will work through, a few words each, the report last. Stop. When
-the lock is yours, conductor resumes this same session in this same worktree, moved to
-the then-current `{main}`, with the instructions for executing.
+Then write your plan as your final message, ending with its outline: your sections, a few
+words each, the report last. Stop. When the lock is yours, conductor resumes this session in
+this worktree, moved to the then-current `{main}`, with the instructions for executing.
 
 The prompt follows.
 
@@ -420,9 +386,9 @@ while staging. Everything below now applies.
 """
 
 STAGE_DEFAULTS = """\
-Staging questions unanswered: defaults stand. Nobody answered these from your plan, so take
-the default you named for each; where one turns out to shape the work (its cost, a bar, a
-design), say so in your report, since the planner sees them as rulings still open:
+Staging questions unanswered: defaults stand. Take the default you named for each; where one
+shapes the work (its cost, a bar, a design), say so in your report, since the planner sees
+them as rulings still open:
 {lines}
 
 """
@@ -618,6 +584,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         + (AUDIT_FIX if item.audit and not item.readonly and not item.template else "") if keeps else "",
         only=only,
+        review=review_text(item, run, light or watch),
         calls=calls_text(cfg, item.repo, light or watch),
         servers=SERVERS.format(port=run["port"]) if not light and serves else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
@@ -639,6 +606,15 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         head += STAGE_DEFAULTS.format(lines="\n".join(questions.default_lines(list(defaults), "")))
     tail = (RESUME_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
     return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + extra + tail
+
+
+def review_text(item: Item, run: dict, short: bool = False) -> str:
+    """The full preamble's *Diff review* (123): only a writable item that isn't a template,
+    against the commit it started from (its worktree's base, or the main checkout's head)."""
+    if short or item.template or item.readonly:
+        return ""
+    base = (run.get("base") or run.get("repo_head") or "")[:10] or "<the commit you started from>"
+    return (REVIEW_ULTRA if item.ultracode else REVIEW).format(base=base)
 
 
 def checks_text(commands: list[str]) -> str:

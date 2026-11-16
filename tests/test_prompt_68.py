@@ -20,10 +20,10 @@ def ask(server, question, **args):
 
 def test_the_preamble_carries_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "Every background call sets a `timeout` (a kill limit; 10 minutes if left out)" in full
-    assert "post the gap in SE and the rule being applied" in " ".join(render(env, SHORT * 3, rules=True).split())
+    assert "`run_in_background` and a `timeout` sized to its estimate with margin" in full
+    assert "the gap in SE and the rule applied" in " ".join(render(env, SHORT * 3, rules=True).split())
     assert "`5:40pm (by rate)`" in full
-    assert "finders and verifiers" in full and "never how big" in full
+    assert "10 agents in any fan-out" in full
 
 
 def test_an_amendment_named_beside_a_default_is_refused_once(env):

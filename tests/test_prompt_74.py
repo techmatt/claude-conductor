@@ -11,15 +11,12 @@ from test_preamble import SHORT, render
 
 def test_the_full_preamble_carries_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "Asking and scope." in full and "Scope." not in full.replace("Asking and scope.", "")
-    assert full.count("default overrides prompt") == 1 and full.count("`design: true`") == 1
-    assert "Premises." in full and "re-read it from source" in full and "report only ratios" in full
-    assert "config only, never memory or a `CLAUDE.md` (a lesson goes in `carry:`)" in full
-    assert "the latest `progress` or `wait_for` return names who does" in full
-    assert "under ~60 lines; long tables go in the item's results folder, linked" in full
+    assert "Asking." in full and "Scope." not in full
+    assert full.count("default overrides prompt") == 1 and full.count("with a default returns at once") == 1
+    assert "Measurement." in full and "re-read it from source" in full and "report only ratios" in full
+    assert "Lessons go in `carry:`" in full            # memory and CLAUDE.md writes are hooked (122)
+    assert "under ~60 lines, long tables linked from the item's results folder" in full
     assert "edit `~/.claude`\nconfig when it helps" not in full
-    light = " ".join(render(env, SHORT).split())
-    assert "`~/.claude`: config only, never memory" in light
 
 
 def test_wait_for_says_when_what_runs_beside_changed(env, tmp_path):

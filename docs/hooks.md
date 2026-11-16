@@ -1,4 +1,4 @@
-# Hooks: preamble rules enforced
+# Hooks and the rule ledger
 
 The executor's PreToolUse hook (`talk.pre_hook`, matcher `talk.PRE_TOOLS`: the shell, file,
 Agent/Task and Workflow tools) denies a call that breaks a rule a hook can check cheaply and
@@ -6,33 +6,96 @@ reliably, with a one-line `permissionDecisionReason` starting `conductor: refuse
 what to do instead. The checks live in `rules.py` (the agent cap in `fanout.py`); the hook also
 caps shell timeouts (`progress.md`, *Short calls*). It runs as
 `<python> -m conductor.talk pre --cap <s> --control <folder> [--readonly] [--background=<glob> …]`,
-one Python start per matched call. A hook error lets the call through.
-
-Enforcement beats text (Anthropic's Claude Code team: short guidance plus enforcement work
-better than long rule lists). A rule below marked **hooked** needs no preamble line beyond the
-gist; the preamble rewrite after 122 drops the rest. Checked live (122): a real `claude -p` in
-the sandbox with these settings had its `sed -i` and `%TEMP%` Write refused and its heredoc
+one Python start per matched call. A hook error lets the call through. Checked live (122): a
+real `claude -p` in the sandbox had its `sed -i` and `%TEMP%` Write refused and its heredoc
 commit message allowed.
+
+Enforcement beats text (Anthropic's Claude Code team cut its system prompt ~80% for frontier
+models: short guidance plus enforcement beat long rule lists). Since 123 the preambles
+(`preambles.md`) are short principles; a hooked rule keeps at most a clause there.
+
+**A dropped rule comes back** when a retro or a report's `friction:` line shows its failure
+again: preferably as a hook, else as a line in the preamble, with its row here updated.
 
 ## The ledger
 
-| Rule (preamble) | State | How, or why not |
+Every executor rule, one row each: its gist, its origin (conductor item numbers, — where
+unrecorded; in brackets the project incident that prompted it), and where it lives now. *Full* and *light* are the
+preambles, *both* the two; *hook* is `rules.py`/`fanout.py`; *dropped* is gone from the text
+and not enforced.
+
+### Enforced by the hook
+
+| Rule | Origin | Lives |
 |---|---|---|
-| Edit files with Write/Edit, never a shell heredoc, `sed` or `-c` string (full, light) | **hooked** | `sed -i`/`perl -i`; a heredoc redirected or `tee`d to a file; a heredoc script or `-c`/`-e` string with a file write (`open(…,'w')`, `write_text`, `writeFileSync` …); PowerShell `-replace` or a here-string into `Set-Content`/`Out-File`. A heredoc feeding stdin (`$(cat <<'EOF' …)`, `git commit -F - <<EOF`) and read-only `sed` pass. |
-| Scratch and output never in `%TEMP%` (all three) | **hooked** | A file tool's path, or a shell command naming `%TEMP%`, `$TEMP`/`$TMP`/`$TMPDIR` (upper case: a shell's own `$tmp` is fine), `$env:TEMP`, `AppData\Local\Temp`, Git Bash `/tmp`, a bare `mktemp`, a temp-file API. Claude Code's own task output (`Temp\claude\…\tasks\`) may be read. |
-| Never `isolation: worktree` (full) | **hooked** | An Agent/Task call's `isolation`, or the literal in a Workflow script. |
-| Helpers never `git checkout`/`restore` (full) | **hooked** | A call with `agent_id` running `git checkout`, `restore`, `switch`, `stash` (not `list`/`show`), `clean -f` or `reset --hard`. The lead may. |
-| Any fan-out ≤ 10 agents (full, light) | **hooked** (120) | `fanout.py`. |
-| No elevation (full, light) | **hooked** (new) | `sudo`, `gsudo`, `runas`, `-Verb RunAs`. |
-| Long jobs via `start`, never `&`/`nohup` (full, light) | **hooked** (new) | Bash: `nohup`, `disown`, `setsid`, a trailing `&`. |
-| Wait with `wait_for`, never `sleep` or polls (full, light) | **hooked** (new) | A `sleep`/`Start-Sleep`/`timeout /t` of 5 s or more, or a `while`/`until` loop with a sleep. |
-| Every background call sets a `timeout` (full, light) | **hooked** (new) | `run_in_background` with no `timeout`. |
-| `~/.claude`: config only, never memory or a `CLAUDE.md` (full, light) | **hooked** (new) | A file tool writing `~/.claude/**/CLAUDE.md` or a `memory/` path there. |
-| The report is the only file in the control folder (all three) | **hooked** (new), file tools | A file tool's path in the control folder outside `reports/` (`talk.touch_paths`). Shell writes stay with the tamper guard: a command naming the folder may only read it. |
-| Readonly: commit nothing (readonly items, watches) | **hooked** (new) | `git commit` when the item is `readonly` (`--readonly`). |
-| Scripts in a file, not a heredoc or `-c` string (full, light) | text | Only the writing ones are hooked: a read-only `python -c "print(…)"` or `node -e` one-liner is routine, and denying them all would be false positives. |
-| Never touch the main checkout; never check out, commit to, rebase or push main (worktree items) | text | Git already refuses checking out a branch another worktree holds. A path check would need each launch's shared-link list: shared folders are the main checkout's own, linked in, so their main-checkout paths are legitimate. Worth hooking with that list passed in. |
-| `paths:` only (items declaring it) | text | The merge's branch check is exact and catches shell-made changes (builds, formatters) a pre-hook can't see; a Write/Edit-only check would add little. |
-| Heavy compute at below-normal priority, threads, 2 heavy subagents, full suite never beside a sim | text | A command doesn't say whether it is heavy; a subagent call doesn't say whether it builds. |
-| Servers on `CONDUCTOR_PORT`; `npm ci` first | text | A listen port isn't visible in most command lines. |
-| Asking, latitude, premises, progress, outline, messages, report rules, helper briefs | text | Judgement, not a call's shape. |
+| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003) | hook; a clause in both |
+| No `%TEMP%`, `$TMP`, `/tmp`, `mktemp` or temp-file APIs | 61 | hook; a clause in both |
+| Never `isolation: worktree` (it lands in the main checkout) | — (aicomplete 040) | hook only |
+| Helpers never `git checkout`/`restore`/`switch`/`stash`/`clean -f`/`reset --hard` | 86 (aicomplete 144), 122 | hook only |
+| Any fan-out ≤ 10 agents; a Workflow declares `const MAX_AGENTS` | 68, 117 (aicomplete 234), 120 | hook; a clause in full |
+| No elevation (`sudo`, `runas`, `-Verb RunAs`) | 76 (aicomplete 103) | hook; a word in both |
+| No Bash `&`, `nohup`, `disown`, `setsid` jobs: `start` | 106 (aicomplete 188) | hook; `start` in *Short calls* |
+| No `sleep` ≥ 5 s or poll loop: `wait_for` | — (wordwarriors 034), 122 | hook; `wait_for` in *Short calls* |
+| Every `run_in_background` sets a `timeout` | 82 (fractals 026, website 003) | hook; in *Short calls* |
+| `~/.claude`: config only, never memory or a `CLAUDE.md`; lessons in `carry:` | 74 (aicomplete 087) | hook; "lessons go in `carry:`" in full |
+| Only the report (and `write_roots`) in the control folder | —, 114 (`write_roots`) | hook (file tools) and the tamper guard; one line in each |
+| Readonly items commit nothing | 79 | hook; the readonly line |
+
+### In the preamble text
+
+| Rule | Origin | Lives |
+|---|---|---|
+| Unattended: decide what you can, record it, keep going | —, 123 | full (first line) |
+| `ask` only when a wrong guess wastes work or is hard to undo, with a default; a call holds the session; block only when every default is worse | 74 | both |
+| A skip binds; a default never un-skips or overrides the prompt without `default overrides prompt:` | 61 (aicomplete 009, 030) | both |
+| **Design asks** (`design: true`): design principle, reversed direction, ~30% split, a reading that removes what it names, departing from Matt's staging answer, a fix changing play | 79, 111 | full word for word; light the split and play-fix only |
+| An undoable step last | 74 | full |
+| Latitude: rulings, goal, bars, method; say what gave way, never ask | 102 (aicomplete 167) | both |
+| Method is a route; required lines and CLAUDE.md *Working rules* bind | 102, 111 (aicomplete 206) | full |
+| Bars strict, not chased; a numeric target's reachability first | 102 | both (the "~30 min, strongest lever" recipe dropped) |
+| **Fix loops**: three failed attempts at one failure → change approach, `design: true` if design changes | 123 | both |
+| Only hard stop: a prompt's wrong-repo guard | 102 | full |
+| Fix the obvious in place, inside `paths:` | 113 | both |
+| Leftover budget: over an hour left, the next step on an unmet bar | 75 (aicomplete 090), 102 | both (`LEFTOVER_FULL` / `_LIGHT`) |
+| **Measurement**: paired seeds, fresh seeds for a final read, timing on a quiet box, only ratios beside others, re-base only when alone | 74, 102, 117 (aicomplete 215) | full word for word |
+| Re-read a quoted number from source | 74 | full |
+| `progress` at start, milestones, a >15 min job, an estimate moving a third | 74, 103 | full; light start and long jobs |
+| `outline` with a row per done-when item; staged: post it first | — | full |
+| An `eta` names its source | 68 | full |
+| Plan from the last tool return's clock | 86, 114 (aicomplete 143, 213) | both |
+| Calibration freeze line, SE gap, diff review before fresh seeds, seeds taken | 74, 86, 117 (aicomplete 223, 234) | *Calibrate* block |
+| Servers on `CONDUCTOR_PORT`, detached, stopped; `npm ci` first | 74, 84 (aicomplete 135-138) | *Servers* block; light a port line |
+| Scratch in `out/<item>/`; the rest of `out/` is not fresh | 61, 116 (fractals 008, 010) | both |
+| Working papers under the results folder, committed | 73 (aicomplete 079) | full |
+| Reusable reads in `out/keep/`, named in the report | 110, 117 | full |
+| Scripts in files (read-only one-liners pass the hook) | 72 | full (a clause) |
+| Heavy compute below normal priority, `{free}` threads free, `{threads}` threads, half beside others | 72, 73 | full; light `nice` and threads |
+| A full test suite only between sims | 86 (aicomplete 142) | both |
+| A load message is information: finish the unit, go smaller | 80, 82 | full |
+| At most 2 heavy subagents, over any Workflow or Ultracode note | 73 | full |
+| Helper briefs: rulings word for word, own scratch path; read-only helpers answer inline | 79 (aicomplete 111), 113 (website 006), 118 (aicomplete 239) | full |
+| Messages and amendments outrank the prompt; answer by `progress`; helpers pass them up; `resume`/`answered` | —, 110 | full; light one line |
+| *Short calls*: under `foreground_seconds`, background longer, `wait_for`, never end the turn to wait | — (wordwarriors 034), 82 | both (`CALLS` / `CALLS_LIGHT`) |
+| Worktree: commit to the branch, never touch `main` or the main checkout | — | both (`WORKDIR_TREE` / `_LIGHT`); hooking it needs the shared-link list |
+| `paths:` only | — | both; the merge's branch check enforces it |
+| `write_roots` writable | 114 (fractals 050) | both |
+| Readonly: nothing merges, so ledger entries go in `carry:` | 79 (aicomplete 109) | both |
+| *Running beside you*; the latest return rules | 74 (aicomplete 080, 081) | both |
+| **Diff review** before the report: one read-only subagent, the diff, rulings, done-when, *What failure looks like*; one more pass at most; a `Diff review:` line | 123 | full, writable, not template; Ultracode's adversarial review counts |
+| Report header, statuses (`done` / `partial` / `red`, a soft-band miss is `done`), the report-path line | 74, 109, 114, 117 | both word for word |
+| `warnings:` from the repo's *Warning checks*; `unchanged from main`; never changes status | 109, 113, 121 | full; light the header line |
+| Report: what changes for the planner first, ~60 lines, answer every message, flag a two-change comparison, tests only for an unfixed red | 74 | full; light answers by number |
+| Pickers: manifest schema, `pick:` line, never delete a round | 79, 121 | *Pickers* block |
+| Audit notes under fixed headings | 75 | *Audit notes* block (`templates/audit.md`) |
+
+### Dropped in 123
+
+| Rule | Origin | Why |
+|---|---|---|
+| Ask when the result rests on your reading of a scope line | 74 | Covered by "a wrong guess would waste real work" and the design asks. |
+| Estimate in round trips (~15 s) plus measured run times | 84 | `progress` and `wait_for` returns carry the clock and time left. |
+| Never kill and relaunch work for load alone | 82 | Folded into "finish the unit in flight, start the next one smaller". |
+| Ultracode's "every substantive task" says when, never how big | 68 | The 10-agent cap is hooked. |
+| Split helpers by file | — (aicomplete 040) | `isolation: worktree` is hooked. |
+| Blocked time doesn't count toward the limit (in *Asking*) | — | The time-limit line says it. |
+| Light: 2 heavy subagents, `~/.claude`, elevation spelled out | 73, 74, 76 | A light item rarely fans out; the rest is hooked. |

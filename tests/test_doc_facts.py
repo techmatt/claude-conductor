@@ -58,6 +58,6 @@ def test_the_full_preamble_gives_a_thread_count_and_a_home_for_working_papers(en
     run = {"worktree": str(env.root / "wt"), "branch": "conductor/076_cards", "base": "0123456789abcdef"}
     text = executor.build_prompt(env.cfg, item, paths, 1.0, datetime(2026, 11, 3, 15), run)
     text = " ".join(text.split(executor.PROMPT_FOLLOWS)[0].split())
-    assert f"simulation and test runs at {load.run_threads()} threads" in text
-    assert f"leaves at least {load.FREE_THREADS} hardware threads free" in text
-    assert "`experiments/results/076_cards/`), never `out/`" in text
+    assert f"sims and tests at {load.run_threads()} threads" in text
+    assert f"leaves {load.FREE_THREADS} hardware threads free" in text
+    assert "(`experiments/results/076_cards/`), committed" in text

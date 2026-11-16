@@ -11,15 +11,13 @@ from test_prompt_80 import held, load_tells, samples
 
 def test_both_preambles_carry_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "edit files with Write/Edit only, never a shell heredoc" in full
+    assert "edit with Write/Edit" in full
     assert "A load message is information: finish the unit in flight, start the next one smaller" in full
-    assert "never kill and relaunch work for load alone" in full
-    assert "Every background call sets a `timeout` (a kill limit; 10 minutes if left out) sized to its estimate" in full
+    assert "a `timeout` sized to its estimate with margin" in full
     light = " ".join(render(env, SHORT).split())
-    assert "Scripts, edits: Write/Edit, never a heredoc" in light
-    assert "on a load message, finish the unit, then go smaller" in light
-    assert "`timeout` sized to the estimate" in light
-    assert len(render(env, SHORT).split()) <= 430
+    assert "Hooks refuse shell edits" in light
+    assert "`run_in_background` with a `timeout`" in light
+    assert len(render(env, SHORT).split()) <= 400
 
 
 def test_the_load_message_is_information_not_an_order(env, monkeypatch):

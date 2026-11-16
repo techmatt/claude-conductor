@@ -34,23 +34,23 @@ def test_a_short_item_gets_the_light_preamble(env):
 
 
 def test_both_preambles_rule_out_elevation(env):
-    # aicomplete 103: samply's UAC prompt sat unseen on the desktop for ~30 minutes.
-    assert "No elevation (UAC, admin installs, services)" in render(env, SHORT)
-    assert "Never run what needs elevation (UAC, admin installs, services)" in render(env, SHORT * 3)
+    # aicomplete 103: samply's UAC prompt sat unseen on the desktop for ~30 minutes. Hooked since 122.
+    assert "Hooks refuse shell edits, %TEMP% and the\nlike" in render(env, SHORT)
+    assert "elevation" in render(env, SHORT * 3)
 
 
 def test_a_flagged_or_long_item_gets_the_full_preamble(env):
     for body, meta in ((SHORT, {"ultracode": True}), (SHORT, {"max_hours": 2.0}), (SHORT, {"audit": True}),
                        (SHORT * 3, {})):
         text = render(env, body, **meta)
-        assert "Outline." in text and "`eta`" in text
+        assert "`outline`" in text and "`eta`" in text
         assert "Pickers." not in text and "pick:" not in text and "Servers." not in text
 
 
 def test_pickers_only_for_an_item_that_could_produce_candidates(env):
     art = "Make 2-3 candidates for the hero with `art:alts`, write a picker manifest, and end at `pick:`."
     text = render(env, art)                              # short, but full: it needs the schema
-    assert "Outline." in text and "Pickers." in text and "pick: <manifest path" in text
+    assert "`outline`" in text and "Pickers." in text and "pick: <manifest path" in text
     assert '"art_alts_009"' in text
 
 
@@ -61,7 +61,7 @@ def test_servers_and_port_only_when_the_repo_runs_one(env):
     tree = env.root / "worktrees" / "001_a"                # the worktree's own package.json
     tree.mkdir(parents=True)
     (tree / "package.json").write_text('{"scripts": {"dev:web": "vite"}}', encoding="utf-8")
-    assert "Servers." in render(env, long) and "uses port\n5200 (`CONDUCTOR_PORT`)" in render(env, long)
+    assert "Servers." in render(env, long) and "uses port 5200 (`CONDUCTOR_PORT`)" in render(env, long)
     assert "Servers." not in render(env, SHORT)          # the light preamble never has it,
     assert "uses port 5200" in render(env, SHORT)        # only its port line
 

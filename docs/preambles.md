@@ -1,176 +1,95 @@
 # Preambles
 
 What conductor tells an executor before the item body (`executor.py`); how it is launched,
-its MCP and settings files, `wait_for` and message delivery: `executors.md`. Rules its
-PreToolUse hook enforces (shell edits, `%TEMP%`, isolation, helpers' git, more): `hooks.md`.
+its MCP and settings files, `wait_for` and message delivery: `executors.md`. **Every rule a
+preamble carries, its origin and where it lives now (text, hook or dropped) is in the rule
+ledger, `hooks.md`.** This file is the structure.
 
-**Three preambles**, chosen by conductor, never by front-matter:
+Since 123 the preambles are short general guidance, not one rule per incident (Anthropic's
+Claude Code team found frontier models do better that way, and so did Matt's executors).
+A rule the hook enforces keeps at most a clause; incident citations stay out of the
+executor's text and live in the ledger. A rule dropped there comes back when a retro or a
+`friction:` line shows its failure again, preferably as a hook.
 
-- **Watch** (`WATCH`, ~210 words) for `W<n>_watch` items: one
-  `progress` line, scratch, short calls and `wait_for`, messages, the readonly line, the time
-  limit and the report rules. No asking, outline, ETAs, port,
-  load rules or leftover step.
-- **Light** (`LIGHT`, ~430 words) for a small item (`executor.is_light`): a body under
-  150 words (`LIGHT_WORDS`), none of `ultracode`, `template`, `resume`, `audit` or an
-  explicit `max_hours`, and nothing that could produce candidates (`PICK_RE`, below: a
-  short art round needs the picker schema). It keeps only what a
-  small item can trip on: who it is and that nobody watches; ask with a default (it holds
-  the session: background work first), block only if every default is worse; messages and amendments outrank the prompt and are
-  answered in the report by number; short calls (nothing foreground over
-  `foreground_seconds`, never end the turn to wait); the worktree, `paths`, readonly
-  and *Beside you* rules (a shorter worktree text), and a one-line port rule where the
-  repo can serve (`has_servers`, below); *Bounds*, one short
-  paragraph of the rules below; *Latitude* in three lines (below); the time limit; the report path, its header lines and
-  what each status means. Progress is one line
-  at the start, another only past ~15 minutes. No outline, ETAs, pickers or servers:
-  an item that proves bigger may still use them, but nothing asks it to.
-- **Full** (`PREAMBLE`) for everything else: who it is, unattended; *Asking and scope*
-  (one section since 74: when to ask, always with a default; a call holds the session; block
-  only when every default is worse; a skip binds; what isn't asked is decided and recorded;
-  question defaults, `design: true` and an undoable step last, each said once; the leftover
-  step); *Latitude* (below); *Premises* and *The box* (below); progress and *Outline* (`progress.md`);
-  *Messages* (`executors.md`, *Delivery*); *Short calls*; where it works, `paths`, *Beside you*
-  (`scheduling.md`); the time limit; the **absolute report path** (the only file it may
-  write outside its repo); the header and what each status means; the report budget (74:
-  what changes for the planner first, header, findings, decisions, under ~60 lines, long
-  tables linked from the results folder, a bug hunt's or test cleanup's required tables
-  kept), every amendment and message answered by number, a confounded comparison flagged,
-  test details only for an unfixed red, no narration; `Report written to <path>`.
-  Three blocks go in only where they apply: *Pickers* and the header's `pick:` line
-  (schema inline, `picks.md`) when the body could produce candidates (`executor.PICK_RE`:
-  picker, `pick:`, candidates, alternatives, an `art:` command, the art pipeline or an art
-  template); *Servers*, carrying the port (*Port*, below) and the 10-minute background
-  limit (start detached, output to a log, stop before the end) and, since 84, `npm ci` in a
-  package folder before its checks (a fresh worktree has no `node_modules`: aicomplete
-  135-138's `npm run check`, `cards:fit` and e2e silently went unrun), when a run target's `cwd`
-  is in the repo or a `package.json` at its root or one folder down (aicomplete's `web/`;
-  74) has a `dev…` or `preview…` script (`executor.has_servers`); the *calibration* line
-  (a freeze line posted before the gate, every done-when line met or unmet against the
-  prompt's number since 86, a missed band's SE gap first; since 117 a rules change's diff review before fresh seeds,
-  aicomplete 234 paid two bumps, and farmed seeds taken in the repo's ledger, 223 didn't) when the item is `rules: true` or names a gate, band, target or seed count
-  (`executor.wants_calibrate`, 74).
+## Three preambles
+
+Chosen by conductor, never by front-matter:
+
+- **Watch** (`WATCH`, ~150 words) for `W<n>_watch` items: one `progress` line, scratch,
+  messages, the readonly line, the time limit and the report rules. Out of 123's scope.
+- **Light** (`LIGHT`, ~295 words of template, ~380 rendered) for a small item
+  (`executor.is_light`): a body under 150 words (`LIGHT_WORDS`), none of `ultracode`,
+  `template`, `resume`, `audit` or an explicit `max_hours`, and nothing that could produce
+  candidates (`PICK_RE`: a short art round needs the picker schema). *Asking* (with the
+  two design asks a small item meets), *Progress* (start and long jobs), *Bounds* (skips,
+  scratch, compute, a clause on the hooks, the leftover line), *Latitude* (the conflict
+  order, bars, the fix-loop cap, fix the obvious), messages, `CALLS_LIGHT`, where it works,
+  a port line where the repo serves, the time limit and the report header. No outline,
+  ETAs, pickers, servers or diff review.
+- **Full** (`PREAMBLE`, ~885 words before its optional blocks) for everything else:
+  *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
+  bars, the fix-loop cap, the wrong-repo guard as the only hard stop, fix the obvious, the
+  leftover check), *Measurement* (paired and fresh seeds, a quiet box, ratios beside
+  others, re-read quoted numbers), *Progress* (with `outline` and `eta`), *The box*
+  (scratch, results, keeps, a clause on the hooks, load, helpers), *Messages*, then the
+  optional blocks, where it works, the time limit, the **report-path line** (word for
+  word: `tests/fake_claude.py` and the restart preamble find the path by it), the header,
+  the status definitions and the report rules.
+
+## Optional blocks (full preamble)
+
+- *Calls* (`CALLS`; light `CALLS_LIGHT`): the `foreground_seconds` cap and `wait_for`,
+  unless the cap is 0 (`progress.md`, *Short calls*).
+- *Servers* (`SERVERS`) where the repo can serve (`executor.has_servers`: a run target's
+  `cwd` in the repo, or a `package.json` at its root or one folder down with a `dev…` or
+  `preview…` script): the port, `start`, and `npm ci` before a package's checks. Light
+  gets `PORT_LIGHT` instead.
+- *Calibrate* (`CALIBRATE`) for `rules: true` or a body naming a gate, band, target or
+  seed count (`executor.wants_calibrate`): the freeze line, the SE gap, the diff review
+  before fresh seeds, seeds taken in the ledger.
+- *Pickers* (`PICK`) and the header's `pick:` line when the body could produce
+  candidates (`executor.PICK_RE`; schema: `picks.md`).
+- *Audit notes* (`templates/audit.md`) for `audit` items and note-keeping templates, with
+  `AUDIT_FIX` for a writable `audit: true` item.
+- **Diff review** (`REVIEW`, 123) for a writable full item that isn't a template: before
+  the report, one read-only subagent gets `git diff <base>` (the worktree's base, or the
+  main checkout's head at launch: `run["repo_head"]`), the prompt's rulings word for word,
+  the done-when list and the repo `CLAUDE.md`'s *What failure looks like* section if any.
+  It reports bugs and unmet or broken done-when rows, each with a file and line, no style
+  comments; the item fixes what is real, at most one more pass on the new diff, and the
+  report body carries `Diff review: N found, M fixed, K rejected (why)`. An `ultracode`
+  item gets `REVIEW_ULTRA`: its adversarial review counts as this one. Light, template and
+  readonly items skip it.
+- Stage and resume texts (`STAGE`, `RESUME_HEAD`, `STAGE_DEFAULTS`, the amendment
+  blocks): `worktrees.md`, *Staging*.
 
 Template texts follow the preamble unchanged; a template item but a watch always gets the
-full one, as do `audit` items (with the *Audit notes* paragraph) and resume items (with
-*Resumed*). A **readonly** item in a worktree, light or full, gets the readonly line in place
-of the worktree's commit and merge paragraph, and no leftover step; since 79 (not a watch) the
-line adds that nothing merges, so seed-ledger entries and anything the prompt says to commit go
-in `carry:` for the planner (aicomplete 109 had to work that out itself); a full one keeps *Asking and
-scope*, *Outline*, *The box* and, where the repo serves, *Servers*, since a notes-only bug hunt
-runs for hours and may serve the app.
+full one, as do `audit` items and resume items (with *Resumed*). A **readonly** item in a
+worktree, light or full, gets the readonly line in place of the worktree's commit and merge
+paragraph and no leftover step; not a watch, the line adds that nothing merges, so ledger
+entries and anything the prompt says to commit go in `carry:`.
 
-**Running beside you now** ends the working-directory lines of a full or light preamble: the
-project's other items executing or in setup, any repo, not paused, no watch, or "nothing"
-(`talk.running_beside`, kept in the run record as `running_beside`), so the halve-threads rule
-can be followed. An `alongside` item can start later (aicomplete 080 and 081 overloaded the
-box), so on a change the next `progress` or `wait_for` return ends with the new line, once; the
-full preamble says the latest return rules (74). Other projects' daemons don't show here;
-*Now*'s load line does.
+## Filled in at launch
 
-**Port.** Every launch (a resumed stage too) gets a TCP port of its own, chosen by
-conductor: free at launch, from the OS's ephemeral range, never a run target's or tool's (the
-ports in its `url` and `ready`), another live item's or the picker's. It is in the run
-record and the `start` event (`port`), and in the executor's environment as
-`CONDUCTOR_PORT`. Where the repo can serve (`has_servers`), the preamble says any server the
-executor starts uses that port, passed through where the repo hard-codes one, so an item that
-starts the app never collides with **run game** or another item's server; elsewhere it is
-only in the environment (74). Stages and merge executors get none.
-
-**Scope, scratch and load** (61, from aicomplete's 009, 030, 032 and 034). Both preambles say:
-
-- **A skip binds.** A skip in the prompt, or one Matt sends by message, stands: the goal
-  decides only routes the prompt didn't rule out. A skipped route it thinks best goes in
-  its report or a question; its own default never un-skips it.
-- **Question defaults.** A default may not contradict a prompt line or amendment unless the
-  question's first line says `default overrides prompt: <line>` (`questions.md`).
-- **Scratch**, bench and run output go in `out/<item>/` in the working directory, never
-  `%TEMP%`; anything else in `out/` is an earlier item's (116: fractals 008 and 010 read a
-  reused `out/parity`, `out/browser2` as fresh). The daemon makes `out/<item>/` at launch;
-  `out/keep/` stays shared. `out/` is ignored before every launch and stage
-  (`git.ignore_locally`: `/out/` in `.git/info/exclude`, never committed; 72).
-- **Scripts in files** (72; wordwarriors 174, aicomplete 074): written with Write, run as a
-  file. Since 82 edits too go through Write/Edit only (fractals 025, website 003 broke code
-  patching through a heredoc); hooked since 122 (`hooks.md`).
-- **Background timeouts** (82, both, in *Short calls*). Every `run_in_background` call sets a
-  `timeout` sized to its estimate with margin (left out, Claude Code kills it at 10 minutes:
-  fractals 026's and website 003's render chains died mid-run); a job that may outrun that
-  goes through `start` (106: a Git Bash `&` dies with its shell, aicomplete 188's farm;
-  `executors.md`) and is waited on with `wait_for`. *Servers* says the same for a server.
-- **Working papers** (73, aicomplete 079). Papers a prompt asks for (per-card notes,
-  helper write-ups) go in a folder named for the item under the repo's results folder
-  (`experiments/results/<item>/`), committed; ultracode helpers had put them in `out/`,
-  git-ignored, and they were lost. Full preamble only. Read outputs a later item could
-  reuse go straight in `out/keep/`, which outlives the worktree; the preamble names where it is
-  kept, for the report to point at (110, 117; `worktrees.md`, *Kept reads*).
-- **Load budget.** Heavy compute (simulation sweeps, builds, test runs, subagent fan-out)
-  runs at below-normal process priority and leaves at least 4 hardware threads free:
-  simulation and test runs default to `load.run_threads()` threads (the box's less 4 and 2
-  of headroom: 6 here; 73), half that while another item runs alongside; at most 2 heavy
-  subagents (builds, sims, browsers) at once. **This wins** over Workflow's "under 10 agents" and Ultracode's "cost is
-  no constraint": light read-only reviewers and verifiers don't count
-  against the 2, but run in batches per dimension. Any fan-out (a Workflow, a diff review) runs at most 10
-  agents in all (or fewer if the prompt says), verifiers too (68; 117: aicomplete 234 ran 16): a
-  Workflow fanning out without `const MAX_AGENTS = <n>`, n ≤ 10, is denied at launch (120; `ultracode.md`).
-  The rest is not enforced: *Now*'s load line shows it broken; `load_high` logs under 2 free for ~3 min and messages only an
-  item that is a real share of it (80); the next `progress` or `wait_for` return says when timing reads are inflated (`memory.md`).
-  A load message is information (82): finish the unit in flight, start the next one smaller,
-  never kill and relaunch running work for load alone.
-  The recipe (72): Git Bash `nice -n 10 <cmd>` gives `BELOW_NORMAL` on Windows, inherited by
-  children; the full preamble adds the PowerShell form.
-- **Premises** (74, full only). A number or fact the prompt quotes is re-read from source
-  before use, a moved one reported; a timing read beside another item reports only ratios, and a
-  speed baseline is re-based only on a quiet box (117: aicomplete 215 re-based under load).
-- **`~/.claude`: config only** (74). Settings and permissions, never memory or a
-  `CLAUDE.md`; a lesson goes in `carry:` for the repo's `CLAUDE.md` (aicomplete 087 wrote a
-  memory that loads only in Matt's main-checkout sessions).
-- **No elevation** (76, both). Nothing that needs elevation (UAC, an admin install or
-  service): a no-admin route, or the report says what needs Matt (aicomplete 103's `samply`
-  UAC prompt sat unseen ~30 minutes; conductor doesn't yet show such a hang: `HANDOFF.md` *Open*).
-- **Design asks** (79, both; the full one in *Asking and scope*): a ruling splitting a pass
-  (over ~30% of its items on one side) and a fix changing play beyond its bug are `design:
-  true` asks with a default (`questions.md`, *Design*).
-- **Status, clock, writable roots** (114, both). `partial` is a real shortfall, a reported
-  soft-band miss `done`, a hard bar missed even within ~1 SE `partial` (117, aicomplete 215; `reports.md`). "Plan from the clock in the last tool return, never
-  from your own estimate" (aicomplete 213 guessed the time, stopped with 2 of 4 h unused).
-  `write_roots` (`control-folder.md`; default `open_roots`) are named writable (`WRITES`) and
-  the only-file line allows them (fractals 050 read it as "one path"); not readonly or watches.
-- **Telling time** (84, full, in *Progress*): remaining work is estimated in round trips
-  (~15 s, measured ~16 s; it said 20–40 s), never the clock: `progress` and `wait_for`
-  returns carry it and the time left to the cap (`progress.md`). Words held.
-- **Aicomplete's notes of 11-07 to 11-08** (86): every conductor tool return gives the clock
-  (143 froze early); a full test suite runs only between sims (142 saturated 12 threads);
-  helpers never `git checkout` or `git restore` a shared folder (144; hooked since 122).
-- **Helper briefs** (79, full): quote the prompt's rulings verbatim (aicomplete 111's
-  paraphrase made a cap a target band; `ultracode.md`); (113) each helper gets its own
-  scratch path `out/<item>/<helper>/` (fractal-website 006: a shared one let a helper
-  overwrite another's docstring); (118) a read-only one (Explore, Plan) answers inline.
-- **Fix the obvious in place** (113, Matt; both, ending *Latitude*): unless readonly, fix
-  anything obvious found (stale doc line, small bug, dead code, own audit findings) before
-  finishing, even at extra time, inside `paths:`; a note only for Matt's decisions or large
-  work. `self_audit` too, and it lands (`resume.md`); `AUDIT_FIX` keeps only its list.
-- **Leftover budget** (75: a done-when check). Before finishing with over an hour left, the
-  executor lists each done-when item against its measured result and takes a step that
-  advances an unmet one, in scope, saying which (aicomplete 090 stopped 3 of 4 hours early
-  on its band alone, two targets unmet). `max_hours` is a kill time, not a budget. A
-  template's plainer form has no goal condition (`templates.md`).
-- **Latitude** (102, both; aicomplete 167 spent ~3 h tuning toward a ±8 gate its locked
-  rulings put out of reach, then stopped to ask before reporting why). One paragraph after
-  *Asking and scope*, replacing its "decide what you don't ask, the only hard stop" sentence:
-  conflicts resolve in the order locked rulings (CLAUDE.md, docs, the prompt), goal, done-when
-  bars, method, the line that gave way named in the report, never asked about; method (read
-  counts, screen order, tables) is a suggested route sized to the time budget, while lines
-  marked required, the repo's CLAUDE.md *Working rules* steps (111: rulings, not method; 206
-  froze with 19 tests red) and what keeps measurement honest (paired seeds, fresh seeds for a
-  final read) bind; each bar is scored strictly as written (outside a band is unmet) but not chased
-  once evidence shows it out of reach, reported unmet with its evidence and driver; a numeric
-  target (tuning, calibration, a gate) starts with a ~30 min reachability check (put back what
-  the new rules changed, or the strongest allowed lever to its limit), posting a miss as
-  progress. The leftover check skips a bar shown unreachable. Light gets the same in three
-  lines; its cap rose to 430.
-- **Warnings** (109): every preamble's header gains `warnings: none | <kind>: <what tripped>[; …]`
-  (`warnings.md`); full and light name the repo's CLAUDE.md *Warning checks* and its
-  `warning_checks` (`executor.checks_text`), and say a warning never changes the status.
-  Full adds (113) that no such section is fine and (121) asks for `<kind>: unchanged from
-  main: …` for one as on main (light: no room under its cap). Light folds the pointer into its header line
-  under its 430 cap (shorter `slow:`, unmet-bar, message and design-ask lines). Its report-path line stays
-  word for word: `tests/fake_claude.py` and the restart preamble find the path by it.
+- **Running beside you now** ends the working-directory lines of a full or light preamble:
+  the project's other items executing or in setup, any repo, not paused, no watch, or
+  "nothing" (`talk.running_beside`, kept in the run record as `running_beside`). An
+  `alongside` item can start later, so on a change the next `progress` or `wait_for`
+  return ends with the new line, once. Other projects' daemons don't show here; *Now*'s
+  load line does.
+- **Port.** Every launch (a resumed stage too) gets a TCP port of its own: free at launch,
+  from the OS's ephemeral range, never a run target's or tool's, another live item's or the
+  picker's. It is in the run record and the `start` event (`port`), and in the executor's
+  environment as `CONDUCTOR_PORT`; the preamble names it only where the repo can serve.
+  Stages and merge executors get none.
+- **Threads.** `{free}` is `load.FREE_THREADS`, `{threads}` `load.run_threads()` (the box's
+  less 4 and 2 of headroom). `load_high` logs under 2 free for ~3 min and messages only an
+  item that is a real share of it; a Git Bash `nice -n 10` gives `BELOW_NORMAL` on Windows,
+  inherited by children.
+- **Scratch.** The daemon makes `out/<item>/` at launch; `out/keep/` stays shared and
+  outlives the worktree (`worktrees.md`, *Kept reads*). `out/` is ignored before every
+  launch and stage (`git.ignore_locally`: `/out/` in `.git/info/exclude`, never committed).
+- **Warnings.** The header's `warnings:` line names the repo's CLAUDE.md *Warning checks*
+  and its `warning_checks` (`executor.checks_text`; `warnings.md`).
+- **Writable roots.** `write_roots` (`control-folder.md`; default `open_roots`) are named
+  writable (`WRITES`) and the only-file line allows them; not readonly items or watches.
