@@ -17,8 +17,8 @@ Every file over budget gets cut, deduplicated or split. A split doc gets its own
 
 | Path | Budget | Why |
 |---|---|---|
-| `planner.md` | 25 KB | the one file every session reads whole, so the common path (*Start*, a normal session's vocab) belongs in it and nowhere else |
-| `planner-vocab.md` | 5 KB | rare ops only, read when Matt uses one; a row a normal session needs moves to `planner.md` (4 → 5 KB 2026-11-12: read on demand, and every row was being squeezed) |
+| `planner.md` | 23 KB | the one file every session reads whole, so the common path (*Start*, a normal session's vocab) belongs in it and nowhere else (25 → 23 KB 2026-11-16, prompt 125's trim to 21.6 KB: rare rows and doc-held rules moved out) |
+| `planner-vocab.md` | 7 KB | rare ops only, read when Matt uses one; a row a normal session needs moves to `planner.md` (4 → 5 KB 2026-11-12: read on demand, and every row was being squeezed; 5 → 7 KB 2026-11-16: prompt 125 moved nine rare rows here) |
 | `HANDOFF.md` | 24 KB | starts a claude.ai session on conductor, on demand; *Open* is a wavefront, not a log (20 → 24 KB 2026-11-12: prompts 104–108 each had to compress older lines to fit theirs) |
 | `CLAUDE.md` | 6 KB | read at every Claude Code session here |
 | `README.md` | 7 KB | an overview and an index into `docs/`, nothing more |

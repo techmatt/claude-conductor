@@ -26,6 +26,15 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **review cards** / **tool X** | Signal `tool: <name>`: starts that `[tools.<name>]` if needed and opens it (`tool: <name> stop` stops it; `docs/app.md`, *Project tools*). |
 | **test workers** | `[remote]` only: Matt presses **Test workers** on the app's Workers tab (a browser joined first), or a Claude Code session runs `conductor remote test <control>`: conductor's own job, no project build; per worker offered / finished / credited shards, s a shard, overtaken, matched, in `remote-diag.md` *Worker test* (`docs/remote-status.md`). |
 | **use remote workers** | `[remote]` only: default since 105 under `[remote] default = true` (`remote: false` opts out), else `remote: true`; seeded batches via `farm-seeds` (`docs/remote-workers.md`). |
+| **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras, rulings on its notes); with none (it would hold its queue), says so. |
+| **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`; it takes every unused note. |
+| **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
+| **trim state** | One request rewriting `state.md` to the wavefront (queued, open, paged, still ruled), dropping histories and what the repo's docs hold; rulings executors need ride the next prompt. |
+| **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
+| **notes used X, Y** / **R** | Signal `audit_used: <repo>/<NNN_name>, …` / `audit_used: <repo>/all`: notes an item already handled. |
+| **run X** / **stop X** | Signal `run: X` / `run: X stop`. One target: "run …" is it; several, no match: asks; none: offers one, port in `ports`. |
+| **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |
+| **context estimate** | Estimates tokens. |
 | **push R** | Signal `push: <repo>` (retry; `push: control` for the control folder). |
 | **park project** / **resume project** | *Park / resume* in `claude-ai-new-project.md`. |
 | **rename repo R to S** [at P] | Only when nothing of R is queued, staged or running: **stop conductor**, then tells Matt to run `uv run conductor rename-repo R S [--path P] --control <control>` in `C:\Code\claude-conductor` and start the daemon. History carries over; `state.md`'s prose about R is fixed by request. |
