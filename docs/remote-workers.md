@@ -78,8 +78,7 @@ the fingerprint command fails. The shims run Python with `-P`, so a file in the 
 folder never shadows a module; the `.cmd` one mangles `%`, `^` and `&` in arguments.
 The paragraph (111) also says to commit before farming a change (a project's build may take
 only committed code: aicomplete 204 ran every read natively and starved the box) and that
-`farm-seeds: error: the broker went away` (exit 3) is a failure, not a slow run
-(`remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
+a lost broker means the main box finishes, said (126; `remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
 `.conductor/remote/seeds.jsonl`, which the *Kept reads* rows read (`worktrees.md`).
 
 The commit it runs from, its dirty-tree warning and `farm-seeds --cancel`: `farm-seeds.md`.
@@ -165,8 +164,8 @@ planner's digest and the deadlines: `remote-diag.md`.
   nothing. A failed build (with its log's error line: `client.failure_line`) or one over 20
   minutes (killed, tried once more: `remote-diag.md`) is the browsers' `error` state.
 - **Provenance.** Who ran the kept copy of each shard is noted beside it
-  (`shards/<first>.who.json`: the broker's, or `farm-seeds`' for a shard it ran after the
-  broker went away), and `.conductor/remote/jobs/<job>/job.json` is built from those notes,
+  (`shards/<first>.who.json`: the broker's, or `farm-seeds`' for a shard it finished after the
+  broker dropped out), and `.conductor/remote/jobs/<job>/job.json` is built from those notes,
   so it matches the output's engines even without the broker (97: 162's read "main box 8"
   for 6 native and 2 wasm shards). The summary names a worker `<kind> <name> (<id>)`. The record also has the engines used,
   whether native and wasm mixed, and both references (`references`: `native`, `wasm`, `differ`); `jobs/<job>/main.log` has a `rerun shard N` line for each

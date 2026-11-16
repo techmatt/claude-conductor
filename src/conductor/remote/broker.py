@@ -37,7 +37,9 @@ from . import diag, selftest, settings
 from .board import Board
 
 PAGE = Path(__file__).with_name("page")
-MAX_BODY = 16 * 1024 * 1024    # a shard's output, base64'd, fits well under this
+# A browser's shard output comes in its request. 126: aicomplete's p248j shards were 33-38 MB
+# each and the old 16 MB cap refused every result (the main box's own now come as a path).
+MAX_BODY = 256 * 1024 * 1024
 FILE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}$")
 RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM\d|LPT\d)(\..*)?$", re.I)     # Windows device names
 JOB_KEEP_DAYS = 7
@@ -227,17 +229,21 @@ class Handler(BaseHTTPRequestHandler):
             wid, key = str(b["worker"]), str(b["key"])
             return {"pass": board.gate(wid, key, str(b["value"])), "reference": board.reference_kind(wid, key)}
         if op == "result":
-            ok = b.get("ok") is True
-            if ok and isinstance(b.get("output_b64"), str):       # native workers: the bytes exactly
+            ok, source = b.get("ok") is True, None
+            if ok and isinstance(b.get("path"), str) and b["path"]:   # the main box: its file, moved in (126)
+                if not self._local() or self.headers.get("Origin"):
+                    raise ValueError("a result by path is the main box's only")
+                output, source = b"", Path(b["path"])
+            elif ok and isinstance(b.get("output_b64"), str):       # native workers: the bytes exactly
                 output = base64.b64decode(b["output_b64"], validate=True)
             elif ok and isinstance(b.get("output"), str):         # the browser: its string, as UTF-8
                 output = b["output"].encode("utf-8")
             elif ok:
-                raise ValueError("an ok result needs `output` (text) or `output_b64`")
+                raise ValueError("an ok result needs `output` (text), `output_b64` or `path`")
             else:
                 output = b""
             return {"accepted": board.result(str(b["worker"]), str(b["job"]), int(b["shard"]), ok, output,
-                                             str(b.get("log", "")), float(b.get("ms", 0)))}
+                                             str(b.get("log", "")), float(b.get("ms", 0)), source=source)}
         if op == "job":
             ranges = [(int(a), int(n)) for a, n in b["ranges"]]
             cwd = b.get("cwd")
@@ -434,6 +440,7 @@ def serve(control: Path, stay: bool = False, after: int | None = None, watch: Co
     board = Board(r.state, r.lease_seconds, r.fresh_seconds, r.bundle_js, native_argv=r.native,
                   seed_seconds=r.seed_seconds, main_slots=r.main_slots, start_cores=r.start_cores)
     restored = board.restore(r.state / BOARD)
+    board.recount()                              # the day's wins from the job records, not the saved board (126)
     try:
         server = make_server(r, board)
     except OSError as exc:

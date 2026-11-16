@@ -88,10 +88,14 @@ adding the section brings the chip and tab, removing it takes them.
   reference)`, `3 shards re-run on the main box since 4:30pm`, `the broker restarted at
   …`, a worker's error); a table, the main box first: worker (its name from the page), kind and engine, cores (the main box's
   `main_slots` as slots), state (*One state*: `preparing · compiling the bundle for 810ce37 · 12 s`,
-  `working · 2 shards out`), last seen (`local` for the main box: the broker's own machine), shards today (won, by local date). Workers the broker has
-  forgotten (an hour unheard) drop out; their counts are kept by id, so one that rejoins (a
-  laptop asleep overnight) carries on from them (124: aicomplete's tab won 35 shards at
-  4:25-4:54am and rejoined at 8:31am showing 0). The broker learns the running items from
+  `working · 2 shards out`), last seen (`local` for the main box: the broker's own machine), shards today (won, by local date, by
+  worker id). Workers the broker has forgotten (an hour unheard) drop out; their counts are
+  kept by id, so one that rejoins (a laptop asleep overnight) carries on from them (124:
+  aicomplete's tab won 35 shards at 4:25-4:54am and rejoined at 8:31am showing 0). *Shards
+  today* is counted from the job records (126, `Board.recount`): at each broker start (a
+  handover, a new broker) from the `shards/<first>.who.json` notes written today, then one
+  per win, so no restart or lost board resets it. Shards `farm-seeds` finished itself after
+  the broker dropped out count from the next broker start. The broker learns the running items from
   `running/<repo>/<name>.run.json` every 2 s (`broker.running_items`).
 - **Test workers** (124, *Worker test* below) on the tab's top row, and the last result
   under it: a line per worker.

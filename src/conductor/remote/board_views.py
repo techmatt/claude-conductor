@@ -4,7 +4,6 @@ the app's panel and the inbox's *Now* line. A mixin: `Board` holds the data and 
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from . import cores as policy, diag
@@ -155,7 +154,6 @@ class Views:
             j = jobs[0] if jobs else None
             out_by = self._out_by(jobs, now)
             job = self._job_view(j, now) if j else None
-            today = time.strftime("%Y-%m-%d", time.localtime(now))
             from .board import Worker     # board imports this module: at call time only
             main = self.workers.get("main") or Worker("main", "main", label="main box")
             rows = []
@@ -168,7 +166,7 @@ class Views:
                              "cores": w.cores, "out": n, "gate": gate, "fresh": fresh,
                              # the main box is the broker's own machine: never "seen", always local
                              "last_seen": None if w.kind == "main" else w.last_seen or None,
-                             "today": w.today if w.day == today else 0,
+                             "today": self.today(w.id, now),
                              **self._plan_row(w),
                              **self._state(w, now, jobs, n)})
             return {"now": now, "job": job, "workers": rows, "items": list(self.items),

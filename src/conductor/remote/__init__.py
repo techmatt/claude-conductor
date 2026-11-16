@@ -39,9 +39,8 @@ the shards ran; its first, the commit the native exe is built from. Commit befor
 a project's build may take only committed code (aicomplete 204 ran every read natively); on a dirty
 tree it warns (`farm-seeds: warning: uncommitted changes`). To stop a run, `farm-seeds --cancel`
 (this item's runs): it closes the broker job and kills the native shards, which killing the shell
-may not. `farm-seeds: error: the broker went away` (exit 3) is a
-failure, not a slow run: its finished shards are kept; re-run once the daemon is back, or run the
-native command for the range.
+may not. If the broker drops out mid-job, it finishes the remaining shards on the main box and
+says so (`farm-seeds: the broker dropped out mid-job ...`): a slower run, not a failure.
 """
 
 

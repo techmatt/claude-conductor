@@ -5,14 +5,18 @@ range (bytes, never re-encoded); where the shards ran is its business, never the
 Placement: no broker, or a job estimated under `local_below_seconds`, runs the native
 command at once over the whole range. Otherwise the range is split into shards whether or
 not a worker is connected, so one that joins mid-job takes those still pending; the main
-box claims shards too (`main_slots` at once) and, once none is left unleased, re-runs one
-still out on a worker (the first copy back wins). A broker that restarts part-way is waited
-for (`PATIENCE`) and the job carries on; one that stays gone fails the command at once
-(`BROKER_LOST`, exit 3), its finished shards kept in the job's folder."""
+box claims shards too (`main_slots` at once) and copies one still out on a worker once
+that worker is late (`board.Board._overdue`; the first copy back wins). The main box hands
+its shard outputs over as files in the job's folder, never as bytes in a request (126).
+
+A broker that restarts part-way is waited for (`PATIENCE`) and the job carries on. One
+that stays gone, refuses the job's calls or no longer knows the job is looked for once more
+(`broker.json` may name a new one); failing that, the shards not yet in are finished on the
+main box (`main_slots` at once, those it already ran kept), and stderr says so. A run never
+ends with shards missing (126: aicomplete's job 221 did, at exit 3)."""
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -36,8 +40,7 @@ BEAT_SECONDS = 2.0          # the job's heartbeat: a job the broker stops hearin
 BUILD_STALE_SECONDS = 45 * 60   # a build lock this old is a dead build's (two tries of 20 min)
 FAULT_VAR = "CONDUCTOR_REMOTE_FAULT"   # `node-hang`: the Node wasm reference hangs (tests, the sandbox walk)
 PATIENCE = 45.0             # a broker restarting (a handover, or the daemon starting one that died) is waited this long
-BROKER_LOST = "error"               # `farm-seeds: error: ...`, its stderr line when the broker stays gone (wait_for's `fail` ends on it)
-BROKER_LOST_EXIT = 3
+RECONNECTS = 2              # a broker gone past PATIENCE is looked for again this many times before the main box finishes
 CANCELLED_EXIT = 130
 CANCEL = threading.Event()  # a stop signal or `farm-seeds --cancel`: the job closes, its native runs die
 OWNER = "owner.json"        # in a job's folder while its farm-seeds runs: pid, item (`--cancel` reads it)
@@ -46,7 +49,17 @@ NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if WIN else {}
 
 
 class BrokerDown(Exception):
-    pass
+    """The broker not answering a call (`refused` None), or answering it with an HTTP status
+    other than 503 (`refused`: 413 for a body over `broker.MAX_BODY`, which every one of
+    aicomplete job 221's 35 MB shard results got, 126)."""
+
+    def __init__(self, op: str, refused: int | None = None, cause: object = ""):
+        self.op, self.refused = op, refused
+        super().__init__(f"{op}: {cause}")
+
+    def plain(self) -> str:
+        """Its words for a stderr line. Never "error": an item's `wait_for` ends on that."""
+        return f"it refused `{self.op}` (HTTP {self.refused})" if self.refused else f"it stopped answering `{self.op}`"
 
 
 def say(text: str) -> None:
@@ -145,7 +158,7 @@ class Broker:
             except (urllib.error.URLError, OSError, ValueError) as exc:
                 answered = isinstance(exc, urllib.error.HTTPError) and exc.code != 503
                 if answered or time.monotonic() >= end:
-                    raise BrokerDown(f"{op}: {exc}") from exc
+                    raise BrokerDown(op, exc.code if answered else None, exc) from exc
                 time.sleep(0.5)
 
 
@@ -365,7 +378,8 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
         jid = broker.call("job", {"key": key, "fingerprint": expected, "args": args, "ranges": ranges,
                                   "cwd": str(cwd), "item": os.environ.get(settings.ITEM_VAR, "")})["job"]
     except (BrokerDown, KeyError) as exc:
-        return run_local(r, cwd, first, count, out, args, f"broker refused the job: {exc}")
+        why = exc.plain() if isinstance(exc, BrokerDown) else "its reply named no job"
+        return run_local(r, cwd, first, count, out, args, f"the broker took no job: {why}")
     folder = r.state / "jobs" / jid
     (folder / "main").mkdir(parents=True, exist_ok=True)
     (folder / OWNER).write_text(json.dumps({"pid": os.getpid(), "item": os.environ.get(settings.ITEM_VAR, "")}),
@@ -380,66 +394,116 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
           args: list[str], ranges: list[tuple[int, int]], jid: str, folder: Path, t0: float) -> int:
     failed: list[str] = []
     errors: list[str] = []
+    lost: list[tuple[str, bool]] = []            # what the broker did (its words, refused?): the stderr line, a reconnect
+    own: dict[int, Path] = {}                    # first seed -> a main-box output the broker didn't take: kept, never re-run
     down, ended = threading.Event(), threading.Event()
     notes: dict = {}
+    link = {"broker": broker}                    # a reconnect swaps it
+    sid_of = {a: i for i, (a, _) in enumerate(ranges)}
     if r.build:
         threading.Thread(target=ensure_bundle, args=(r, key, cwd, broker, ended, notes), daemon=True).start()
     log = open(folder / "main.log", "ab")
 
+    def note(text: str) -> None:
+        log.write(f"{time.strftime('%H:%M:%S')} {text}\n".encode())
+        log.flush()
+
+    def broke(text: str, refused: bool = False) -> None:
+        lost.append((text, refused))
+        note(f"broker: {text}")
+        down.set()
+
     def beat() -> None:
         while not ended.wait(BEAT_SECONDS):
             try:
-                broker.call("state", {"job": jid})
+                link["broker"].call("state", {"job": jid})
             except BrokerDown:
                 pass
 
+    def hand_in(b: Broker, a: int, sid: int, tmp: Path, ms: float) -> None:
+        """A finished output, by its path: the broker moves the file into `shards/`. One it
+        doesn't take is kept here (`own`) unless another copy is already in."""
+        try:
+            taken = b.call("result", {"worker": "main", "job": jid, "shard": sid, "ok": True, "path": str(tmp),
+                                      "ms": ms}, patience=PATIENCE).get("accepted")
+        except BrokerDown as exc:
+            broke(exc.plain(), bool(exc.refused))
+            taken = False
+        if taken or not tmp.exists():
+            return
+        if shard_path(folder, a).exists():
+            tmp.unlink(missing_ok=True)          # a worker's copy won
+        else:
+            own[a] = tmp
+
     def slot(n: int) -> None:
         while not down.is_set() and not CANCEL.is_set():
+            b = link["broker"]
             try:
-                c = broker.call("claim", {"job": jid}, patience=PATIENCE)
-            except BrokerDown:
-                down.set()
-                return
-            if c.get("done") or c.get("gone") or "shard" not in c:
+                c = b.call("claim", {"job": jid}, patience=PATIENCE)
+            except BrokerDown as exc:
+                return broke(exc.plain(), bool(exc.refused))
+            if c.get("gone"):
+                return broke("it no longer knows the job")
+            if c.get("done") or "shard" not in c:
                 if c.get("wait"):
                     time.sleep(0.2)
                     continue
                 return
             a, k, sid = c["first"], c["count"], c["shard"]
+            if a in own:                         # run here already, before a reconnect: hand that in
+                hand_in(b, a, sid, own.pop(a), 0.0)
+                continue
             if c.get("rerun"):                   # provenance: a shard re-run here while a worker held it
-                log.write(f"{time.strftime('%H:%M:%S')} rerun shard {sid} seeds {a}+{k}\n".encode())
-                log.flush()
+                note(f"rerun shard {sid} seeds {a}+{k}")
             tmp = folder / "main" / f"{a:012d}.{n}.out"
             t = time.time()
             code = run_native(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
             if code == -1:
+                tmp.unlink(missing_ok=True)
                 continue                         # a worker's copy won
-            ok = code == 0 and tmp.exists()
-            if not ok:
+            if code != 0 or not tmp.exists():
                 failed.append(f"seeds {a}..{a + k - 1}: exit {code}")
-            try:
-                broker.call("result", {"worker": "main", "job": jid, "shard": sid, "ok": ok,
-                                       "output_b64": base64.b64encode(tmp.read_bytes()).decode() if ok else "",
-                                       "ms": (time.time() - t) * 1000}, patience=PATIENCE)
-            except BrokerDown:
-                down.set()
-            if not ok:
+                try:
+                    b.call("result", {"worker": "main", "job": jid, "shard": sid, "ok": False}, patience=PATIENCE)
+                except BrokerDown:
+                    pass
                 return
+            hand_in(b, a, sid, tmp, (time.time() - t) * 1000)
 
     def guarded(n: int) -> None:
         try:
             slot(n)
         except Exception as exc:                 # noqa: BLE001 - reported; the rest runs locally
             errors.append(repr(exc))
+            note(f"a slot stopped: {exc!r}")
 
     threading.Thread(target=beat, daemon=True).start()
-    threads = [threading.Thread(target=guarded, args=(i,), daemon=True) for i in range(max(1, r.main_slots))]
-    for t in threads:
-        t.start()
-    for t in threads:
-        while t.is_alive():
-            t.join(0.25)                         # never a bare join: a stop signal must get through
+    for tries in range(RECONNECTS + 1):
+        threads = [threading.Thread(target=guarded, args=(i,), daemon=True) for i in range(max(1, r.main_slots))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            while t.is_alive():
+                t.join(0.25)                     # never a bare join: a stop signal must get through
+        if (CANCEL.is_set() or failed or errors or not down.is_set() or tries == RECONNECTS
+                or any(refused for _, refused in lost)):
+            break                                # a broker that refuses a call would refuse it again
+        b2 = Broker.find(r)                      # the daemon may have started one elsewhere since
+        try:
+            back = b2 is not None and not b2.call("state", {"job": jid}, patience=PATIENCE).get("gone")
+        except BrokerDown:
+            back = False
+        if not back:
+            break
+        say(f"the broker is back ({lost[0][0]} for a while): carrying on with job {jid}")
+        link["broker"] = b2
+        lost.clear()
+        down.clear()
+        for a in list(own):                      # run here while it was gone: the board still has them leased here
+            hand_in(b2, a, sid_of[a], own.pop(a), 0.0)
     ended.set()
+    broker = link["broker"]
     if CANCEL.is_set():
         log.close()
         _close(broker, jid)
@@ -454,35 +518,23 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
     if not down.is_set() and not errors:
         try:
             state = broker.call("state", {"job": jid}, patience=PATIENCE)
-        except BrokerDown:
-            down.set()
+        except BrokerDown as exc:
+            broke(exc.plain(), bool(exc.refused))
     missing = [(a, k) for a, k in ranges if not shard_path(folder, a).exists()]
-    if missing and not errors:
-        # A failure, said at once: the silent one-shard-at-a-time fallback cost aicomplete
-        # 209-211 6-12 minutes each. The executor decides: re-run once the daemon is back, or
-        # run the native command itself at its own threads.
-        log.close()
-        say(f"{BROKER_LOST}: the broker went away mid-job ({len(ranges) - len(missing)} of {len(ranges)} "
-            f"shards in, kept in {folder / 'shards'}); nothing written to {out}. Re-run once the daemon "
-            "is back, or run the native command for the range")
-        return BROKER_LOST_EXIT
     if missing:
+        # Never a failure for want of the broker (126), and never silent or one shard at a
+        # time (aicomplete 209-211 lost 6-12 min each to that): `main_slots` at once, said.
         _close(broker, jid)                      # no worker writes into this job any more
-        say(f"a main-box slot failed ({errors[0]}); running the {len(missing)} shard(s) not yet in here")
-        for a, k in missing:
-            tmp = folder / "main" / f"{a:012d}.out"
-            code = run_native(r.native, cwd, a, k, tmp, args, log=log)
-            if code != 0:
-                log.close()
-                say(f"the native command exited {code} for seeds {a}..{a + k - 1}")
-                return code
-            shard_path(folder, a).parent.mkdir(parents=True, exist_ok=True)
-            try:
-                write_who(shard_path(folder, a), MAIN_DONE)
-                os.replace(tmp, shard_path(folder, a))
-            except OSError:
-                if not shard_path(folder, a).exists():
-                    raise
+        why = (f"the broker dropped out mid-job: {lost[0][0]}" if lost
+               else "a main-box slot stopped (main.log has why)" if errors else "the broker handed out no more shards")
+        code = _finish_here(r, cwd, folder, args, missing, own, log, why, len(ranges))
+        if code:
+            log.close()
+            if code == CANCELLED_EXIT:
+                say(f"cancelled: its native runs stopped; nothing written to {out}")
+            return code
+    for p in own.values():
+        p.unlink(missing_ok=True)                # copies another worker's beat in
     log.close()
     merged = out.with_name(out.name + f".farm{os.getpid()}.tmp")
     with open(merged, "wb") as f:
@@ -491,6 +543,67 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
     os.replace(merged, out)
     _record(folder, key, args, ranges, state, out, time.time() - t0, notes.get("fallback", ""))
     _close(broker, jid)
+    return 0
+
+
+def _land(folder: Path, a: int, tmp: Path) -> None:
+    """A main-box output into `shards/`, with its note (who ran it)."""
+    dest = shard_path(folder, a)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        write_who(dest, MAIN_DONE)
+        os.replace(tmp, dest)
+    except OSError:
+        if not dest.exists():
+            raise
+
+
+def _finish_here(r: settings.Remote, cwd: Path, folder: Path, args: list[str], missing: list[tuple[int, int]],
+                 own: dict[int, Path], log, why: str, total: int) -> int:
+    """The shards not yet in, done on the main box: those it already ran (`own`) are kept,
+    the rest run `main_slots` at once. 0 when every one is in; else the first native exit
+    code, or CANCELLED_EXIT."""
+    kept = [a for a, _ in missing if a in own and own[a].exists()]
+    for a in kept:
+        _land(folder, a, own.pop(a))
+    todo = [(a, k) for a, k in missing if a not in kept]
+    width = max(1, min(r.main_slots, len(todo)))
+    say(f"{why}; {total - len(missing)} of {total} shards were in. Finishing the other {len(missing)} on the "
+        f"main box" + (f" ({len(kept)} already run here, kept)" if kept else "")
+        + (f", {width} at a time" if todo else ""))
+    lock, codes = threading.Lock(), []
+
+    def one(n: int) -> None:
+        while not CANCEL.is_set():
+            with lock:
+                if not todo or codes:
+                    return
+                a, k = todo.pop(0)
+            if shard_path(folder, a).exists():
+                continue
+            tmp = folder / "main" / f"{a:012d}.here{n}.out"
+            code = run_native(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
+            if code == -1 and shard_path(folder, a).exists():
+                tmp.unlink(missing_ok=True)
+            elif code != 0 or not tmp.exists():
+                with lock:
+                    codes.append((code if code else 1, f"seeds {a}..{a + k - 1}: exit {code}"))
+                return
+            else:
+                _land(folder, a, tmp)
+
+    threads = [threading.Thread(target=one, args=(i,), daemon=True) for i in range(width if todo else 0)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        while t.is_alive():
+            t.join(0.25)
+    if CANCEL.is_set():
+        return CANCELLED_EXIT
+    if codes:
+        say(f"the native command failed on the main box: {codes[0][1]}")
+        return codes[0][0]
+    say(f"all {total} shards in")
     return 0
 
 
@@ -698,7 +811,8 @@ def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[
     try:
         broker.call("status", {"key": key}, timeout=STATUS_TIMEOUT)["live"]
     except (BrokerDown, KeyError) as exc:
-        return run_local(r, cwd, first, count, out, args, f"broker unreachable ({exc})")
+        why = exc.plain() if isinstance(exc, BrokerDown) else "no `live` in its reply"
+        return run_local(r, cwd, first, count, out, args, f"broker unreachable ({why})")
     # Sharded even with no worker connected: one that joins mid-job takes the shards still pending.
     return farm(r, cwd, key, broker, first, count, out, args)
 

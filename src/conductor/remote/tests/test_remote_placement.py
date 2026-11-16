@@ -156,3 +156,42 @@ def test_a_free_main_slot_copies_a_remote_shard_past_one_and_a_half_times_its_ex
     assert not b.result("bl", jid, 0, True, b"late\n")  # first copy wins
     assert b.result("bl", jid, 1, True, b"one\n", ms=40_000)
     assert b.jobs[jid].shards[1].done["worker"] == "bl"
+
+
+def test_the_tail_leaves_a_slow_browser_its_shards_while_it_works_through_them_in_normal_time(tmp_path):
+    """126: on a heavy spec a browser took 110-176 s a shard against the main box's 90 s. The
+    tail copied every shard still out, and the browser finished 8 of the 9 copies first. A copy
+    now waits until the holder is past 1.5 times its expected time, timed from when it took the
+    shard (its check-ins renew the lease, not that clock), unless the main box would clearly win."""
+    b, clock = _board(tmp_path)
+    jid = _job(b, n=2)
+    b.jobs[jid].rates.update({"main": 45_000, "bl": 40_000})   # a shard: 90 s here, 80 s on the laptop
+    _tab(b)
+    _gate(b)
+    assert [b.poll("bl")["shard"] for _ in range(2)] == [0, 1]
+    for _ in range(12):                                 # 120 s, checking in every 10 s, both shards named
+        clock.t += 10
+        _tab(b)
+        b.renew("bl", [[jid, 0], [jid, 1]])
+        assert b.claim(jid) == {"wait": True}           # nothing free; 1.5 times 80 s is 120 s: not late yet
+    clock.t += 5                                        # 125 s
+    _tab(b)
+    b.renew("bl", [[jid, 0], [jid, 1]])
+    assert (b.claim(jid)["rerun"], b.claim(jid)["rerun"]) == (True, True)   # now late: copied
+    assert len(b.reruns) == 2
+
+
+def test_the_tail_copies_a_shard_the_main_box_would_finish_in_under_half_the_time_left(tmp_path):
+    b, clock = _board(tmp_path)
+    jid = _job(b, n=2)
+    b.jobs[jid].rates.update({"main": 45_000, "bl": 40_000})
+    _tab(b)
+    _gate(b)
+    assert [b.poll("bl")["shard"] for _ in range(2)] == [0, 1]
+    clock.t += 10
+    _tab(b)
+    assert b.claim(jid) == {"wait": True}
+    b.jobs[jid].rates["bl"] = 200_000                   # measured far slower since: 400 s a shard, 390 s left
+    c = b.claim(jid)
+    assert c["rerun"] and c["shard"] == 0
+    assert b.claim(jid, rerun=False) == {"wait": True}  # never without the caller's leave

@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import shutil
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -71,8 +72,12 @@ class Shard:
     id: int
     first: int
     count: int
-    leases: dict[str, float] = field(default_factory=dict)   # worker id -> leased at
+    leases: dict[str, float] = field(default_factory=dict)   # worker id -> leased at, or its last renewal (`renew`)
     done: dict | None = None     # {worker, kind, engine, ms}
+    started: dict[str, float] = field(default_factory=dict)  # worker id -> leased at, never renewed: how long it has run (126)
+
+    def since(self, wid: str) -> float:
+        return self.started.get(wid, self.leases.get(wid, 0.0))
 
 
 @dataclass
@@ -147,6 +152,13 @@ def _report(report, now: float) -> dict:
     return out
 
 
+def _inside(path: Path, folder: Path) -> bool:
+    try:
+        return path.resolve().is_relative_to(folder.resolve()) and path.is_file()
+    except OSError:
+        return False
+
+
 def who_path(out: Path) -> Path:
     return out.with_suffix(".who.json")
 
@@ -187,6 +199,7 @@ class Board(Views):
         self.past: dict[str, dict] = {}    # a forgotten worker's counts, by id: a reconnect takes them up (124)
         self._n = 0
         self._notes = 0
+        self.credit_day, self.credits = "", {}   # wins by worker id on that local date (`today`, `recount`)
 
     # ------------------------------------------------------------ workers
     def hello(self, wid: str, kind: str, cores: int = 1, label: str = "", fresh: bool = False,
@@ -319,7 +332,7 @@ class Board(Views):
                 if not free or not self._share(job, wid, len(free), jobs, now):
                     continue                     # a faster worker is expected to finish what is free sooner
                 s = free[0]
-                s.leases[wid] = now
+                s.leases[wid] = s.started[wid] = now
                 job.count(wid, "offered")
                 if w.hw:
                     job.tags[f"{s.id}:{wid}"] = w.cores
@@ -353,9 +366,9 @@ class Board(Views):
             for s in j.shards:
                 if not s.done:
                     for wid, at in s.leases.items():
-                        if self._live(j, s, wid, at, now):
+                        if self._live(j, s, wid, at, now):     # timed from its start, not its last renewal
                             out.setdefault(wid, []).append(
-                                placement.busy_until(at, s.count * self._ms_seed(j, wid), now))
+                                placement.busy_until(s.since(wid), s.count * self._ms_seed(j, wid), now))
         return out
 
     def _serves(self, w: Worker, job: Job, now: float) -> bool:
@@ -450,22 +463,29 @@ class Board(Views):
 
     # ------------------------------------------------------------ results
     def result(self, wid: str, job_id: str, shard_id: int, ok: bool, output: bytes = b"", log: str = "",
-               ms: float = 0.0) -> bool:
-        """A shard's output (bytes, kept exactly), or its failure. The first good copy wins."""
+               ms: float = 0.0, source: Path | None = None) -> bool:
+        """A shard's output (bytes, kept exactly), or its failure. The first good copy wins.
+        `source`: the output as a file in the job's folder (the main box's, 126), moved into
+        `shards/` when it wins and left where it is when it doesn't."""
         with self.lock:
             job, w = self.jobs.get(job_id), self.workers.get(wid)
             if job is None or w is None or not 0 <= shard_id < len(job.shards):
                 return False
             if w.kind != "main" and w.gates.get(job.key, ("",))[0] != "pass":
                 return False                       # never gated for this commit
+            if source is not None and ok and not _inside(Path(source), job.folder):
+                raise ValueError("a result's path must be a file in its job's folder")
             if w.kind == "main":
                 job.seen = self.clock()
             s = job.shards[shard_id]
+            if source is not None and ok and selftest.is_test(job.key):
+                output = Path(source).read_bytes()
             if ok and selftest.is_test(job.key) and output != selftest.expected(s.first, s.count).encode():
                 ok = False                         # the worker test checks every copy: a wrong one never lands
                 job.count(wid, "mismatched")
             holders = [x for x in s.leases if x != wid]
             s.leases.pop(wid, None)
+            s.started.pop(wid, None)
             if log:
                 self._append(job.folder / "logs" / f"{wid}.log", log[-LOG_CHARS:], cap=LOG_FILE_CAP)
             ms = ms if isinstance(ms, (int, float)) and math.isfinite(ms) and ms >= 0 else 0.0
@@ -495,14 +515,65 @@ class Board(Views):
             # matches the output even when the broker is gone by the end (162's did not).
             write_who(path, done)
             tmp = path.with_suffix(f".{wid}.tmp")
-            tmp.write_bytes(output)
-            os.replace(tmp, path)
+            if source is None:
+                tmp.write_bytes(output)
+                os.replace(tmp, path)
+            else:
+                try:
+                    os.replace(source, path)
+                except OSError:                    # held open a moment (a scanner): copy it instead
+                    shutil.copyfile(source, tmp)
+                    os.replace(tmp, path)
             s.done = done
             s.leases.clear()
+            s.started.clear()
             w.shards += 1
             day = time.strftime("%Y-%m-%d", time.localtime(self.clock()))
             w.day, w.today = day, (w.today if w.day == day else 0) + 1
+            self._credit(wid, day)
             return True
+
+    def _credit(self, wid: str, day: str) -> None:
+        if self.credit_day != day:
+            self.credit_day, self.credits = day, {}
+        self.credits[wid] = self.credits.get(wid, 0) + 1
+
+    def today(self, wid: str, now: float) -> int:
+        """Shards `wid` won on `now`'s local date (the Workers tab), from `recount` at the
+        broker's start plus each win since: a handover, a new broker, a worker forgotten
+        and back, none of them resets it (126)."""
+        return self.credits.get(wid, 0) if self.credit_day == time.strftime("%Y-%m-%d", time.localtime(now)) else 0
+
+    def recount(self) -> None:
+        """Today's wins from the job records: every kept shard has its `<first>.who.json`
+        (`write_who`) in `jobs/<job>/shards/`, written when it won. Only folders touched
+        today are read. A broker start's first act, so the count is the day's, whatever
+        happened to the board before (aicomplete 250: 36 shown, 71 won)."""
+        now = self.clock()
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        lt = time.localtime(now)
+        midnight = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+        counts: dict[str, int] = {}
+        try:
+            folders = [p / "shards" for p in (self.root / "jobs").iterdir()]
+        except OSError:
+            folders = []
+        for sh in folders:
+            try:
+                if sh.stat().st_mtime < midnight:
+                    continue
+                notes = [p for p in sh.glob("*.who.json") if p.stat().st_mtime >= midnight]
+            except OSError:
+                continue
+            for p in notes:
+                try:
+                    wid = json.loads(p.read_text(encoding="utf-8")).get("worker")
+                except (OSError, ValueError, AttributeError):
+                    continue
+                if isinstance(wid, str) and wid:
+                    counts[wid] = counts.get(wid, 0) + 1
+        with self.lock:
+            self.credit_day, self.credits = day, counts
 
     def _plan_result(self, job: Job, s: Shard, w: Worker, ok: bool, ms: float) -> None:
         """A result, for the core counts (`cores.py`): a browser's own shard is a sample and
@@ -584,8 +655,9 @@ class Board(Views):
                         w.gates.pop(key, None)
 
     def claim(self, job_id: str, rerun: bool = True) -> dict:
-        """The main box's next shard: an unleased one, else (with `rerun`) the oldest still
-        out on a worker and not already running here. `done` once every shard is in."""
+        """The main box's next shard: an unleased one, else (with `rerun`) one still out on a
+        worker that is late, or that the main box would clearly beat (`_overdue`). `done`
+        once every shard is in."""
         with self.lock:
             job = self.jobs.get(job_id)
             if job is None:
@@ -604,30 +676,40 @@ class Board(Views):
                     return {"wait": True}          # a worker expected to finish them sooner takes them
                 free = late                        # a free slot here copies a lagging remote shard
             elif not free and rerun:
-                free = sorted((s for s in job.shards if not s.done and "main" not in s.leases),
-                              key=lambda s: min(s.leases.values(), default=now))
+                free = self._overdue(job, now, tail=True)
             if not free:
                 return {"wait": True}
             s = free[0]
-            s.leases["main"] = now
+            s.leases["main"] = s.started["main"] = now
             job.count("main", "offered")
             rerun = bool(s.leases.keys() - {"main"})
             if rerun:
                 self.reruns = [t for t in self.reruns if now - t < 3600] + [now]
             return {"shard": s.id, "first": s.first, "count": s.count, "rerun": rerun}
 
-    def _overdue(self, job: Job, now: float) -> list[Shard]:
-        """Shards out only on remote workers past OVERDUE times their worker's expected time,
-        the most overdue first. A read waits for its slowest shard: aicomplete's laptop ran
-        2-seed shards of one job 7 to 11 min (j1794328936-30) while free shards still went
-        its way, so the main box's tail rerun came late (103)."""
+    def _overdue(self, job: Job, now: float, tail: bool = False) -> list[Shard]:
+        """Shards out only on remote workers that a free main slot should copy, the most
+        overdue first: each holder has run it past OVERDUE times its expected time (its ms a
+        seed in this job, so a heavy spec's slow shards are expected slow), timed from when it
+        took the shard, not its last check-in. At the `tail` (nothing left unleased), also
+        one the main box would finish in under half the time its holder still needs.
+
+        A read waits for its slowest shard: aicomplete's laptop ran 2-seed shards of one job 7
+        to 11 min (j1794328936-30) while free shards still went its way (103). But the tail
+        once copied every shard still out: 126's browser took 110-176 s a heavy shard against
+        the main box's 90 s, and 8 of the 9 copies lost."""
         late = []
         for s in job.shards:
-            if s.done or "main" in s.leases or not s.leases:
+            holders = [x for x in s.leases if self._live(job, s, x, s.leases[x], now)]
+            if s.done or "main" in s.leases or not holders:
                 continue
-            over = max((now - at) / max(s.count * self._ms_seed(job, wid) / 1000, 1e-3) for wid, at in s.leases.items())
-            if over > OVERDUE:
-                late.append((-over, s.id, s))
+            expect = {x: max(s.count * self._ms_seed(job, x) / 1000, 1e-3) for x in holders}
+            over = min((now - s.since(x)) / expect[x] for x in holders)
+            if over <= OVERDUE:
+                left = min(s.since(x) + expect[x] - now for x in holders)
+                if not tail or s.count * self._ms_seed(job, "main") / 1000 >= left / 2:
+                    continue
+            late.append((-over, s.id, s))
         return [s for _, _, s in sorted(late)]
 
     def state(self, job_id: str) -> dict:

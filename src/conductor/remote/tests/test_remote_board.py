@@ -90,15 +90,18 @@ def test_lease_timeout_and_a_silent_worker_release_shards(tmp_path):
 
 
 def test_the_main_box_reruns_a_shard_out_on_a_worker_and_the_first_copy_wins(tmp_path):
-    b, _ = board(tmp_path)
+    b, clock = board(tmp_path)
     jid = job(b, n=2)
     gated(b, "w")
     assert b.poll("w")["shard"] == 0
     c = b.claim(jid)
     assert (c["shard"], c["rerun"]) == (1, False)
     assert b.result("main", jid, 1, True, b"one\n")
+    assert b.claim(jid) == {"wait": True}             # dry, but the worker took it just now (126)
+    clock.t += 1                                      # 10 seeds at 0.05 s: 0.5 s expected, so 1 s is late
+    b.hello("w", "local-remote")
     c = b.claim(jid)
-    assert (c["shard"], c["rerun"]) == (0, True)      # dry: re-run the worker's shard
+    assert (c["shard"], c["rerun"]) == (0, True)      # re-run the worker's shard
     assert b.claim(jid) == {"wait": True}             # nothing else to take
     assert b.result("main", jid, 0, True, b"zero\r\n")
     assert not b.result("w", jid, 0, True, b"late\n")  # the worker's copy loses
@@ -404,3 +407,43 @@ def test_the_job_record_counts_the_kept_copies_even_with_the_broker_gone(tmp_pat
     assert [s["worker"] for s in rec["shards"]] == ["b1", "main", "main"]
     assert rec["engines"] == ["native", "wasm"] and rec["mixed"]
     assert "browser laptop (b1) 1 (wasm), main box 2 (native)" in capsys.readouterr().err
+
+
+def test_the_days_count_comes_from_the_job_records_whatever_happens_to_the_board(tmp_path):
+    """126: aicomplete's Workers tab showed 36 where the browser had won 71 that day: its
+    count lived on its board row, which a new row (the same tab back after an hour) began at 0."""
+    import os
+    import time
+    b, clock = board(tmp_path)
+    clock.t = time.time()
+    jid = job(b, n=3)
+    gated(b, "w")
+    for sid in (b.poll("w")["shard"], b.poll("w")["shard"]):
+        assert b.result("w", jid, sid, True, b"x\n", ms=10)
+    assert b.today("w", clock.t) == 2 and b.panel()["workers"][1]["today"] == 2
+    old = b.jobs[jid].folder / "shards" / "000000000020.who.json"   # yesterday's win, in a folder touched today
+    old.write_text('{"worker": "w"}\n', encoding="utf-8")
+    os.utime(old, (clock.t - 2 * 86400, clock.t - 2 * 86400))
+    b2, clock2 = board(tmp_path)                      # a new broker, no saved board at all
+    clock2.t = clock.t
+    assert b2.today("w", clock2.t) == 0
+    b2.recount()
+    assert b2.today("w", clock2.t) == 2 and b2.today("w", clock2.t + 86400) == 0
+
+
+def test_the_main_box_hands_a_result_in_as_a_file_in_its_jobs_folder(tmp_path):
+    """126: job 221's shards were 33-38 MB; base64'd in a request each was refused (HTTP 413)."""
+    import pytest
+    b, _ = board(tmp_path)
+    jid = job(b, n=2)
+    b.claim(jid)
+    b.claim(jid)
+    out = b.jobs[jid].folder / "main" / "a.out"
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"big\r\n")
+    with pytest.raises(ValueError):
+        b.result("main", jid, 0, True, source=tmp_path / "elsewhere.out")    # never a file outside the job
+    assert b.result("main", jid, 0, True, source=out)
+    assert (b.jobs[jid].folder / "shards" / "000000000000.out").read_bytes() == b"big\r\n" and not out.exists()
+    out.write_bytes(b"late\n")
+    assert not b.result("main", jid, 0, True, source=out) and out.exists()  # lost: left for its sender

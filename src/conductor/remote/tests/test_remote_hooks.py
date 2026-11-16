@@ -101,7 +101,7 @@ def test_a_remote_item_gets_farm_seeds_on_its_path(project, launches, no_broker)
     assert env[settings.ITEM_VAR] == "code/001_job"           # the worker page names the item
     assert "Its last stderr line says where\nthe shards ran; its first, the commit the native exe is built from. Commit before you farm" in prompt
     assert "To stop a run, `farm-seeds --cancel`" in prompt                     # 114
-    assert prompt.rstrip().endswith("or run the\nnative command for the range.")
+    assert prompt.rstrip().endswith("a slower run, not a failure.")                # 126: no exit 3 any more
     assert "`farm-seeds <first seed> <count> <out file> [args…]`" in prompt
     # The command on that PATH works: no broker answers, so it runs locally.
     exe = shutil.which(settings.COMMAND, path=env[path_key])

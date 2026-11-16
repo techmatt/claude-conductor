@@ -114,10 +114,12 @@ def test_a_native_failure_fails_the_job(farm, capsys):
 
 
 @pytest.mark.slow           # a call caught mid-shutdown waits out its socket timeout
-def test_the_broker_dying_mid_job_fails_at_once(farm, capsys, monkeypatch):
-    """Not a silent fall back to one shard at a time (aicomplete 209-211: 6-12 min each)."""
+def test_the_broker_dying_mid_job_is_finished_on_the_main_box_and_said(farm, capsys, monkeypatch):
+    """126: a run never ends with shards missing (job 221 did, at exit 3), and it says what it
+    did, never with "error" in it (an item's `wait_for` fails on that). Not one shard at a
+    time either (aicomplete 209-211: 6-12 min each): `main_slots` at once."""
     monkeypatch.setattr(client, "PATIENCE", 1.0)        # a broker that stays gone, after the wait for a restart
-    farm.setup()
+    farm.setup(main_slots="3")
     farm.worker("lr1")
     server = farm.servers[-1]
 
@@ -126,9 +128,56 @@ def test_the_broker_dying_mid_job_fails_at_once(farm, capsys, monkeypatch):
         server.server_close()
     farm.once_a_job_is_open(die)
     code, out = farm.run(0, 100, "--sleep", "0.01")
-    assert code == client.BROKER_LOST_EXIT and not out
+    assert (code, out) == (0, farm.local(0, 100))
     err = capsys.readouterr().err
-    assert "farm-seeds: error: the broker went away mid-job" in err and "shards in, kept in" in err
+    assert "the broker dropped out mid-job: it stopped answering" in err and "Finishing the other" in err
+    assert "all 10 shards in" in err and "error" not in err.lower()
+    assert len(farm.record()["shards"]) == 10
+
+
+def test_a_job_the_broker_forgets_mid_job_is_finished_on_the_main_box(farm, capsys):
+    farm.setup(main_slots="2")
+    farm.once_a_job_is_open(lambda: (time.sleep(0.3), farm.board.close(next(iter(farm.board.jobs)))))
+    code, out = farm.run(0, 100, "--sleep", "0.01")
+    assert (code, out) == (0, farm.local(0, 100))
+    err = capsys.readouterr().err
+    assert "it no longer knows the job" in err and "all 10 shards in" in err
+
+
+def test_shard_outputs_past_the_request_cap_still_land(farm, monkeypatch):
+    """126: job 221's shards were 33-38 MB and every result was refused (HTTP 413); the main
+    box's now go by path, whatever their size."""
+    monkeypatch.setattr(broker, "MAX_BODY", 4000)       # the job's request fits; each 10-seed shard's output doesn't
+    farm.setup(main_slots="2")
+    code, out = farm.run(0, 60, "--pad", "500")
+    assert (code, out) == (0, farm.local(0, 60, "--pad", "500")) and len(out) > 6 * 4000
+    assert {s["worker"] for s in farm.record()["shards"]} == {"main"}
+
+
+@pytest.mark.slow           # a call caught mid-shutdown waits out its socket timeout
+def test_a_broker_back_at_a_new_address_takes_the_job_up_again(farm, capsys, monkeypatch):
+    monkeypatch.setattr(client, "PATIENCE", 1.0)
+    farm.setup(main_slots="2")
+    old = farm.servers[-1]
+
+    def move():
+        time.sleep(0.3)
+        old.RequestHandlerClass.door.close()
+        old.shutdown()
+        old.server_close()
+        farm.board.save(farm.r.state / broker.BOARD)
+        b2 = Board(farm.r.state, farm.r.lease_seconds, farm.r.fresh_seconds, farm.r.bundle_js, native_argv=farm.r.native)
+        assert b2.restore(farm.r.state / broker.BOARD)
+        new = broker.make_server(farm.r, b2, port=0)
+        threading.Thread(target=new.serve_forever, daemon=True).start()
+        farm.servers.append(new)
+        (farm.r.state / "broker.json").write_text(json.dumps(
+            {"pid": 0, "local": f"http://127.0.0.1:{new.server_address[1]}/w/{farm.r.secret()}/"}), encoding="utf-8")
+    farm.once_a_job_is_open(move)
+    code, out = farm.run(0, 200, "--sleep", "0.01")
+    assert (code, out) == (0, farm.local(0, 200))
+    err = capsys.readouterr().err
+    assert "the broker is back" in err and "Finishing the other" not in err
 
 
 def test_the_page_and_bundles_need_the_token_and_main_box_calls_need_loopback(farm):
