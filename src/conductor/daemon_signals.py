@@ -177,10 +177,12 @@ class SignalsMixin:
             elif key in ("clear", "push", "pause", "resume"):
                 if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "reviewed", "outline", "review", "session_opened", "audit", "land",
-                         "retry"):
+            elif key in ("approve", "cancel", "outline", "review", "session_opened", "audit", "land", "retry"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
+            elif key == "reviewed":
+                if not all(len(ref.split()) == 1 for ref in value.split(",")):
+                    raise ValueError(f"line {n}: reviewed: expects `<item>[, <item> ...]`, got {value!r}")
             elif key == "audit_used":
                 if not all(len(ref.split()) == 1 for ref in value.split(",")):
                     raise ValueError(f"line {n}: audit_used: expects `<repo>/<NNN_name>[, ...]` or `<repo>/all`, "
@@ -401,21 +403,25 @@ class SignalsMixin:
             raise ValueError(f"{verb}: {ref!r} is ambiguous: {sorted(hits)}")
         return hits[0], view
 
-    def _reviewed(self, ref: str, rel: str) -> None:
-        """Mark one finished item's report reviewed. Reviewed state is the event log's:
-        an item is reviewed once a `reviewed` event names it, until its report changes
-        (`report_changed`); the event keeps the hashes the change is checked against."""
-        item_id, view = self._finished_item("reviewed", ref)
-        if view.reviewed(item_id):
-            prior = view.reviews.get(item_id)
-            when = f"#{prior.id}, {clock(prior.ts)}" if prior else "a watch's report needs no review"
-            self.log.append("warning", item=item_id, paths=[rel],
-                            note=f"{item_id} was already reviewed ({when}); nothing changed")
-            return
-        fin = view.finishes[item_id]
-        self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
-                        status=fin.detail.get("status"), by=self._by or "unknown",
-                        hashes=retry_io(report_hashes, self.cfg, item_id))
+    def _reviewed(self, value: str, rel: str) -> None:
+        """Mark finished items' reports reviewed (`reviewed: <item>[, <item> ...]`, 128): every
+        ref is resolved first, so one that names no finished item refuses the line and marks
+        none. Reviewed state is the event log's: an item is reviewed once a `reviewed` event
+        names it, until its report changes (`report_changed`); the event keeps the hashes
+        the change is checked against."""
+        found = [self._finished_item("reviewed", ref.strip()) for ref in value.split(",") if ref.strip()]
+        view = found[-1][1]
+        for item_id in dict.fromkeys(i for i, _ in found):
+            if view.reviewed(item_id):
+                prior = view.reviews.get(item_id)
+                when = f"#{prior.id}, {clock(prior.ts)}" if prior else "a watch's report needs no review"
+                self.log.append("warning", item=item_id, paths=[rel],
+                                note=f"{item_id} was already reviewed ({when}); nothing changed")
+                continue
+            fin = view.finishes[item_id]
+            self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
+                            status=fin.detail.get("status"), by=self._by or "unknown",
+                            hashes=retry_io(report_hashes, self.cfg, item_id))
 
     def check_reviewed_reports(self, view: state.View) -> None:
         """Log `report_changed` when a reviewed report or its audit notes no longer match the

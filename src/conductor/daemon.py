@@ -45,7 +45,8 @@ from .daemon_reap import ReapMixin
 from .daemon_restart import RestartMixin
 from .daemon_retros import RetrosMixin
 from .daemon_setup import SetupMixin
-from .daemon_signals import SIGNAL_SETTLE_SECONDS, SignalsMixin
+from .daemon_queue import QueueMixin
+from .daemon_signals import SignalsMixin
 from .daemon_templates import TemplatesMixin
 from .daemon_toasts import ToastsMixin
 from .daemon_watch import WatchMixin
@@ -109,7 +110,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
 
 class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
              TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin, ApiMixin,
-             ToastsMixin):
+             ToastsMixin, QueueMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):
         """`notifier(title, body, tag)` raises desktop toasts; default: Windows toasts."""
         self.cfg = cfg
@@ -141,6 +142,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.invalid_seen: dict[str, str] = {}
         self.report_stats: dict[str, tuple] = {}    # reviewed item → its files' (size, mtime) last hashed
         self.queued_hashes: dict[str, str | None] = {}  # queued item → its file's hash: a change is `edited`
+        self.queued_texts: dict[str, tuple] = {}        # queued item → (mtime_ns, text): what a rewrite changed
         self.starts: dict[str, str] = {}                # queued item → the start estimate its receipt last gave
         self._inbox_key: tuple | None = None
         self._inbox_at = 0.0
@@ -585,50 +587,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
                 self.invalid_seen[key] = "stray"
                 self.log.append("invalid", paths=[key], path=key,
                                 error="queue folder is not a repo in conductor.toml")
-        self._refuse_late_writes(view)
-        queued: dict[str, items.Item] = {}
-        edited: set[str] = set()
-
-        def dep_warning(item: items.Item) -> dict:
-            warning = state.dependency_warning(view, item) if item.depends_on else None
-            return {"warning": warning} if warning else {}      # its receipt says so (docs/receipts.md)
-
-        for repo, queue in view.queued.items():
-            for item in queue:
-                queued[item.id] = item
-                if item.id not in self.enqueued:
-                    self.enqueued.add(item.id)
-                    meta = item.meta()
-                    meta["paths_declared"] = meta.pop("paths")      # `paths` is the event's own column
-                    meta |= self._renumbered.pop(item.id, {})
-                    if shared := [i for i in items.ref_matches(str(item.num), repo, view.known())
-                                  if i != item.id and item.num]:
-                        meta["shares_number"] = shared              # its receipt says: name it in full
-                    self.starts[item.id] = starts = state.start_estimate(self.cfg, view, item)
-                    carries = {"parked": p} if (p := state.parked_estimate(self.cfg, view, item)) else {}
-                    self.log.append("enqueue", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    **meta, starts=starts, **carries, **dep_warning(item))
-                # A queued item may be rewritten until it launches: the launch (and a
-                # stage, which a change discards below) reads the file as it is then.
-                digest = file_hash(item.path)
-                if self.queued_hashes.get(item.id, digest) != digest:
-                    edited.add(item.id)
-                    starts = state.start_estimate(self.cfg, view, item)
-                    moved = {"starts": starts} if self.starts.get(item.id) != starts else {}
-                    self.starts[item.id] = starts
-                    self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
-                                    staged=item.id in view.staged, **moved, **dep_warning(item),
-                                    **self._kept_amends(item.id))
-                self.queued_hashes[item.id] = digest
-                if item.errors:
-                    # Per file version and reason: a `resume:` item's reason moves with the queue.
-                    key = f"{item.id}:{item.path.stat().st_mtime}:{'; '.join(item.errors)}"
-                    if self.invalid_seen.get(item.id) != key:
-                        self.invalid_seen[item.id] = key
-                        self.log.append("invalid", item=item.id, paths=[self.cfg.rel(item.path)],
-                                        error="; ".join(item.errors))
-        self.queued_hashes = {i: h for i, h in self.queued_hashes.items() if i in queued}
-        self.starts = {i: s for i, s in self.starts.items() if i in queued}
+        queued, edited = self._scan_queue(view)        # daemon_queue
         # A stage belongs to the item file it read; a removed item drops it, and a rewritten
         # one (staging or staged) is staged again from its new text.
         for item_id, srec in list(view.staged.items()):
@@ -686,27 +645,6 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_requests(between=True)
         start(*args)
         self.process_requests(between=True)
-
-    def _refuse_late_writes(self, view: state.View) -> None:
-        """A queue file named for an item that already launched (a rewrite that lost the race
-        with its launch, or a reused name) can never reach it. It is set aside as `.bad`
-        with an `invalid` event, never left to hold its repo's queue."""
-        for repo, queue in view.queued.items():
-            late = [i for i in queue if i.id in view.running or i.id in view.done]
-            for item in late:
-                queue.remove(item)
-                try:
-                    if time.time() - item.path.stat().st_mtime < SIGNAL_SETTLE_SECONDS:
-                        continue                    # still being written: set aside once settled
-                    bad = item.path.with_name(item.path.name + ".bad")
-                    retry_io(os.replace, item.path, bad)
-                except OSError:
-                    continue
-                where = "running" if item.id in view.running else "finished"
-                self.log.append("invalid", item=item.id, paths=[self.cfg.rel(bad)], path=self.cfg.rel(bad),
-                                error=f"{item.id} already launched ({where}), so this write to its queue file "
-                                      f"can't reach it; set aside as {bad.name}. A running item takes tell or "
-                                      "amend; a change to finished work is a new item")
 
     def _stage_run(self, srec: dict) -> Run:
         return Run(srec, self.cfg.path("running", srec["repo"], f"{srec['name']}.stage.json"),
@@ -832,6 +770,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             self._worktree_op(rec, "discarded", "the item file changed while launching")
         retry_io(run.rec_path.unlink, True)
         self.queued_hashes[item.id] = digest
+        self.queued_texts.pop(item.id, None)          # its next scan starts from the new text
         self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)], staged=bool(stage),
                         launching=True)
 

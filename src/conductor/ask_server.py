@@ -12,7 +12,8 @@ hands out no waiting message (the PostToolUse hook after it does, on the lead's 
 `wait(minutes?)` is how a paused item idles: it returns once a message waits for the item
 (the hook after it delivers it) or the minutes pass. `wait_for(path | pid | log + line, every?,
 minutes?)` replaces an executor's shell polls: it checks every ~50s and returns when the
-target changes, a message waits, or the minutes pass, saying what changed. `start(command, log?)`
+target changes, a message waits, a subagent of the item finishes (the SubagentStop hook,
+`talk.note_subagent`, 128), or the minutes pass, saying what changed. `start(command, log?)`
 starts a long job detached (`procs.spawn_detached`), so it outlives the shell call, and
 returns its pid at once (106). JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
@@ -97,7 +98,8 @@ PROGRESS_TOOL = {
         "properties": {
             "note": {"type": "string", "description": "What is happening, one line."},
             "eta": {"type": "string", "description": ("When you expect to finish: a clock time (5:40pm) or a duration "
-                                                      "(25m), its source in brackets after it: 5:40pm (by rate), 7:10pm (to the cap).")},
+                                                      "(25m), its source in brackets after it: 5:40pm (by rate) once you have a plan; "
+                                                      "(to the cap) only when you expect to use the whole time limit.")},
             "done": {"type": "number", "description": "Units done so far, when the work has countable units."},
             "remaining": {"type": "number", "description": "Units still to do."},
             "outline": {
@@ -147,8 +149,9 @@ WAIT_FOR_TOOL = {
         "beside either is the process doing the work, and its exit ends the wait too, with how "
         "things stand. A `log` wait also ends on a line matching `fail`. Returns "
         "with what changed, or early for a message from conductor (delivered as the call "
-        "returns), or after `minutes` with how things stand; then call it again if you still "
-        "need to. `pid` is a Windows pid: Git Bash's `$!` is not one, so there use a `log` line "
+        "returns) or a subagent of yours finishing, or after `minutes` with how things stand; "
+        "then call it again if you still need to. To wait on a background subagent, give "
+        "`minutes` near its expected length; never a path nothing will write. `pid` is a Windows pid: Git Bash's `$!` is not one, so there use a `log` line "
         "or a marker `path` the command writes last."
     ),
     "inputSchema": {
@@ -536,6 +539,7 @@ class Server:
                 return f"`{name}` must be a positive number", True
         started = last_progress = time.time()
         end, checked = started + min(minutes, WAIT_MAX_MINUTES) * 60, 0.0
+        mark = talk.subagent_mark(self.control, self.item)     # subagents finishing after this end it
         while not cancel.is_set():
             at = time.time()
             if at - checked >= every:
@@ -546,6 +550,11 @@ class Server:
                 self._announced.update(fresh)
                 return (f"A message from conductor is waiting: it reaches you as this call returns. Do what it "
                         f"says, then call `wait_for` again if you still need to. So far: {target.state()}."
+                        f"{self._running_now()}"), False
+            if done := talk.subagents_done(self.control, self.item, mark):     # 128: SubagentStop
+                kinds = ", ".join(dict.fromkeys(str(d.get("agent_type") or "subagent") for d in done))
+                return (f"A subagent finished ({kinds}) after {round(at - started)}s: read its result as this call "
+                        f"returns, then call `wait_for` again if you still need to. So far: {target.state()}."
                         f"{self._running_now()}"), False
             if at >= end:
                 return f"Nothing yet after {round(at - started)}s: {target.state()}.{self._running_now()}", False

@@ -307,6 +307,10 @@ def hook_settings(python: str, control: Path, item: str, cap_seconds: float = 0,
         "args": ["-m", "conductor.talk", "pre", "--cap", f"{cap_seconds:g}", "--control", str(control),
                  *(["--readonly"] if readonly else []), *(f"--background={g}" for g in background)],
     }]}]
+    hooks["SubagentStop"] = [{"matcher": "", "hooks": [{        # ends a `wait_for` early (128)
+        "type": "command", "command": python, "timeout": HOOK_TIMEOUT_SECONDS,
+        "args": ["-m", "conductor.talk", "subagent", "--control", str(control), "--item", item],
+    }]}]
     return json.dumps({"hooks": hooks}, indent=1)
 
 
@@ -458,6 +462,49 @@ def farm_note(control: Path, item: str, event: dict, native: list[str], flags: l
     return rules.FARM_REMINDER.format(cmd=f"`{cmd[:80]}`") if first else None
 
 
+def subagent_file(control: Path, item: str) -> Path:
+    return Path(control) / ".conductor" / "touch" / f"{_key(item)}.subagents.jsonl"
+
+
+def note_subagent(control: Path, item: str, event: dict) -> None:
+    """The SubagentStop hook (128): one line per subagent of the item that finished, which
+    ends a `wait_for` under way (`subagents_done`). Claude Code (2.1.326, probed) runs it
+    as a background subagent finishes, while the lead is still inside another call."""
+    path = subagent_file(control, item)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps({"at": time.time(), "agent_id": event.get("agent_id"),
+                            "agent_type": event.get("agent_type")}) + "\n")
+
+
+def subagent_mark(control: Path, item: str) -> int:
+    """Where the subagent file ends now: a wait counts only lines written after it (a byte
+    offset, not a clock: Windows' clock can tick coarser than a hook's write)."""
+    try:
+        return subagent_file(control, item).stat().st_size
+    except OSError:
+        return 0
+
+
+def subagents_done(control: Path, item: str, mark: int = 0) -> list[dict]:
+    """The subagents that finished after `mark` (`subagent_mark`), oldest first."""
+    try:
+        with open(subagent_file(control, item), "rb") as fh:
+            fh.seek(mark)
+            lines = fh.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return []
+    out = []
+    for ln in lines:
+        try:
+            rec = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(rec, dict):
+            out.append(rec)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="conductor.talk")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -466,6 +513,9 @@ def main(argv: list[str] | None = None) -> int:
     h.add_argument("--item", required=True)
     h.add_argument("--native", action="append", default=[])
     h.add_argument("--native-flag", action="append", default=[])
+    sa = sub.add_parser("subagent")
+    sa.add_argument("--control", required=True)
+    sa.add_argument("--item", required=True)
     pre = sub.add_parser("pre")
     pre.add_argument("--cap", type=float, default=0)
     pre.add_argument("--background", action="append", default=[])
@@ -485,6 +535,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "pre":
             out = pre_hook(event, args.cap, args.background, Path(args.control) if args.control else None,
                            args.readonly) if event else None
+        elif args.cmd == "subagent":
+            out = note_subagent(Path(args.control), args.item, event)
         else:
             out = hook(Path(args.control), args.item, event, args.native, args.native_flag)
     except Exception as exc:            # a hook never breaks the executor's tool call

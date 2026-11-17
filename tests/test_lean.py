@@ -60,7 +60,7 @@ def test_the_full_preamble_says_ask_holds_the_session(env):
 def test_both_preambles_rule_on_subagents(env):
     full, light = " ".join(render(env, max_hours=2.0).split()), " ".join(render(env, body="short").split())
     assert "whatever a Workflow or Ultracode note says" in full and "10 agents in any fan-out" in full
-    assert "subagent" not in light       # 123: the fan-out cap is hooked (fanout.py); a light item rarely fans out
+    assert "fan-out" not in light and "heavy subagents" not in light     # 123: the cap is hooked (fanout.py)
 
 
 @pytest.mark.parametrize("running, line", [([], "Running beside you now: nothing."),

@@ -125,9 +125,16 @@ class ReceiptsMixin:
                 self._write_receipt(rel, [ev], result=f"queued as {ev.item}{starts}" + (
                     f"; its number is also {', '.join(shared)}'s: name it in full, never by number"
                     if shared else ""), warning=d.get("warning"))
+            case "edited" if d.get("identical"):        # 128: the same bytes again
+                self._write_receipt(rel, [ev], result=(
+                    "rewritten with identical bytes: nothing changed, and it runs the text it had"), warning=(
+                    "the write changed nothing (was the edited copy sent? resend it from a fresh workspace "
+                    "path, or amend instead)"))
             case "edited":
                 how = "the launch it raced was undone; " if d.get("launching") else ""
                 how += "its stage is redone" if d.get("staged") else "it runs the new text"
+                how += f" ({'; '.join(d['changes'])})" if d.get("changes") else ""     # 128: what conductor now holds
+                how += f"; it carries picker {d['choices']}'s saved choices" if d.get("choices") else ""
                 how += f"; now {d['starts']}" if d.get("starts") else ""     # only when the start moved
                 how += f"; {talk.amends_line(d['amendments'])}" if d.get("staged") and d.get("amendments") else ""
                 self._write_receipt(rel, [ev], result=f"rewritten: {how}", warning=d.get("warning"))

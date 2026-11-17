@@ -91,7 +91,7 @@ Edits (the default for `state.md`) are whole lines of the staged file, each old 
 
 **Timing intent is a requirement** (Matt's standing call): when he says parallel, alongside or now, scope the item to qualify (`alongside:`, nothing shared riding along), check **queue status**, and say when it starts before queuing (or why it can't).
 
-**Rewrite, amend or new item**: **queue status** first. Rewrite a queued or staged item for a changed plan, never a running one; **amend** adds to a plan that still stands, until it merges; a correction to finished work is a new item.
+**Rewrite, amend or new item**: **queue status** first. Rewrite a queued or staged item for a changed plan, never a running one; **amend** adds to a plan that still stands, until it merges; a correction to finished work is a new item. A rewrite takes effect (front-matter and saved picks included); its receipt lists what changed (`(needs_pick: x added; body +1 −0 line(s))`): check that your edit is there; `identical bytes` means it never arrived, so resend or amend.
 
 **Front-matter** (`docs/items.md`): `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick`, `remote`, `external_data`.
 - **Concurrency** (`docs/scheduling.md`): a worktree per item, one item per repo at a time. `alongside: <what it touches>` runs one beside the rest when it shares nothing outside git (art, voice, readonly prototypes; never a template). Exclusive templates run alone. `depends_on` only where queue order doesn't serialize; `readonly` never merges and starts at once. A busy queue head gets a read-only head start by itself; `stage: false` when that's wasted.
@@ -126,7 +126,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 - **Unexplained outcomes** (stopped early, part skipped, much slower, unclear red): recommend **ask X** or **post-audit X** in a line, with its question; queue only on Matt's word, once per report, never once declined.
 - **Deferred design calls** (a cleanup's or bug hunt's options and pick, a report line, audit notes that *need a decision*): record each pick as a `state.md` ruling in the request processing the report, and list them for Matt, a line each; he overrides any later. One needing work goes to *Paged*, never queued unasked. One marked `(Matt's call)` is still a question, its pick the default.
-- **Reviewed**: `reviewed:` only inside **process X / next / all**, after reading that report in full this turn; a `report_changed` one needs processing again. Conductor's own reports past `planner-notes.md`'s mark are *Unreviewed reports*; processing one moves the mark.
+- **Reviewed**: `reviewed:` (one item or a comma list) only inside **process X / next / all**, after reading that report in full this turn; a `report_changed` one needs processing again. Conductor's own reports past `planner-notes.md`'s mark are *Unreviewed reports*; processing one moves the mark.
 
 ## state.md, maintenance and closeout
 

@@ -59,16 +59,19 @@ Progress. `progress` (mcp__conductor__progress) shows Matt a short line and retu
 call it at the start, at milestones, on launching a job over ~15 minutes (its expected end
 in the note), and when your estimate moves by a third. Once you have a plan, post `outline`:
 your sections in order, one row per done-when item, the report last, each with a rough local
-finish time; mark rows `done` as you go. An `eta` names its source: `5:40pm (by rate)`,
-`7:10pm (to the cap)`. Plan from the clock in the last tool return, never your own estimate.
+finish time; mark rows `done` as you go. An `eta` names its source: once you have a plan,
+an estimate by rate (`5:40pm (by rate)`); `(to the cap)` only when you expect to use the
+whole time limit. Plan from the clock in the last tool return, never your own estimate.
 Staged, your plan ends with the outline: post it first thing.{calibrate}
 {servers}
 The box. Scratch and run output go in `out/{item_name}/` (git-ignored); anything else in
 `out/` is an earlier item's, never a fresh result. Working papers the prompt asks for go
 under the repo's results folder (`experiments/results/{item_name}/`), committed; read outputs
-a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Put
-scripts in files and edit with Write/Edit; conductor's hooks refuse shell edits, %TEMP%,
-elevation, `&` jobs, sleeps and the like, each saying what to do instead. Heavy compute
+a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Every
+file write goes through Write or Edit, and a script that writes files runs from a file:
+conductor's hooks refuse `sed -i`, a heredoc into a file and a heredoc or `-c`/`-e` script
+that writes one, as they do %TEMP%, elevation, `&` jobs, sleeps and the like, each saying
+what to do instead. Heavy compute
 (sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
 PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) and leaves {free}
 hardware threads free: sims and tests at {threads} threads, half that while another item runs
@@ -151,8 +154,8 @@ Progress: a `progress` (mcp__conductor__progress) line at start and on launching
 
 Bounds. A skip in prompt or message binds (a default overriding the prompt starts
 `default overrides prompt: <line>`). Scratch: `out/{item_name}/`. Heavy compute: `nice -n 10`,
-{threads} threads, a full suite only between sims. Hooks refuse shell edits, %TEMP% and the
-like, saying why.{leftover}
+{threads} threads, a full suite only between sims. Write files with Write/Edit only: hooks
+refuse heredoc, `-c`/`-e` and `sed -i` writes, %TEMP% and the like, saying why.{leftover}
 
 Latitude. Conflicts: locked rulings, goal, done-when bars, method; report what gave way,
 don't ask. Score bars strictly; check a numeric target is reachable before chasing it. Three
@@ -271,14 +274,17 @@ under ~{cap:g} seconds (`timeout` ≤ {cap_ms}); conductor moves one still runni
 the background{bg}. Run longer work with `run_in_background` and a `timeout` sized to its
 estimate with margin; a job that may outlast 10 minutes goes through `start`
 (mcp__conductor__start, detached), then `wait_for` its pid. Wait with `wait_for`
-(mcp__conductor__wait_for: a path, a pid exiting or a log line; a message returns it early),
-never by ending your turn: a message cannot reach you idle.
+(mcp__conductor__wait_for: a path, a pid exiting or a log line; a message or a subagent
+finishing returns it early), never by ending your turn: a message cannot reach you idle.
+For a background subagent, `wait_for` with `minutes` near its expected length, or check its
+output; never a path nothing will write.
 """
 
 CALLS_LIGHT = """
 Short calls. Nothing foreground over ~{cap:g} s (`timeout` ≤ {cap_ms}): background longer
 work (`run_in_background` with a `timeout`; over 10m: mcp__conductor__start), wait with
-mcp__conductor__wait_for, never by ending your turn.
+mcp__conductor__wait_for (`minutes` near a subagent's length, never a path nothing writes),
+never by ending your turn.
 """
 
 CALLS_BG = ", and commands matching {globs} always run in the background"

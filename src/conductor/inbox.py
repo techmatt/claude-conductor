@@ -342,8 +342,11 @@ def describe(ev: Event) -> str:
             extras += [resume_label(d)] if d.get("resume_of") else []
             text = f"{who} queued" + (f" ({', '.join(extras)})" if extras else "")
             text += f"; warning: {d['warning']}" if d.get("warning") else ""
+        case "edited" if d.get("identical"):
+            text = f"{who} rewritten in the queue with identical bytes: nothing changed"
         case "edited":
             text = f"{who} rewritten in the queue; it runs the new text" + (
+                f" ({'; '.join(d['changes'])})" if d.get("changes") else "") + (
                 " (its stage is discarded; it stages again from the new text)" if d.get("staged") else "")
             text += f"; {talk.amends_line(d['amendments'])}" if d.get("staged") and d.get("amendments") else ""
         case "adopt":

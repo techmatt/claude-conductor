@@ -36,7 +36,15 @@ until the file is fixed — an item not yet started may be rewritten freely.
 **Rewriting a queued item.** Conductor parses `queue/` afresh every tick, so a rewrite
 of an item that has not launched takes effect: the launch reads the file as it is then.
 Each change to a queued file's bytes logs an `edited` event (an Activity event, so the
-planner and the Events tab see that the rewrite landed). A stage belongs to the text it
+planner and the Events tab see that the rewrite landed) whose `changes` say what conductor
+now holds (128, `daemon_queue.changes`): each front-matter field added, removed or changed
+(`needs_pick: art_alts_183 added`, `max_hours: 2 → 3`), then `body +A −R line(s)`, or
+`whitespace only`; the receipt repeats them, so a planner checks there that its edit
+arrived (Word Warriors 184: a rewrite meant to add `needs_pick` reached the file without
+it, and launched on the old text). A rewrite adding or changing `needs_pick` whose picker
+is already saved carries those choices at launch (`choices`; the receipt says so). A write
+of identical bytes (a newer mtime, nothing else) logs `edited` with `identical: true` and a
+receipt saying nothing changed, with a warning to resend or amend. A stage belongs to the text it
 read, so a rewrite of a staging or staged item discards the stage (a staging executor is
 killed) and stages it again from the new text when it still waits (`warning` *stage
 discarded … it starts again from the new text*; `worktrees.md`, *Staging*). Amendments

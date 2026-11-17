@@ -132,7 +132,7 @@ def test_queue_item_rewrite_and_amendment_receipts(env):
     os.utime(item, (later, later))                  # a rewrite in the same tick's second still differs in mtime
     env.d.tick()
     meta, _ = receipt(env, "queue/code/002_waits.md")
-    assert meta["result"] == "rewritten: it runs the new text"
+    assert meta["result"] == "rewritten: it runs the new text (body +1 −1 line(s))"     # 128: what changed
     assert meta["written_ms"] == item.stat().st_mtime_ns // 1_000_000
     amend = env.control / "queue" / "code" / "002_waits.amend.20261021-1015.md"
     amend.write_text("---\nby: planner\n---\n\nAlso: say hello.\n", encoding="utf-8")

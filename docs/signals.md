@@ -19,7 +19,7 @@ approve: 007                 # proposed/007_x.md → queue/<its repo>/007_x.md
 cancel: sandbox/004          # a queued item (or a proposed one: `cancel: 007`)
 reorder: sandbox 006 004     # the listed items swap numbers; unlisted ones stay
 review: all                  # write review.md: every unreviewed report inlined (or `review: sandbox/003`)
-reviewed: sandbox/003        # the planner has acted on that finished item's report
+reviewed: sandbox/003        # the planner has acted on that finished item's report (or a comma list)
 tell: sandbox/005 use sqlite # a message to running sandbox/005 (see progress.md)
 outline: sandbox/005         # ask running sandbox/005 for an updated outline (a tell of fixed text)
 audit_used: sandbox/003, 005 # those audit notes were handled already (`audit_used: sandbox/all`: every unused one)
@@ -80,8 +80,10 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   until it completes (`reorder` logged with `note`), and that queue launches nothing
   meanwhile. A restart finishes an interrupted reorder the same way.
 - **reviewed** — `reviewed: <repo>/<NNN_name>` (or `NNN_name`, `NNN`; a name without a
-  repo is looked up across every repo, and one found in two is ambiguous: refused).
-  It marks one finished item's report as reviewed and logs `reviewed` (item, `finish`:
+  repo is looked up across every repo, and one found in two is ambiguous: refused), or a
+  comma list of them (128: `reviewed: 182, 183, wordwarriors/184`), each checked as one
+  alone; a ref refused refuses the line, and none of it is marked.
+  It marks each finished item's report as reviewed and logs `reviewed` (item, `finish`:
   the finish event's id, `status`, `by`: the file's `by:` or `unknown`). Refused for an
   item that has not finished (queued, staged or running) or is unknown. An item already
   reviewed is a no-op: a `warning` names the earlier `reviewed` event and the file is

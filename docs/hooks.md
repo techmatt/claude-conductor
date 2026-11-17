@@ -28,7 +28,7 @@ and not enforced.
 
 | Rule | Origin | Lives |
 |---|---|---|
-| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003) | hook; a clause in both |
+| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried) | hook; since 128 a sentence in full and a clause in light naming each refused form |
 | No `%TEMP%`, `$TMP`, `/tmp`, `mktemp` or temp-file APIs | 61 | hook; a clause in both |
 | Never `isolation: worktree` (it lands in the main checkout) | — (aicomplete 040) | hook only |
 | Helpers never `git checkout`/`restore`/`switch`/`stash`/`clean -f`/`reset --hard` | 86 (aicomplete 144), 122 | hook only |
@@ -77,6 +77,8 @@ and not enforced.
 | Helper briefs: rulings word for word, own scratch path; read-only helpers answer inline | 79 (aicomplete 111), 113 (website 006), 118 (aicomplete 239) | full |
 | Messages and amendments outrank the prompt; answer by `progress`; helpers pass them up; `resume`/`answered` | —, 110 | full; light one line |
 | *Short calls*: under `foreground_seconds`, background longer, `wait_for`, never end the turn to wait | — (wordwarriors 034), 82 | both (`CALLS` / `CALLS_LIGHT`) |
+| A background subagent: `wait_for` with `minutes` near its length or check its output, never a path nothing writes | 128 (helium-hustle 027, 030) | both (*Short calls*); a subagent finishing also ends a `wait_for` (`executors.md`) |
+| ETA: by rate once there is a plan; `(to the cap)` only for the whole limit | 68, 128 (helium-hustle 028) | full; the `eta` field's description |
 | Worktree: commit to the branch, never touch `main` or the main checkout | — | both (`WORKDIR_TREE` / `_LIGHT`); hooking it needs the shared-link list |
 | `paths:` only | — | both; the merge's branch check enforces it |
 | `write_roots` writable | 114 (fractals 050) | both |

@@ -38,8 +38,9 @@ Chosen by conductor, never by front-matter:
 
 ## Optional blocks (full preamble)
 
-- *Calls* (`CALLS`; light `CALLS_LIGHT`): the `foreground_seconds` cap and `wait_for`,
-  unless the cap is 0 (`progress.md`, *Short calls*).
+- *Calls* (`CALLS`; light `CALLS_LIGHT`): the `foreground_seconds` cap and `wait_for`
+  (128: for a background subagent, `minutes` near its length, never a path nothing will
+  write), unless the cap is 0 (`progress.md`, *Short calls*).
 - *Servers* (`SERVERS`) where the repo can serve (`executor.has_servers`: a run target's
   `cwd` in the repo, or a `package.json` at its root or one folder down with a `dev…` or
   `preview…` script): the port, `start`, and `npm ci` before a package's checks. Light

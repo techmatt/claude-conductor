@@ -3,7 +3,7 @@
 **Progress.** The executor's second tool, `progress` (`mcp__conductor__progress`):
 
 ```
-progress(note, eta?, done?, remaining?, outline?, answered?)   # eta: free text (5:40pm (by rate), 25m (to the cap)); done/remaining: numbers
+progress(note, eta?, done?, remaining?, outline?, answered?)   # eta: free text (5:40pm (by rate); (to the cap) only for the whole limit); done/remaining: numbers
                                                     # outline: [{title, eta, done}], see Outline
                                                     # answered: an open question's id a message answered (questions.md)
 ```
@@ -45,7 +45,9 @@ delivered like one, so its reply tag pairs it with the outline it produced.
 
 **ETA source** (68). The preamble has an `eta` name its source in brackets after the time,
 `5:40pm (by rate)` or `7:10pm (to the cap)` (aicomplete 068's counted to the cap and read 80
-minutes late); `nightshift.parse_eta` ignores the brackets. A frozen band that misses its target
+minutes late); `nightshift.parse_eta` ignores the brackets. Since 128 it asks for a by-rate
+estimate once there is a plan, and `(to the cap)` only when the whole time limit is expected
+to be used (helium-hustle 028's first ETA was 5:40pm to the cap; it finished at 4:28pm). A frozen band that misses its target
 posts the gap in SE and the rule being applied before any change.
 
 **ETA drift** (61). A running item's `eta` can stop meaning anything: aicomplete 009's
