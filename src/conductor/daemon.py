@@ -161,7 +161,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.mem_told: dict[str, str] = {}          # running item → level it was last told about
         self._load_short = 0                        # samples in a row under cfg.load_warn_free_threads
         self._load_since: float | None = None       # short of threads since (monotonic)
-        self._load_high: dict | None = None         # the sustained stretch: {since, logged} (`_check_load`)
+        self._load_high: dict | None = None         # the sustained stretch: {since, logged, told} (`_check_load`)
         self.load_told: dict[str, float] = {}       # running item → when it was last told (monotonic)
         self._init_restart()
         self._init_watch()

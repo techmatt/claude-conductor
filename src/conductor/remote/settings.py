@@ -23,7 +23,7 @@ NOW_LINE = (".conductor", "now", "remote.line")   # the inbox's *Now* line while
 
 KEYS = {"dir","native", "native_build", "build", "bundle_js", "fingerprint", "merge", "port", "bind",
         "token", "shard_seeds", "seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds",
-        "main_slots", "start_cores", "accent", "host", "default"}
+        "main_slots", "start_cores", "accent", "host", "default", "pin"}
 TOKEN_REQUEST = "remote-token"          # the request folder's suffix that pins a generated token (`pin_token`)
 
 
@@ -55,6 +55,7 @@ class Remote:
     host: str = ""                         # the join URL's host: this PC's name unless set (an IP, say)
     project: str = ""                      # conductor.toml's `project` (else the control folder's name)
     default: bool = False                  # an item without `remote:` gets farm-seeds (unless readonly or a template)
+    pin: bool = True                       # a farm runs from a farm tree pinned at its start (`tree.py`)
 
     @property
     def state(self) -> Path:
@@ -66,6 +67,7 @@ class Remote:
         d = asdict(self)
         d["control"], d["token"] = str(self.control), self.secret()
         d.pop("default")                   # items' business, not the broker's
+        d.pop("pin")                       # farm-seeds' own
         return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:16]
 
     def secret(self) -> str:
@@ -121,10 +123,11 @@ def load(control: Path) -> Remote | None:
             if not isinstance(table[key], str):
                 raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a string")
             setattr(r, key, table[key])
-    if "default" in table:
-        if not isinstance(table["default"], bool):
-            raise RemoteError(f"{CONFIG_NAME}: remote.default must be true or false")
-        r.default = table["default"]
+    for key in ("default", "pin"):
+        if key in table:
+            if not isinstance(table[key], bool):
+                raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be true or false")
+            setattr(r, key, table[key])
     if Path(r.dir).is_absolute() or ".." in Path(r.dir).parts:
         raise RemoteError(f"{CONFIG_NAME}: remote.dir must be a folder inside the repo")
     if not ACCENT_RE.match(r.accent):

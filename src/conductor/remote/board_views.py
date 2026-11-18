@@ -187,10 +187,10 @@ class Views:
         kinds: dict[str, int] = {}
         for w in live:
             kinds[w["kind"]] = kinds.get(w["kind"], 0) + 1
-        failed = [w for w in live if "fail" in w["gates"].values()]
+        failed = [w for w in live if w["failing"]]      # its latest gate, never an old one (130)
         # 116: the reason, not just the count (aicomplete's laptop idled on a Wasm out-of-memory
         # while the line said only "failed the fingerprint gate").
-        why = "; ".join(f"{w['label'] or w['id']}: {next(iter(w['why'].values()))[:120]}" for w in failed if w["why"])
+        why = "; ".join(f"{w['label'] or w['id']}: {w['failing'][:240]}" for w in failed if w["failing"] != "failed")
         return (f"remote workers: {len(live)} connected ({', '.join(f'{n} {k}' for k, n in sorted(kinds.items()))}), "
                 f"{sum(w['cores'] for w in live)} cores"
                 + (f"; {len(failed)} failed the fingerprint gate" + (f" ({why})" if why else "") if failed else ""))

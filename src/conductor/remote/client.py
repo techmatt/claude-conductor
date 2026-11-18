@@ -30,7 +30,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import diag, settings
+from . import diag, settings, tree
 from .board import who_path, write_who
 
 MAIN_DONE = {"worker": "main", "kind": "main", "engine": "native", "label": "main box"}
@@ -302,7 +302,7 @@ def wasm_reference(r: settings.Remote, key: str, retrying=None) -> tuple[str, st
 
 
 def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended: threading.Event,
-                  notes: dict | None = None) -> None:
+                  notes: dict | None = None, pinned: Path | None = None) -> None:
     """Tell the broker when this commit's bundle is ready, with its wasm reference. A bundle
     not yet built is built only once a browser is connected, so a job no browser joins never
     shares the main box with a build. Returns when ready, failed, or the job ends. Without a
@@ -320,9 +320,12 @@ def ensure_bundle(r: settings.Remote, key: str, cwd: Path, broker: Broker, ended
                 return
             failed.unlink(missing_ok=True)
             broker.call("bundle", {"key": key, "state": "building"}, patience=PATIENCE)
-            # Detached: out of the executor's job object, so its end never kills a build.
-            procs.spawn_detached([sys.executable, "-P", "-m", "conductor.remote.client", "--build", key, str(cwd)],
-                                 cwd, bundles / f"{key}.spawn.log")
+            # Detached: out of the executor's job object, so its end never kills a build. It
+            # holds the farm tree too, so the tree isn't synced to another key under it.
+            d = procs.spawn_detached([sys.executable, "-P", "-m", "conductor.remote.client", "--build", key, str(cwd)],
+                                     cwd, bundles / f"{key}.spawn.log")
+            if pinned:
+                tree.hold(pinned, d.pid, d.create_time)
         while not ended.is_set():
             if final.exists():
                 if not (bundles / key / "wasm.fingerprint").exists():
@@ -367,7 +370,7 @@ def run_local(r: settings.Remote, cwd: Path, first: int, count: int, out: Path, 
 
 
 def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, count: int, out: Path,
-         args: list[str]) -> int:
+         args: list[str], pinned: Path | None = None) -> int:
     t0 = time.time()
     try:
         expected = fingerprint(r, cwd)
@@ -385,13 +388,14 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
     (folder / OWNER).write_text(json.dumps({"pid": os.getpid(), "item": os.environ.get(settings.ITEM_VAR, "")}),
                                 encoding="utf-8", newline="\n")
     try:
-        return _farm(r, cwd, key, broker, first, count, out, args, ranges, jid, folder, t0)
+        return _farm(r, cwd, key, broker, first, count, out, args, ranges, jid, folder, t0, pinned)
     finally:
         (folder / OWNER).unlink(missing_ok=True)
 
 
 def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, count: int, out: Path,
-          args: list[str], ranges: list[tuple[int, int]], jid: str, folder: Path, t0: float) -> int:
+          args: list[str], ranges: list[tuple[int, int]], jid: str, folder: Path, t0: float,
+          pinned: Path | None = None) -> int:
     failed: list[str] = []
     errors: list[str] = []
     lost: list[tuple[str, bool]] = []            # what the broker did (its words, refused?): the stderr line, a reconnect
@@ -401,7 +405,7 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
     link = {"broker": broker}                    # a reconnect swaps it
     sid_of = {a: i for i, (a, _) in enumerate(ranges)}
     if r.build:
-        threading.Thread(target=ensure_bundle, args=(r, key, cwd, broker, ended, notes), daemon=True).start()
+        threading.Thread(target=ensure_bundle, args=(r, key, cwd, broker, ended, notes, pinned), daemon=True).start()
     log = open(folder / "main.log", "ab")
 
     def note(text: str) -> None:
@@ -764,9 +768,8 @@ DIRTY = "warning: uncommitted changes"   # its stderr line on a dirty tree
 
 
 def source(root: Path, key: str) -> None:
-    """Say which commit the native command runs from; on a dirty tree, warn: native builds
-    from the working tree, a wasm build may take only committed code, so mixed sources
-    would pass silently (aicomplete 213)."""
+    """Say which commit the native command runs from; on a dirty tree, warn: no commit holds
+    that code, and a wasm build that took only committed code would differ (aicomplete 213)."""
     head, _, dirty = key.partition("-")
     if not dirty:
         say(f"native from commit {head}")
@@ -780,8 +783,8 @@ def source(root: Path, key: str) -> None:
     shown = ", ".join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else "")
     say(f"native from commit {head} plus uncommitted changes")
     say(f"{DIRTY} ({shown or 'untracked files'}): "
-        "the native exe is built from them, a wasm bundle may take only committed code, so shards can "
-        "run different code. Commit before you farm")
+        "the farm builds from them, but no commit holds the code this read ran, and a bundle build that "
+        "takes only committed code would run different code. Commit before you farm")
 
 
 def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str]) -> int:
@@ -789,10 +792,27 @@ def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[
         root, key = repo_key(Path.cwd())
     except (subprocess.CalledProcessError, OSError):
         root, key = Path.cwd(), ""
-    cwd = root / r.dir if r.dir else root
     cancel(r, "", live=False)                    # a hard-killed run's job, closed now, not at its heartbeat's end
     if key:
         source(root, key)
+    pinned = None
+    if key and r.pin:
+        try:
+            pinned, copied = tree.take(r.state, root, key)
+            say(f"runs from farm tree {pinned} (the code as it is now; {copied} file(s) copied in)")
+            tree.add_args(root / r.dir, pinned / r.dir, args)
+        except tree.TreeError as exc:
+            say(f"{exc}; running from the working tree")
+    try:
+        return _dispatch_in(r, pinned or root, key, first, count, out, args, pinned)
+    finally:
+        if pinned:
+            tree.release(pinned)
+
+
+def _dispatch_in(r: settings.Remote, root: Path, key: str, first: int, count: int, out: Path, args: list[str],
+                 pinned: Path | None) -> int:
+    cwd = root / r.dir if r.dir else root
     if r.native_build:
         built = run_simple(r.native_build, cwd)
         if built.returncode != 0:
@@ -814,7 +834,7 @@ def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[
         why = exc.plain() if isinstance(exc, BrokerDown) else "no `live` in its reply"
         return run_local(r, cwd, first, count, out, args, f"broker unreachable ({why})")
     # Sharded even with no worker connected: one that joins mid-job takes the shards still pending.
-    return farm(r, cwd, key, broker, first, count, out, args)
+    return farm(r, cwd, key, broker, first, count, out, args, pinned)
 
 
 if __name__ == "__main__":

@@ -386,7 +386,7 @@ def describe(ev: Event) -> str:
             if told:
                 tail = f"told {', '.join(told)}"
             elif d.get("causes"):
-                tail = f"{', '.join(d['causes'])} already told (once per `load_tell_minutes` at most)"
+                tail = f"{', '.join(d['causes'])} already told (once a stretch)"
             elif "causes" in d:
                 tail = "mostly outside the items: none told"
             else:

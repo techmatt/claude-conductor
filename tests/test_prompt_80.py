@@ -32,26 +32,33 @@ def test_outside_load_logs_with_no_message(env, monkeypatch):
     assert "**high** since" in memory.load_line(env.cfg)
 
 
-def test_the_item_causing_it_is_told_once_then_not_for_15_minutes(env, monkeypatch):
+def test_the_item_causing_it_is_told_once_a_stretch_and_never_twice_in_15_minutes(env, monkeypatch):
     held(env)
     busy_box(env, monkeypatch, 95, own=60)
     samples(env, 6)
     assert len(load_tells(env)) == 1 and len(env.events("load_high")) == 1
     told = env.d.load_told["code/001_hold"]
-    env.d.load_told["code/001_hold"] = told - 14 * 60       # 14 minutes on: still quiet
-    env.d._load_high["logged"] -= 14 * 60
+    env.d.load_told["code/001_hold"] = told - 60 * 60       # an hour on, same stretch: still quiet (130)
+    env.d._load_high["logged"] -= 15 * 60 + 1
     samples(env, 1)
-    assert len(load_tells(env)) == 1 and len(env.events("load_high")) == 1
-    env.d.load_told["code/001_hold"] = told - 15 * 60 - 1   # past 15: told again
+    assert len(load_tells(env)) == 1 and len(env.events("load_high")) == 2   # the stretch logs again
+    assert env.events("load_high")[-1].detail["causes"] == ["code/001_hold"]
+    env.d._load_high = None                                 # a new stretch, inside 15 minutes: quiet
+    env.d.load_told["code/001_hold"] = told - 14 * 60
+    samples(env, 1)
+    assert len(load_tells(env)) == 1
+    env.d._load_high = None                                 # a new stretch past 15: told again
+    env.d.load_told["code/001_hold"] = told - 15 * 60 - 1
     samples(env, 1)
     assert len(load_tells(env)) == 2 and env.events("load_high")[-1].detail["items"] == ["code/001_hold"]
 
 
-def test_a_real_share_is_a_quarter_of_the_box_or_three_threads(monkeypatch):
-    monkeypatch.setattr(load.psutil, "cpu_count", lambda: 20)
-    row = lambda pct: {"cpu": 95, "top": [{"who": "a/1", "cpu": pct, "item": True}]}
-    assert load.own_share(row(15), "a/1")                   # 3 threads of 20
-    assert not load.own_share(row(10), "a/1") and not load.own_share(row(60), "a/2")
+def test_a_real_share_is_40_percent_of_the_busy_cpu(monkeypatch):
+    row = lambda pct, cpu=95: {"cpu": cpu, "top": [{"who": "a/1", "cpu": pct, "item": True}]}
+    assert load.own_share(row(38), "a/1") and load.own_share(row(30, cpu=70), "a/1")
+    assert not load.own_share(row(37), "a/1")               # 249's case: most of the load outside (130)
+    assert not load.own_share(row(15), "a/1")               # 3 threads of 20 was a share under 80
+    assert not load.own_share(row(60), "a/2") and not load.own_share({"cpu": 0}, "a/1")
 
 
 def test_the_warning_waits_out_its_seconds(env, monkeypatch):

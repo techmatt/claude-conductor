@@ -107,9 +107,10 @@ class MemoryMixin:
         samples and `load_warn_seconds`: a `load_high` event (inbox only, no toast: 70) carrying
         the inflated-timing caution, again every `load_tell_minutes` while it lasts. Only a
         running item whose own tree is a real share of the load (`load.own_share`) is
-        messaged, at most once per `load_tell_minutes`; load from outside is logged, no item
-        told (aicomplete 121 was told to cut its threads beside Defender and Chrome). Returns
-        the stretch (`{since, free}`) for the sample to carry, None when the box has room."""
+        messaged, once per stretch (130: aicomplete 249 got eight in one) and never twice
+        inside `load_tell_minutes`; load from outside is logged, no item told (aicomplete 121
+        was told to cut its threads beside Defender and Chrome). Returns the stretch
+        (`{since, free}`) for the sample to carry, None when the box has room."""
         cfg, at = self.cfg, time.monotonic()
         short = load is not None and load_mod.free_threads(load) < cfg.load_warn_free_threads
         self._load_short = self._load_short + 1 if short else 0
@@ -119,11 +120,13 @@ class MemoryMixin:
             return None
         every = cfg.load_tell_minutes * 60
         if self._load_high is None:
-            self._load_high = {"since": stamp(), "logged": None}
+            self._load_high = {"since": stamp(), "logged": None, "told": set()}
         high = self._load_high
         live = [i for i, run in self.runs.items() if run.rec.get("phase", "exec") == "exec" and not run.exited()]
         causes = [i for i in live if load_mod.own_share(load, i)]
-        items = [i for i in causes if i not in self.load_told or at - self.load_told[i] >= every]
+        items = [i for i in causes if i not in high["told"]
+                 and (i not in self.load_told or at - self.load_told[i] >= every)]
+        high["told"].update(items)
         free = load_mod.free_threads(load)
         if items or high["logged"] is None or at - high["logged"] >= every:
             high["logged"] = at

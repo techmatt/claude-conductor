@@ -737,9 +737,27 @@ class Board(Views):
             live = [w for w in self.workers.values() if w.kind != "main" and self._fresh(w, now)]
             return {"workers": [{"id": w.id, "kind": w.kind, "cores": w.cores, "label": w.label, "shards": w.shards,
                                  "gates": {k: v[0] for k, v in w.gates.items()},
-                                 "why": {k: w.why[k] for k, v in w.gates.items() if v[0] == "fail" and k in w.why}}
+                                 "why": {k: w.why[k] for k, v in w.gates.items() if v[0] == "fail" and k in w.why},
+                                 "failing": self._failing(w)}
                                 for w in live],
                     "jobs": len([j for j in self.jobs.values() if not j.complete])}
+
+    def _failing(self, w: Worker) -> str:
+        """Why this worker's latest gate failed, or "" when it passed (or answered) since: a
+        failure for a key it has passed a newer one after is history, not its state (130:
+        aicomplete's *Now* said at 7:52pm that its browser failed a 6:09pm gate, five passes
+        later). A bundle that wouldn't load in Node either is named as the build's fault."""
+        decided = [(at, k, s) for k, (s, at) in w.gates.items() if s in ("pass", "fail")]
+        if not decided:
+            return ""
+        _, key, state = max(decided)
+        if state != "fail":
+            return ""
+        why = w.why.get(key, "failed")
+        k = self.keys.get(key)
+        if k and k.note and why.startswith("load failed"):
+            why += f" (the bundle {key[:7]} failed in Node too: its build, not this worker; the next commit rebuilds)"
+        return why
 
     @staticmethod
     def _pairs(running) -> list[tuple[str, int]]:

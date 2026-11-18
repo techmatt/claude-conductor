@@ -98,7 +98,7 @@ memory_critical_free_gb = 1.5
 memory_calm_seconds = 300     # a level falls only once the box is clear this long (rises at once)
 load_warn_free_threads = 2    # load_high: under this many hardware threads free ...
 load_warn_seconds = 180       # ... for this long (see memory.md)
-load_tell_minutes = 15        # how often a stretch logs again, and an item causing it is messaged at most
+load_tell_minutes = 15        # how often a stretch logs again; an item causing it is messaged once a stretch, never twice in this
 # night shift keys: night-shift.md; [run.<name>]: run-targets.md; [tools.<name>]: app.md; [remote]: remote-workers.md
 
 [links]                       # name = URL; session.md lists them first, above everything else

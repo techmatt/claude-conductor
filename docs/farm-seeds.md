@@ -9,6 +9,29 @@ the item's prompt paragraph: `remote-workers.md`, *The executor interface*.
 `<out file>`'s folder is made first if missing (118: aicomplete 238 farmed 1,152 games,
 then crashed at its merge because `out/keep/` didn't exist).
 
+## The farm tree it runs from (130)
+
+With `[remote] pin` (default `true`), every step of a run happens in a **farm tree**, a copy
+of the repo's files (tracked, plus untracked and unignored: the set the job key hashes) made
+at its start: `native_build`, the fingerprint, the main box's native shards, a local-remote
+worker's (the job's `cwd`) and the wasm build (which holds the tree while it runs, even past
+the job). Its second stderr line says `farm-seeds: runs from farm tree <path> (the code as it
+is now; N file(s) copied in)`. `src/conductor/remote/tree.py`; tests `test_remote_tree.py`.
+
+- **Why.** Each step used to read the item's working tree while the executor edited it:
+  aicomplete's bundle `32fccf1` (263) compiled configs that had `city_cut_at` with code that
+  didn't (the commit had neither), so Node and the browser both failed it; a parameter added
+  mid-farm failed a whole farm's native shards (263); and a build beside a farmed read failed
+  with "Access is denied" on the `target/release` exe its shards held (167, 260).
+- **Where.** `.conductor/remote/trees/<n>/`, with `<n>.json` (its key, the files it copied, its
+  holders). Runs of one key share a tree; a tree nobody holds is synced to the next key
+  (changed files only, with a fresh mtime, so builds stay incremental: `target/` stays in the
+  tree); none free, a new one. Deleting `trees/` while no farm runs only costs a full build.
+- An argument naming a file the tree lacks (a spec in a git-ignored folder) is copied in at
+  the same place; a file outside the repo is read where it is.
+- The item's own `target/` is never built or locked by a farm: an item that runs the native exe
+  itself builds it itself. `pin = false` runs in the working tree as before 130.
+
 ## The commit it runs from
 
 Its first stderr line names the commit the native command runs from:
@@ -16,13 +39,13 @@ Its first stderr line names the commit the native command runs from:
 or an untracked, unignored file: the same test as the job key, `repo_key`) that line adds
 "plus uncommitted changes", and a second follows:
 
-    farm-seeds: warning: uncommitted changes (<up to 5 paths> and N more): the native exe is
-    built from them, a wasm bundle may take only committed code, so shards can run
-    different code. Commit before you farm
+    farm-seeds: warning: uncommitted changes (<up to 5 paths> and N more): the farm builds
+    from them, but no commit holds the code this read ran, and a bundle build that takes
+    only committed code would run different code. Commit before you farm
 
-`native_build` runs in the working tree, while a project's wasm build may take only
-committed code (aicomplete's `scripts/farm/build.mjs`), so mixed sources used to pass
-silently (aicomplete 213). It warns and carries on; it never refuses.
+Mixed sources used to pass silently (aicomplete 213); since 130 the farm tree holds the
+uncommitted changes for both builds, but a read is still only reproducible from a commit.
+It warns and carries on; it never refuses.
 
 ## Stopping a run
 

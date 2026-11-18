@@ -39,8 +39,10 @@ fractals/012 9% (fractals), conductor 3%, MsMpEng.exe 2% (outside)`), and carrie
 (2; busy percent of all threads) for 3 samples in a row (`LOAD_SAMPLES`) and
 `load_warn_seconds` (180), the daemon logs `load_high` (inbox only, no toast since 70), again
 every `load_tell_minutes` (15) while the stretch lasts. Only a running item whose own tree is
-a real share of the load (`load.own_share`: a quarter of the box, or 3 threads' worth) is
-messaged, at most once per `load_tell_minutes`, and since 82 as information: let the unit in
+a real share of the load (`load.own_share`: since 130, 40% of the busy CPU) is messaged
+once per stretch and never twice inside `load_tell_minutes` (130: under 80's rule, a quarter
+of the box or 3 threads every 15 minutes, aicomplete 249 got eight tells while most of the
+load was outside, and none changed what it did), and since 82 as information: let the unit in
 flight finish and start the next one with fewer threads, never kill and relaunch running work
 for load alone (fractals 022, 026 and 028 each restarted renders three or more times on "cut
 their threads", minutes lost each time; both preambles' load lines say the same). Memory

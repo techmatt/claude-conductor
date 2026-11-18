@@ -29,8 +29,7 @@ MIN_PERCENT = 1.0       # a consumer under this is not named
 MIN_SECONDS = 1.0       # a sample sooner than this (a rising memory level) repeats the last one
 FREE_THREADS = 4        # the preamble's load budget: an item leaves this many hardware threads free
 RUN_HEADROOM = 2        # threads under the budget's ceiling the preamble's default leaves for the session itself
-OWN_SHARE = 25          # percent of the box an item's tree uses before `load_high` messages it (80) ...
-OWN_THREADS = 3         # ... or this many threads' worth, whichever comes first
+OWN_SHARE = 40          # percent of the box's busy CPU an item's tree is before `load_high` messages it (80, 130)
 
 
 def run_threads() -> int:
@@ -155,10 +154,12 @@ def free_threads(load: dict) -> float:
 
 
 def own_share(load: dict, item: str) -> bool:
-    """Is `item`'s own tree a real share of the box's load (80): at least `OWN_SHARE` of the
-    CPU, or `OWN_THREADS` threads' worth? Below that the load is someone else's to cut."""
+    """Is `item`'s own tree a real share of the box's load: at least `OWN_SHARE` percent of
+    the busy CPU? Below that the load is someone else's to cut (130: aicomplete 249 was told
+    eight times beside outside load under 80's quarter-of-the-box-or-3-threads rule, and
+    none of the tells changed what it did)."""
     pct = sum(t["cpu"] for t in load.get("top") or [] if t.get("item") and t.get("who") == item)
-    return pct >= OWN_SHARE or pct * (psutil.cpu_count() or 1) / 100 >= OWN_THREADS
+    return pct > 0 and pct * 100 >= OWN_SHARE * max(load.get("cpu") or 0, pct)
 
 
 def _tag(t: dict) -> str:

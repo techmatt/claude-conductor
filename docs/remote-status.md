@@ -177,7 +177,10 @@ The inbox's *Now* section gets one line while a worker is connected:
 `remote workers: 2 connected (1 browser, 1 local-remote), 13 cores`; a failed gate adds
 `; 1 failed the fingerprint gate (Work laptop: load failed: RangeError ...)`, each worker's
 reason (`board_views.gate_why`: a load failure as the page said it, else `wrong fingerprint:
-got …, expected …`; 116). The worker's state detail, its page's gate chip and the view's
+got …, expected …`; 116). Only a worker's latest gate counts: one it failed and has passed
+a newer key since is history (130: at 7:52pm the line still blamed aicomplete's browser for
+a 6:09pm failure, five passes on), and a load failure of a bundle Node couldn't load
+either is named the build's fault, not the worker's (`Board._failing`). The worker's state detail, its page's gate chip and the view's
 `gate.why` carry the same reason. The broker writes it
 to `.conductor/now/remote.line` every 2 s; the inbox shows such a line only while it is
 under 30 s old (`inbox.now_files`).

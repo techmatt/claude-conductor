@@ -25,7 +25,7 @@ that farmed has `remote: true` on its `start` event, however it got it.
   unless the section changed. It exits once the daemon has been gone a minute. If it
   dies, the daemon starts it again within 10 s (one warning); its jobs carry on (`remote-url.md`).
   By hand: `python -m conductor.remote.broker <control> [--stay] [--after <pid>]`; `--stay`
-  serves with no daemon (tests, a manual run), `--after` is a handover.
+  serves with no daemon, `--after` is a handover.
 - **LAN only, one shared token.** It binds `bind:port` (default `0.0.0.0:8770`, outside every port block, so a `[remote]` sets its own) and serves
   every path under `/w/<token>/`: the worker page, the wasm bundles and the job API.
   Workers pull: they poll for shards and post results; a worker never listens. The main
@@ -81,7 +81,7 @@ only committed code: aicomplete 204 ran every read natively and starved the box)
 a lost broker means the main box finishes, said (126; `remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
 `.conductor/remote/seeds.jsonl`, which the *Kept reads* rows read (`worktrees.md`).
 
-The commit it runs from, its dirty-tree warning and `farm-seeds --cancel`: `farm-seeds.md`.
+The farm tree it runs from (`pin`, 130), its commit, dirty-tree warning, `--cancel`: `farm-seeds.md`.
 
 A `remote` item that runs the native sim itself (the `native` executable's name, or any
 executable under `out/`, with a seed range or game count: the flags `native` puts before
