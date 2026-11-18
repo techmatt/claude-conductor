@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | rename-repo | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | rename-repo | remote | app`."""
 
 from __future__ import annotations
 

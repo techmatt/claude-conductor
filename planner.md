@@ -105,7 +105,7 @@ Edits (the default for `state.md`) are whole lines of the staged file, each old 
 
 **Timing intent is a requirement** (Matt's standing call): when he says parallel, alongside or now, scope the item to qualify (`alongside:`, nothing shared riding along), check **queue status**, and say when it starts before queuing (or why it can't).
 
-**Rewrite, amend or new item**: **queue status** first. Rewrite a queued or staged item for a changed plan, never a running one; **amend** adds to a plan that still stands, until it merges; fixing finished work is a new item. A rewrite takes effect (front-matter and saved picks too); its receipt lists what changed (`(needs_pick: x added; body +1 −0 line(s))`): check your edit is there; `identical bytes`: it never arrived, so resend or amend.
+**Rewrite, amend or new item**: **queue status** first. Rewrite a queued or staged item for a changed plan, never a running one; **amend** adds to a plan that still stands, until it merges; fixing finished work is a new item. A rewrite takes effect (front-matter and saved picks too); its receipt lists what changed: check your edit is there; `identical bytes`: it never arrived, so resend or amend.
 
 **Front-matter** (`docs/items.md`): `repo`, and as needed `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick`, `remote`, `external_data`.
 - **Concurrency** (`docs/scheduling.md`): a worktree per item, one item per repo at a time. `alongside: <what it touches>` runs one beside others when it shares nothing outside git (art, voice, readonly prototypes; never a template). Exclusive templates run alone. `depends_on` only where queue order doesn't serialize; `readonly` never merges, starts at once. A busy queue head gets a read-only head start itself; `stage: false` when that's wasted.
@@ -129,12 +129,12 @@ Edits (the default for `state.md`) are whole lines of the staged file, each old 
 - **Pause**: when Matt needs the box, **pause R** (never a tell asking it to wait); it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): a readonly watch item judges stalls and drift; it may tell, answer with an answer already given, toast, or draw a backlog item into an empty queue. **Autopilot** gates only the draws.
 - **Box health**: *Now*'s first lines are memory, then CPU and top consumers (laggy? check those first, `docs/memory.md`). At `pressure`, say what is eating it.
-- **Reds** — raise at once and say what broke: `memory_critical`; `daemon_died` (its items are red `interrupted`: say what was lost, propose follow-ups); `run_failed` (its log's tail); `checkout_dirty` (name the files to Matt; it lands by itself once he cleans them).
+- **Reds** — raise at once and say what broke: `memory_critical`; `daemon_died` (its items are red `interrupted`: what was lost, follow-ups); `run_failed` (its log's tail); `checkout_dirty` (name the files to Matt; it lands once he cleans them).
 - **Picks** (`docs/picks.md`): `needs_pick: <name>` holds an item until the pick is saved and appends the choices at launch: never relay them by hand. *picks saved <time>*: read the choices, never ask Matt.
 
 ## Reading a report
 
-A report opens with `status:`, `blocks:`, `carry:`, `slow:`, `friction:`, `warnings:`, `partial:`, `pick:` (each line's reading: `docs/reports.md`, *For the planner*). `partial` is a real shortfall (a hard bar missed, even ~1 SE short), while a reported soft-band miss is `done`; `partial:` parts led `matt:` are calls to bring Matt; all such, each naming a question or a `## For Matt` choice: no retro (inbox `no workflow retro for X`). Raise a `warnings:` line to Matt first, by kind, with the item's judgement; never a hold. `red` with `after_red: stop` holds the repo's queue until **clear R** (an `API error` red: **retry X**). A `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**). `pick:` → **pick X**.
+A report opens with `status:`, `blocks:`, `carry:`, `slow:`, `friction:`, `warnings:`, `partial:`, `pick:` (each line's reading: `docs/reports.md`, *For the planner*). `partial` is a real shortfall (a hard bar missed, even ~1 SE short), while a reported soft-band miss is `done`; `partial:` parts led `matt:` are calls to bring Matt (`docs/retros.md`). Raise a `warnings:` line to Matt first, by kind, with the item's judgement; never a hold. `red` with `after_red: stop` holds the repo's queue until **clear R** (an `API error` red: **retry X**). A `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**). `pick:` → **pick X**.
 
 Don't summarize a report back: say what it changes, what the planner got wrong and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right; flag only those that block upcoming work.
 
@@ -144,7 +144,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## state.md, maintenance and closeout
 
-- **Handoff docs are the wavefront, not a history**: `state.md` is what is queued, running, open and ruled. A line stays only if it would change a future decision and can't live in code or the repo's docs; a new fact rewrites its line (git keeps history). Past 40 KB a request's receipt warns and the digest marks **trim state** due; a repo doc past 15 KB is due a trim item (`docs/receipts.md`).
+- **Handoff docs are the wavefront, not a history**: `state.md` is what is queued, running, open and ruled. A line stays only if it would change a future decision and can't live in code or the repo's docs; a new fact rewrites its line (git keeps history). Past 40 KB, receipt and digest mark **trim state** due; a repo doc past 15 KB, a trim item (`docs/receipts.md`).
 - **Each item for Matt sits in one place**: *Waiting on Matt* (what work is blocked on, raised every start), *Open questions* (decisions for upcoming work, asked once), then *Paged* with the planner's default (raised only by Matt or when a prompt touches that code).
 - **Maintenance**: `state.md` keeps per repo when each template last ran and the project's triggers. Defaults: **bug hunt** after big features or new surface; **general cleanup** after ~10 feature items or a big rework; **cleanup** when audit notes pile up; **test cleanup** when a full run grew ~1.5×; **claude.md cleanup** when `CLAUDE.md` is long or stale; **disk space cleanup** after lots of media; a repeated `slow:` cause picks one (`docs/templates.md`). At start, recommend what is due, a line each, with why; never queue one unasked or re-offer a declined one till its cause grows. Conductor queues the **workflow retro** itself; process it per `docs/retros.md` (it prunes *Planner habits*, ≤15). Recommend "cleanup conductor" when HANDOFF's *How work flows* says it is due.
 - **Planner habits** (a `state.md` section) are rules for the planner, never pending fixes. A repeated mistake becomes one; a one-off is said in chat.
@@ -164,7 +164,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **check questions** / **answer active questions** | Open asks with their items, blocking first, others with default and when / for each in the inbox's *Questions*, **answer Q** with its best take, a line each to Matt; design ones or ones needing Matt are raised instead. |
 | **answer Q: …** | Writes Matt's words to `questions\<id>.answer.md` (Q may be short: `012__1`); if the default was taken, says it will be `late`. |
 | **queue status** | Per repo: the running item (elapsed, progress, outline), the queue; then proposed. |
-| **read the workflow** / **remind me the vocab** | Re-reads this file / prints these tables and the rare ops'. |
+| **read the workflow** / **remind me the vocab** | Re-reads this file / prints the vocab, rare ops too. |
 
 **Queueing and maintenance** (when each is due: *Maintenance*)
 
@@ -172,7 +172,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 |---|---|
 | **enqueue** / **propose** | Writes a prompt to `queue\<repo>\`, or `proposed\` to hold it (*Approval*). |
 | **approve X** / **cancel X** | Signal `approve: NNN_name` (held → queue) / `cancel: <item>` (proposed or queued, never running). |
-| **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new or queued item; a running X: signal `audit: <repo>/<NNN_name>` / lists unused notes per repo, reading one if asked. |
+| **with audit** / **audit X** / **audit notes** [R] | `audit: true` on a new or queued item; running: signal `audit: <repo>/<NNN_name>` / unused notes per repo. |
 | **alongside X** | `alongside: <its area>` on a new or queued X if *Concurrency* allows; else why not. |
 
 **Running items**

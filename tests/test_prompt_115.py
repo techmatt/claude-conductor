@@ -3,6 +3,8 @@ what waits on him, errors), coalesced per project within about a minute; standin
 fold into one line; a cancelled auto-retro stays cancelled and a new item never takes a
 number already in use in its repo."""
 
+import pytest
+
 from conductor import inbox, notify, state
 
 from test_prompt_107 import auto, fin, queued
@@ -81,6 +83,7 @@ def test_only_what_matt_acts_on_toasts():
     assert notify.note("red", "code/1_x", "code", {"reasons": ["x"]}) is None      # its finish says it
 
 
+@pytest.mark.slow
 def test_a_daemon_finish_names_the_item_that_started_after_it(env):
     env.queue("001_a", "FAKE report done")
     env.queue("002_b", env.hold())

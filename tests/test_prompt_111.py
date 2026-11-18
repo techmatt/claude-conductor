@@ -3,10 +3,11 @@ resumes its own session after a backoff and finishes as usual; `retry:` does the
 demand for a kept red item; an API-only red queues no self-audit; a resume item's red never
 holds its queue, and its cost is its own, not its original's running total."""
 
+import pytest
+
 from conductor import session, state
 from conductor.daemon_api import api_error, api_only
 from conductor.util import read_text
-
 from conftest import transcript
 
 API_LINE = "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"
@@ -43,6 +44,7 @@ def test_retries_spent_is_a_red_naming_the_api_and_queues_no_self_audit(env):
     assert session.retros(env.d.log, state.scan(env.d.cfg, env.d.log), "code").due is None
 
 
+@pytest.mark.slow
 def test_a_resume_items_red_never_holds_and_its_cost_is_its_own(env):
     env.queue("001_orig", "FAKE cost 9.48\nFAKE commit a.txt one")
     env.tick_until(lambda: env.finished("code/001_orig"))

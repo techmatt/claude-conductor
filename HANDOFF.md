@@ -30,9 +30,9 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-11-12, after prompt 108
+Last cleanup: 2026-11-17, after prompt 132
 
-Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`), aicomplete (`C:\Code\aicomplete-control`), fractals (`C:\Code\fractals-control`) and workbench (`C:\Code\workbench-control`: small unrelated scripts, a subfolder each; 92). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it works.
+Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`), aicomplete (`C:\Code\aicomplete-control`), fractals (`C:\Code\fractals-control`), workbench (`C:\Code\workbench-control`: small unrelated scripts, a subfolder each; 92) and Helium Hustle (`C:\Code\helium-hustle-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it works.
 
 Live, by area (the doc named holds the detail):
 
@@ -71,7 +71,7 @@ Chores:
 - Staging `Questions:` deciding a rule's shape could block launch (156's Q1 cost a rework); since 120, open rulings. (aicomplete 164, #7341, as are the next three)
 - Remind an executor whose outline ETA trails its `eta` by a third (156: two watch tells).
 - Aicomplete's scripts put headless Edge's `--user-data-dir` in `%TEMP%` (Defender scans it, not `out/`; 170): its planner's.
-- Size splits wait until a prompt would pass budget (`tools/sizes.py`).
+- Size splits wait until a prompt would pass budget (`tools/sizes.py`); one adding to `planner.md` or this file trims first, in the same item (both at budget 11-16; the 11-17 cleanup freed some).
 - 116's OOM fix (`index.html`'s recycle, reload) is unrun in a browser: check aicomplete's laptop tab (`coresReplaced`, no `load failed` gate).
 - `wait_for`'s default `fail` pattern matches "error" in ordinary prose (subagent output under ultracode: aicomplete 173 lost ~10 min). Fix: a default that can't match ordinary text. Due from #7766.
 - An item-file edit that only appends answers to the stage's own questions should keep the stage and deliver once (177 restaged, got two copies). (aicomplete 193, due from #8636, as are the next two)
@@ -98,7 +98,6 @@ Still not live:
 - **122**: a real `-p` obeys the hook's deny (Bash, Write: sandbox probe); unseen in items. Does a helper's PreToolUse input carry `agent_id`? Do denials hit legit calls (`conductor: refused` in logs)?
 - **120's lines**: unseen live: a real Workflow call reaching the hook? stages naming defaults?
 - **119**: unseen live: Helium's **Run game** by the card viewer; old-command servers replaced.
-- `prompts.py`'s rename hint for a `YYYYMMDD-HHMM-…` inbox prompt doubles the stamp (118).
 - **118**: unseen live: `state_budget_kb` 40 right for aicomplete?
 - **117's lines**: unseen live. `told_to_stop` reads any non-conductor `tell` with "stop" ("don't stop" matches too): is that tight enough? Do reports name the kept path, and later items find kept reads at once? **108's *Re-derived or re-read***: do notes name files, and cleanups add the caching line?
 - **115's lines**: unseen live. Are a 10s settle and a 60s coalesce right (a finish whose next item has a long setup reads `next`, not `started`)? Does a renumbered planner item confuse its planner (the receipt names the new id; `depends_on` written against the old number now finds the other item)? Does the standing fold hide a warning Matt still wants raised each time?
@@ -108,13 +107,7 @@ Still not live:
 - **111's API retry**: unseen live. Does a real `claude -p --resume` after a 403 carry on mid-step, and does its `total_cost_usd` count the whole session (assumed from 216's $9.48)? Are 2 / 10 / 30 min right for a Cloudflare outage? If 204's build read only HEAD, aicomplete's `[remote] build` is why (its planner's; the commit-first line covers it).
 - **110's kept reads**: in use (aicomplete 228, 233); 3 items / 2 GB right?
 - **109's `warnings:`**: unseen live. aicomplete's design checker (205) is the first user: its `CLAUDE.md` *Warning checks* or `warning_checks` is its planner's to add; do executors run the checks and copy the parts verbatim?
-- **The app's remote chip, Workers tab** (91, 97): sandbox only. Amber at a 5-min-old re-run too eager? A new key's bundle prebuild untried.
-- **82's lines** (fractals): a load-told executor going smaller, sized `timeout`s, a cancelled dependency's set-aside item, the Pick… menu: unseen live.
-- **83's lines**: the app's self-restart once idle, a held question sorted last, one tray icon after; **81's waiting mark** on a taskbar: unseen.
-- **102's *Latitude***: does a tuning item post reachability early, naming what gave way?
-- **Repos that don't fit worktrees** (78, 91): start `worktrees = false`; does fractals' report name enough to switch? Does a new project's first request edit the stub `state.md`?
-- **Inbox sections read twice** (aicomplete 11-03): a read spliced over a rewrite? **98**: why the laptop missed gates?
-- **99-103's core counts, placement**: laptop at 2, ceiling 3: does it hold; does a farm beat local (161 didn't)? Does the overdue copy cut a read's tail? 103's `answered:` and long-job line unseen live.
+- **78–103, unseen live** (each report has the detail): the remote chip's amber and bundle prebuild (91, 97); 82's load-told shrink, sized `timeout`s, set-aside item, Pick… menu; 83's idle self-restart, held question last, one tray icon, 81's taskbar mark; 102's early reachability; whether `worktrees = false` repos name enough to switch (78, 91); inbox sections read twice (11-03); 98's missed gates; 99–103's core ceiling, farm vs local, overdue copy, `answered:`.
 - **Farm load** (aicomplete 168, #7341): no broker → `run_local` runs native at full `--threads` (~95 min): cap at `main_slots`. A `remote: true` item's load warning should name `main_slots` as its share (168 read it as "run native"). A worker offline mid-item raised no flag: the watch or *Now* should.
 - `farm-seeds` and the worker page come from the working checkout: uncommitted code reaches live jobs and tabs (98, 99; 100's edits reloaded the laptop 4 times).
 - A spec newer than a worker's bundle isn't in it (167's laptop failed every shard of one). 100 drops a worker from a job at its first failed shard; to do: rebuild the bundle when a job names a spec it lacks. Due from #7341.

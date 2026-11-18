@@ -78,3 +78,7 @@ def test_a_misnamed_inbox_prompt_is_named_not_skipped(root, capsys):  # noqa: F8
     assert "Skipped, misnamed: inbox/106_background_jobs.md (rename it to " in out and "-<project>-background-jobs.md" in out
     _, out = run(root, "list", capsys=capsys)
     assert "Skipped, misnamed: inbox/106_background_jobs.md" in out
+    (root / "prompts" / "inbox" / "106_background_jobs.md").unlink()
+    (root / "prompts" / "inbox" / "20200101-1030-conductor-short-stamp.md").write_text("go\n", encoding="utf-8")
+    _, out = run(root, "list", capsys=capsys)
+    assert out.count("20200101-1030") == 1 and "-conductor-short-stamp.md to queue it)" in out

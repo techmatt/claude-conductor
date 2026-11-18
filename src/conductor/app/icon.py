@@ -20,7 +20,7 @@ MASTER = Path(__file__).with_name("icon.svg")
 ICO = Path(__file__).with_name("conductor.ico")
 ICO_SIZES = (16, 20, 24, 32, 48, 256)
 SMALL = 24                  # this size and below draw the bolder variant
-HUB = {"gold": "#f4b942", "dim": "#8a6a22", "red": "#e5484d", "slate": "#8da9c4",
+HUB = {"gold": "#f4b942", "red": "#e5484d", "slate": "#8da9c4",
        "orange": "#ff7a1a", "orange_dim": "#8f4410"}
 BADGE_RING = "#0b2545"      # the icon's navy, round the taskbar badge
 TURN_STARTS = (90, 0, 270, 180)     # the turning badge's filled half: ◐ ◓ ◑ ◒ (degrees, Qt's)

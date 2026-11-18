@@ -94,6 +94,7 @@ def test_an_amendment_written_with_its_item_still_lands(env):
     assert (env.repo / "d.txt").is_file()
 
 
+@pytest.mark.slow
 def test_an_amendment_for_an_unknown_item_waits(env):
     p = amend_file(env, "005_later", "hello")
     env.d.tick()
@@ -128,6 +129,7 @@ def test_a_staged_amendment_keeps_the_stage(env):
     assert got.detail["via"] == "resume" and "while staged" in reports(env, "002_next", ".amend.md")
 
 
+@pytest.mark.slow
 def test_a_running_item_gets_the_whole_amendment(env, capsys, tmp_path):
     env.queue("001_busy", "FAKE until-message 30")
     env.tick_until(lambda: env.events("start"))
@@ -148,6 +150,7 @@ def test_a_running_item_gets_the_whole_amendment(env, capsys, tmp_path):
     assert "amendment #" in model.activity_text(got)
 
 
+@pytest.mark.slow
 def test_finished_items_refuse_amendments(env, capsys):
     env.queue("001_done", "FAKE report done")
     env.tick_until(lambda: env.finished("code/001_done"))

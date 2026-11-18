@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from conductor.app import item_model, model
 from conductor.app.model import Project
 from conductor.app.streamlog import render_stream_json
@@ -22,6 +24,7 @@ def test_filter_events(env):
     p.close()
 
 
+@pytest.mark.slow
 def test_trail_of_a_merged_item(env):
     env.queue("001_x", "FAKE commit a.txt hello")
     env.tick_until(lambda: env.finished("code/001_x"))

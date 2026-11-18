@@ -53,6 +53,7 @@ def test_fork_command_line(env):
     assert "--fork-session" not in plain and plain[plain.index("--session-id") + 1] == "new-sid"
 
 
+@pytest.mark.slow
 def test_resume_of_what_has_not_finished_is_invalid(env):
     env.queue("001_orig", env.hold())
     env.queue("002_ask", "1. Why?", resume="code/001_orig")

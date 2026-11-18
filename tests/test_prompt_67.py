@@ -5,6 +5,8 @@ import subprocess
 import sys
 import threading
 
+import pytest
+
 from conductor import ask_server, inbox, questions, resume
 from conductor.app import model
 from conductor.executor import RunPaths
@@ -69,6 +71,7 @@ def test_plan_questions():
     assert questions.plan_questions("Open questions about the gate were settled.\n- x") == []
 
 
+@pytest.mark.slow
 def test_a_staged_plans_questions_reach_the_inbox_until_it_launches(env):
     env.queue("001_long", env.hold())
     env.tick_until(lambda: env.events("start"))
@@ -98,6 +101,7 @@ def test_split_default():
     assert questions.split_default("Which seed?") == ("Which seed?", None)
 
 
+@pytest.mark.slow
 def test_unanswered_staging_questions_launch_with_defaults_and_stay_open_rulings(env):
     """120 (helium 012, aicomplete 244): the resume message says the defaults stand, and
     the digests keep them as open rulings while it runs and until its report is reviewed."""

@@ -28,6 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STAMP = re.compile(r"^(\d{8}-\d{6})-([A-Za-z0-9_]+)-(.+)\.md$")
+STAMPISH = re.compile(r"^\d{8}-\d{1,6}-(.+)$")
 NUMBERED = re.compile(r"^(\d+)([a-z]*)_(.+)$")
 LINE = re.compile(r"^(\S+) (start|done|stopped|stale) (\S+)")
 CLOSES = {"done", "stopped", "stale"}
@@ -69,9 +70,13 @@ def misnamed(root: Path) -> list[str]:
     for p in sorted((root / "prompts" / "inbox").glob("*.md")):
         if STAMP.match(p.name):
             continue
-        m = NUMBERED.match(p.stem)
-        slug = (m[3] if m else p.stem).replace("_", "-").strip("-") or "prompt"
-        want = f"{datetime.fromtimestamp(p.stat().st_mtime):%Y%m%d-%H%M%S}-<project>-{slug}.md"
+        stamp = f"{datetime.fromtimestamp(p.stat().st_mtime):%Y%m%d-%H%M%S}"
+        if s := STAMPISH.match(p.stem):  # a short stamp (118): keep its `<project>-<slug>`, not the stamp twice
+            want = f"{stamp}-{s[1]}.md"
+        else:
+            m = NUMBERED.match(p.stem)
+            slug = (m[3] if m else p.stem).replace("_", "-").strip("-") or "prompt"
+            want = f"{stamp}-<project>-{slug}.md"
         out.append(f"Skipped, misnamed: inbox/{p.name} (rename it to {want} to queue it)")
     return out
 

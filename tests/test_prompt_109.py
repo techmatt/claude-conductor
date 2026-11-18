@@ -5,6 +5,8 @@ kind, counted per kind across recent reports. A repo declares its own checks in
 
 from datetime import datetime
 
+import pytest
+
 from conductor import executor, inbox, notify
 from conductor.items import Item
 
@@ -47,6 +49,7 @@ def test_every_preamble_asks_for_warnings_and_names_the_repos_checks(env):
     assert "never changes your status" in render(env, long)
 
 
+@pytest.mark.slow
 def test_warnings_lead_the_digests_and_never_hold(env):
     env.queue("001_cards", "FAKE warnings design: capstone has a cheap source; perf: 40s turns\nFAKE report done")
     env.queue("002_tune", "FAKE warnings design: same power on every board\nFAKE report partial")

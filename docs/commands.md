@@ -37,7 +37,7 @@ itself starts its successor (`restart.md`).
 
 `--since` takes an event id (`#12` or `12`, exclusive), a relative age (`30m`, `2h`,
 `1d`), a clock time today (`5:25pm`), an ISO time, `checkpoint` (from the latest
-checkpoint's own event on) or `checkpoint N` (from checkpoint #N on). `--item` takes
+checkpoint's own event on) or `checkpoint N` (from checkpoint #N on; `cp` for short, `#N` too). `--item` takes
 `sandbox/001_x`, `001_x` or `001`.
 
 Stopping the daemon does **not** stop executors (the next start adopts them); a **tree**

@@ -39,7 +39,7 @@ AUDIT_LATE = "From conductor: this item now keeps audit notes, for the rest of i
 # retry is one step and never a guess.
 ITEM = "<repo>/<NNN_name>"
 FORMS = {
-    "read": "`read: <event id>` or `read: latest`",
+    "read": "`read: <event id>`, `read: latest` or `read: all`",
     "clear": "`clear: <repo>`",
     "land": f"`land: {ITEM}` (a finished red item)",
     "retry": f"`retry: {ITEM}` (a finished red item)",
