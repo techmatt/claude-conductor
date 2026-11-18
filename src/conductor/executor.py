@@ -103,6 +103,8 @@ carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
 warnings: none | <kind>: <what tripped>[; <kind>: <another>]
+and, only when `partial`, one more:
+partial: <each unmet bar and why>[; <another>], `matt: ` leading one only Matt's call is left on
 {pick_line}`slow:` names only a part over ~15 minutes or twice your estimate; `friction:`, one
 or two things (prompt, repo docs or tools, conductor) that cost time or tokens; `warnings:`,
 what the repo's CLAUDE.md *Warning checks*{checks} trip (run them before the report; no such
@@ -112,8 +114,10 @@ nothing you touched, reads `<kind>: unchanged from main: <text>`. A warning neve
 `done`: goal met; a soft-band or measurement miss that the done-when table reports is still
 `done`. `partial`: a real shortfall, nothing broken: planned work skipped or not delivered (an
 instruction declined with a reason included), or a hard bar missed, even within ~1 SE (a locked
-ruling, a required check, a feature that doesn't work). `red`: something broken or unsafe; this
-repo's queue should not continue without a look.
+ruling, a required check, a feature that doesn't work). A bar is `matt:` only when your work on
+it is done and what remains is a play, design or price call that is his (asked or defaulted); one
+missed on the work, skipped or out of time is plain. All `matt:` queues no workflow retro.
+`red`: something broken or unsafe; this repo's queue should not continue without a look.
 {pick}
 The report leads with what changes for the planner: findings and decisions, under ~60
 lines, long tables linked from the item's results folder (a bug hunt's or test cleanup's
@@ -231,7 +235,7 @@ CALIBRATE = (" A calibration or tuning item posts a freeze line as progress befo
              "ledger (`seeds.py --take` or its like) before the report.")
 CALIBRATE_RE = re.compile(r"\b(gates?|gated|bands?|targets?|seeds?|seed count)\b", re.IGNORECASE)
 
-PICK_LINE = "and, only if you wrote a picker manifest, a sixth:\npick: <manifest path relative to the repo root>\n"
+PICK_LINE = "and, only if you wrote a picker manifest, one more:\npick: <manifest path relative to the repo root>\n"
 
 PICK = """
 Pickers. When the prompt asks for a picker, or you produce candidates for Matt to choose
@@ -508,8 +512,8 @@ def _workdir(cfg: Config, item: Item, run: dict, light: bool = False) -> str:
 ASK_TIMEOUT_MS = 7 * 24 * 3600 * 1000
 
 HEADER_KEYS = ("status", "blocks", "carry")
-OPTIONAL_KEYS = ("slow", "friction", "warnings", "pick")     # straight after the three, any order
-TEXT_KEYS = ("slow", "friction", "warnings")     # kept as written; `pick` is a path
+OPTIONAL_KEYS = ("slow", "friction", "warnings", "partial", "pick")     # straight after the three, any order
+TEXT_KEYS = ("slow", "friction", "warnings", "partial")     # kept as written; `pick` is a path
 MAX_PICKS = 12                                   # `pick:` lines a header may carry, one per picker
 STATUSES = ("done", "partial", "red")
 
@@ -764,7 +768,8 @@ def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False
 def read_header(report: Path) -> tuple[dict | None, str | None]:
     """(header, problem). Accepts the three lines bare or inside a `---` block, then
     `slow:` (what took long), `friction:` (what cost the item time or tokens), `warnings:`
-    (what its checks tripped; absent is no problem either) and optional `pick:` lines (a picker manifest's path each: `pick` is the
+    (what its checks tripped; absent is no problem either), `partial:` (why each unmet bar
+    is unmet, `matt:` leading one that waits on his call: docs/retros.md) and optional `pick:` lines (a picker manifest's path each: `pick` is the
     first, `picks` all of them; fractals 022 had three). Those only right after the three,
     in any order, never in the body."""
     if not report.is_file():
@@ -774,7 +779,7 @@ def read_header(report: Path) -> tuple[dict | None, str | None]:
     header = {}
     seen = 0                            # optional lines met so far, set or not
     for n, ln in enumerate(lines):
-        m = re.match(r"^\**(status|blocks|carry|slow|pick|friction|warnings)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
+        m = re.match(r"^\**(status|blocks|carry|slow|pick|friction|warnings|partial)\**\s*:\s*(.*)$", ln, re.IGNORECASE)
         key = m.group(1).lower() if m else None
         if key is None or (key in header and key != "pick"):
             continue                    # the first of each key counts; a repeat is body

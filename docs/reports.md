@@ -13,12 +13,13 @@ carry: <what state.md should change, or none>
 slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
 friction: none | <what cost the item time or tokens>[; <another>]
 warnings: none | <kind>: <what tripped>[; <kind>: <another>]
+partial: <each unmet bar and why>[; <another>]      # optional: only when partial; `matt: ` leads a bar only his call is left on
 pick: <manifest path relative to the repo root>     # optional: only after writing a picker manifest
 ```
 
 (Bare lines or inside a `---` block; `**status**:` is tolerated.) Only the first
 non-blank lines are read: `status`, `blocks` and `carry` count only in the first three
-(the first of each); `slow:`, `friction:`, `warnings:` and `pick:` only straight after them, in any
+(the first of each); `slow:`, `friction:`, `warnings:`, `partial:` and `pick:` only straight after them, in any
 order, each counted only when every line before it was a header line; `pick:` with a one-word value; so a body that opens with
 "Status: …" or "Pick: went with …" stays body. Backticks around a pick are dropped, `\`
 becomes `/`, and `pick: none` is no pick. The `finish` event carries it as
@@ -48,6 +49,14 @@ executor noticed, each part led by a kind: `design: capstone has a cheap source;
 `review.md` under *Warnings*, counted per kind, one unchanged since the last reviewed report folded into a *standing* line, one unchanged from main into the repeat line (no toast): `warnings.md`. Parked edits an item carries are answered just
 after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 
+`partial:` (131) says why each unmet bar of a `partial` is unmet, `;`-separated. A part led
+by `matt:` is a bar whose work is done and that waits only on a play, design or price call
+of Matt's (asked or defaulted); anything else (missed on the work, skipped, out of time) is
+plain. Every part `matt:` and no stall queues no workflow retro (`retros.md`). The `finish`
+event carries it and the inbox's finish line adds ` · partial: …`. Only the full preamble
+asks for it (the light one is at its word cap), and a report without it is treated as
+before: its `partial` queues a retro.
+
 ## For the planner
 
 How a planner reads the header (`planner.md`, *Reading a report*, points here):
@@ -55,7 +64,7 @@ How a planner reads the header (`planner.md`, *Reading a report*, points here):
 - `blocks:` what the item blocks; `carry:` what `state.md` should change, folded in by request.
 - `partial` is a real shortfall (Matt, 2026-11-13; 114): planned work skipped or not
   delivered, or a hard bar missed, even within ~1 SE (a locked ruling, a required check, a feature that
-  doesn't work; 117, aicomplete 215); nothing broken. A `partial` Matt told to stop queues no retro (`retros.md`). A soft-band or measurement miss that the done-when table
+  doesn't work; 117, aicomplete 215); nothing broken. A `partial` Matt told to stop, or whose `partial:` parts all wait on Matt, queues no retro (`retros.md`); bring the `matt:` calls to him. A soft-band or measurement miss that the done-when table
   reports is `done`, so it queues no retro (aicomplete 213-215 went `partial` on soft
   misses alone). `red`: something broken or unsafe; with `after_red: stop` the repo's
   queue holds until **clear R**.

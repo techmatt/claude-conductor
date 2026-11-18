@@ -325,12 +325,13 @@ class MergeMixin:
             "finish", item=item_id, paths=report_paths,
             status=out["status"], report_status=out["report_status"], reasons=out["reasons"],
             blocks=out["blocks"], carry=out["carry"], slow=out.get("slow"), pick=out.get("pick"),
-            friction=out.get("friction"), warnings=out.get("warnings"),
+            friction=out.get("friction"), warnings=out.get("warnings"), partial=out.get("partial"),
             session_id=rec["session_id"], exit_code=out["exit_code"],
             cost_usd=out["cost_usd"], turns=out["turns"],
             needs_planner=rec.get("needs_planner", False), after_red=after_red, **extra,
         )
         self._retry_cleared(run)                # daemon_api: a `retry:` that landed lifts its red's hold
+        self.note_retro_skip(item_id)           # daemon_retros: a `partial` only waiting on Matt
         if rec.get("template") == "watch" and out["status"] != "red":
             self._watch_actions(rec)            # its tell, notify and draw lines (daemon_watch)
         rec["phase"] = "done"

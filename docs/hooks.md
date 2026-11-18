@@ -87,6 +87,7 @@ and not enforced.
 | **Diff review** before the report: one read-only subagent, the diff, rulings, done-when, *What failure looks like*; one more pass at most; a `Diff review:` line | 123 | full, writable, not template; Ultracode's adversarial review counts |
 | Report header, statuses (`done` / `partial` / `red`, a soft-band miss is `done`), the report-path line | 74, 109, 114, 117 | both word for word |
 | `warnings:` from the repo's *Warning checks*; `unchanged from main`; never changes status | 109, 113, 121 | full; light the header line |
+| `partial:` when partial: each unmet bar and why, `matt: ` on one only his call is left on (all such: no retro) | 131 (aicomplete 264) | full only (light at its word cap) |
 | Report: what changes for the planner first, ~60 lines, answer every message, flag a two-change comparison, tests only for an unfixed red | 74 | full; light answers by number |
 | Pickers: manifest schema, `pick:` line, never delete a round | 79, 121 | *Pickers* block |
 | Audit notes under fixed headings | 75 | *Audit notes* block (`templates/audit.md`) |

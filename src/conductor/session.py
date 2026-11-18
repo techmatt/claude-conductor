@@ -13,6 +13,7 @@ from pathlib import Path
 from . import git, globs, inbox, nightshift, parked, resume
 from .audits import canonical
 from .daemon_api import api_only
+from .daemon_watch import STALL_FLAGS
 from .config import Config
 from .events import Event, EventLog
 from .state import View
@@ -309,14 +310,34 @@ def told_to_stop(log: EventLog, fin: Event) -> bool:
                and STOP_RE.search(str(e.detail.get("text") or "")) for e in log.query(kinds=["tell"], item=fin.item))
 
 
+MATT_RE = re.compile(r"^\W*matt\b\W*:", re.IGNORECASE)
+
+
+def partial_parts(fin: Event) -> list[str]:
+    """A finish's `partial:` line split on `;`: why each unmet bar is unmet."""
+    return [p.strip() for p in str(fin.detail.get("partial") or "").split(";") if p.strip()]
+
+
+def waits_on_matt(log: EventLog, fin: Event) -> bool:
+    """A `partial` whose every unmet bar waits only on Matt's call (each `partial:` part led
+    by `matt:`) and that never stalled (a quiet, eta or blocked watch flag on it): a design
+    hand-off, not a workflow miss, so no retro on its `partial` (aicomplete 264, four faces
+    waiting on his play calls, got 269_post_audit_264, cancelled by hand). An overrun still counts."""
+    parts = partial_parts(fin)
+    if fin.detail.get("status") != "partial" or not parts or not all(MATT_RE.match(p) for p in parts):
+        return False
+    return not any(e.detail.get("flag") in STALL_FLAGS for e in log.query(kinds=["watch_flag"], item=fin.item))
+
+
 def retro_trigger(log: EventLog, fin: Event) -> str | None:
     """Why this item alone makes a workflow retro due, or None. A red that is only the API's
-    or a failed launch is none: there is no workflow to look back on (aicomplete 216)."""
+    or a failed launch is none: there is no workflow to look back on (aicomplete 216). A
+    `partial` that only waits on Matt (`waits_on_matt`) triggers only by overrunning."""
     if fin.detail.get("status") == "red" and api_only(fin.detail.get("reasons")):
         return None
     if fin.detail.get("status") == "partial" and told_to_stop(log, fin):
         return None
-    if fin.detail.get("status") in ("partial", "red"):
+    if fin.detail.get("status") in ("partial", "red") and not waits_on_matt(log, fin):
         return str(fin.detail["status"])
     return f"ran {times:.1f}× its first ETA" if (times := overrun(log, fin)) else None
 

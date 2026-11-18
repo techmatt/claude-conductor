@@ -31,7 +31,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `recover` | restart found it finished while the daemon was down, a merge to resume, or a cut-off run resumed (`restart.md`) | note; continued, pid, cut, why, deadline |
 | `requeue` | restart found it never launched, or mid-setup | reason |
 | `kill` | max_hours reached (red) | pid, reason |
-| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow, friction and warnings (as written, or null), pick (`<repo>/<path>` or null; picks: all, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd (a resume item's: its fork's own), api_tries and retried (`api-retry.md`), turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
+| `finish` | item done (after its merge, when it had one) | status, report_status, reasons, blocks, carry, slow, friction, warnings and partial (as written, or null), pick (`<repo>/<path>` or null; picks: all, when several), parked_done, parked_back (its parked edits), session_id, exit_code, cost_usd (a resume item's: its fork's own), api_tries and retried (`api-retry.md`), turns, branch, merged, needs_planner, after_red; conductor (its own red, landed anyway); audit (it kept notes), template, resume_of (a resume item) |
 | `audit_used` | a cleanup (or general cleanup) concluded, not red: the audit notes it acted on; or an `audit_used:` signal (no item, `by`) | notes (item ids); paths (their files) |
 | `red` | the item's status is red | reasons, after_red; external_data (its kept branch) |
 | `tamper` | control folder changed during an executor's window (red) | changes, concurrent, found (the check that saw it); attributed (with several running: those whose own tool calls named a changed path, the only ones that end red; empty: all do; `control-folder.md`) |
@@ -75,6 +75,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `pause` / `resume` | a `pause:` / `resume:` signal (`night-shift.md`, *Pause*) | repo; items, by; paused_seconds (resume) |
 | `watch` | conductor queued a watch item | reason, flags (their keys), file, by |
 | `retro` | a self-audit queued (`retros.md`) | of, why, file, by |
+| `retro_skip` | a `partial` whose every unmet bar waits on Matt queued no retro (`retros.md`, 131) | waits (its `matt:` parts), by |
 | `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
 | `autopilot` | an `autopilot:` signal set the mode (`night-shift.md`); the last one holds | mode (`off`, `night`, `always`), was, by |
 | `ack` | `ack: invalid` (`signals.md`) | what, events (`invalid` ids), by |

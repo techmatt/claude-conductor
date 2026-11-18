@@ -153,6 +153,8 @@ def describe(ev: Event) -> str:
                 text += f" · carry: {d['carry']}"
             if slow := slow_text(d):
                 text += f" · slow: {slow}"
+            if d.get("status") == "partial" and (why := (d.get("partial") or "").strip()):
+                text += f" · partial: {why}"
             if (friction := (d.get("friction") or "").strip()) and friction.lower().rstrip(".") != "none":
                 text += f" · friction: {friction}"
             if warned := warnings_text(d):     # unchanged from main throughout: not bold (121)
@@ -446,6 +448,8 @@ def describe(ev: Event) -> str:
             text = f"watch {who} launched: {d.get('reason')}"
         case "retro":
             text = f"workflow retro {who} queued: post-audit of {d.get('of')} ({', '.join(d.get('why') or [])})"
+        case "retro_skip":
+            text = f"no workflow retro for {who}: its partial only waits on Matt ({'; '.join(d.get('waits') or [])})"
         case "push":
             text = (f"pushed {d.get('target')} {d.get('branch')} to {d.get('remote')} ({str(d.get('sha'))[:8]}"
                     + (", up to date" if d.get("up_to_date") else "") + f"; {', '.join(d.get('why', []))})")

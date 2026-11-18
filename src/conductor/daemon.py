@@ -980,6 +980,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "slow": (header or {}).get("slow"), "pick": _pick_ref(repo, (header or {}).get("pick")),
             "picks": [r for v in (header or {}).get("picks", []) if (r := _pick_ref(repo, v))],
             "friction": (header or {}).get("friction"), "warnings": (header or {}).get("warnings"),
+            "partial": (header or {}).get("partial"),
             "exit_code": exit_code, "cost_usd": own_cost(rec, result),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }

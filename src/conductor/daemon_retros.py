@@ -44,6 +44,15 @@ class RetrosMixin:
                 moved = True
         return moved
 
+    def note_retro_skip(self, item_id: str) -> None:
+        """A `partial` whose every unmet bar waits on Matt (`session.waits_on_matt`) queues no
+        retro: say so once, as a `retro_skip` event the inbox shows, right after its finish."""
+        fin = self.log.last("finish", item=item_id)
+        if not self.cfg.auto_retros or fin is None or fin.detail.get("template") or fin.detail.get("resume_of"):
+            return
+        if session.waits_on_matt(self.log, fin) and not session.retro_trigger(self.log, fin):
+            self.log.append("retro_skip", item=item_id, waits=session.partial_parts(fin), by="conductor")
+
     def queue_retros(self) -> None:
         """Queue each repo's due retro, one at a time per repo, never while it is paused.
         Looked at again only after a finish, pause, resume or retro event."""

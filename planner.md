@@ -134,7 +134,7 @@ Edits (the default for `state.md`) are whole lines of the staged file, each old 
 
 ## Reading a report
 
-A report opens with `status:`, `blocks:`, `carry:`, `slow:`, `friction:`, `warnings:`, `pick:` (each line's reading: `docs/reports.md`, *For the planner*). `partial` is a real shortfall (a hard bar missed, even ~1 SE short), while a reported soft-band miss is `done`. Raise a `warnings:` line to Matt first, by kind, with the item's judgement; never a hold. `red` with `after_red: stop` holds the repo's queue until **clear R** (an `API error` red: **retry X**). A `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**). `pick:` → **pick X**.
+A report opens with `status:`, `blocks:`, `carry:`, `slow:`, `friction:`, `warnings:`, `partial:`, `pick:` (each line's reading: `docs/reports.md`, *For the planner*). `partial` is a real shortfall (a hard bar missed, even ~1 SE short), while a reported soft-band miss is `done`; `partial:` parts led `matt:` are calls to bring Matt (all such: no retro, inbox `no workflow retro for X`). Raise a `warnings:` line to Matt first, by kind, with the item's judgement; never a hold. `red` with `after_red: stop` holds the repo's queue until **clear R** (an `API error` red: **retry X**). A `conductor:` line overrides `status:` (`NOT on main`: kept work lands with **land X**). `pick:` → **pick X**.
 
 Don't summarize a report back: say what it changes, what the planner got wrong and what blocks, then fold the carry into `state.md` by request. Spec deviations with stated reasons are usually right; flag only those that block upcoming work.
 
