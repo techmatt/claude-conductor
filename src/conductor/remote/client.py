@@ -674,8 +674,14 @@ def main(argv: list[str] | None = None) -> int:
         return build_bundle(r, argv[1], Path(argv[2]))
     if argv[:1] == ["--cancel"] and r:
         return cancel(r, os.environ.get(settings.ITEM_VAR, ""), everyone="--all" in argv[1:])
-    if len(argv) < 3 or not argv[0].isdigit() or not argv[1].isdigit():
-        print(f"usage: {settings.COMMAND} <first seed> <count> <out file> [project args…]", file=sys.stderr)
+    rev = None
+    if argv[:1] == ["--at"] and len(argv) > 1:
+        rev, argv = argv[1], argv[2:]
+    elif argv[:1] and argv[0].startswith("--at="):
+        rev, argv = argv[0][5:], argv[1:]
+    if len(argv) < 3 or not argv[0].isdigit() or not argv[1].isdigit() or rev == "":
+        print(f"usage: {settings.COMMAND} [--at <commit>] <first seed> <count> <out file> [project args…]",
+              file=sys.stderr)
         return 2
     first, count, out, args = int(argv[0]), int(argv[1]), Path(argv[2]).resolve(), argv[3:]
     if r is None:
@@ -689,7 +695,7 @@ def main(argv: list[str] | None = None) -> int:
     CANCEL.clear()
     old = _on_stop(lambda *_: CANCEL.set())
     try:
-        code = _dispatch(r, first, count, out, args)
+        code = _dispatch(r, first, count, out, args, rev)
     finally:
         _on_stop(old)
     if code == 0:
@@ -787,12 +793,23 @@ def source(root: Path, key: str) -> None:
         "takes only committed code would run different code. Commit before you farm")
 
 
-def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str]) -> int:
+def rev_key(folder: Path, rev: str) -> tuple[Path, str]:
+    """`--at <rev>`: the repo's root and the commit's full sha (its key is the first 12, as a
+    clean tree at that commit would have)."""
+    def git(*a: str) -> str:
+        return subprocess.run(["git", *a], cwd=str(folder), capture_output=True, text=True, check=True,
+                              encoding="utf-8", errors="replace", **NO_WINDOW).stdout.strip()
+    return Path(git("rev-parse", "--show-toplevel")), git("rev-parse", "--verify", "--end-of-options", f"{rev}^{{commit}}")
+
+
+def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str], rev: str | None = None) -> int:
+    cancel(r, "", live=False)                    # a hard-killed run's job, closed now, not at its heartbeat's end
+    if rev:
+        return _dispatch_at(r, first, count, out, args, rev)
     try:
         root, key = repo_key(Path.cwd())
     except (subprocess.CalledProcessError, OSError):
         root, key = Path.cwd(), ""
-    cancel(r, "", live=False)                    # a hard-killed run's job, closed now, not at its heartbeat's end
     if key:
         source(root, key)
     pinned = None
@@ -808,6 +825,29 @@ def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[
     finally:
         if pinned:
             tree.release(pinned)
+
+
+def _dispatch_at(r: settings.Remote, first: int, count: int, out: Path, args: list[str], rev: str) -> int:
+    """`--at <rev>` (133): build and farm that commit, not the working tree, so both sides of a
+    paired read farm (aicomplete 270 ran its old side natively). Always in a farm tree, `pin` or not."""
+    try:
+        root, sha = rev_key(Path.cwd(), rev)
+    except (subprocess.CalledProcessError, OSError):
+        say(f"--at {rev}: not a commit in this repo")
+        return 2
+    key = sha[:12]
+    say(f"native from commit {key} (--at {rev}; the working tree is not used)")
+    try:
+        pinned, copied = tree.take(r.state, root, key, rev=sha)
+    except tree.TreeError as exc:
+        say(str(exc))
+        return 2
+    try:
+        say(f"runs from farm tree {pinned} (commit {key}; {copied} file(s) copied in)")
+        tree.add_args(root / r.dir, pinned / r.dir, args, missing_only=True)
+        return _dispatch_in(r, pinned, key, first, count, out, args, pinned)
+    finally:
+        tree.release(pinned)
 
 
 def _dispatch_in(r: settings.Remote, root: Path, key: str, first: int, count: int, out: Path, args: list[str],

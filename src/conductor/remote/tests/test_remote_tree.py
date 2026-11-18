@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 
-from conductor.remote import tree
+from conductor.remote import client, tree
 
 from .conftest import git
 from .test_remote_board import board, job
@@ -81,6 +81,30 @@ def test_an_argument_naming_an_ignored_file_is_copied_into_the_tree(farm, tmp_pa
     assert (a / "built.txt").read_text() == "spec"
     tree.release(a)
     (tmp_path / "code" / "built.txt").unlink()
+
+
+def test_at_a_commit_farms_that_commits_code_not_the_working_tree(farm, tmp_path, capsys):
+    """133: a paired read's old side farms from its own commit (aicomplete 270 ran it natively)."""
+    pinned_project(farm, tmp_path, pin="false")                          # `--at` takes a tree regardless
+    repo = tmp_path / "code"
+    old = git(repo, "rev-parse", "HEAD").strip()
+    (repo / "conf.txt").write_text("new\n", encoding="utf-8")
+    git(repo, "commit", "-q", "-am", "new conf")
+    (repo / "conf.txt").write_text("dirty\n", encoding="utf-8")         # an uncommitted edit: never read
+    code = client.main(["--at", old[:8], "0", "2", str(tmp_path / "a.txt")])
+    assert code == 0 and (tmp_path / "a.txt").read_bytes() == b"0 old\n1 old\n"
+    err = capsys.readouterr().err
+    assert f"native from commit {old[:12]} (--at {old[:8]}" in err and client.DIRTY not in err
+    assert not (repo / "built.txt").exists() and (repo / "conf.txt").read_text() == "dirty\n"
+    tree.add_args(repo, tree.take(farm.r.state, repo, "k9", rev=old)[0], ["conf.txt"], missing_only=True)
+    assert (farm.r.state / tree.TREES / "0" / "conf.txt").read_text() == "old\n"   # the commit's file stays
+    tree.release(farm.r.state / tree.TREES / "0")
+    assert client.main(["--at=HEAD","0", "1", str(tmp_path / "b.txt")]) == 0
+    assert (tmp_path / "b.txt").read_bytes() == b"0 new\n"
+    assert client.main(["--at", "nosuchrev", "0", "1", str(tmp_path / "c.txt")]) == 2
+    assert "--at nosuchrev: not a commit" in capsys.readouterr().err
+    assert not list(farm.r.state.glob("rev-*"))                          # the extraction is cleaned up
+    git(repo, "checkout", "conf.txt")
 
 
 def test_pin_false_runs_in_the_working_tree(farm, tmp_path, capsys):

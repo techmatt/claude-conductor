@@ -114,7 +114,9 @@ def test_the_preambles_say_how_to_wait_estimate_and_write(env):
     assert "`minutes` near a subagent's length, never a path nothing writes" in light
     assert ("once you have a plan, an estimate by rate (`5:40pm (by rate)`); `(to the cap)` only when you expect "
             "to use the whole time limit") in full
-    assert "Every file write goes through Write or Edit, and a script that writes files runs from a file" in full
+    assert "Every file write goes through Write or Edit. Never `sed -i`, a heredoc into a file" in full
+    assert "For a scripted change, Write a small script file, then run it." in full          # 133
+    assert "(Write a script, then run it)" in light
     assert "Write files with Write/Edit only: hooks refuse heredoc, `-c`/`-e` and `sed -i` writes" in light
 
 

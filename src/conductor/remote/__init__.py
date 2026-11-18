@@ -37,7 +37,9 @@ exactly what that command would, spread over any remote workers that are connect
 none is). Run seeded batches through it, not the native command. Its last stderr line says where
 the shards ran; its first, the commit the native exe is built from. Commit before you farm a change:
 a project's build may take only committed code (aicomplete 204 ran every read natively); on a dirty
-tree it warns (`farm-seeds: warning: uncommitted changes`). To stop a run, `farm-seeds --cancel`
+tree it warns (`farm-seeds: warning: uncommitted changes`). `farm-seeds --at <commit> <first seed> …`
+builds and farms that commit instead, not your working tree: a paired read's older side farms too.
+To stop a run, `farm-seeds --cancel`
 (this item's runs): it closes the broker job and kills the native shards, which killing the shell
 may not. If the broker drops out mid-job, it finishes the remaining shards on the main box and
 says so (`farm-seeds: the broker dropped out mid-job ...`): a slower run, not a failure.

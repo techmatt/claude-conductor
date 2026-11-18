@@ -68,10 +68,10 @@ The box. Scratch and run output go in `out/{item_name}/` (git-ignored); anything
 `out/` is an earlier item's, never a fresh result. Working papers the prompt asks for go
 under the repo's results folder (`experiments/results/{item_name}/`), committed; read outputs
 a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Every
-file write goes through Write or Edit, and a script that writes files runs from a file:
-conductor's hooks refuse `sed -i`, a heredoc into a file and a heredoc or `-c`/`-e` script
-that writes one, as they do %TEMP%, elevation, `&` jobs, sleeps and the like, each saying
-what to do instead. Heavy compute
+file write goes through Write or Edit. Never `sed -i`, a heredoc into a file, or a heredoc or
+`-c`/`-e` script that writes one: conductor's hooks refuse each, and each try is a lost call.
+For a scripted change, Write a small script file, then run it. The hooks refuse %TEMP%,
+elevation, `&` jobs, sleeps and the like too, each saying what to do instead. Heavy compute
 (sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
 PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) and leaves {free}
 hardware threads free: sims and tests at {threads} threads, half that while another item runs
@@ -161,7 +161,7 @@ Progress: a `progress` (mcp__conductor__progress) line at start and on launching
 Bounds. A skip in prompt or message binds (a default overriding the prompt starts
 `default overrides prompt: <line>`). Scratch: `out/{item_name}/`. Heavy compute: `nice -n 10`,
 {threads} threads, a full suite only between sims. Write files with Write/Edit only: hooks
-refuse heredoc, `-c`/`-e` and `sed -i` writes, %TEMP% and the like, saying why.{leftover}
+refuse heredoc, `-c`/`-e` and `sed -i` writes (Write a script, then run it), %TEMP% and the like.{leftover}
 
 Latitude. Conflicts: locked rulings, goal, done-when bars, method; report what gave way,
 don't ask. Score bars strictly; check a numeric target is reachable before chasing it. Three

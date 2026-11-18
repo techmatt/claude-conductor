@@ -28,7 +28,7 @@ and not enforced.
 
 | Rule | Origin | Lives |
 |---|---|---|
-| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried) | hook; since 128 a sentence in full and a clause in light naming each refused form |
+| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried); 133 (aicomplete 267, 270 each lost a call) | hook; since 128 a sentence in full and a clause in light naming each refused form; since 133 a plain "Never …: the hooks refuse each", and "Write a script, then run it" in both |
 | No `%TEMP%`, `$TMP`, `/tmp`, `mktemp` or temp-file APIs | 61 | hook; a clause in both |
 | Never `isolation: worktree` (it lands in the main checkout) | — (aicomplete 040) | hook only |
 | Helpers never `git checkout`/`restore`/`switch`/`stash`/`clean -f`/`reset --hard` | 86 (aicomplete 144), 122 | hook only |
@@ -40,7 +40,8 @@ and not enforced.
 | `~/.claude`: config only, never memory or a `CLAUDE.md`; lessons in `carry:` | 74 (aicomplete 087) | hook; "lessons go in `carry:`" in full |
 | Only the report (and `write_roots`) in the control folder | —, 114 (`write_roots`) | hook (file tools) and the tamper guard; one line in each |
 | Readonly items commit nothing | 79 | hook; the readonly line |
-| A `remote` item farms seeded runs, not the native sim directly | 124 (aicomplete 249) | the message hook: one reminder, never a denial (a native run is the fallback; `remote-workers.md`) |
+| A `remote` item farms seeded runs, not the native sim directly | 124 (aicomplete 249) | the message hook: one reminder, never a denial (a native run is the fallback; `remote-workers.md`); since 133 it names `farm-seeds --at <commit>` for an older revision (aicomplete 270) |
+| Revisit a taken design default with time left | 133 (aicomplete 271) | the message hook: one nudge at the first report write with over an hour left (`questions.md`, *Revisit*) |
 
 ### In the preamble text
 

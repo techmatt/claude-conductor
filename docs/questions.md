@@ -70,6 +70,14 @@ Options:
   and the item's *Unreviewed reports* line, `done` or `partial`, says `commit rests on open
   design default: <id>` so the planner raises it at once (84, `inbox.md`);
   answering it works as before. Before 83, aicomplete 128's two read as blocking with 128 done.
+  Matt's ruling given in chat still goes to `<id>.answer.md` (planner.md, *Questions*): it
+  records the ruling and clears the question (aicomplete 271's lingered ~2 h on "no action needed").
+- **Revisit** (133). The lead's first Write or Edit of its report with over an hour of its time
+  limit left, while a design question it asked holds a taken default, gets one hook message
+  (`talk.revisit_note`, marker `.conductor/touch/<item>.revisit`): take the next in-scope step
+  on what that default deferred, then update the report (aicomplete 271 deferred part of its
+  goal two minutes in and finished with an hour of its 2 h unused). A staged "revisit at
+  <time> if ahead" on the ask was weighed and not built: the report-time nudge covers it.
 - **Closed.** An item that ends with a question still open (killed, crashed) has it
   closed by the daemon (`question_closed`).
 - **A message never answers it** (58; before, a tell became the answer, and aicomplete's

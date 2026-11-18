@@ -32,6 +32,19 @@ is now; N file(s) copied in)`. `src/conductor/remote/tree.py`; tests `test_remot
 - The item's own `target/` is never built or locked by a farm: an item that runs the native exe
   itself builds it itself. `pin = false` runs in the working tree as before 130.
 
+## A named commit: `--at` (133)
+
+`farm-seeds --at <commit> <first seed> <count> <out file> [args…]` (or `--at=<commit>`) builds
+and farms that commit instead of the working tree, so both sides of a paired read farm
+(aicomplete 270 ran its old-revision side natively and was flagged for it). The commit's files
+come from `git archive` into a farm tree (`tree.take(..., rev=)`), always, `pin` or not; its
+key is the commit's first 12 hex digits, as a clean tree there would have, so the bundle
+cache is shared. An argument naming a file the commit lacks is copied in from the working
+tree; one it has keeps the commit's version. Its first line reads `farm-seeds: native from
+commit <sha> (--at <rev>; the working tree is not used)`; a rev that isn't a commit exits 2.
+Synced from a commit, a tree compares files by hash, never size and mtime: `git archive`
+stamps every file with its commit time, so two commits in the same second looked unchanged.
+
 ## The commit it runs from
 
 Its first stderr line names the commit the native command runs from:

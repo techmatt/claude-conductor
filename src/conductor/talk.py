@@ -435,11 +435,56 @@ def hook(control: Path, item: str, event: dict | None = None, native: list[str] 
     if subagent_call(event or {}):
         return None
     remind = farm_note(control, item, event or {}, native, flags) if native else None
+    revisit = revisit_note(control, item, event or {})
     messages = take(control, item, "hook")
-    if not messages and not remind:
+    if not messages and not remind and not revisit:
         return None
-    text = "\n\n".join(t for t in (remind, context_text(messages) if messages else "") if t)
+    text = "\n\n".join(t for t in (remind, revisit, context_text(messages) if messages else "") if t)
     return json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}})
+
+
+REVISIT_SECONDS = 3600      # time left at the report for a taken design default to be revisited
+REVISIT = ("conductor: you are writing your report with about {left} of the time limit left, and you took "
+           "the default on design question {ids}, held for Matt. Where that default deferred part of your goal, "
+           "take the next in-scope step on that part now (the default stands until he rules), then update the "
+           "report and say what you did; if nothing in scope is left there, say so. This reminder comes once.")
+
+
+def revisit_file(control: Path, item: str) -> Path:
+    return Path(control) / ".conductor" / "touch" / f"{_key(item)}.revisit"
+
+
+def revisit_note(control: Path, item: str, event: dict) -> str | None:
+    """The lead's first Write or Edit of its report with over `REVISIT_SECONDS` left, while a
+    design question it asked holds a taken default: one nudge to revisit what the default
+    deferred (133: aicomplete 271 deferred part of its goal two minutes in and finished with an
+    hour unused)."""
+    ti = event.get("tool_input")
+    if event.get("tool_name") not in ("Write", "Edit", "MultiEdit") or not isinstance(ti, dict):
+        return None
+    rec = run_record(control, item)
+    if not rec or not rec.get("report") or not rec.get("deadline") or not isinstance(ti.get("file_path"), str):
+        return None
+    if _norm(str(Path(ti["file_path"]).resolve())) != _norm(str(Path(rec["report"]).resolve())):
+        return None
+    marker = revisit_file(control, item)
+    if marker.exists():
+        return None
+    try:
+        left = parse_stamp(rec["deadline"]).timestamp() - time.time()
+    except (ValueError, TypeError):
+        return None
+    if left < REVISIT_SECONDS:
+        return None
+    from . import questions
+    held = [q.id for q in questions.scan(control) if q.item == item and q.design and q.is_open and q.default]
+    if not held:
+        return None
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(stamp() + "\n", encoding="utf-8", newline="\n")
+    mins = int(left // 60)
+    return REVISIT.format(left=f"{mins // 60} h {mins % 60:02d} min" if mins >= 60 else f"{mins} min",
+                          ids=", ".join(f"`{i}`" for i in held))
 
 
 def farm_file(control: Path, item: str) -> Path:

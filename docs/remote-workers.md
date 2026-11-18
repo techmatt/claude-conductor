@@ -81,7 +81,7 @@ only committed code: aicomplete 204 ran every read natively and starved the box)
 a lost broker means the main box finishes, said (126; `remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
 `.conductor/remote/seeds.jsonl`, which the *Kept reads* rows read (`worktrees.md`).
 
-The farm tree it runs from (`pin`, 130), its commit, dirty-tree warning, `--cancel`: `farm-seeds.md`.
+Its farm tree (`pin`, 130), commit, `--at <commit>` (133), dirty-tree warning, `--cancel`: `farm-seeds.md`.
 
 A `remote` item that runs the native sim itself (the `native` executable's name, or any
 executable under `out/`, with a seed range or game count: the flags `native` puts before

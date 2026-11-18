@@ -20,10 +20,13 @@ them); none free: a new one. `trees.lock` serialises taking and releasing."""
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
 import subprocess
+import tarfile
+import tempfile
 import time
 from pathlib import Path
 
@@ -106,18 +109,19 @@ def _sha(path: Path) -> str:
     return h.hexdigest()
 
 
-def sync(root: Path, tree: Path, files: dict) -> tuple[dict, int]:
-    """Make `tree` hold `root`'s files as they are now. `files` is what the tree copied last
-    time; returns the new map and how many files were copied or removed."""
+def sync(root: Path, tree: Path, files: dict, listing: list[str] | None = None) -> tuple[dict, int]:
+    """Make `tree` hold `root`'s files as they are now (`listing`, else `source_files`). `files`
+    is what the tree copied last time; returns the new map and how many files were copied or removed."""
     new, changed = {}, 0
-    for rel in source_files(root):
+    for rel in (source_files(root) if listing is None else listing):
         src, dst = root / rel, tree / rel
         try:
             st = src.stat()
         except OSError:
             continue
         old = files.get(rel)
-        if old and old[0] == st.st_size and old[1] == st.st_mtime_ns and dst.is_file():
+        # An extracted commit's mtimes are its commit time (`git archive`), so a listing is hashed.
+        if listing is None and old and old[0] == st.st_size and old[1] == st.st_mtime_ns and dst.is_file():
             new[rel] = old
             continue
         sha = _sha(src)
@@ -135,9 +139,35 @@ def sync(root: Path, tree: Path, files: dict) -> tuple[dict, int]:
     return new, changed
 
 
-def take(state: Path, root: Path, key: str, pid: int | None = None) -> tuple[Path, int]:
+def extract(root: Path, rev: str, dest: Path) -> list[str]:
+    """`rev`'s committed files (`git archive`) unpacked under `dest`; returns their paths.
+    `farm-seeds --at` (133): a paired read's older side farms from its own commit."""
+    data = subprocess.run(["git", "-C", str(root), "archive", "--format=tar", rev], capture_output=True,
+                          check=True, **NO_WINDOW).stdout
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        tar.extractall(dest, filter="data")
+        return sorted(m.name for m in tar.getmembers() if m.isfile())
+
+
+def take(state: Path, root: Path, key: str, pid: int | None = None, rev: str | None = None) -> tuple[Path, int]:
     """A tree holding `key`'s code, held for `pid` (this process by default) until `release`.
-    Returns the tree (the repo root's copy) and the files copied into it now."""
+    Returns the tree (the repo root's copy) and the files copied into it now. With `rev`, the
+    code is that commit's, not the working tree's."""
+    if rev:
+        state.mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(prefix="rev-", dir=state))
+        try:
+            try:
+                listing = extract(root, rev, tmp)
+            except (OSError, subprocess.CalledProcessError, tarfile.TarError) as exc:
+                raise TreeError(f"commit {rev} could not be read: {exc}") from exc
+            return _take(state, tmp, key, pid, listing)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return _take(state, root, key, pid, None)
+
+
+def _take(state: Path, root: Path, key: str, pid: int | None, listing: list[str] | None) -> tuple[Path, int]:
     pid = pid or os.getpid()
     trees = state / TREES
     with _Lock(state / LOCK):
@@ -161,7 +191,7 @@ def take(state: Path, root: Path, key: str, pid: int | None = None) -> tuple[Pat
         tree = trees / meta.stem
         tree.mkdir(parents=True, exist_ok=True)
         try:
-            files, changed = sync(root, tree, data.get("files") or {})   # the same key: a stat per file, no copy
+            files, changed = sync(root, tree, data.get("files") or {}, listing)   # the same key: a stat per file, no copy
         except (OSError, subprocess.CalledProcessError) as exc:
             raise TreeError(f"the farm tree {tree} could not be synced: {exc}") from exc
         holds = {k: v for k, v in (data.get("holds") or {}).items() if _alive(int(k), v)}
@@ -170,13 +200,16 @@ def take(state: Path, root: Path, key: str, pid: int | None = None) -> tuple[Pat
     return tree, changed
 
 
-def add_args(src: Path, dst: Path, args: list[str]) -> None:
+def add_args(src: Path, dst: Path, args: list[str], missing_only: bool = False) -> None:
     """An argument naming a file the tree lacks (a spec in a git-ignored folder, say) is copied
-    in at the same place, so the native command finds it from the tree as from the repo."""
+    in at the same place, so the native command finds it from the tree as from the repo.
+    `missing_only` (`--at`): a file the commit has keeps the commit's version."""
     for a in args:
         try:
             p = (src / a).resolve()
             rel = p.relative_to(src.resolve())
+            if missing_only and (dst / rel).exists():
+                continue
             if p.is_file() and not ((dst / rel).is_file() and (dst / rel).read_bytes() == p.read_bytes()):
                 (dst / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(p, dst / rel)

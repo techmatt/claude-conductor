@@ -124,7 +124,7 @@ Edits (the default for `state.md`) are whole lines of the staged file, each old 
 
 ## While items run
 
-- **Questions** (`docs/questions.md`): answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters: a new item). Answer *default overrides prompt* ones first. A *design* one is Matt's call, relayed, never yours. *Staging questions: open rulings* are raised like open questions; **amend** answers them.
+- **Questions** (`docs/questions.md`): answer once (**answer Q**); after its default it is `late` and changes nothing (if it matters: a new item). Answer *default overrides prompt* ones first. A *design* one is Matt's call, relayed, never yours, open past its default till he rules: his ruling in chat is still **answer Q** (it clears it). *Staging questions: open rulings* are raised like open questions; **amend** answers them.
 - **Progress**: the latest line (with ETA) and outline, on *Now*; bold-warn when the ETA can't be right. **tell** and **outline** land after the lead's next tool call (`docs/progress.md`); longer, or not started: **amend**.
 - **Pause**: when Matt needs the box, **pause R** (never a tell asking it to wait); it holds across sessions until **resume R**.
 - **Night shift** (`docs/night-shift.md`): a readonly watch item judges stalls and drift; it may tell, answer with an answer already given, toast, or draw a backlog item into an empty queue. **Autopilot** gates only the draws.
@@ -193,7 +193,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 |---|---|
 | **check reports** [verbose] | Unreviewed reports (item, status, finish time), oldest first, then running or staged as "not in yet"; verbose: a few lines each. |
 | **process X** | *Reading a report* for X, the carry by request, then `reviewed: <repo>/<NNN_name>`; recommends the matching template if `slow:` causes now repeat. |
-| **process next** | **process X** for the first unreviewed report (dependencies first, then finish order); with none, conductor's first. |
+| **process next** / **review next** | **process X** for the first unreviewed report (dependencies first, then finish order); with none, conductor's first. |
 | **ask X: …** | Queues `resume: <repo>/<NNN_name>`, Matt's words as body: X's finished session, forked, answers as a readonly report. |
 | **pick X** / **retire X** | Signal `pick: <repo>/<manifest path>` (X: the item whose report has `pick:`, or the manifest's name; one pending and plain "pick": that one) / `retire: <name>`. |
 | **read picks X** | Reads `picks\<name>.choices.json` (per row `id`, `key`, `changed`, `note`): what changes, row by row, for the next prompt; not saved yet: says so. |

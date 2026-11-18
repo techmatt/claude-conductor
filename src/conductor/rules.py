@@ -173,7 +173,8 @@ COUNTS_RE = re.compile(r"(?:^|\s)--?(?:seeds?|games?|count|first|runs)\b[=\s]*\d
                        r"|\s\d+\s+\d+(?:\s|$)", re.IGNORECASE)    # a flag, a range, or a positional `first count`
 FARM_REMINDER = ("conductor: this item is `remote`: a seeded run of the project's native sim ({cmd}) runs on "
                  "the main box alone, and the idle remote workers get nothing. Run seeded batches through "
-                 "`farm-seeds <first seed> <count> <out file> [args…]` (same output); a native run is the "
+                 "`farm-seeds <first seed> <count> <out file> [args…]` (same output; `farm-seeds --at <commit> …` "
+                 "for an older revision, such as a paired read's old side); a native run is the "
                  "fallback when it can't farm. Say in `friction:` why, if you keep running it directly.")
 
 
