@@ -24,7 +24,7 @@ Planners write prompts to `prompts/inbox/<YYYYMMDD-HHMMSS>-<project>-<slug>.md`,
 
 - "Run next prompt" (and the like): `uv run python tools/prompts.py next`. It lists what's waiting, oldest first, takes the oldest, numbers it (`prompts/NN_<slug>.md`) and writes the ledger's `start` line. "Run <slug>" / "run <file>": `... run <name>`, out of order (an old numbered prompt too).
 - It refuses while the ledger has a `start` with no `done`: relay the name and start time. Only on Matt's word that it's stale ("run anyway") add `--anyway`, which records it.
-- Then say "Running NN_slug", run exactly that file as if pasted, end with `Report written to <path>`, and never chain on. Say how many still wait from a fresh `list` at the end.
+- Then say "Running NN_slug", run exactly that file as if pasted, end with `Report written to <path>`, and never chain on. End with the line `X prompts still waiting`, X from a fresh `list` (`0 prompts still waiting` when none).
 - Nothing waiting: say so in one line and do nothing else.
 
 There is no "run all prompts" phrase.
