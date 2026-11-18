@@ -84,7 +84,7 @@ def test_refusals_are_events_not_rejected_signals(env, shown, tmp_path):
         ("text", str(env.repo / "docs"), "is a folder, not a file"),
         ("url", "http://example.com/", "only https://"),
         ("url", "ftp://localhost/x", "only https://"),
-        ("url", "file:///C:/Windows", "only https://"),
+        ("url", (tmp_path / "outside" / "secret.txt").as_uri(), "is outside"),     # 129: file:/// checked as `file`
         ("url", "https://user:pw@example.com/", "user name or password"),
         ("url", "https://", "only https://"),
     ]

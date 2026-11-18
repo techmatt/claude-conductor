@@ -162,7 +162,8 @@ class MessagesMixin:
         running there is told to commit, stop what it started and `wait`; its clock (max_hours,
         the stall checks) stops until `resume:`."""
         if ev := state.scan(self.cfg, self.log).paused.get(repo):
-            raise ValueError(f"pause: {repo} is already paused (since {clock(ev.ts)})")
+            self._noop(f"{repo} is already paused (since {clock(ev.ts)}); nothing changed")     # 129
+            return
         runs = self._pausable(repo)
         self.log.append("pause", repo=repo, paths=[rel], items=[r.item_id for r in runs], by=self._by or "unknown")
         for run in runs:
@@ -174,7 +175,8 @@ class MessagesMixin:
         """`resume: <repo>`: the queue is released, and each paused item's deadline moves
         later by its pause before it is told to carry on."""
         if repo not in state.scan(self.cfg, self.log).paused:
-            raise ValueError(f"resume: {repo} is not paused")
+            self._noop(f"{repo} is not paused; nothing changed")      # 129
+            return
         runs = [r for r in self._pausable(repo) if r.rec.get("paused_at")]
         held = {r.item_id: (now() - parse_stamp(r.rec["paused_at"])).total_seconds() for r in runs}
         self.log.append("resume", repo=repo, paths=[rel], items=sorted(held),

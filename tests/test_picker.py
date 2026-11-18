@@ -657,8 +657,9 @@ def test_retire_signal_for_a_picker_with_no_series(env, monkeypatch):
     assert ev.detail["by"] == "planner" and ev.paths == ["signals/b.signal"] and "later" not in ev.detail
     assert not (env.repo / "picks" / "m.json").exists() and not (env.repo / "art" / "d.png").exists()
     assert picks.pending(env.cfg, state.scan(env.cfg, env.d.log), env.d.log) == []
-    send(env, "retire: art_alts", "c.signal")
-    assert "already retired" in env.events("invalid")[-1].detail["error"]
+    send(env, "retire: art_alts", "c.signal")                   # a no-op said in the receipt (129)
+    assert not (env.control / "signals" / "c.signal.bad").exists() and len(env.events("pick_retired")) == 1
+    assert "already retired" in (env.control / "receipts" / "signals" / "c.md").read_text(encoding="utf-8")
     # A manifest left under a retired name (git tracks it) is refused, never served with broken tiles.
     write_manifest(env.repo)
     send(env, f"pick: {REF}", "d.signal")

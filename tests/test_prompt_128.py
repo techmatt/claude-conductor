@@ -131,4 +131,4 @@ def test_reviewed_takes_a_comma_list(env):
     send(env, "by: planner\nreviewed: 001, code/002_b,003_c", "list")
     assert not bad(env, "list")
     assert [e.item for e in env.events("reviewed")] == ["code/001_a", "code/002_b", "code/003_c"]
-    assert "already reviewed" in env.events("warning")[-1].detail["note"]       # 001: a note, as one alone
+    assert "already reviewed" in read_text(env.control / "receipts" / "signals" / "list.md")   # 001: a no-op (129)

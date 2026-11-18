@@ -30,6 +30,7 @@ tool: cards                  # start project tool `cards` if needed, open its UR
 pick: code/picks/art_alts_009.json   # serve that picker manifest and open it in the browser
 retire: art_alts_009         # delete that picker's manifest and images (picks.md, Retiring)
 open: reveal C:\Code\x\out.png   # a desktop action on a checked path (below)
+open: file C:\Code\x\page.html?missing   # a local page in the browser, its query kept (open.md)
 notify: ready when you are   # a desktop toast
 stop: daemon                 # the daemon exits cleanly, as on Ctrl+C
 restart: daemon              # the daemon restarts itself at its next safe point, adopting executors (restart.md)
@@ -86,8 +87,8 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   It marks each finished item's report as reviewed and logs `reviewed` (item, `finish`:
   the finish event's id, `status`, `by`: the file's `by:` or `unknown`). Refused for an
   item that has not finished (queued, staged or running) or is unknown. An item already
-  reviewed is a no-op: a `warning` names the earlier `reviewed` event and the file is
-  not rejected. Reviewed state is derived from the event log (an item is reviewed once a
+  reviewed is a no-op said only in the receipt's `result` (129; before, a `warning`),
+  naming the earlier `reviewed` event (*Tidy-ups*, below). Reviewed state is derived from the event log (an item is reviewed once a
   `reviewed` event names it), so it survives restarts, and it is independent of the
   read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
   waits on the read mark. Several `reviewed:` lines may share a file. The event keeps
@@ -109,7 +110,7 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   value fails the syntax check.
 - **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
   It never answers a question the item is waiting on (`questions.md`).
-- **pause** / **resume** — `pause: <repo>`, `resume: <repo>` (refused when already so):
+- **pause** / **resume** — `pause: <repo>`, `resume: <repo>` (a no-op when already so, 129):
   `night-shift.md`, *Pause*.
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,
   *Outline*.
@@ -128,8 +129,9 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
 - **audit_used** — `audit_used: <item>[, <item> …]` (each resolved as for `reviewed`) or
   `<repo>/all` (every unused note of the repo at that moment): notes an item already handled,
   so they leave *audit pending* and no cleanup is handed them. Logs one `audit_used` per repo
-  with no item (`by`). Refused, with nothing marked, for an item with no notes, one already
-  used or claimed by a running cleanup, or a repo with no unused notes.
+  with no item (`by`). Refused, with nothing marked, for an item with no notes or one
+  claimed by a running cleanup; notes already used, or a repo with none unused, are a
+  no-op (129).
 - **checkpoint** — `checkpoint: <label>` (any text, a ` # ` included, or none): see
   `inbox.md`.
 - **session** — `session: <label>` (any text, or none): a checkpoint with that label,
@@ -143,7 +145,7 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   or the file is rejected at parse time; a manifest that fails validation rejects it
   when applied, with the reason.
 - **retire** — `retire: <picker name>`: deletes that picker's manifest and images; see
-  `picks.md`, *Retiring*. An unknown or already retired name is refused.
+  `picks.md`, *Retiring*. An unknown name is refused; an already retired one is a no-op.
 - **open** — `open: <verb> <path or URL>`: one named desktop action on a checked path
   (`folder`, `reveal`, `file`, `text`, `url`); see `open.md`.
 - **notify** — `notify: <text>`: a desktop toast; see `open.md`.
@@ -157,7 +159,20 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   (mode, was), which every later decision reads (`night-shift.md`, *Autopilot*).
 - **ack** — `ack: invalid [#<event> …]` (none named: every live one) logs `ack`; those
   rejected signals leave the app's "N rejected" and the inbox (`inbox.md`), not Events.
-  A non-live id rejects the file. The app's **Dismiss** sends `ack: invalid`.
+  An id already clear (acknowledged, past a checkpoint, never a rejection), or a plain
+  `ack: invalid` with none live, is a no-op: `nothing to acknowledge …` in the receipt,
+  no event (129; before, it rejected the file and so made a new notice). The app's
+  **Dismiss** sends `ack: invalid`.
+
+**Tidy-ups** (129): a line whose wish already holds logs nothing (so no notice) and is
+named in the receipt's `result`: `ack:` of a clear id, `reviewed:`, `retire:`,
+`audit_used:` again (or `<repo>/all` with none), `pause:` when paused, `resume:` when not.
+(`run|tool: X stop` of one not running logs `run_stop` with a note.) Still refused: a
+wrong thing (unknown, or not finished).
+
+**Refusals end with the accepted form** (129): an `invalid` error (the receipt's
+`reason`) ends `; use <form>`, the failing key's (`daemon_signals.FORMS`) or, for an
+unknown key, the nearest known keys'; an `open_refused` reason, its own (`open.md`).
 
 Conductor processes a file once it reads and has stopped changing (a `planner-*` one at
 0.25s, any other at 1s: `receipts.md`, *When*), then deletes it. The whole file is syntax-checked first: an unknown key or malformed line rejects it with

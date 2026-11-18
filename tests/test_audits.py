@@ -139,16 +139,20 @@ def test_audit_used_signal_marks_notes_by_hand(env):
                          encoding="utf-8").stdout
     assert f"used by planner (#{used.id})" in out
     # A ref refused anywhere in the line marks nothing: used already, no notes, or not a note.
-    for n, line in enumerate(("code/001_a", "code/003_c, code/004_plain", "code/999", "nope/all")):
+    for n, line in enumerate(("code/003_c, code/004_plain", "code/999", "nope/all")):
         env.signal(f"bad{n}.txt", f"audit_used: {line}")
         env.tick_until(lambda: len(env.events("invalid")) == n + 1)
-    assert len(env.events("audit_used")) == 1
+    env.signal("again.txt", "audit_used: code/001_a")       # used already: a no-op said in the receipt (129)
+    env.tick_until(lambda: (env.control / "receipts" / "signals" / "again.txt.md").exists())
+    assert "already used" in (env.control / "receipts" / "signals" / "again.txt.md").read_text(encoding="utf-8")
+    assert len(env.events("audit_used")) == 1 and len(env.events("invalid")) == 3
     env.signal("all.txt", "audit_used: code/all")
     env.tick_until(lambda: len(env.events("audit_used")) == 2)
     assert env.events("audit_used")[-1].detail["notes"] == ["code/003_c"]
     assert "audit pending" not in (env.control / "inbox.md").read_text(encoding="utf-8")
-    env.signal("none.txt", "audit_used: code/all")
-    env.tick_until(lambda: "no unused audit notes" in (env.events("invalid") or [None])[-1].detail["error"])
+    env.signal("none.txt", "audit_used: code/all")         # none left: a no-op (129)
+    env.tick_until(lambda: (env.control / "receipts" / "signals" / "none.txt.md").exists())
+    assert "no unused audit notes" in (env.control / "receipts" / "signals" / "none.txt.md").read_text(encoding="utf-8")
     env.queue("005_clean", "", template="cleanup")
     env.tick_until(lambda: env.events("hold"))
     assert "no unused audit notes" in env.events("hold")[-1].detail["reason"]

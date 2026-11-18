@@ -72,7 +72,7 @@ def test_retry_resumes_a_kept_red_item_lands_it_and_lifts_its_hold(env):
     assert "code" not in state.scan(env.d.cfg, env.d.log).red_hold
     env.signal("r2.md", "retry: code/001_red")
     env.tick_until(lambda: env.events("invalid"))
-    assert env.events("invalid")[-1].detail["error"] == "retry: code/001_red finished done, not red"
+    assert env.events("invalid")[-1].detail["error"].startswith("retry: code/001_red finished done, not red; use `retry:")
 
 
 def test_what_counts_as_an_api_failure(tmp_path):

@@ -75,8 +75,9 @@ def test_pause_and_resume_stop_the_queue_and_the_clock(env):
     assert "**PAUSED** since" in read_text(env.control / "inbox.md")
     snap = model.Project(env.control).snapshot()
     assert list(snap.paused) == ["code"] and snap.repo_names == ["code"]
-    env.signal("cli-2.signal", "by: cli\npause: code")             # once is enough
-    env.tick_until(lambda: (env.control / "signals" / "cli-2.signal.bad").exists())
+    env.signal("cli-2.signal", "by: cli\npause: code")             # once is enough: a no-op (129)
+    env.tick_until(lambda: (env.control / "receipts" / "signals" / "cli-2.md").exists())
+    assert "already paused" in receipt(env, "cli-2.signal") and len(env.events("pause")) == 1
     run.rec["deadline"] = before = stamp(now() + timedelta(minutes=10))
     time.sleep(1)
     env.signal("cli-3.signal", "by: cli\nresume: code")
@@ -87,8 +88,10 @@ def test_pause_and_resume_stop_the_queue_and_the_clock(env):
     text = report(env, "001_work")
     assert "From conductor: RESUME" in text and "No message yet" not in text
     assert env.finished("code/001_work").detail["status"] == "done"
-    env.signal("cli-4.signal", "by: cli\nresume: code")            # not paused
-    env.tick_until(lambda: (env.control / "signals" / "cli-4.signal.bad").exists())
+    env.signal("cli-4.signal", "by: cli\nresume: code")            # not paused: a no-op (129)
+    env.tick_until(lambda: (env.control / "receipts" / "signals" / "cli-4.md").exists())
+    assert "code is not paused; nothing changed" in receipt(env, "cli-4.signal")
+    assert len(env.events("resume")) == 1 and not (env.control / "signals" / "cli-4.signal.bad").exists()
 
 
 @pytest.mark.slow

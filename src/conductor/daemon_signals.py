@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -32,6 +33,56 @@ PLANNER_SIGNAL_SETTLE_SECONDS = 0.25
 def signal_settle(name: str) -> float:
     return PLANNER_SIGNAL_SETTLE_SECONDS if name.startswith("planner-") else SIGNAL_SETTLE_SECONDS
 AUDIT_LATE = "From conductor: this item now keeps audit notes, for the rest of its run.\n\n"   # `audit:`
+
+
+# The accepted form of each verb, ending a refusal that doesn't already name one (129), so a
+# retry is one step and never a guess.
+ITEM = "<repo>/<NNN_name>"
+FORMS = {
+    "read": "`read: <event id>` or `read: latest`",
+    "clear": "`clear: <repo>`",
+    "land": f"`land: {ITEM}` (a finished red item)",
+    "retry": f"`retry: {ITEM}` (a finished red item)",
+    "approve": "`approve: <NNN>` (a file in proposed/)",
+    "cancel": f"`cancel: {ITEM}` (a queued or proposed item)",
+    "reorder": "`reorder: <repo|proposed> <item> <item> ...`",
+    "review": f"`review: all` or `review: {ITEM}` (a finished item)",
+    "reviewed": f"`reviewed: {ITEM}[, ...]` (finished items)",
+    "session_opened": f"`session_opened: {ITEM}` (a finished item)",
+    "tell": f"`tell: {ITEM} <message>` (a running item)",
+    "outline": f"`outline: {ITEM}` (a running item)",
+    "audit": f"`audit: {ITEM}` (a running item)",
+    "audit_used": f"`audit_used: {ITEM}[, ...]` or `audit_used: <repo>/all`",
+    "checkpoint": "`checkpoint: <label>`",
+    "session": "`session: <label>`",
+    "run": "`run: <target>` or `run: <target> stop`",
+    "tool": "`tool: <name>` or `tool: <name> stop`",
+    "pick": "`pick: <repo>/<manifest path>`",
+    "retire": "`retire: <picker name>`",
+    "open": "`open: folder|reveal|file|text <path>` or `open: url <URL>` (a local page with a query: "
+            "`open: file <path>?<query>`)",
+    "notify": "`notify: <text>`",
+    "stop": "`stop: daemon`",
+    "restart": "`restart: daemon`",
+    "watch": "`watch: now`",
+    "push": "`push: <repo>` or `push: control`",
+    "autopilot": "`autopilot: off|night|always`",
+    "ack": "`ack: invalid` or `ack: invalid #<event> ...`",
+    "pause": "`pause: <repo>`",
+    "resume": "`resume: <repo>`",
+}
+
+
+def with_form(key: str | None, error: str) -> str:
+    """`error`, ending with the form conductor would accept: `key`'s, or for an unknown key
+    the nearest known ones (129)."""
+    if "; use `" in error or "; use one of" in error:
+        return error
+    if key in FORMS:
+        return f"{error}; use {FORMS[key]}"
+    near = difflib.get_close_matches(key or "", list(FORMS), n=2, cutoff=0.5)
+    return f"{error}; use " + (" or ".join(FORMS[k] for k in near) if near else
+                               "one of the known keys (docs/signals.md): " + ", ".join(FORMS))
 
 
 def _strip_comment(value: str) -> str:
@@ -88,7 +139,7 @@ class SignalsMixin:
             except OSError:
                 continue
             rel = f"signals/{f.name}"
-            by, applied = None, []
+            by, applied, key = None, [], None
             with self._receipt(rel, always=True):       # every event its lines log, or why it was refused
                 try:
                     text = read_text(f)
@@ -103,9 +154,11 @@ class SignalsMixin:
                             applied.append(f"{key}: {value}")
                     retry_io(f.unlink)
                 except (ValueError, UnicodeDecodeError, OSError) as exc:
+                    # a verb's refusal ends with its accepted form (129; the parse adds its own)
+                    error = with_form(key, str(exc)) if key and isinstance(exc, ValueError) else str(exc)
                     with self._attributed(by):
                         extra = {"applied": applied} if applied else {}
-                        self.log.append("invalid", paths=[rel], path=rel, error=str(exc), **extra)
+                        self.log.append("invalid", paths=[rel], path=rel, error=error, **extra)
                     try:
                         os.replace(f, f.with_name(f.name + ".bad"))
                     except OSError:
@@ -154,6 +207,14 @@ class SignalsMixin:
             self._by = None
 
     def _parse_signal(self, text: str) -> list[tuple[str, str]]:
+        """`_parse_lines`, a refusal ending with the failing key's accepted form (129)."""
+        self._line_key = None
+        try:
+            return self._parse_lines(text)
+        except ValueError as exc:
+            raise ValueError(with_form(self._line_key, str(exc))) from None
+
+    def _parse_lines(self, text: str) -> list[tuple[str, str]]:
         """`key: value` lines (blank lines, `#` lines and trailing ` # comments` ignored),
         syntax-checked as a whole; `by:` is taken out. What a verb acts on is checked when
         it applies."""
@@ -168,7 +229,8 @@ class SignalsMixin:
             # So is `ack:`'s, whose `#<event>` ids would otherwise read as one.
             value = value.strip() if key in ("tell", "checkpoint", "session", "notify", "ack") else _strip_comment(value)
             if not sep or not key:
-                raise ValueError(f"line {n}: expected `key: value`, got {s!r}")
+                raise ValueError(f"line {n}: expected `key: value`, got {s!r}; use `<key>: <value>`, one per line")
+            self._line_key = key
             if key == "by":
                 continue
             if key == "read":
@@ -236,7 +298,7 @@ class SignalsMixin:
                 raise ValueError(f"line {n}: unknown signal key {key!r}")
             out.append((key, value))
         if not out:
-            raise ValueError("empty signal")
+            raise ValueError("empty signal; use one `<key>: <value>` line or more")
         return out
 
     def _apply_signal(self, key: str, value: str, rel: str) -> None:
@@ -294,7 +356,8 @@ class SignalsMixin:
             self.picker.open(value, self._by, rel)
         elif key == "retire":
             if value in picks.retired(self.log):
-                raise ValueError(f"retire: picker {value!r} is already retired")
+                self._noop(f"picker {value} is already retired; nothing changed")
+                return
             if (ref := picks.known(self.cfg, self.log).get(value)) is None:
                 raise ValueError(f"retire: no picker named {value!r}")
             self._retire_picker(value, ref, [rel], by=self._by or "unknown")
@@ -415,8 +478,7 @@ class SignalsMixin:
             if view.reviewed(item_id):
                 prior = view.reviews.get(item_id)
                 when = f"#{prior.id}, {clock(prior.ts)}" if prior else "a watch's report needs no review"
-                self.log.append("warning", item=item_id, paths=[rel],
-                                note=f"{item_id} was already reviewed ({when}); nothing changed")
+                self._noop(f"{item_id} was already reviewed ({when}); nothing changed")     # 129: no warning
                 continue
             fin = view.finishes[item_id]
             self.log.append("reviewed", item=item_id, paths=[rel, *fin.paths[:1]], finish=fin.id,
@@ -491,12 +553,17 @@ class SignalsMixin:
     def _ack(self, ids: list[int], rel: str) -> None:
         """`ack: invalid [#N ...]`: the rejected signals named (without ids, every live one)
         are dealt with, so they drop from the app's header, the inbox and the next digest; a
-        checkpoint clears them anyway. They stay in Events."""
+        checkpoint clears them anyway. They stay in Events. An id already clear (acknowledged,
+        past a checkpoint, never a rejection) is a no-op said in the receipt (129): a tidy-up
+        never makes a notice of its own."""
         live = [e.id for e in live_invalids(self.log)]
         if stale := [i for i in ids if i not in live]:
-            raise ValueError(f"ack: {', '.join(f'#{i}' for i in stale)}: not a rejected signal still unacknowledged "
-                             "since the latest checkpoint")
-        self.log.append("ack", paths=[rel], what="invalid", events=sorted(ids or live), by=self._by or "unknown")
+            self._noop(f"nothing to acknowledge for {', '.join(f'#{i}' for i in stale)}: not a rejected "
+                       "signal still live (already acknowledged, past a checkpoint, or never a rejection)")
+        if todo := sorted(i for i in ids if i in live) if ids else live:
+            self.log.append("ack", paths=[rel], what="invalid", events=todo, by=self._by or "unknown")
+        elif not ids:
+            self._noop("nothing to acknowledge: no rejected signal is live")
 
     def retire_pickers(self) -> None:
         """Retire every picker a later round of its series has saved choices for
@@ -554,13 +621,15 @@ class SignalsMixin:
                     raise ValueError(f"audit_used: {repo!r} is not a repo")
                 ids = [n.item for n in view.unused_notes(self.cfg, repo)]
                 if not ids:
-                    raise ValueError(f"audit_used: {repo} has no unused audit notes")
+                    self._noop(f"{repo} has no unused audit notes; nothing changed")
+                    continue
             else:
                 item_id, _ = self._finished_item("audit_used", ref)
                 repo = item_id.split("/", 1)[0]
                 ids = [item_id]
                 if ev := view.audit_used.get(item_id):
-                    raise ValueError(f"audit_used: {item_id}'s notes were already used (#{ev.id})")
+                    self._noop(f"{item_id}'s notes were already used (#{ev.id}); nothing changed")
+                    continue
                 if item_id in view.claimed_notes():
                     raise ValueError(f"audit_used: {item_id}'s notes are claimed by a running cleanup")
                 if item_id not in [n.item for n in view.unused_notes(self.cfg, repo)]:

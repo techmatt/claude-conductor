@@ -37,6 +37,12 @@ events: [812, 813]
 ```
 
 - `outcome`: `accepted`, with `result` (what happened), or `refused`, with `reason`.
+  A refused signal's `reason` ends with the form conductor would accept (129: `; use
+  \`cancel: <repo>/<NNN_name>\` …`, an `open_refused` its own nearest form), so a retry is
+  one step. A signal line whose wish already holds (`ack:` of a clear id, `reviewed:`
+  again, `pause:` when paused; `signals.md`, *Tidy-ups*) is `accepted`, logs no event, and
+  its note is the `result` (`nothing to acknowledge for #2712: …`, after `applied; ` when
+  other lines logged events).
   A queue item's `accepted` receipt (enqueued or rewritten) may also carry `warning`: a
   `depends_on` that can never be met in order, so it will hold (`items.md`); fix it now.
   A request that leaves `state.md` past `state_budget_kb` (40 KB; `[defaults]`) says so in `warning`, naming up to three
@@ -59,7 +65,7 @@ events: [812, 813]
 
 | write | written when | result | refused when |
 |---|---|---|---|
-| signal | its lines applied or it was rejected | `applied`; with tells (`tell:`, `outline:`, `pause:`, `resume:`) where each went, `; `-joined | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line |
+| signal | its lines applied or it was rejected | `applied`; with tells (`tell:`, `outline:`, `pause:`, `resume:`) where each went, `; `-joined; a tidy-up already true: its note | `invalid` (it is `.bad`); an `open_refused` or `pick_failed` line; the reason ends `; use <form>` |
 | request | applied or failed (within a second of `request.md`); `pending` while an earlier request or its own files hold it | `committed <sha>`, `nothing to commit: every target is identical to HEAD (was the edited copy sent? resend it from a fresh workspace path)`, `applied; nothing changed` | `request_failed` (it is `.failed`; `targets missing: …`) |
 | queue item | `enqueue`, `edited` | `queued as <id>; <start>` (and `; carries N parked edit(s) as things stand: …` when it would: `parked.md`; plus, if its number was already taken, `renumbered from <old>: its number was already <id>'s`, the receipt staying at the name written, 115: `items.md`; `its number is also <id>'s: name it in full` only for older shares); `rewritten: it runs the new text` / `its stage is redone`, then what changed in brackets (128: `(needs_pick: x added; body +1 −0 line(s))`) and `; it carries picker <name>'s saved choices` when a saved picker came in with it (and `; amendment #N still stands: … don't re-send`), plus `; now <start>` when the rewrite moved it; the same bytes again: `rewritten with identical bytes: nothing changed, and it runs the text it had`, with a `warning` to resend or amend (`items.md`) | `invalid` (bad front-matter; a write after launch, set aside as `.md.bad`) |
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |

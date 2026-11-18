@@ -155,7 +155,8 @@ another live picker still shows (a round's "current" tile is often the last roun
 pick); the choices file stays. It logs `pick_retired` (name, manifest, `deleted`, `kept`,
 and `later` or `by`), drops the name from the server (its URLs 404) and from *Pending*,
 and the inbox's *Picks* lists it for a day. A name is retired once; `retire:` on an
-unknown or retired name is refused, and so is `pick:` or `conductor pick` on a manifest with a
+unknown name is refused (on a retired one it is a no-op its receipt names, 129), and so is
+`pick:` or `conductor pick` on a manifest with a
 retired name (65: a tracked manifest stays, its images don't), so a new round takes a new name.
 
 **Items that need a pick** (66). Executors never see the control folder, so a saved

@@ -492,9 +492,10 @@ def test_reviewed_marks_a_finished_report_and_survives_restart(env):
     env.d.log.close()
     env.d = env.new_daemon()
     assert [e.item for e in state.scan(env.d.cfg, env.d.log).unreviewed()] == ["code/002_b"]
-    send(env, "reviewed: code/001_a", "again")              # already reviewed: a no-op with a note
+    send(env, "reviewed: code/001_a", "again")              # already reviewed: a no-op, said in the receipt
     assert not bad(env, "again") and len(env.events("reviewed")) == 1
-    assert "already reviewed" in env.events("warning")[-1].detail["note"]
+    assert "already reviewed" in (env.control / "receipts" / "signals" / "again.md").read_text(encoding="utf-8")
+    assert not [w for w in env.events("warning") if "already reviewed" in w.detail.get("note", "")]
     send(env, "reviewed: code/002", "last")
     env.d.write_inbox(force=True)
     assert "## Unreviewed reports" not in (env.control / "inbox.md").read_text(encoding="utf-8")
@@ -750,8 +751,11 @@ def test_a_rejected_signal_shows_until_acknowledged_or_a_checkpoint(env):
     assert [e.id for e in live_invalids(env.d.log)] == bad_ids[1:]
     assert "app-1.signal invalid" not in render() and "app-2.signal invalid" in render()
     assert f"acknowledged invalid #{bad_ids[0]}" in render()
+    n_events = env.d.log.max_id()
     send(env, f"by: planner\nack: invalid #{bad_ids[0]}", "planner-again.signal")    # already acknowledged
-    assert bad(env, "planner-again.signal")
+    assert not bad(env, "planner-again.signal") and env.d.log.max_id() == n_events    # 129: no event, no notice
+    assert "nothing to acknowledge" in (env.control / "receipts" / "signals" / "planner-again.md").read_text(
+        encoding="utf-8")
     path = actions.ack_invalid(env.control)                 # the app's Dismiss: all of them
     env.tick_until(lambda: not path.exists())
     assert live_invalids(env.d.log) == [] and "app-3.signal invalid" not in render()

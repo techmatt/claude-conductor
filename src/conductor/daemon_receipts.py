@@ -64,6 +64,7 @@ def _q(value) -> str:
 class ReceiptsMixin:
     def _init_receipts(self) -> None:
         self._capturing: list[Event] | None = None  # events of the signal file or request being handled
+        self._noted: list[str] | None = None        # its no-op lines' notes (`_noop`): receipt only, no event
         self._pruned_at = 0.0
         self.proposed_seen: dict[str, int] = {}     # proposed file → the mtime its receipt covers
         self.parked_seen: dict[str, int] = {}       # parked file → the same
@@ -81,11 +82,13 @@ class ReceiptsMixin:
         """Every event appended inside goes to `rel`'s receipt, written on the way out; with
         nothing logged, only if `always` (a signal), never for a request still waiting."""
         got: list[Event] = []
+        notes: list[str] = []
         prev, self._capturing = self._capturing, got
+        prev_notes, self._noted = self._noted, notes
         try:
             yield got
         finally:
-            self._capturing = prev
+            self._capturing, self._noted = prev, prev_notes
         if got or always:
             refusal = next((e for e in got if e.kind in REFUSALS and (e.kind != "invalid" or rel in e.paths)), None)
             if refusal:
@@ -100,11 +103,19 @@ class ReceiptsMixin:
                           if request and request.detail.get("identical") else
                           "applied; nothing changed" if request else
                           "; ".join(map(tell_result, tells)) if tells else "applied")
+                if notes:                       # 129: a tidy-up already true is a no-op, said here only
+                    result = "; ".join(([result] if got else []) + notes)
                 # A cancel with queued dependents says so: each now holds by itself.
                 warning = "; ".join(e.detail["warning"] for e in got if e.kind == "cancel" and e.detail.get("warning"))
                 if request and (fold := session.state_warning(request.detail)):     # 106: fold before it grows
                     warning = "; ".join(filter(None, [warning, fold]))
                 self._write_receipt(rel, got, result=result, warning=warning or None)
+
+    def _noop(self, note: str) -> None:
+        """A signal line whose wish already holds (`ack:` of a clear id, `reviewed:` of a reviewed
+        item, ...): accepted, nothing logged, so no notice; its receipt's `result` says so (129)."""
+        if self._noted is not None:
+            self._noted.append(note)
 
     def _receipt_event(self, ev: Event) -> None:
         """Every appended event: into the receipt being gathered, or the receipt of the

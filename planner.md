@@ -58,6 +58,20 @@ C:\Code\<project>-control\
 
 **Signals**: `key: value` lines applied in order, `by: planner` first, then the actions (**Vocab**). A rejected one becomes `.bad`, lines before the failing one still applied (`docs/signals.md`).
 
+**Simple actions** (rule): one signal, one receipt check, then reply; no lookup, workaround or tidy-up signal after. A `refused` `reason` ends with the accepted form: retry once with it, or tell Matt. A tidy-up already true (`ack:` of a clear id, `reviewed:` again) is `accepted`, its `result` saying so.
+
+```
+open: folder|reveal|text <path>   Explorer / its folder, file selected / Notepad (unrun)
+open: file <path>[?query][#frag]  default app; with a query: the page in the browser
+open: url <https | http://localhost | file:///>
+run: <target> [stop]              one target: it; several, no match: ask; none: offer one
+notify: <text>                    a toast (ping me)
+tell: <repo>/<NNN_name> <text>    a running item
+ack: invalid [#<event>]           a rejected signal dealt with (none named: all)
+```
+
+A path (absolute or control-relative; one Matt names or the planner wrote) lies in the control folder, a repo, the worktrees, conductor or `open_roots`.
+
 **Requests** are the only way tracked control files change. Write `requests\<stamp>\` in one call: `request.md` with edits in its body, or with whole replacement files at their control-folder paths, listed last (it waits 60s for a late one):
 
 ```
@@ -138,7 +152,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 ## Vocab
 
-`NNN_name` may be shortened to `NNN` (a taken number is renumbered: see its receipt); a queued item may carry its repo as `repo/NNN_name`. **Rare ops** are in `planner-vocab.md` — read it only for one of them or a phrase not here: the maintenance templates (cleanup, general cleanup, bug hunt, content / test / claude.md / disk space cleanup), notes used, trim state, backlog, show backlog, watch now, autopilot, fill until, stop conductor, memory?, show events, postmortem, reorder, push, land, retry, open, ping me, run / stop a target, ultracode X, process all, defaults all, mark reviewed, post-audit, art round, review cards / tool X, park / resume project, rename repo, use / test remote workers, context estimate.
+`NNN_name` may be shortened to `NNN` (a taken number is renumbered: see its receipt); a queued item may carry its repo as `repo/NNN_name`. **Rare ops** are in `planner-vocab.md` — read it only for one of them or a phrase not here: the maintenance templates (cleanup, general cleanup, bug hunt, content / test / claude.md / disk space cleanup), notes used, trim state, backlog, show backlog, watch now, autopilot, fill until, stop conductor, memory?, show events, postmortem, reorder, push, land, retry, ultracode X, process all, defaults all, mark reviewed, post-audit, art round, review cards / tool X, park / resume project, rename repo, use / test remote workers, context estimate.
 
 **Session and inbox**
 
@@ -170,6 +184,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **ETA on X?** | X's latest outline, else progress line, with when posted; neither: says so, never guesses. |
 | **pause R** / **resume R** | Signal `pause: <repo>` / `resume: <repo>`: running items commit, stop what they started and wait, clocks stopped; nothing new starts. |
 | **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
+| **open X** / **show me X** / **ping me** / **run X** / **stop X** | *Simple actions*. |
 | **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
 
 **Processing reports**

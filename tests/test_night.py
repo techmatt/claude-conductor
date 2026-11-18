@@ -57,7 +57,8 @@ def test_a_stall_is_flagged_and_a_watch_tells_the_item(env, monkeypatch):
     assert f"#{tell.id} message #{tell.id} for code/001_long: post where you are (by watch)" in night
     assert "code/W1_watch" not in inbox.split("## Unreviewed reports", 1)[-1].split("##", 1)[0]
     env.signal("planner-1.signal", "by: planner\nreviewed: code/W1_watch")     # needs none, and breaks nothing
-    env.tick_until(lambda: "needs no review" in env.events("warning")[-1].detail["note"])
+    rec = env.control / "receipts" / "signals" / "planner-1.md"           # 129: a no-op in its receipt
+    env.tick_until(lambda: rec.exists() and "needs no review" in rec.read_text(encoding="utf-8"))
     # Watches have their own series (Word Warriors 093_watch beside 093_hunt5_calls): the queue's
     # next number is still one past the last real item, and the next watch one past the last.
     view = state.scan(env.d.cfg, env.d.log)
