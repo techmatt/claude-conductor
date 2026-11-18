@@ -115,8 +115,10 @@ nothing you touched, reads `<kind>: unchanged from main: <text>`. A warning neve
 `done`. `partial`: a real shortfall, nothing broken: planned work skipped or not delivered (an
 instruction declined with a reason included), or a hard bar missed, even within ~1 SE (a locked
 ruling, a required check, a feature that doesn't work). A bar is `matt:` only when your work on
-it is done and what remains is a play, design or price call that is his (asked or defaulted); one
-missed on the work, skipped or out of time is plain. All `matt:` queues no workflow retro.
+it is done and what remains is a play, design or price call that is his (asked or defaulted), and
+the part names its question (`questions/<id>`) or a choice you list as a bullet under a `## For
+Matt` heading; one missed on the work, skipped, out of time or naming neither is plain. All
+`matt:` queues no workflow retro.
 `red`: something broken or unsafe; this repo's queue should not continue without a look.
 {pick}
 The report leads with what changes for the planner: findings and decisions, under ~60

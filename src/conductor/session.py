@@ -318,15 +318,62 @@ def partial_parts(fin: Event) -> list[str]:
     return [p.strip() for p in str(fin.detail.get("partial") or "").split(";") if p.strip()]
 
 
+HEADING_RE = re.compile(r"^\s*(?:#{1,6}\s+(.+?)|\*\*([^*]+)\*\*[.:]?)\s*$")
+BULLET_RE = re.compile(r"^ ?(?:[-*•]|\d+[.)])\s+(.+)$")     # top level: a nested bullet is an option of its choice
+QUESTION_N_RE = re.compile(r"\bquestion\s*#?\s*(\d+)\b", re.IGNORECASE)
+
+
+def matt_choices(report: str) -> list[str]:
+    """The choices a report lists for Matt: each top-level bullet's name (its bold lead, or what comes
+    before its first `:`, a trailing number like `5.4` dropped) under a heading naming Matt
+    (`## For Matt`, `**Pending Matt (4).**`), up to the next heading."""
+    out, under = [], False
+    for ln in report.splitlines():
+        if h := HEADING_RE.match(ln):
+            under = bool(re.search(r"\bmatt\b", h.group(1) or h.group(2) or "", re.IGNORECASE))
+        elif under and (b := BULLET_RE.match(ln)):
+            text = b.group(1)
+            name = m.group(1) if (m := re.match(r"\*\*([^*]+)\*\*", text)) else text.split(":")[0]
+            name = re.sub(r"[\s:]+\d+(?:\.\d+)?\s*(?:pt)?[\s:.]*$", "", name.strip(" *_`:.")).strip(" *_`:.")
+            if len(name) >= 3:
+                out.append(name)
+    return out
+
+
+def matt_on(parts: list[str], report: str, asked: list[str]) -> list[str | None]:
+    """What each `matt:` part waits on (132): the questions the item raised that it names
+    (`questions/<id>`, the id, or `question <n>`) and the choices it names that the report
+    lists for Matt (`matt_choices`), `, `-joined; None for a bare label or a plain part."""
+    choices = matt_choices(report)
+    out = []
+    for p in parts:
+        nums = {m.group(1) for m in QUESTION_N_RE.finditer(p)}
+        on = [f"questions/{q}" for q in asked if q in p or q.rsplit("__", 1)[-1] in nums]
+        on += [f"choice: {c}" for c in choices if c.lower() in p.lower()]
+        out.append(", ".join(dict.fromkeys(on)) if MATT_RE.match(p) and on else None)
+    return out
+
+
 def waits_on_matt(log: EventLog, fin: Event) -> bool:
     """A `partial` whose every unmet bar waits only on Matt's call (each `partial:` part led
     by `matt:`) and that never stalled (a quiet, eta or blocked watch flag on it): a design
     hand-off, not a workflow miss, so no retro on its `partial` (aicomplete 264, four faces
-    waiting on his play calls, got 269_post_audit_264, cancelled by hand). An overrun still counts."""
-    parts = partial_parts(fin)
-    if fin.detail.get("status") != "partial" or not parts or not all(MATT_RE.match(p) for p in parts):
+    waiting on his play calls, got 269_post_audit_264, cancelled by hand). An overrun still counts.
+    Conductor checks the label (132): each part must name a question the item raised or a
+    choice its report lists for Matt (the finish's `matt_on`, `matt_on`); a bare label is plain."""
+    parts, on = partial_parts(fin), fin.detail.get("matt_on") or []
+    if fin.detail.get("status") != "partial" or not parts or len(on) != len(parts) or not all(on):
         return False
     return not any(e.detail.get("flag") in STALL_FLAGS for e in log.query(kinds=["watch_flag"], item=fin.item))
+
+
+def finish_matt_on(log: EventLog, item_id: str, partial: str | None, report: Path) -> list[str | None] | None:
+    """At a finish: `matt_on` for its `partial:` line, from its report and its `ask` events."""
+    parts = [p.strip() for p in str(partial or "").split(";") if p.strip()]
+    if not any(MATT_RE.match(p) for p in parts):
+        return None
+    asked = [str(e.detail.get("question")) for e in log.query(kinds=["ask"], item=item_id) if e.detail.get("question")]
+    return matt_on(parts, read_text(report) if report.is_file() else "", asked)
 
 
 def retro_trigger(log: EventLog, fin: Event) -> str | None:

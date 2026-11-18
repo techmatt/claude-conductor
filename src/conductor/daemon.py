@@ -981,6 +981,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "picks": [r for v in (header or {}).get("picks", []) if (r := _pick_ref(repo, v))],
             "friction": (header or {}).get("friction"), "warnings": (header or {}).get("warnings"),
             "partial": (header or {}).get("partial"),
+            "matt_on": session.finish_matt_on(self.log, item_id, (header or {}).get("partial"), Path(rec["report"])),
             "exit_code": exit_code, "cost_usd": own_cost(rec, result),
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }

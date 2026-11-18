@@ -51,9 +51,11 @@ after the header as `parked P<n>: done | skipped (why)` (`parked.md`).
 
 `partial:` (131) says why each unmet bar of a `partial` is unmet, `;`-separated. A part led
 by `matt:` is a bar whose work is done and that waits only on a play, design or price call
-of Matt's (asked or defaulted); anything else (missed on the work, skipped, out of time) is
+of Matt's (asked or defaulted), and names it: its question (`questions/<id>`) or a choice the
+report lists as a top-level bullet under a `## For Matt` heading (132; conductor checks, and a
+bare label counts as plain). Anything else (missed on the work, skipped, out of time) is
 plain. Every part `matt:` and no stall queues no workflow retro (`retros.md`). The `finish`
-event carries it and the inbox's finish line adds ` · partial: …`. Only the full preamble
+event carries it, with `matt_on` (what each part names, or null), and the inbox's finish line adds ` · partial: …`. Only the full preamble
 asks for it (the light one is at its word cap), and a report without it is treated as
 before: its `partial` queues a retro.
 

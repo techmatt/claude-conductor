@@ -18,13 +18,20 @@ what finishes while one runs counts toward the next). One is due when any of the
   that Matt or the planner told to stop (a `tell` with "stop", not conductor's own; 117:
   aicomplete 226, stopped for a base change, got a retro; `session.told_to_stop`), or a
   `partial` that only waits on Matt (131, `session.waits_on_matt`): every part of its
-  report's `partial:` line is led by `matt:` (`reports.md`) and no `quiet`, `eta` or
-  `blocked` watch flag stalled it. Aicomplete 264 finished `partial` only because four card
+  report's `partial:` line is led by `matt:` (`reports.md`), each names what it waits on,
+  and no `quiet`, `eta` or `blocked` watch flag stalled it. Conductor checks the naming, not
+  the label (132, `session.matt_on`, at the finish as its `matt_on`): a part must name a
+  question the item raised (`questions/<id>`, the id, or `question <n>`) or a choice the
+  report lists for Matt (a top-level bullet under a heading naming Matt, `## For Matt`,
+  matched by its bold lead or what precedes its first `:`). A bare `matt:` label is a plain
+  part. Aicomplete 264 finished `partial` only because four card
   faces needed Matt's play calls; its retro (269) had nothing to find and was cancelled by
   hand. Such an item still triggers by overrunning (below); a `partial` with no `partial:`
-  line, or one plain part, triggers as before. Conductor says so once, right after the
+  line, one plain part, or a finish from before 132, triggers as before. Friction alone
+  never triggers it either: repeated friction is already tracked over the last five reports
+  (`SLOW_WINDOW`, the digest's *repeated* line). Conductor says so once, right after the
   finish, as a `retro_skip` event (with `auto_retros` on): the inbox shows `no workflow
-  retro for <X>: its partial only waits on Matt (<the matt: parts>)`; or
+  retro for <X>: its partial only waits on Matt (<part> (on <questions/id or choice: name>); …)`; or
 - ran past 1.5× its first ETA and 10 minutes over (`RETRO_OVERRUN`, measured from its
   `start` to the first `progress` with an `eta` or outline), or
 - at 12 of them with none of the above (`RETRO_FLOOR`).

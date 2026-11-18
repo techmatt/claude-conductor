@@ -51,7 +51,8 @@ class RetrosMixin:
         if not self.cfg.auto_retros or fin is None or fin.detail.get("template") or fin.detail.get("resume_of"):
             return
         if session.waits_on_matt(self.log, fin) and not session.retro_trigger(self.log, fin):
-            self.log.append("retro_skip", item=item_id, waits=session.partial_parts(fin), by="conductor")
+            waits = [f"{p} (on {on})" for p, on in zip(session.partial_parts(fin), fin.detail["matt_on"])]
+            self.log.append("retro_skip", item=item_id, waits=waits, by="conductor")
 
     def queue_retros(self) -> None:
         """Queue each repo's due retro, one at a time per repo, never while it is paused.
