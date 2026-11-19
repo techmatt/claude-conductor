@@ -57,8 +57,11 @@ def test_the_stub_state_md_has_every_section_in_order(tmp_path):
     control = tmp_path / "proj-control"
     text = read_text(control / "state.md")
     heads = [ln[3:] for ln in text.splitlines() if ln.startswith("## ")]
-    assert heads == ["Repos", "Queued and running", "Waiting on Matt", "Open questions", "Paged",
-                     "Pending fixes", "Maintenance", "Planner habits"]
+    assert heads == ["Repos", "Queued and running", "Waiting on Matt", "Open questions",
+                     "Pending fixes", "Maintenance"]          # 137: split from the start
+    assert read_text(control / "paged.md") == "# proj — paged\n"
+    assert read_text(control / "habits.md") == "# proj — planner habits\n"
+    assert "paged.md" in read_text(control / "state.md") and not session.unsplit(text)
     maint = session.state_sections(text)["maintenance"]
     for repo in ("app", "web"):
         line = next(ln for ln in maint if ln.startswith(f"- `{repo}`"))

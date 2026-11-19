@@ -297,9 +297,9 @@ def test_templates_carry_the_leftover_line_but_a_watch(env):
     from conductor import executor
     def body(template):
         return executor.body(env.d.cfg, Item("code", "001_a", env.control / "x.md", num=1, body="", template=template))
-    for template in ("bug_hunt", "self_audit", "general_cleanup", "disk_cleanup"):
+    for template in ("self_audit", "general_cleanup", "disk_cleanup"):
         assert "Leftover budget." in body(template)
-    assert "Leftover budget." not in body("watch")
+    assert "Leftover budget." not in body("watch") and "Leftover budget." not in body("bug_hunt")   # 137
 
 
 def test_the_mcp_config_names_the_workdir(env):

@@ -535,17 +535,27 @@ def state_size(control: Path, targets: list[str], budget_kb: float) -> dict:
     size = len(text.encode("utf-8"))
     if size <= budget_kb * 1024:
         return {}
+    if split := unsplit(text):
+        return {"state_kb": round(size / 1024, 1), "state_budget_kb": budget_kb, "split": split}
     return {"state_kb": round(size / 1024, 1), "state_budget_kb": budget_kb, "fold": fold_candidates(text)}
 
 
+def split_text(sections: list[str]) -> str:
+    """`split state is due: *Planner habits* → habits.md, …`"""
+    return "split state is due: " + ", ".join(f"*{s.capitalize()}* → `{SPLIT[s]}`" for s in sections)
+
+
 def state_warning(detail: dict) -> str | None:
-    """A request receipt's warning for `state_size`'s fields: fold before it grows."""
+    """A request receipt's warning for `state_size`'s fields: split an unsplit state.md,
+    else fold before it grows."""
     if not detail.get("state_kb"):
         return None
+    head = f"state.md is {detail['state_kb']:g} KB, past its {detail.get('state_budget_kb', 15):g} KB budget: "
+    if split := detail.get("split"):
+        return head + split_text(split)
     fold = detail.get("fold") or []
-    return (f"state.md is {detail['state_kb']:g} KB, past its {detail.get('state_budget_kb', 40):g} KB budget: "
-            + (f"fold these lines' sub-bullets into the line as it now stands (fold state): {'; '.join(fold)}"
-               if fold else "trim state is due"))
+    return head + (f"fold these lines' sub-bullets into the line as it now stands (fold state): {'; '.join(fold)}"
+                   if fold else "trim state is due")
 
 
 def due_items(lines: list[str]) -> list[str]:
@@ -584,18 +594,41 @@ def from_state(control: Path) -> list[str]:
     return out
 
 
-HABITS_NOTE = "The planner's own rules, from `state.md`: follow them; never list them to Matt."
+HABITS_NOTE = "The planner's own rules, from `{source}`: follow them; never list them to Matt."
+# What a split moves out of `state.md` (137): its control file, or (rulings) the code repo's doc.
+SPLIT = {"planner habits": "habits.md", "paged": "paged.md", "standing rulings": "docs/rulings.md"}
+
+
+def control_section(control: Path, name: str) -> tuple[list[str], str] | None:
+    """A section a split moved to its own control file (`SPLIT`: `habits.md`, `paged.md`):
+    that file's lines (its `# ` title dropped) when it exists, else `state.md`'s section,
+    so an unsplit project reads as before; with the file it came from. None if neither reads."""
+    own = control / SPLIT[name]
+    try:
+        if own.is_file():
+            return [ln for ln in read_text(own).splitlines() if not ln.startswith("# ")], own.name
+        return state_sections(read_text(control / "state.md")).get(name) or [], "state.md"
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def unsplit(text: str) -> list[str]:
+    """The `state.md` sections a split moves out (137) still in it with content: `Planner
+    habits`, `Paged`, `Standing rulings`, as written in `SPLIT`."""
+    return [name for name, body in state_sections(text).items()
+            if name in SPLIT and any(ln.strip() for ln in body)]
 
 
 def planner_habits(control: Path) -> list[str]:
-    """`state.md`'s *Planner habits* whole, under its own heading so the planner follows
-    them without relaying them as fixes; nothing when the section is absent or empty."""
-    try:
-        body = state_sections(read_text(control / "state.md")).get("planner habits") or []
-    except (OSError, UnicodeDecodeError):
+    """The planner's habits whole (`habits.md`, else `state.md`'s *Planner habits*), under
+    their own heading so the planner follows them without relaying them as fixes; nothing
+    when absent or empty."""
+    if (found := control_section(control, "planner habits")) is None:
         return []
+    body, source = found
     lines = "\n".join(body).strip("\n").splitlines()
-    return ["## Planner habits", "", HABITS_NOTE, "", *lines] if any(ln.strip() for ln in lines) else []
+    return (["## Planner habits", "", HABITS_NOTE.format(source=source), "", *lines]
+            if any(ln.strip() for ln in lines) else [])
 
 
 def next_number(log: EventLog) -> int:
@@ -630,12 +663,17 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
     body = inbox.render(cfg, log, view, heading=head, root=root)     # conductor's reports sit in its *Unreviewed reports*
     habits = planner_habits(cfg.control)
     out = [body.rstrip(), "", *from_state(cfg.control), *([""] + habits if habits else []), "", "## Maintenance facts"]
-    if state_line := size_line("state.md", *docs, cfg.state_budget_kb, "trim state"):
+    try:
+        state_text = read_text(cfg.control / "state.md")
+    except (OSError, UnicodeDecodeError):
+        state_text = ""
+    split = unsplit(state_text)
+    if state_line := size_line("state.md", *docs, cfg.state_budget_kb, "split state" if split else "trim state"):
         out.append(state_line)
-        try:
-            out += [f"  - fold: {f}" for f in fold_candidates(read_text(cfg.control / "state.md"))]
-        except (OSError, UnicodeDecodeError):
-            pass
+        if split:
+            out.append(f"  - {split_text(split).removeprefix('split state is due: ')}")
+        else:
+            out += [f"  - fold: {f}" for f in fold_candidates(state_text)]
     for repo in cfg.repos:
         out += maintenance(cfg, log, view, repo, docs)
     return "\n".join(out) + "\n"

@@ -43,13 +43,13 @@ def test_state_md_past_its_trim_line_is_due(env):
     cfg = env.d.cfg
     sizes, prev = session.doc_growth(cfg)
     assert session.size_line("state.md", sizes, prev, cfg.state_budget_kb, "trim state") is None
-    (env.control / "state.md").write_text("y" * 30 * 1024, encoding="utf-8")
+    (env.control / "state.md").write_text("y" * 14 * 1024, encoding="utf-8")
     sizes, prev = session.doc_growth(cfg)
-    assert session.size_line("state.md", sizes, prev, cfg.state_budget_kb, "trim state") is None   # 118: default 40
-    (env.control / "state.md").write_text("y" * 41 * 1024, encoding="utf-8")
+    assert session.size_line("state.md", sizes, prev, cfg.state_budget_kb, "trim state") is None   # 137: default 15
+    (env.control / "state.md").write_text("y" * 16 * 1024, encoding="utf-8")
     sizes, prev = session.doc_growth(cfg)
     line = session.size_line("state.md", sizes, prev, cfg.state_budget_kb, "trim state")
-    assert line.startswith("- **due** trim state: `state.md` 41.0 KB, budget 40 KB, +")
+    assert line.startswith("- **due** trim state: `state.md` 16.0 KB, budget 15 KB, +")
 
 
 def test_the_full_preamble_gives_a_thread_count_and_a_home_for_working_papers(env):

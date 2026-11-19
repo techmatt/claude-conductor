@@ -674,7 +674,7 @@ def test_digest_keeps_planner_habits_apart_from_pending_fixes(tmp_path):
         "- stage receipts before quoting them (due: always)\n\n## Paged\n\n- x\n", encoding="utf-8")
     fixes = "\n".join(session.from_state(tmp_path))
     assert "a parked edit" in fixes and "receipts" not in fixes
-    assert session.planner_habits(tmp_path) == ["## Planner habits", "", session.HABITS_NOTE, "",
+    assert session.planner_habits(tmp_path) == ["## Planner habits", "", session.HABITS_NOTE.format(source="state.md"), "",
                                                 "- stage receipts before quoting them (due: always)"]
 
 

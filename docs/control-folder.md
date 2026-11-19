@@ -4,7 +4,9 @@
 
 ```
 conductor.toml                 tracked — project, repos, locks, defaults
-state.md, other docs           tracked — changed only through requests
+state.md, other docs           tracked — changed only through requests; a split project
+                               (137) also has paged.md and habits.md (the digest reads
+                               habits.md, else state.md's *Planner habits*)
 .gitignore, .gitattributes     tracked — must ignore every runtime path below
 queue/<repo>/NNN_name.md       approved work, run in NNN order
 queue/<repo>/NNN_name.amend.md an amendment to that item (`.amend.<anything>.md` too); never an item
@@ -86,7 +88,7 @@ merge_minutes = 10            # a merge executor resolving prose is killed after
 foreground_seconds = 60       # a foreground shell call is backgrounded after this; 0 = off (progress.md)
 toasts = true                 # Windows desktop notifications (inbox.md, Toasts)
 doc_budget_kb = 15            # a repo doc past this is **due** in session.md (inbox.md)
-state_budget_kb = 40          # state.md past this: request receipt warning, **due** trim state (receipts.md)
+state_budget_kb = 15          # state.md past this: request receipt warning, **due** trim or split state (receipts.md)
 auto_retros = true            # queue a due workflow retro unasked (retros.md)
 api_retry_minutes = [2, 10, 30]  # an API failure resumes the session after each wait; [] = red at once (api-retry.md)
 memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (memory.md)
@@ -166,7 +168,8 @@ creates the folder: `conductor.toml` (the project; `ports`, the next free port b
 claimed in the registry and named in a printed line; per repo a `[repos.<name>]` table, its
 path (relative, `../app`, beside it), `push = false`; `max_hours = 2`,
 `ask_default_minutes = 10`), a stub `state.md` (every section `planner.md` expects, in
-order; *Maintenance* `never` per template and repo), `.gitignore`,
+order; *Maintenance* `never` per template and repo; already split, 137: no *Paged* or
+*Planner habits*), `paged.md` and `habits.md` (a title line each), `.gitignore`,
 `.gitattributes`, the runtime and queue folders; then `git init -b main` and a first
 commit. A non-empty folder is refused (an empty one, made to grant access, is fine).
 

@@ -26,7 +26,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
    It writes and commits the control folder (refusing one with files in it), makes a missing code repo with no remote, and prints what it did (`docs/control-folder.md`). Until a repo has a remote, `session.md` says `<repo> has no remote: create its GitHub repo`, and likewise for the control folder (with its `gh repo create … --private` line); relay both. A repo Matt already made on GitHub is cloned first, over HTTPS (`gh auth git-credential`; SSH isn't set up), then init.
 3. Matt starts conductor before the planner writes anything: only a running daemon handles a write, so an earlier one gets no receipt. The app's **Start daemon**, `uv run conductor run --detach C:\Code\<project>-control` (from anywhere; `conductor app <control>` adds it to the app), or `uv run conductor run C:\Code\<project>-control` in a plain terminal. Never plain `run` as a Claude Code background command (`docs/restart.md`).
 4. The planner asks for folder access to the control folder, `C:\Code\claude-conductor` and each repo (and to `C:\Code\gdrive-sync` if the project will home files on Drive: *Storage*). One missing path fails the whole request (*The bridge* in `planner.md`).
-5. The planner's first request (one bridge call) edits the stub `state.md` and `conductor.toml`, and queues the contract items. **Day one:**
+5. The planner's first request (one bridge call) edits the stub `state.md` (split from the start: `paged.md`, `habits.md`; rulings go in each repo's `docs/rulings.md`, made by its contract item) and `conductor.toml`, and queues the contract items. **Day one:**
    - `locks`, `max_hours`, `ask_default_minutes`; `open_roots` (the project's Drive folder, for **open X**; also named writable in every preamble unless `write_roots` lists others, `[]` none); `[links]` (name = URL: design doc, boards; first in every `session.md`); `display_name` where the repo name doesn't read well in a chat title (`AIcomplete`: chats are titled `<display name> session N`).
    - Per repo: `shared` untracked folders and `setup` commands its worktrees need (setup runs off the daemon loop: `docs/executors.md`, *Setup*); `worktrees` / `stage`. **Cue for `worktrees = false`:** for an existing repo, one names-only listing of its root decides it: a `.venv`, build outputs, per-checkout config or sibling paths mean `worktrees = false` and `stage = false`, and its contract item reports what a worktree would need; switching later is a request. A new repo starts with worktrees on.
    - Each code repo's `CLAUDE.md` standing contract, as a first queued prompt for that repo (below).
@@ -36,6 +36,7 @@ A new Drive-homed folder starts with the queue item that creates it. That item a
    The contract holds:
    - the report: path and header from conductor's preamble, a ~60-line soft target, findings, decisions and surprises only, tests mentioned only for an unfixed red, and the `Report written to <path>` sign-off;
    - "commit to the branch you are on";
+   - a `docs/rulings.md` (the project's standing rulings, the planner's; the preamble names it);
    - local 12-hour clock times;
    - steps over ~30 seconds backgrounded, with a completion waiter on the real process, never on a launcher wrapper;
    - LF line endings (`.gitattributes` `* text=auto eol=lf`);

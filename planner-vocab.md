@@ -27,8 +27,10 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **use remote workers** | `[remote]` only: default since 105 under `[remote] default = true` (`remote: false` opts out), else `remote: true`; seeded batches via `farm-seeds`, a paired read's older side via `farm-seeds --at <commit>` (`docs/remote-workers.md`). |
 | **cleanup R** | With unused notes, queues `template: cleanup`, `ultracode: true` (body: Matt's extras, rulings on its notes); with none (it would hold its queue), says so. |
 | **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`; it takes every unused note. |
-| **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3), focus as body; "notes only" adds `readonly: true`. |
-| **trim state** | One request rewriting `state.md` to the wavefront (queued, open, paged, still ruled), dropping histories and what the repo's docs hold; rulings executors need ride the next prompt. |
+| **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3; a cap: it stops on yield), focus as body; "notes only" adds `readonly: true`. Scope: recent changes since the last hunt. |
+| **full bug hunt R** [Nh] … | The same, body led by "Full bug hunt: every lens.": each lens gets one real round, then stop on yield. |
+| **trim state** | One request rewriting `state.md` to the wavefront (plan, status, queue, next, Matt's items, maintenance, pending fixes), dropping histories and what the repo's docs hold. |
+| **split state** | Once per project: a request moving *Planner habits* to `habits.md` and *Paged* to `paged.md` (each `# <project> — …` then the lines) and deleting them from `state.md`, plus a parked edit or item per repo writing its rulings to `docs/rulings.md`, then deleting *Standing rulings* from `state.md` once it lands. |
 | **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
 | **notes used X, Y** / **R** | Signal `audit_used: <repo>/<NNN_name>, …` / `audit_used: <repo>/all`: notes an item already handled. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |

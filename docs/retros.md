@@ -79,6 +79,7 @@ The inbox shows the `retro` event as `workflow retro <item> queued: post-audit o
 ## For the planner
 
 Process a retro's report as any self-audit's: **About conductor** to `planner-notes.md`,
-project findings to `state.md`, then prune *Planner habits*. Never offer **post-audit** for
+project findings to `state.md`, then prune the planner habits (`habits.md`, or an
+unsplit `state.md`'s *Planner habits*). Never offer **post-audit** for
 a retro conductor queues. A retro or `friction:` line showing a failure the rule ledger
 (`hooks.md`) lists as dropped brings that rule back, preferably as a hook: a conductor prompt.

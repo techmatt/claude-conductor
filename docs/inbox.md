@@ -59,12 +59,16 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      its indented lines) saying `due`, any case. Sections match
      by `## ` heading, ignoring a `(…)` after it; a missing one says so, as does a
      missing `state.md`;
-   - **Planner habits**: `state.md`'s *Planner habits* section whole (rules for the
+   - **Planner habits**: the control `habits.md` whole (its `# ` title dropped), else
+     for an unsplit project `state.md`'s *Planner habits* section (137; rules for the
      planner, which it follows and never lists to Matt), under its own heading
-     and a one-line note saying so; left out when the section is absent or empty. Habit
+     and a one-line note naming the file; left out when absent or empty. Habit
      lines filed under *Pending fixes* were relayed as fixes every start;
    - **Maintenance facts**: first `**due** trim state` when the control `state.md` is
-     past `state_budget_kb` (40 KB; `[defaults]`), with its growth and `fold:` lines (`receipts.md`); then per repo, with no judgement: for each template (bug hunt,
+     past `state_budget_kb` (15 KB since 137; `[defaults]`), with its growth and `fold:` lines (`receipts.md`);
+     `**due** split state` instead while `state.md` still holds *Planner habits*, *Paged*
+     or *Standing rulings* with content (`session.unsplit`), one line naming each and
+     where it goes (`habits.md`, `paged.md`, the code repo's `docs/rulings.md`); then per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's

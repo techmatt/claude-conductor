@@ -51,21 +51,30 @@ def conductor_toml(project: str, repos: dict[str, str], mains: dict[str, str] | 
     return "\n".join(lines) + "\n"
 
 
-SECTIONS = ("Queued and running", "Waiting on Matt", "Open questions", "Paged", "Pending fixes")
+SECTIONS = ("Queued and running", "Waiting on Matt", "Open questions", "Pending fixes")
 EMPTY = {"Queued and running": "nothing yet", "Waiting on Matt": "nothing"}
 
 
 def state_md(project: str, repos: dict[str, str]) -> str:
     """Every section planner.md expects, in its order, so the planner's first request is edits:
-    Repos, the item and Matt sections, Maintenance (every template never, per repo), Planner habits."""
+    Repos, the item and Matt sections, Maintenance (every template never, per repo). Split
+    from the start (137): *Paged* and *Planner habits* are their own files (`side_files`)."""
     never = "; ".join(f"{word} never" for _, word in MAINTENANCE)
-    out = [f"# {project} — state", "", "Status, plan and flags. Changed only through conductor requests.", "",
+    out = [f"# {project} — state", "", "Status, plan and flags: the wavefront. Changed only through conductor "
+           "requests. Paged items: `paged.md`; planner habits: `habits.md`; standing rulings: each code "
+           "repo's `docs/rulings.md`.", "",
            "## Repos", "", *(f"- `{n}`: {v}" for n, v in repos.items())]
     for name in SECTIONS:
         out += ["", f"## {name}", "", EMPTY.get(name, "none")]
     out += ["", "## Maintenance", "", *(f"- `{n}`: {never}; workflow retro never." for n in repos),
-            "- Triggers: planner.md's defaults.", "", "## Planner habits", ""]
+            "- Triggers: planner.md's defaults."]
     return "\n".join(out) + "\n"
+
+
+def side_files(project: str) -> dict[str, str]:
+    """The control files a split `state.md` points to (137), empty but for their title (a
+    habits line under it would reach the digest as a habit; planner.md says what each holds)."""
+    return {"paged.md": f"# {project} — paged\n", "habits.md": f"# {project} — planner habits\n"}
 
 
 def prepare_repo(name: str, path: Path) -> tuple[str | None, str | None]:
@@ -151,6 +160,7 @@ def init(control: Path, project: str, repo_args: list[str]) -> tuple[str, list[s
     tracked = {
         CONFIG_NAME: conductor_toml(project, repos, mains, block),
         "state.md": state_md(project, repos),
+        **side_files(project),
         ".gitignore": gitignore(),
         ".gitattributes": GITATTRIBUTES,
     }

@@ -18,9 +18,10 @@ SUBS = ["  - 2026-11-11: r63 talk moved the cap to 4", "  - Nov 11 (3pm): Matt p
         "    a continuation of that sub-bullet", "  - #8373 asked again"]
 
 
-def state_text(pad_kb: int = 0) -> str:
+def state_text(pad_kb: int = 0, section: str = "Next") -> str:
+    """A split state.md by default (137); `section="Planner habits"` makes it unsplit."""
     return ("# State\n\n## Open\n\n" + "\n".join([PARENT, *SUBS]) + "\n- a plain line\n  - one sub only\n\n"
-            "## Planner habits\n\n- keep it short\n" + ("x" * 99 + "\n") * (pad_kb * 10))
+            f"## {section}\n\n- keep it short\n" + ("x" * 99 + "\n") * (pad_kb * 10))
 
 
 def test_fold_candidates_names_lines_with_sub_bullets_biggest_first():
@@ -33,27 +34,44 @@ def test_a_request_leaving_state_past_budget_warns_with_the_lines_to_fold(env):
     d = env.control / "requests" / "20261111-1000-state"
     d.mkdir(parents=True)
     (d / "request.md").write_text("---\ntargets: [state.md]\nmessage: \"state: design talk\"\n---\n", encoding="utf-8")
-    (d / "state.md").write_text(state_text(pad_kb=41), encoding="utf-8")
+    (d / "state.md").write_text(state_text(pad_kb=16), encoding="utf-8")
     env.d.tick()
     meta, _ = receipt(env, "requests/20261111-1000-state")
-    assert meta["outcome"] == "accepted" and "past its 40 KB budget: fold these lines" in meta["warning"]
+    assert meta["outcome"] == "accepted" and "past its 15 KB budget: fold these lines" in meta["warning"]
     assert "**Card rules**" in meta["warning"]
     req = env.events("request")[-1].detail
-    assert req["state_kb"] > 40 and len(req["fold"]) == 1
+    assert req["state_kb"] > 15 and len(req["fold"]) == 1
+
+
+def test_an_unsplit_state_past_budget_says_split_state_in_receipt_and_digest(env):
+    """137: an unsplit state.md (Planner habits, Paged or Standing rulings still in it) gets
+    **split state**, not trim or fold."""
+    d = env.control / "requests" / "20261119-1200-state"
+    d.mkdir(parents=True)
+    (d / "request.md").write_text("---\ntargets: [state.md]\nmessage: \"state: big\"\n---\n", encoding="utf-8")
+    (d / "state.md").write_text(state_text(pad_kb=16, section="Planner habits"), encoding="utf-8")
+    env.d.tick()
+    meta, _ = receipt(env, "requests/20261119-1200-state")
+    assert meta["warning"].endswith("past its 15 KB budget: split state is due: *Planner habits* → `habits.md`")
+    env.signal("planner-1.signal", "by: planner\nsession: start")
+    env.tick_until(lambda: env.events("checkpoint"))
+    text = read_text(env.control / "session.md")
+    assert "- **due** split state: `state.md`" in text and "  - *Planner habits* → `habits.md`" in text
+    assert "trim state" not in text and "fold:" not in text
 
 
 def test_a_request_leaving_state_under_state_budget_kb_has_no_warning_and_no_due_line(env):
-    """118: the budget is `[defaults] state_budget_kb`, default 40 (was a fixed 25)."""
+    """118: the budget is `[defaults] state_budget_kb`, default 15 since 137 (40 before, a fixed 25 first)."""
     d = env.control / "requests" / "20261114-2130-state"
     d.mkdir(parents=True)
-    (d / "request.md").write_text("---\ntargets: [state.md]\nmessage: \"state: 30 KB\"\n---\n", encoding="utf-8")
-    (d / "state.md").write_text(state_text(pad_kb=30), encoding="utf-8")
+    (d / "request.md").write_text("---\ntargets: [state.md]\nmessage: \"state: 10 KB\"\n---\n", encoding="utf-8")
+    (d / "state.md").write_text(state_text(pad_kb=10), encoding="utf-8")
     env.d.tick()
     meta, _ = receipt(env, "requests/20261114-2130-state")
     assert meta["outcome"] == "accepted" and not meta.get("warning")
     sizes, prev = session.doc_growth(env.d.cfg)
     assert session.size_line("state.md", sizes, prev, env.d.cfg.state_budget_kb, "trim state") is None
-    assert session.state_size(env.control, ["state.md"], 25)["state_budget_kb"] == 25   # a lower key warns again
+    assert session.state_size(env.control, ["state.md"], 5)["state_budget_kb"] == 5   # a lower key warns again
 
 
 def test_start_runs_a_job_detached_that_outlives_the_server(tmp_path):

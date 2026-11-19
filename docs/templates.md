@@ -111,22 +111,21 @@ Every template but `bug_hunt`, `self_audit` and `watch` is
   where that is cheap); review contact sheets and use the app at real speed; fix clear
   bugs and make each automatable check a test; keep a findings list in the repo
   (`docs/qa-findings.md` unless it has a convention), read first so nothing known is
-  re-reported. **The clock**: `max_hours` is the hunt's length plus an hour for setup,
-  merge and the report (the vocab queues N + 1), and the length is a target to use, not
-  a cap: the first progress line names the start and the hunt-end time (the limit minus
-  the hour), and each round ends with a progress line. A dry round widens the hunt by
-  the next lens (paths not yet driven, odd input, long runs, a content sweep, recent
-  changes, code reading for bugs, the checker itself); it stops early only when every
-  lens has had a real round and found nothing new, and spends its last stretch making
-  its fixes committed and green. The planner's body, if any, usually names a focus.
-  With `readonly: true` it is *notes only*: the text's own paragraph has it find and
-  record but change nothing tracked (checker and screenshots in a `shared` folder or
-  nowhere, findings in the report only); the clock applies in full. The report has
-  **Time** (start, target, actual end, one line per round; why, lens by lens, if it
-  ended over 15 minutes early), **Checker**, **Fixed** (notes only: **Found**) and
-  **Deferred**, most important first, each with options and the executor's pick. It is
-  `partial` when it ended early without exhausting the lenses, or left clear bugs
-  unfixed for lack of time.
+  re-reported. **Scope and stop on yield** (137; Matt's "a budget is a target" no
+  longer applies to hunts): **bug hunt** is the recent-changes one: the git log since
+  the last hunt, each changed area driven hard, plus the checker sweep; another lens
+  (paths not yet driven, odd input, long runs, a content sweep, code reading, the
+  checker itself) only where a round points at it. **Full bug hunt** (the body asks for
+  it) gives every lens one real round first. A round is *thin* when it found nothing a
+  user would hit, only wording, stale lines or polish; two thin rounds in a row end the
+  hunt. `max_hours` (the vocab's N + 1: an hour for setup, merge, report) is a cap; no
+  *Leftover budget* line. The body usually names a focus. With `readonly: true` it is
+  *notes only*: find and record but change nothing tracked (checker and screenshots in
+  a `shared` folder or nowhere, findings in the report only). The report has **Time**
+  (start, scope, end and why: `stopped on yield` or `at the cap`, one line per round
+  with what it found), **Checker**, **Fixed** (notes only: **Found**) and **Deferred**,
+  most important first, each with options and the executor's pick. Ending early is never
+  `partial`; only clear bugs left unfixed for lack of time are.
 - **`template: self_audit`** (only on a resume item, `resume.md`; **post-audit X**). The
   original's own session, forked, looks back over its run, from memory and its record,
   and fixes what is obvious in place before finishing (113: stale docs, small bugs, dead

@@ -2,19 +2,28 @@ Bug hunt in `{{repo}}`. Run the project as its intended users would (whoever the
 docs say they are), find what is broken, confusing, ugly or slow, fix what is clearly a
 bug, and leave Matt a clear list of the rest.
 
-## The clock
+## Scope and the clock
 
-The time limit above is the hunt's length plus one hour for setup, merge and the report.
-**The hunt's length is a target to use, not a cap to stay under.** Matt chose it; a hunt
-that ends hours early has wasted the time he set aside, however good its findings. Write
-down your start time and your hunt-end time (the limit minus one hour) in your first
-progress line. Work in rounds; at the end of each round, post a progress line with the
-time left and the next round's plan.
+**Scope: recent changes**, unless the planner's note below asks for a **full bug hunt**.
+Read the git log since the last hunt (the findings list or the last hunt's commit says
+when; no earlier hunt: the last two weeks) and drive each changed area hard, as its user
+would; recent code is where bugs live. Run the checker sweep across everything too.
+Another lens from the list below runs only when a round on recent changes points at it
+(a bug whose cause reaches past the change). A **full bug hunt** gives every lens below
+one real round first.
 
-Running out of findings is not the end of the hunt; it is the signal to widen it. When a
-round comes up dry, take the next lens from this list (in any order that fits the repo)
-and keep going:
+**Stop on yield.** Work in rounds; end each with a progress line: what it found and the
+next round's plan. A round is *thin* when it found nothing a user would hit in normal
+use: only wording, stale lines or polish. **After two thin rounds in a row, the hunt is
+over**: finish the fixes in hand, make them committed and green, write the report. The
+time limit (the hunt plus an hour for setup, merge and the report) is a cap, not a
+target: never widen the hunt to fill it. Stop at the cap with whatever is committed and
+green; never start a fix you can't finish and test before then.
 
+The lenses (a full bug hunt's rounds; otherwise only where a round points):
+
+- **Recent changes:** read the git log since the last hunt and drive each changed area
+  hard (the default scope above).
 - **Paths not yet driven:** every screen, mode, setting and URL/dev flag the docs or code
   name; each first-run, returning-user and edge state (empty, full, maxed, reset).
 - **Odd input:** mashing, holding, pressing during transitions, pausing, resizing,
@@ -24,21 +33,11 @@ and keep going:
 - **Content sweep:** every piece of text, audio and art the project ships, read, heard
   and looked at as its user would, against the repo's own rules (findings list
   categories, style rules, rulings in its docs).
-- **Recent changes:** read the git log since the last hunt and drive each changed area
-  hard; recent code is where bugs live.
 - **Code reading for bugs:** races, timers, state that survives a scene or session it
   shouldn't, error paths, places the tests don't reach. Only where it can produce a bug
   a user would see.
 - **The checker itself:** add the checks this hunt taught you to want, then run them
   across everything.
-
-Stop before the hunt-end time only if every lens above has had a real round and turned
-up nothing new in its last pass. If so, say so in the report, round by round. Never stop
-early because the findings so far feel like enough, because the fixes are in, or because
-the fast lane is green.
-
-Spend the last stretch before the hunt-end time, not after it, on making sure what you
-fixed is committed and green: never start a fix you can't finish and test before then.
 
 ## The work
 
@@ -66,21 +65,22 @@ and reading finished screenshots can run alongside.
 change nothing tracked: no fixes, no tests, no findings-list edits, no commit. Build the
 checker and keep its screenshots in one of the repo's `shared` folders if the preamble
 names one, otherwise outside the repo or nowhere; the findings go in the report only,
-still checked against the repo's findings list so nothing known is re-reported. The
-clock rules above apply in full.
+still checked against the repo's findings list so nothing known is re-reported. Scope
+and stop on yield apply in full.
 
 ## The report
 
 After its header:
-- **Time**: start, hunt-end target, actual end, and the rounds in between (one line
-  each: the lens, how long, what it found). If it ended more than 15 minutes before the
-  target, say why, lens by lens.
+- **Time**: start, scope (recent changes since <commit or date>, or full), actual end
+  and why it ended (`stopped on yield` after rounds N and N+1, or `at the cap`), then
+  one line per round: the lens or area, how long, what it found (counts of user-facing
+  bugs and of wording or polish), so the stop can be judged.
 - **Checker**: what it covers and how to run it (or, notes only, where it is).
 - **Fixed**: each bug fixed, briefly (notes only: **Found**, each bug with where it shows).
 - **Deferred**: everything left for Matt, most important first, each with the options
   you see and which you would pick and why; mark a call that is Matt's own (taste, scope, a rules term) `(Matt's call)`.
 
-The status is `done` when the hunt used its time (or exhausted every lens, shown under
-**Time**) and every clear bug found was fixed or (notes only) recorded; deferred items
-do not make it partial. `partial` when it ended early without exhausting the lenses, or
-when clear bugs were left unfixed for lack of time. `red` only when something is broken.
+The status is `done` when the hunt stopped on yield or at the cap with every clear bug
+found fixed or (notes only) recorded; ending early is never `partial`, and deferred
+items do not make it partial. `partial` only when clear bugs were left unfixed for lack
+of time. `red` only when something is broken.

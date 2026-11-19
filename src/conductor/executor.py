@@ -37,7 +37,7 @@ beyond its bug (the fix as default): `design: true` with a default returns at on
 carry on with the default, and his answer comes later as a message. Leave a step whose
 default can't be undone (a delete, an overwrite) until last.
 
-Latitude. When lines conflict, this order wins: the project's locked rulings (CLAUDE.md, docs,
+Latitude. When lines conflict, this order wins: the project's locked rulings ({rulings}CLAUDE.md, docs,
 the prompt), the goal, the done-when bars, the method; say in the report which gave way and
 why, and never ask about it. Method is a suggested route, sized to the time budget; lines
 marked required, the repo's CLAUDE.md *Working rules* and *Measurement* below bind. Score each bar strictly as
@@ -129,11 +129,16 @@ could not fix, and narrates no process. Your final message ends with `Report wri
 
 {tail}"""
 
+# A repo's standing rulings (137): named first among the locked rulings when the repo has the file.
+RULINGS = "docs/rulings.md"
+RULINGS_FULL = f"`{RULINGS}`, read before you start; "
+RULINGS_LIGHT = f" (`{RULINGS}`: read it first)"
+
 # The diff review (123): a writable full item, before its report. Light, template and readonly
 # items skip it; an ultracode item's adversarial review counts as it.
 REVIEW = """
 Diff review. Before the report, send one read-only subagent `git diff {base}` (this item's
-whole change), the prompt's rulings quoted word for word, its done-when list, and the repo
+whole change), the prompt's rulings quoted word for word,{rulings} its done-when list, and the repo
 CLAUDE.md's *What failure looks like* section if it has one. It looks for bugs and for
 done-when rows unmet or broken, each finding naming a file and line, no style-only comments.
 Fix what is real; at most one more pass, on the new diff only. The report body carries one
@@ -141,7 +146,7 @@ line: `Diff review: N found, M fixed, K rejected (why)`.
 """
 REVIEW_ULTRA = """
 Diff review. Your Ultracode adversarial review of the diff (`git diff {base}`) is this item's
-diff review: fix what is real, then one line in the report body: `Diff review: N found, M
+diff review{rulings}: fix what is real, then one line in the report body: `Diff review: N found, M
 fixed, K rejected (why)`.
 """
 
@@ -163,7 +168,7 @@ Bounds. A skip in prompt or message binds (a default overriding the prompt start
 {threads} threads, a full suite only between sims. Write files with Write/Edit only: hooks
 refuse heredoc, `-c`/`-e` and `sed -i` writes (Write a script, then run it), %TEMP% and the like.{leftover}
 
-Latitude. Conflicts: locked rulings, goal, done-when bars, method; report what gave way,
+Latitude. Conflicts: locked rulings{rulings_light}, goal, done-when bars, method; report what gave way,
 don't ask. Score bars strictly; check a numeric target is reachable before chasing it. Three
 failed fixes for one failure: change approach. Unless readonly, fix small obvious things.
 
@@ -296,6 +301,8 @@ never by ending your turn.
 CALLS_BG = ", and commands matching {globs} always run in the background"
 
 PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
+
+HUNT_TEMPLATE = "bug_hunt"     # stops on yield (137): no leftover-budget line
 
 LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time limit left, run the next "
             "most useful step toward its goal, in scope, and say in the report what it was.\n")
@@ -579,6 +586,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     writes = ((WRITES_LIGHT if light else WRITES).format(roots=", ".join(f"`{p.as_posix()}`" for p in cfg.write_roots))
               if cfg.write_roots and not item.readonly and not watch else "")
     only = ONLY_TWO if keeps else ONLY_LIGHT if light else ONLY_ONE
+    rulings = not watch and has_rulings(cfg, item, run)
     if writes:
         only = only[:-1] + ROOTS_TOO + "." if only.endswith(".") else only + ROOTS_TOO
     text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
@@ -590,13 +598,15 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         port=PORT_LIGHT.format(port=run["port"]) if light and serves else "",
         calibrate=CALIBRATE if wants_calibrate(item) else "",
         now=RUNNING_NOW.format(items=", ".join(running) or "nothing") if running is not None else "",
-        leftover="" if item.readonly else LEFTOVER_LIGHT if light else LEFTOVER_FULL,
+        leftover="" if item.readonly or item.template == HUNT_TEMPLATE else LEFTOVER_LIGHT if light else LEFTOVER_FULL,
         beside=BESIDE.format(items="\n".join(f"- {i}: {g}" for i, g in beside)) if beside else "",
         resumed=resumed,
         audit="\n" + audits.fill(audits.template_text("audit"), notes_path=str(paths.audit.resolve()))
         + (AUDIT_FIX if item.audit and not item.readonly and not item.template else "") if keeps else "",
         only=only,
-        review=review_text(item, run, light or watch),
+        review=review_text(item, run, light or watch, rulings),
+        rulings=RULINGS_FULL if rulings else "",
+        rulings_light=RULINGS_LIGHT if rulings else "",
         calls=calls_text(cfg, item.repo, light or watch),
         servers=SERVERS.format(port=run["port"]) if not light and serves else "",
         max_hours=max_hours, ask_minutes=cfg.ask_default_minutes,
@@ -620,13 +630,23 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + extra + tail
 
 
-def review_text(item: Item, run: dict, short: bool = False) -> str:
+def review_text(item: Item, run: dict, short: bool = False, rulings: bool = False) -> str:
     """The full preamble's *Diff review* (123): only a writable item that isn't a template,
-    against the commit it started from (its worktree's base, or the main checkout's head)."""
+    against the commit it started from (its worktree's base, or the main checkout's head);
+    with `rulings`, the brief carries the repo's `docs/rulings.md` (137)."""
     if short or item.template or item.readonly:
         return ""
     base = (run.get("base") or run.get("repo_head") or "")[:10] or "<the commit you started from>"
-    return (REVIEW_ULTRA if item.ultracode else REVIEW).format(base=base)
+    if item.ultracode:
+        return REVIEW_ULTRA.format(base=base, rulings=f", checked against `{RULINGS}` too" if rulings else "")
+    return REVIEW.format(base=base, rulings=f" the repo's `{RULINGS}` whole," if rulings else "")
+
+
+def has_rulings(cfg: Config, item: Item, run: dict) -> bool:
+    """The repo keeps its standing rulings in `docs/rulings.md` (137): in the item's worktree,
+    else its main checkout."""
+    root = Path(run.get("worktree") or cfg.repos[item.repo])
+    return (root / RULINGS).is_file()
 
 
 def checks_text(commands: list[str]) -> str:
@@ -710,7 +730,8 @@ def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:
                        notes=notes.strip(), usage=usage.strip(), original=item.resume_of or "").rstrip() + "\n"
     if item.template == "self_audit":
         text += LEFTOVER_AUDIT
-    elif item.template != WATCH_TEMPLATE and not item.readonly:      # a watch never has an hour left
+    elif item.template not in (WATCH_TEMPLATE, HUNT_TEMPLATE) and not item.readonly:
+        # a watch never has an hour left; a bug hunt stops on yield (137)
         text += LEFTOVER
     if item.body.strip():
         who = "Why conductor launched this watch" if item.template == WATCH_TEMPLATE else "The planner adds, for this item"

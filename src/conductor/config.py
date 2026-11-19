@@ -89,7 +89,7 @@ class Config:
     foreground_seconds: float = 60.0  # an executor's foreground shell call moves to the background after this (0: off)
     toasts: bool = True
     doc_budget_kb: float = 15.0      # a tracked repo doc past this shows **due** in the digest (session.doc_facts)
-    state_budget_kb: float = 40.0    # `state.md` past this: receipt warning, **due** trim state (session.state_size)
+    state_budget_kb: float = 15.0    # `state.md` past this: receipt warning, **due** split state or trim state (session.state_size; 137)
     auto_retros: bool = True         # conductor queues a due workflow retro itself (daemon_retros, docs/retros.md)
     api_retry_minutes: list[float] = field(default_factory=lambda: [2.0, 10.0, 30.0])  # waits before each API retry (docs/api-retry.md)
     # Memory (`memory.py`): sampled every N seconds (0: off); a level is commit at or over
@@ -409,7 +409,7 @@ def parse(control: Path, text: str, claim: bool = False) -> Config:
         auto_retros=_flag(defaults, "auto_retros", True),
         api_retry_minutes=[float(x) for x in defaults.get("api_retry_minutes", [2, 10, 30])],
         doc_budget_kb=float(defaults.get("doc_budget_kb", 15.0)),
-        state_budget_kb=float(defaults.get("state_budget_kb", 40.0)),
+        state_budget_kb=float(defaults.get("state_budget_kb", 15.0)),
         **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS + NIGHT_KEYS},
         command=[str(x) for x in command],
         args=[str(x) for x in executor.get("args", [])],

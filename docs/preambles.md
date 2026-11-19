@@ -61,6 +61,13 @@ Chosen by conductor, never by front-matter:
   report body carries `Diff review: N found, M fixed, K rejected (why)`. An `ultracode`
   item gets `REVIEW_ULTRA`: its adversarial review counts as this one. Light, template and
   readonly items skip it.
+- **Standing rulings** (137): when the item's worktree (else the repo's main checkout) has
+  `docs/rulings.md` (`executor.has_rulings`), *Latitude* names it first among the locked
+  rulings ("read before you start"; the light preamble: "read it first"), the diff review's
+  brief carries it whole (`REVIEW_ULTRA`: "checked against" it). No file: nothing is said.
+  A watch never gets it.
+- **Bug hunts** (137) get no *Leftover budget* line, in the preamble or after the
+  template: a hunt stops on yield (`templates.md`).
 - Stage and resume texts (`STAGE`, `RESUME_HEAD`, `STAGE_DEFAULTS`, the amendment
   blocks): `worktrees.md`, *Staging*.
 

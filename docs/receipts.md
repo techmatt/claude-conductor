@@ -45,9 +45,12 @@ events: [812, 813]
   other lines logged events).
   A queue item's `accepted` receipt (enqueued or rewritten) may also carry `warning`: a
   `depends_on` that can never be met in order, so it will hold (`items.md`); fix it now.
-  A request that leaves `state.md` past `state_budget_kb` (40 KB; `[defaults]`) says so in `warning`, naming up to three
+  A request that leaves `state.md` past `state_budget_kb` (15 KB since 137; `[defaults]`) says so in `warning`, naming up to three
   lines carrying two or more indented sub-bullets, biggest first (**fold state**;
   `session.fold_candidates`; 106: one day of appended sub-bullets took aicomplete 30 → 41 KB).
+  An unsplit `state.md` (still holding *Planner habits*, *Paged* or *Standing rulings*)
+  gets `split state is due: *Planner habits* → \`habits.md\`, …` instead (`split` on the
+  request event, in place of `fold`).
   A signal refused part-way also has `applied`: the lines that applied before the one
   that failed (they stay applied). A request held by an earlier one on the same targets
   is `pending`, its `result` what it waits for, replaced by the final receipt; so is one
