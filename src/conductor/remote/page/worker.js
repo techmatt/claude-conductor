@@ -187,7 +187,7 @@ async function loop() {
       let accepted = false;
       for (let tries = 0; ; tries++) {    // a broker restarting takes the result once it is back (~45 s kept trying)
         try {
-          accepted = (await api("result", { worker: wid, job: t.job, shard: t.shard, ok, output, log: line, ms: ok ? ms : 0 }, 120000)).accepted;
+          accepted = (await api("result", { worker: wid, job: t.job, shard: t.shard, ok, output, log: line, ms: ok ? ms : 0, error: err }, 120000)).accepted;
           break;
         } catch (e) {
           note(`shard ${t.shard}: posting the result failed (try ${tries + 1}): ${e}`);

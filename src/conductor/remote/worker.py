@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from . import client, settings
-from .client import Broker, BrokerDown, resolve, run_native
+from .client import Broker, BrokerDown, resolve, run_shard
 
 
 def _fingerprint(native: dict, fp_argv: list[str]) -> str:
@@ -80,9 +80,11 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
                 try:
                     with tempfile.TemporaryDirectory() as d:
                         out = Path(d) / "shard.out"
-                        code = run_native(native["argv"], Path(native["cwd"]), t["first"], t["count"], out, t["args"])
+                        code, why = run_shard(native["argv"], Path(native["cwd"]), t["first"], t["count"], out,
+                                              t["args"])
                         ok = code == 0 and out.exists() and not (fail_every and n % fail_every == 0)
                         data = base64.b64encode(out.read_bytes()).decode() if ok else ""
+                        why = "" if ok else why or f"--fail-every {fail_every}"
                 finally:
                     with lock:
                         running.discard(pair)
@@ -90,7 +92,8 @@ def work(broker: Broker, wid: str, cores: int, fp_argv: list[str], bad_fingerpri
                       f"exit {code} in {(time.time() - t0) * 1000:.0f} ms" + ("" if ok else " (failed)")
                 try:
                     broker.call("result", {"worker": wid, "job": t["job"], "shard": t["shard"], "ok": ok,
-                                           "output_b64": data, "log": log, "ms": (time.time() - t0) * 1000},
+                                           "output_b64": data, "log": log, "ms": (time.time() - t0) * 1000,
+                                           "error": why},
                                 patience=client.PATIENCE)      # lands on a restarted broker
                 except BrokerDown:
                     pass

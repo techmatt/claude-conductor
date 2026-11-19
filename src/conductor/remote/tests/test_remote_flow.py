@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from conductor.remote import broker, client, settings
+from conductor.remote import broker, client, failures, settings
 from conductor.remote.board import Board
 
 from .conftest import git
@@ -98,19 +98,44 @@ def test_a_worker_failing_the_fingerprint_gate_gets_nothing_and_is_reported(farm
     assert "liar failed the fingerprint gate" in capsys.readouterr().err
 
 
-def test_failed_shards_on_a_worker_are_run_elsewhere(farm):
+def test_failed_shards_on_a_worker_are_run_elsewhere(farm, capsys):
     farm.setup()
     farm.worker("flaky", fail_every=2, cores=2)
     code, out = farm.run(0, 80, "--sleep", "0.005")
     assert (code, out) == (0, farm.local(0, 80))
+    err = capsys.readouterr().err
+    if "failed on" in err:                       # 134: named, with where its tail is, never the tail itself
+        assert "and ran again elsewhere; why: " in err and "--fail-every" not in err
 
 
-def test_a_native_failure_fails_the_job(farm, capsys):
-    farm.setup()
+def test_a_native_failure_fails_the_job_and_shows_the_sims_own_error_once(farm, capsys):
+    """134: aicomplete 282 saw only "exit 2" per shard; the cause is shown once, counted."""
+    farm.setup(main_slots="3")
     farm.worker("lr1")
     code, _ = farm.run(0, 40, "--fail")
+    err = capsys.readouterr().err
     assert code != 0
-    assert "failed" in capsys.readouterr().err
+    assert err.count("config: city_cut_at = 9 is out of range 0..5") == 1, err
+    assert "shards failed the same way (exit 2, on " in err and "running seeds" in err
+
+
+def test_a_local_run_shows_the_sims_error(farm, capsys):
+    farm.setup(local_below_seconds="1000")
+    code, _ = farm.run(0, 4, "--fail")
+    err = capsys.readouterr().err
+    assert code == 2 and "running locally" in err
+    assert "shard seeds 0..3 failed (exit 2, on the main box); its output ends:" in err
+    assert "  | config: city_cut_at = 9 is out of range 0..5 (seed 0)" in err
+
+
+def test_failures_report_groups_by_shape():
+    lines = []
+    same = [{"seeds": (a, 10), "code": 2, "who": "the main box", "tail": f"bad value (seed {a})"} for a in (0, 10)]
+    other = {"seeds": (20, 10), "code": None, "who": "laptop", "tail": "RuntimeError: unreachable"}
+    failures.report(lines.append, [*same, other], 5)
+    assert lines == ["2 of the 5 shards failed the same way (exit 2, on the main box; first seeds 0..9); "
+                     "its output ends:", "shard seeds 20..29 failed (failed, on laptop); its output ends:"]
+    assert failures.tail("a\r\n\n" + "".join(f"l{i}\n" for i in range(30))).splitlines() == [f"l{i}" for i in range(10, 30)]
 
 
 @pytest.mark.slow           # a call caught mid-shutdown waits out its socket timeout

@@ -30,7 +30,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import diag, settings, tree
+from . import diag, failures, settings, tree
 from .board import who_path, write_who
 
 MAIN_DONE = {"worker": "main", "kind": "main", "engine": "native", "label": "main box"}
@@ -85,7 +85,7 @@ def run_native(argv: list[str], cwd: Path, first: int, count: int, out: Path, ar
     from .. import procs
     cmd = resolve(settings.fill(argv, first=str(first), count=str(count), out=str(out), args=list(args)), cwd)
     p = subprocess.Popen(cmd, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=log or subprocess.DEVNULL,
-                         stderr=log or subprocess.DEVNULL, **NO_WINDOW)
+                         stderr=subprocess.STDOUT if log else subprocess.DEVNULL, **NO_WINDOW)
     procs.die_with_me(p)
     while True:
         try:
@@ -95,6 +95,9 @@ def run_native(argv: list[str], cwd: Path, first: int, count: int, out: Path, ar
                 p.kill()
                 p.wait()
                 return -1
+
+
+run_shard = failures.run_shard
 
 
 def run_timed(argv: list[str], cwd: Path, out: Path, err: Path | None, deadline: float) -> int | None:
@@ -360,12 +363,12 @@ def shard_path(folder: Path, first: int) -> Path:
 
 def run_local(r: settings.Remote, cwd: Path, first: int, count: int, out: Path, args: list[str], why: str) -> int:
     say(f"running locally ({why})")
-    code = run_native(r.native, cwd, first, count, out, args, log=None)
+    code, tail = run_shard(r.native, cwd, first, count, out, args)
     if CANCEL.is_set():
         say("cancelled")
         return CANCELLED_EXIT
     if code != 0:
-        say(f"the native command exited {code}")
+        failures.report(say, [{"seeds": (first, count), "code": code, "who": "the main box", "tail": tail}], 1)
     return code
 
 
@@ -396,7 +399,7 @@ def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, co
 def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, count: int, out: Path,
           args: list[str], ranges: list[tuple[int, int]], jid: str, folder: Path, t0: float,
           pinned: Path | None = None) -> int:
-    failed: list[str] = []
+    failed: list[dict] = []                      # main-box shards that failed (`failures.report`)
     errors: list[str] = []
     lost: list[tuple[str, bool]] = []            # what the broker did (its words, refused?): the stderr line, a reconnect
     own: dict[int, Path] = {}                    # first seed -> a main-box output the broker didn't take: kept, never re-run
@@ -462,12 +465,12 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
                 note(f"rerun shard {sid} seeds {a}+{k}")
             tmp = folder / "main" / f"{a:012d}.{n}.out"
             t = time.time()
-            code = run_native(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
+            code, why = run_shard(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
             if code == -1:
                 tmp.unlink(missing_ok=True)
                 continue                         # a worker's copy won
             if code != 0 or not tmp.exists():
-                failed.append(f"seeds {a}..{a + k - 1}: exit {code}")
+                failed.append({"seeds": (a, k), "code": code, "who": "the main box", "tail": why})
                 try:
                     b.call("result", {"worker": "main", "job": jid, "shard": sid, "ok": False}, patience=PATIENCE)
                 except BrokerDown:
@@ -515,7 +518,11 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
         return CANCELLED_EXIT
     if failed:
         log.close()
-        say("the native command failed: " + "; ".join(failed))
+        try:
+            failed += failures.remote(broker.call("state", {"job": jid}))   # its workers' failures too
+        except BrokerDown:
+            pass
+        failures.report(say, failed, len(ranges))
         _close(broker, jid)
         return 1
     state = {}
@@ -524,6 +531,9 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
             state = broker.call("state", {"job": jid}, patience=PATIENCE)
         except BrokerDown as exc:
             broke(exc.plain(), bool(exc.refused))
+    if state.get("errors"):                      # ran again elsewhere: where to read why, not the tail itself
+        who = ", ".join(sorted({str(e.get("label") or e.get("worker")) for e in state["errors"]}))
+        say(f"{len(state['errors'])} shard(s) failed on {who} and ran again elsewhere; why: {folder / 'logs'}")
     missing = [(a, k) for a, k in ranges if not shard_path(folder, a).exists()]
     if missing:
         # Never a failure for want of the broker (126), and never silent or one shard at a
@@ -586,12 +596,12 @@ def _finish_here(r: settings.Remote, cwd: Path, folder: Path, args: list[str], m
             if shard_path(folder, a).exists():
                 continue
             tmp = folder / "main" / f"{a:012d}.here{n}.out"
-            code = run_native(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
+            code, why = run_shard(r.native, cwd, a, k, tmp, args, log=log, stop=lambda: shard_path(folder, a).exists())
             if code == -1 and shard_path(folder, a).exists():
                 tmp.unlink(missing_ok=True)
             elif code != 0 or not tmp.exists():
                 with lock:
-                    codes.append((code if code else 1, f"seeds {a}..{a + k - 1}: exit {code}"))
+                    codes.append({"seeds": (a, k), "code": code, "who": "the main box", "tail": why})
                 return
             else:
                 _land(folder, a, tmp)
@@ -605,8 +615,8 @@ def _finish_here(r: settings.Remote, cwd: Path, folder: Path, args: list[str], m
     if CANCEL.is_set():
         return CANCELLED_EXIT
     if codes:
-        say(f"the native command failed on the main box: {codes[0][1]}")
-        return codes[0][0]
+        failures.report(say, codes, total)
+        return codes[0]["code"] or 1
     say(f"all {total} shards in")
     return 0
 

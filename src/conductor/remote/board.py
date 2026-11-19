@@ -19,7 +19,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import cores as policy, diag, placement, selftest
+from . import cores as policy, diag, failures, placement, selftest
 from .board_views import (BUILD_STUCK_SECONDS, GATE_SECONDS, GATE_TRIES, STATES, STEPS,  # noqa: F401 - callers' names
                           Views, _short, gate_why)
 
@@ -96,6 +96,7 @@ class Job:
     tags: dict[str, int] = field(default_factory=dict)      # "shard:worker" -> a browser's cores when it was handed out
     failed: list[str] = field(default_factory=list)         # workers that failed a shard here: no more of its shards
     tally: dict[str, dict] = field(default_factory=dict)    # worker id -> offered, finished, credited, ms, overtaken, mismatched (124)
+    errors: list[dict] = field(default_factory=list)        # workers' failed shards with their output's tail (134)
 
     @property
     def complete(self) -> bool:
@@ -463,10 +464,11 @@ class Board(Views):
 
     # ------------------------------------------------------------ results
     def result(self, wid: str, job_id: str, shard_id: int, ok: bool, output: bytes = b"", log: str = "",
-               ms: float = 0.0, source: Path | None = None) -> bool:
+               ms: float = 0.0, source: Path | None = None, error: str = "") -> bool:
         """A shard's output (bytes, kept exactly), or its failure. The first good copy wins.
         `source`: the output as a file in the job's folder (the main box's, 126), moved into
-        `shards/` when it wins and left where it is when it doesn't."""
+        `shards/` when it wins and left where it is when it doesn't. `error`: a failure's
+        output tail, kept on the job for `state` and in the worker's log (134)."""
         with self.lock:
             job, w = self.jobs.get(job_id), self.workers.get(wid)
             if job is None or w is None or not 0 <= shard_id < len(job.shards):
@@ -486,6 +488,11 @@ class Board(Views):
             holders = [x for x in s.leases if x != wid]
             s.leases.pop(wid, None)
             s.started.pop(wid, None)
+            if not ok and w.kind != "main":
+                error = failures.tail(error[-failures.TAIL_CHARS:])
+                job.errors = [*job.errors, {"worker": wid, "label": w.label, "first": s.first, "count": s.count,
+                                            "error": error}][-failures.KEPT:]
+                log = (log + "\n" if log else "") + "".join(f"  | {x}\n" for x in error.splitlines())
             if log:
                 self._append(job.folder / "logs" / f"{wid}.log", log[-LOG_CHARS:], cap=LOG_FILE_CAP)
             ms = ms if isinstance(ms, (int, float)) and math.isfinite(ms) and ms >= 0 else 0.0
@@ -721,7 +728,7 @@ class Board(Views):
             job.seen = self.clock()
             return {"complete": job.complete, "done": [s.id for s in job.shards if s.done],
                     "shards": [{"first": s.first, "count": s.count, **(s.done or {})} for s in job.shards],
-                    "gate_failures": list(job.gate_failures),
+                    "gate_failures": list(job.gate_failures), "errors": list(job.errors),
                     "tally": {k: dict(v) for k, v in job.tally.items()},
                     "labels": {k: w.label for k in job.tally if (w := self.workers.get(k))},
                     "fingerprints": {"native": self.keys[job.key].fingerprint, "wasm": self.keys[job.key].wasm or None}}

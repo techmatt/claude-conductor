@@ -125,8 +125,11 @@ def test_a_failed_result_frees_the_shard_and_logs_come_back(tmp_path):
     jid = job(b, n=1)
     gated(b, "w")
     b.poll("w")
-    assert not b.result("w", jid, 0, False, log="boom")
+    assert not b.result("w", jid, 0, False, log="boom", error="progress\nconfig: x out of range\n")
     assert "boom" in (b.jobs[jid].folder / "logs" / "w.log").read_text(encoding="utf-8")
+    assert "  | config: x out of range" in (b.jobs[jid].folder / "logs" / "w.log").read_text(encoding="utf-8")
+    assert b.state(jid)["errors"] == [{"worker": "w", "label": "", "first": 0, "count": 10,
+                                       "error": "progress\nconfig: x out of range"}]       # 134: its tail, for farm-seeds
     assert b.claim(jid)["shard"] == 0
 
 

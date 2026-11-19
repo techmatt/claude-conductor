@@ -243,7 +243,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 output = b""
             return {"accepted": board.result(str(b["worker"]), str(b["job"]), int(b["shard"]), ok, output,
-                                             str(b.get("log", "")), float(b.get("ms", 0)), source=source)}
+                                             str(b.get("log", "")), float(b.get("ms", 0)), source=source,
+                                             error=str(b.get("error") or ""))}
         if op == "job":
             ranges = [(int(a), int(n)) for a, n in b["ranges"]]
             cwd = b.get("cwd")

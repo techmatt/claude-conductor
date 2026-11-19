@@ -1,13 +1,32 @@
 # farm-seeds: its source and stopping it
 
-What `farm-seeds` says about the code it runs, and how a run is stopped without leaving
-work behind (114; `src/conductor/remote/client.py`). The command itself, its shims and
+What `farm-seeds` says about the code it runs, why a shard failed, and how a run is stopped
+without leaving work behind (114; `src/conductor/remote/client.py`). The command itself, its shims and
 the item's prompt paragraph: `remote-workers.md`, *The executor interface*.
 
 ## Its output file
 
 `<out file>`'s folder is made first if missing (118: aicomplete 238 farmed 1,152 games,
 then crashed at its merge because `out/keep/` didn't exist).
+
+## A failed shard's cause (134)
+
+Each shard's native run writes its output (stdout and stderr) to a file of its own; a failure
+keeps the last 20 non-blank lines (`src/conductor/remote/failures.py`). On a failed run,
+`farm-seeds` prints each distinct failure once, with its shards' count and that tail:
+
+    farm-seeds: 3 of the 4 shards failed the same way (exit 2, on the main box; first seeds 0..9); its output ends:
+      | config: city_cut_at = 9 is out of range 0..5 (seed 0)
+
+Tails differing only in numbers (seeds) count as the same way. The same holds for a local run
+(no broker, or a small job: `shard seeds 0..3 failed (exit 2, on the main box)`) and for workers:
+a local-remote worker sends its tail with a failed result, a browser tab its exception (`error`).
+The board keeps those on the job (`state`'s `errors`, the last 50) and in
+`jobs/<id>/logs/<worker>.log`. A worker's failed shard runs again elsewhere, so on a run that
+succeeds `farm-seeds` names the worker and that `logs/` folder, never the tail. The tail can say
+"error" and end an item's `wait_for`, which is fine because `farm-seeds` exits straight after
+(aicomplete 282 saw only "exit 2" per shard and reran one natively to read why).
+The main box's whole output still goes to the job's `main.log`.
 
 ## The farm tree it runs from (130)
 
