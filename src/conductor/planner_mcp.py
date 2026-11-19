@@ -19,7 +19,9 @@ import json
 import os
 import re
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -31,7 +33,6 @@ from . import daemon_receipts as receipts
 from . import git, items, questions, request, state
 from . import planner_read as rd
 from .app import actions
-from .ask_server import serve_stdio
 from .daemon_receipts import rel_for
 from .events import EventLog
 from .nightshift import queue_name
@@ -45,7 +46,15 @@ RECEIPT_LINES = 4           # event lines a write returns
 NEAR = 4                    # lines either side of a missed edit's best match
 EDITABLE = ("state.md", "paged.md", "habits.md")    # creatable even before they are tracked
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+READ_TOOLS = ("status", "read")     # run at once; every other tool is a write, in its project's lane
+READERS = 8
 _counter = iter(range(1, 10**9))
+_counter_lock = threading.Lock()
+
+
+def _next() -> int:
+    with _counter_lock:
+        return next(_counter)
 
 P = {"type": "string", "description": "The project (its conductor.toml `project`)."}
 TOOLS = [
@@ -191,13 +200,60 @@ def say_receipt(meta: dict, body: str) -> str:
 
 # ----------------------------------------------------------------- the server
 class PlannerServer:
+    """Calls run as they arrive (141): reads at once, on a pool; the writes for one project
+    one after another, in the order they came (a lane each); `initialize`, `tools/list` and
+    `ping` inline. Every reply goes out whole, a line each, under one lock."""
+
     def __init__(self, controls: list[Path], out=sys.stdout, receipt_seconds: float = RECEIPT_SECONDS):
         self.controls, self.out = controls, out
         self.receipt_seconds = receipt_seconds
+        self.out_lock = threading.Lock()
+        self.pool = ThreadPoolExecutor(READERS, thread_name_prefix="mcp-read")
+        self.lanes: dict[str, ThreadPoolExecutor] = {}
+        self.lanes_lock = threading.Lock()
 
     def send(self, obj: dict) -> None:
-        self.out.write(json.dumps(obj) + "\n")
-        self.out.flush()
+        with self.out_lock:
+            self.out.write(json.dumps(obj) + "\n")
+            self.out.flush()
+
+    def lane(self, msg: dict) -> ThreadPoolExecutor | None:
+        """Where a call runs: None inline, the read pool, or its project's write lane."""
+        if msg.get("method") != "tools/call":
+            return None
+        params = msg.get("params") or {}
+        args = params.get("arguments") or {}
+        if params.get("name") in READ_TOOLS:
+            return self.pool
+        name = ("conductor" if params.get("name") == "note" and args.get("kind") != "backlog"
+                else str(args.get("project") or "").strip().lower())
+        with self.lanes_lock:
+            if name not in self.lanes:
+                self.lanes[name] = ThreadPoolExecutor(1, thread_name_prefix=f"mcp-write-{name or 'default'}")
+            return self.lanes[name]
+
+    def submit(self, msg: dict) -> None:
+        """`handle` now or on its lane; a reply is sent either way."""
+        where = self.lane(msg)
+        if where is None:
+            self.handle(msg)
+            return
+        where.submit(self._guarded, msg)
+
+    def _guarded(self, msg: dict) -> None:
+        try:
+            self.handle(msg)
+        except BaseException as exc:            # `handle` answers its own failures; this is the last net
+            if msg.get("id") is not None:
+                self.error(msg["id"], -32603, f"conductor's MCP worker failed: {type(exc).__name__}: {exc}")
+
+    def drain(self) -> None:
+        """Every call taken finished and answered (at stdin's end)."""
+        self.pool.shutdown(wait=True)
+        with self.lanes_lock:
+            lanes = list(self.lanes.values())
+        for lane in lanes:
+            lane.shutdown(wait=True)
 
     def error(self, mid, code: int, message: str) -> None:
         self.send({"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": message}})
@@ -483,7 +539,7 @@ class PlannerServer:
             for t, ps in pairs.items():         # a conflict marker in the text: those go whole
                 whole[t] = request.apply_edits(rd._text(cfg.control / t) or "", t, ps)
             pairs = {}
-        d = cfg.path("requests", f"{datetime.now():%Y%m%d-%H%M}-mcp{datetime.now():%S}{next(_counter):03d}")
+        d = cfg.path("requests", f"{datetime.now():%Y%m%d-%H%M}-mcp{datetime.now():%S}{_next():03d}")
         self.mark(cfg, d)
         for t, text in whole.items():           # whole files first, request.md last
             write_file(d / t, text)
@@ -588,5 +644,52 @@ def insert_under(text: str, heading: str, line: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def serve(server: PlannerServer, stdin=None) -> int:
+    """Newline-delimited JSON-RPC from stdin, each call handed to `server.submit`; at stdin's
+    end, every call taken is answered before this returns."""
+    stdin = stdin or sys.stdin
+    for line in stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            server.error(None, -32700, "parse error")
+            continue
+        for m in (msg if isinstance(msg, list) else [msg]):
+            if isinstance(m, dict):
+                server.submit(m)
+    server.drain()
+    return 0
+
+
+def private_stdio():
+    """The protocol's pipes as private copies, fds 0 and 1 pointed at NUL. On Windows a
+    child started on a call's thread (git) inherits the std handles, and doing so blocks
+    while another thread reads the stdin pipe: the first call that ran git while the main
+    thread waited for the next line never finished (141). A child's stray output can't
+    reach the protocol either."""
+    sys.stdout.flush()
+    fin, fout = os.dup(0), os.dup(1)            # non-inheritable copies
+    nul_in, nul_out = os.open(os.devnull, os.O_RDONLY), os.open(os.devnull, os.O_WRONLY)
+    os.dup2(nul_in, 0)
+    os.dup2(nul_out, 1)
+    os.close(nul_in)
+    os.close(nul_out)
+    if os.name == "nt":                         # the CRT's dup2 doesn't always move the Win32 std handles
+        import ctypes
+        import msvcrt
+        k32 = ctypes.windll.kernel32
+        k32.SetStdHandle(-10, msvcrt.get_osfhandle(0))
+        k32.SetStdHandle(-11, msvcrt.get_osfhandle(1))
+    stdin = open(fin, "r", encoding="utf-8", newline=None)
+    stdout = open(fout, "w", encoding="utf-8", newline="\n")
+    sys.stdin = open(os.devnull, encoding="utf-8")
+    sys.stdout = sys.stderr                     # a stray print can't corrupt the protocol
+    return stdin, stdout
+
+
 def main(controls: list[str] | None = None) -> int:
-    return serve_stdio(PlannerServer([Path(c) for c in controls or []]))
+    stdin, stdout = private_stdio()
+    return serve(PlannerServer([Path(c) for c in controls or []], out=stdout), stdin)

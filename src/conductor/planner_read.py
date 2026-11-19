@@ -36,6 +36,7 @@ LEDGER_LINES = 12
 # A repo file the planner has to look at itself, over the file bridge (`read("repo")` refuses it).
 IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tif", ".tiff", ".svg", ".pdf")
 LISTED = 200                # names a folder read lists
+MARKDOWN = (".md", ".markdown")     # a repo read of one comes header-first, as a report
 
 
 # ----------------------------------------------------------------- paging
@@ -263,7 +264,7 @@ def outline(text: str) -> str:
     heads = [f"- {h} ({len(chr(10).join(body.splitlines()[a:b]).encode('utf-8'))} bytes)"
              for h, a, b in sections(body)]
     title = next((ln for ln in body.splitlines() if ln.startswith("# ")), "")
-    return (head.rstrip() + ("\n" + title if title else "") + "\n\nSections:\n" + ("\n".join(heads) or "- (none)")
+    return ("\n".join(s for s in (head.strip("\n"), title) if s) + "\n\nSections:\n" + ("\n".join(heads) or "- (none)")
             + f"\n\nWhole: {len(text.encode('utf-8'))} bytes. Read one with `section`, or `section: \"all\"`.")
 
 
@@ -447,6 +448,8 @@ def repo_file(cfg: config_mod.Config, name: str, section: str, part: int, again:
             heads = [h for h, _, _ in sections(text)] or [h for h, _, _ in sections(text, "### ")]
             return f"no section {section!r} in {repo}/{rel}; sections: {'; '.join(heads) or 'none'}", True
         text = found
+    elif not section and part == 1 and rel.lower().endswith(MARKDOWN) and sections(text):
+        return outline(text), False         # header-first, as a report (141)
     return paged(text, part, again), False
 
 

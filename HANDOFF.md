@@ -51,7 +51,7 @@ Live, by area (the doc named holds the detail):
 - **Remote workers** (87, opt-in, removable; `docs/remote-workers.md`): `[remote]` starts a LAN broker; a farming item's (`remote: true`, or by default since 105) `farm-seeds` shards a seeded job over browser tabs (wasm), a local-remote worker and the main box behind per-kind fingerprint gates (89), merged byte-identical. Live on aicomplete (88). Status page, app chip, Workers tab, one URL, diag, per-browser cores, placement (`remote-status.md`, `-url`, `-diag`, `-cores`, `-placement`). 114 (`farm-seeds.md`): it names the commit it runs from and warns on a dirty tree; `farm-seeds --cancel`, a stop signal or a hard kill leaves no native shard running (kill-on-close job) and closes its broker job. 118: it makes its out folder. 116 (`remote-status.md`): one bundle a browser core; an out-of-memory retries in a fresh core, then reloads the page; a failed gate's reason is shown. 124 (`remote-status.md`, *Worker test*): `conductor remote test` / **Test workers** runs a built-in job (no project build) and reports per worker; a worker's counts survive an hour's silence; a `remote` item running the native sim directly is reminded once to farm. 126 (`remote-placement.md`): main-box outputs reach the broker as files; a lost broker means a reconnect, else the main box finishes the job, said; *Shards today* recounted from `who.json` notes; a worker's shard copied only once late. 130: farm steps run in a tree pinned at start (`farm-seeds.md`; 133: `--at <commit>` farms an older revision); *Now*: a worker's latest gate; load tells once a stretch, 40% own share (`memory.md`). 134: a failed run shows a shard's output tail once per cause.
 
 - **Split state, hunts on yield** (137): `state.md` is the wavefront; `habits.md` and `paged.md` are control files (the digest reads `habits.md`, else the old section); standing rulings live in each repo's `docs/rulings.md`, named in the preamble and diff review when present. Bug hunts default to recent changes and stop after two thin rounds (`templates.md`).
-- **Planner MCP tools** (136, 138, 140; `docs/mcp.md`): `conductor mcp`, in the Claude desktop app, is the planner's surface: `start_session`, `status`, `read` (repo files, conductor's reports: 140), and writes that write the bridge's files `by: planner`, marked `via: mcp` (140), returning the receipt; `edit_state` moves sections (140). A launcher runs the server fresh per code change; `--selftest`. The bridge is the exception (images).
+- **Planner MCP tools** (136, 138, 140; `docs/mcp.md`): `conductor mcp`, in the Claude desktop app, is the planner's surface: `start_session`, `status`, `read` (repo files, conductor's reports: 140), and writes that write the bridge's files `by: planner`, marked `via: mcp` (140), returning the receipt; `edit_state` moves sections (140). A launcher runs the server fresh per code change; `--selftest`. 141: calls sent together each answer, a project's writes in order; traffic log; markdown `repo` reads header-first. The bridge is the exception (images).
 - **Scoreboard, dead daemons** (139): `conductor stats` / `read(what="stats")` (`docs/stats.md`); the app toasts a dead or hung daemon once, offering a restart (`memory.md`).
 
 Planner docs: `planner.md` (`start_session` returns it whole), `planner-bridge.md`, `planner-vocab.md` (rare ops, 125), `claude-ai-new-project.md` (new / park / resume, setup); README is an overview and an index into `docs/`.
@@ -68,7 +68,6 @@ Accepted gaps nobody plans to fix unless they bite live in `docs/known-limits.md
 Chores:
 
 - Corelight's `.gitignore` lacks `picks/`, `session.md` and `review.md` (a startup `warning`), and its control folder has no remote (auto-push needs only `origin`): its planner's and Matt's.
-- **Matt's saved start preference** is replaced by `start_session` (the new text: report 138).
 - `ask` holds the whole session for its window (147 idle 10 min); fix: a non-blocking `ask` answered by message. (aicomplete 153, #6654)
 - Check a first outline against its done-when list (147: two watch tells re-sent rows). (aicomplete 153)
 - **Needs a human**: a toast click doesn't open the app (try a `conductor-app:` URI plus `launch_action`); an app-started daemon's windows may open behind.
@@ -80,13 +79,14 @@ Chores:
 - `wait_for`'s default `fail` pattern matches "error" in ordinary prose (subagent output under ultracode: aicomplete 173 lost ~10 min). Fix: a default that can't match ordinary text. Due from #7766.
 - An item-file edit that only appends answers to the stage's own questions should keep the stage and deliver once (177 restaged, got two copies). (aicomplete 193, due from #8636, as are the next two)
 - A browser result refused (HTTP 4xx) is dropped by the page; its shard waits out its lease (10 min at aicomplete). 126's `MAX_BODY` (256 MB) makes it rare. If it bites: post `ok: false` after a 4xx.
-- `farm-seeds`: no worker connected → one native run at the item's threads (30 vs ~10 min). Shards below a seed (130 left it): a shard is `shard_seeds` seeds × every cell on one thread, so a few-seed slow read stays off the browser (260: 249's 2 h → ~20 min). Needs `native` and `run` to take a part (`--part p/P`, contiguous cells; 1-seed shards keep byte order): agree it with aicomplete's planner. Due from #32.
+- `farm-seeds`: no worker → one native run at the item's threads (30 vs ~10 min). Shards below a seed (a shard is `shard_seeds` seeds × every cell on one thread; 260: 2 h → ~20 min) need `native`/`run` to take `--part p/P` (contiguous cells): agree it with aicomplete's planner. Due from #32.
 - **A `bars:` header line** (Matt agreed 11-11, #8636; 114 built the status half, 131 `partial:` for a partial's misses): unmet soft bars of a `done` (`bars: 2 of 6 unmet — d0 88.5 vs ≥90`) for the digests. Not built.
 - farm-seeds' help: name `.conductor\remote\jobs\<id>\shards` (they survive a stopped job). (aicomplete 202, #8974, as is the next)
 - A calibration item `partial` with a named next lever gets a hint to queue it as a follow-up (192's d0 pick waited for 196).
 - Check a queued prompt's absolute write paths against `write_roots` (receipt warning) and show them in staging: 186's path outside surfaced only at run time (a 10-min `ask`). (wordwarriors 193, #5587, as is the next)
 - Warn when a test lane starts with `CONDUCTOR_PORT` taken (an item's own dev server made `@smoke` fail to bind).
 - Preamble: a conductor tool's `Connection closed` (daemon restart) means keep working and retry, never end the turn (009 red at 2:35am); "detached" is conductor's `start` only; a long item writes its report per milestone with real numbers. (workbench 013, #265)
+- aicomplete 290 (post-audit of 278, #13203): a `recover` event lists the cut session's background commands, so the resume knows what to redo (278 lost ~3 turns); the `remote` hook advises farming only on `aic-sim experiment`/`farm` with seeds, not `run --games 1 --trace`; a self-audit preamble names the audited merge commit.
 
 - Promote **process all** / **review all** from planner-vocab.md into planner.md's *Processing reports* when a cleanup frees room.
 
@@ -94,31 +94,25 @@ Chores:
 
 Still not live:
 
-- **105's lines**: a cut-off run's resume (from `.continueN.md`, redoing the cut step?), the update-restart warning (none pending 11-11), `external_data`'s red line, the restaged amendments' receipt.
+- **105**: a cut-off run's resume (redoing the cut step?), the update-restart warning, `external_data`'s red line, restaged amendments' receipt.
 
-- **131-132**: unseen live: `matt:` only on real hand-offs, each naming a question or a `## For Matt` choice? (Not in the light preamble.)
-- **127**: unseen live: does a cut taskbar button read `◐ 1 running`?
+- **127–132**, unseen live: a cut taskbar button reading `◐ 1 running` (127); `matt:` only on real hand-offs naming a question or choice (131–132).
 - **134**: unseen live: is aicomplete's cause in its sim's last 20 lines? A browser's exception enough?
 - **133**: unseen live: the design-default revisit nudge, and a paired read farming its old side with `--at`.
 - **124**: the worker test is proven in the sandbox (headless Chrome) only: run it on aicomplete with the laptop joined. Does the farm reminder catch aicomplete's real direct runs, and stay quiet otherwise?
 - **123**: short preambles and the diff review, sandbox only: anything lost from *Dropped in 123*? real bugs found, at what cost?
-- **121**: unseen live: `unchanged from main:` written? `warns.UNCHANGED_RE` over-catching?
-- **122**: hook denies unseen in items; a helper's `agent_id`? denials of legit calls (`conductor: refused`)?
-- **120's lines**: unseen live: a real Workflow call reaching the hook? stages naming defaults?
-- **119**: unseen live: Helium's **Run game** by the card viewer; old-command servers replaced.
+- **119–122**, unseen live: Helium's **Run game** by the card viewer, old servers replaced (119); a Workflow call at the hook, stages naming defaults (120); `unchanged from main:`, `UNCHANGED_RE` over-catching (121); hook denies in items, a helper's `agent_id`, legit calls denied (122).
 - **139**: the dead-daemon toast is sandbox-proven only; `stats`' corrections rule right?
-- **138, 140**: a 30s receipt wait in claude.ai? `start_session`'s ~20 KB? Is the launcher live after the next app restart (a tool change seen with none), and do `stats`' `bridge` columns fall to images?
+- **138–141**: after a desktop-app restart (141's launcher): do calls sent together all answer (if not, `out/mcp-traffic.log` says if they arrived)? A tool change live with no restart? A 30s receipt wait in claude.ai? `start_session`'s ~20 KB?
+- **MCP step 2 of 3** (11-19): sessions MCP-first, a non-image bridge write noted. Step 3 (retire the bridge to an emergency doc; the daemon flags planner writes without `via: mcp`) once `stats` shows five sessions in a row, two projects, `bridge` 0, no lost write. Later: a Fable preamble trim trial, reports writing `friction: none`.
 - **137**: unseen live: no project is split yet (the planner splits each by **split state**); is 15 KB right after aicomplete's split (~13.5 KB moving)? Do executors read `docs/rulings.md` first, and do hunts stop on yield without dropping real bugs (watch *Time* lines)?
-- **117's lines**: unseen live: `told_to_stop` matching "don't stop" too; kept paths named and found. **108**: do notes name files?
-- **115's lines**: unseen live: toast settle/coalesce times, a renumbered item's `depends_on`, the standing fold.
-- **114's lines**: unseen live: `--cancel` freeing `aic-sim.exe`, the next run closing the dead job; a killed `native_build` runs to its end.
+- **117**: `told_to_stop` matching "don't stop"? **108**: do notes name files?
+- **114–115**, unseen live: `--cancel` freeing `aic-sim.exe`, a killed `native_build` running to its end; toast settle times, a renumbered item's `depends_on`, the standing fold.
 - **135**: unseen live: does a `--resume` with `--model` keep the stage's cache; do Fable items obey preamble and hooks?
 - **113's fix-in-place**: unseen live: items fixing instead of noting; post-audits landing small fixes.
-- **112's session numbers**: aicomplete's control needs `display_name = "AIcomplete"` (by request; its planner's) or its chats read "Aicomplete session N"; does claude.ai title the chat from the planner's bold first line? Numbers continue each project's history.
-- **111's API retry**: unseen live: a real `--resume` after a 403 carrying on mid-step, its `total_cost_usd`, the 2 / 10 / 30 min waits.
-- **110's kept reads**: in use (aicomplete 228, 233); 3 items / 2 GB right?
+- **112**: aicomplete needs `display_name = "AIcomplete"` (its planner's request); does claude.ai title a chat from the planner's bold first line?
+- **111**: unseen live: a `--resume` after a 403 carrying on mid-step, its cost, the 2 / 10 / 30 min waits. **110**: kept reads' 3 items / 2 GB right?
 - **109's `warnings:`**: unseen live. aicomplete's design checker (205) is the first user: its `CLAUDE.md` *Warning checks* or `warning_checks` is its planner's to add; do executors run the checks and copy the parts verbatim?
-- **78–103, unseen live**: each report lists its own lines.
 - **Farm load** (aicomplete 168, #7341): no broker → `run_local` runs native at full `--threads` (~95 min): cap at `main_slots`. A `remote: true` item's load warning should name `main_slots` as its share (168 read it as "run native"). A worker offline mid-item raised no flag: the watch or *Now* should.
 - The worker page comes from conductor's checkout: uncommitted page code reaches live tabs (100 reloaded the laptop 4 times; `farm-seeds` pinned since 130).
 - A spec newer than a worker's bundle isn't in it (167's laptop failed every shard of one). 100 drops a worker from a job at its first failed shard; to do: rebuild the bundle when a job names a spec it lacks. Due from #7341.

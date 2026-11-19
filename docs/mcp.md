@@ -82,7 +82,8 @@ several, refuses with the file's section list, nothing written.
 - `question` (an id or suffix), `picks` (a picker's saved choices, pretty-printed),
   `receipt` (a write's path), `stats` (`weeks`, default 4: `conductor stats`' text, `stats.md`);
 - `repo` (`name`: `<repo>/<path>`): a tracked text file of a project's code repo, read-only,
-  paged and `section`ed like the rest; `<repo>` or a folder lists its tracked names. Refused
+  paged and `section`ed like the rest; a markdown file with `## ` sections comes header-first
+  as a report does (141; `section`, or `"all"`, for the text); `<repo>` or a folder lists its tracked names. Refused
   with the reason: a repo not the project's, a path outside it (`..`, `.git`), untracked,
   git-ignored, binary, not UTF-8, or an image (`.png`, `.jpg`, … `.svg`, `.pdf`: the
   planner looks at those itself, over the bridge);
@@ -123,10 +124,33 @@ The app starts the server once and keeps it, so `conductor mcp` is a thin launch
 mcp --worker`, the server itself, `planner_mcp.main`) and, before an `initialize` or
 `tools/call`, starts a fresh worker when any `.py` under `src/conductor` changed (path,
 mtime, size) since the running one started, or it died, replaying the client's
-`initialize`. A worker that dies mid-call answers that call with an error; the next call
-starts another. So a prompt that changes a tool's behaviour is live at the next call; a
+`initialize`. So a prompt that changes a tool's behaviour is live at the next call; a
 new or renamed tool, a changed description or schema, or a change to the launcher itself
 still takes a full quit and restart of the app, which lists tools once.
+
+**Calls sent together** (141). A chat sends several calls in one turn by default. The
+launcher relays each as it arrives and routes each reply by its id (a thread per worker
+reads its output); a worker started on a code change takes the new calls while the one
+before it finishes its own. In the worker (`PlannerServer.submit`), `status` and `read` run
+at once on a pool; every write runs on its project's lane, one thread, so writes to one
+project apply in the order they came; conductor's own notes share a lane. A call never ends
+unanswered: a worker that exits answers each call it had with an error (a write may have
+landed: `status`, a receipt), and a call over `CALL_SECONDS` (150) gets an error and its late
+reply is dropped. A JSON-RPC batch (an array) is answered as one array; values run together
+on a line are split. The worker reads the protocol from private copies of its pipes, fds 0
+and 1 pointed at NUL: on Windows a child (git) started on a call's thread blocks while
+another thread reads an inheritable stdin pipe (seen in 141's tests: a `status` never ended).
+
+**The traffic log**: every message in and out, a line each (time, launcher pid, `in` /
+`out`, id, tool and `what`, seconds taken, `ERROR`), never arguments or results, in
+`out/mcp-traffic.log` (git-ignored; past 1 MB it moves to `.1`). It shows what the app
+actually sent when a call goes unanswered.
+
+**141's lost results.** From a linked chat after 140, calls sent together got one answer.
+The old launcher took one call at a time and dropped a batch array silently; Claude Code's
+own client, sending three reads at once, got all three through it, so the app's path does
+something those don't, unseen without the log. A lost `edit_state` (aicomplete, 2:07pm) left
+no request, mark or commit: it never ran.
 
 ## Testing
 
@@ -139,4 +163,8 @@ its receipt.
 calls every tool through the launcher against the sandbox (`conductor-sandbox-control`
 beside this checkout), one `ok` / `FAIL` line each, exit 1 on a failure. Its writes stay
 harmless: a held probe item (`selftest_probe`) then a `cancel:` of it, a session start; the
-other writes check the refusal that names what is there. The sandbox daemon must be up.
+other writes check the refusal that names what is there. Then calls sent together:
+`reads-at-once` (three reads) and `write+read` (the probe again beside `status`, cancelled
+after), each failing if any goes unanswered. The sandbox daemon must be up.
+`tests/test_mcp_launcher.py` sends five calls at once, a batch, and calls to a worker that
+dies or never answers.

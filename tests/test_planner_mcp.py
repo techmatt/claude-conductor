@@ -212,7 +212,9 @@ def test_a_repo_file_reads_by_path_and_the_rest_is_refused_with_the_reason(env):
 
         def read(name, **kw):
             return c.call("read", {"project": "test", "what": "repo", "name": name, **kw})
-        assert read("code/docs/rulings.md") == ("# Rulings\n\n## Fonts\n\n- serif", False)
+        text, err = read("code/docs/rulings.md")        # 141: markdown comes header-first, as a report
+        assert not err and text.startswith("# Rulings\n\nSections:\n- Fonts (") and 'section: "all"' in text
+        assert read("code/docs/rulings.md", section="all") == ("# Rulings\n\n## Fonts\n\n- serif", False)
         assert read("code/docs/rulings.md", section="fonts") == ("## Fonts\n\n- serif", False)
         assert read("code") == ("code/ (tracked):\n.gitignore\nREADME.md\ndocs/\nshot.png", False)
         text, err = read("code/../control/state.md")
@@ -319,8 +321,9 @@ def test_the_selftest_prints_a_passing_line_for_every_tool(env):
     t.join(5)
     lines = out.getvalue().splitlines()
     assert box["code"] == 0, out.getvalue()
-    assert [ln.split()[1] for ln in lines[:-1]] == planner_mcp.TOOL_NAMES
-    assert all(ln.startswith("ok ") for ln in lines[:-1]) and lines[-1].startswith("10 of 10 ok")
+    assert [ln.split()[1] for ln in lines[:-1]] == [*planner_mcp.TOOL_NAMES, "reads-at-once", "write+read"]
+    assert all(ln.startswith("ok ") for ln in lines[:-1]) and lines[-1].startswith("12 of 12 ok")
+    assert "3 sent together, 3 answered" in lines[-3] and "2 sent together, 2 answered" in lines[-2]
 
 
 def test_reads_are_capped_and_paged():
