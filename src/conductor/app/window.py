@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, Q
 
 from .. import config as config_mod
 from ..util import clock
-from . import actions, icon, stale, status, theme
+from . import actions, heartbeat, icon, stale, status, theme
 from .events_panel import EventsPanel
 from .model import PRIORITY, Project, Snapshot, overall, restart_due
 from .model_menu import ModelMenu
@@ -32,6 +32,7 @@ except ModuleNotFoundError as exc:      # the module removed (docs/remote-worker
 # Status-dot colours (graphics, not text: they need 3:1, which each meets).
 COLORS = {"red": theme.RED, "asking": theme.ICON_ASKING, "running": theme.ACCENT, "idle": theme.ICON_IDLE}
 SETTINGS_KEY = "controls"
+TOASTED_KEY = "daemon_toasted"  # the dead or hung daemons already toasted (`heartbeat`)
 AUTOPILOT = {                   # mode → menu label, what it means
     "off": ("Off", "Nothing starts by itself: no backlog draws, a watch's included (its tells, answers and "
                    "toasts still go)"),
@@ -237,9 +238,15 @@ class ProjectView(QWidget):
         colour = {"pressure": theme.AMBER, "critical": theme.RED}.get(level)
         self.memory_label.setText(f"<b style='color:{colour}'>{text}</b>" if colour else "")
         self.memory_label.setVisible(bool(colour))
-        self.daemon_btn.setText("Stop daemon…" if d.alive else "Start daemon")
-        self.daemon_btn.setToolTip("Stop the daemon; running executors keep running" if d.alive else
-                                   "Start the daemon (`conductor run`), output in .conductor/daemon.out.log")
+        if d.died or heartbeat.stuck(d):        # down: the button restarts it (`heartbeat`)
+            self.daemon_btn.setText("Restart daemon" if d.died else "Restart daemon…")
+            self.daemon_btn.setToolTip(
+                "Start a new daemon; it adopts the running items" if d.died else
+                "Kill the daemon that stopped answering (only it: its executors run on) and start a new one")
+        else:
+            self.daemon_btn.setText("Stop daemon…" if d.alive else "Start daemon")
+            self.daemon_btn.setToolTip("Stop the daemon; running executors keep running" if d.alive else
+                                       "Start the daemon (`conductor run`), output in .conductor/daemon.out.log")
         self.daemon_btn.setEnabled(True)
         mode, plan = snap.autopilot
         self.autopilot_btn.setText(f"Autopilot: {AUTOPILOT.get(mode, (mode,))[0]}")
@@ -351,7 +358,20 @@ class ProjectView(QWidget):
         self.notify(f"autopilot {mode}: wrote signals/{path.name}; the daemon applies it and logs `autopilot`")
 
     def toggle_daemon(self) -> None:
-        (self.stop_daemon if self.snap and self.snap.daemon.alive else self.start_daemon)()
+        d = self.snap.daemon if self.snap else None
+        if d and heartbeat.stuck(d):
+            self.restart_daemon()
+        else:
+            (self.stop_daemon if d and d.alive else self.start_daemon)()
+
+    def restart_daemon(self) -> None:
+        if confirm(self, "Restart daemon",
+                   f"{self.project.name}'s daemon is not answering. Kill it and start a new one?\n\n"
+                   "Only the daemon is killed: running executors keep running and the new daemon adopts them."):
+            p = actions.restart_daemon(self.project.control)
+            self.notify(f"restarted the daemon for {self.project.name} (pid {p.pid}); "
+                        "output in .conductor/daemon.out.log")
+            self.daemon_btn.setEnabled(False)
 
     def start_daemon(self) -> None:
         p = actions.start_daemon(self.project.control)
@@ -383,6 +403,9 @@ class MainWindow(QMainWindow):
         self.turner = QTimer(self)
         self.turner.timeout.connect(self._turn)
         self.settings = settings or QSettings("conductor", "conductor-app")
+        toasted = self.settings.value(TOASTED_KEY, [])
+        self.heartbeats = heartbeat.Heartbeats([toasted] if isinstance(toasted, str) else toasted or [])
+        self.toaster = None                         # `notify.Toaster` on first use; tests set their own
         self.views: dict[Path, ProjectView] = {}
         self._quitting = False
         self.server = None                          # `single.listen`'s, set by `app.main`
@@ -499,6 +522,23 @@ class MainWindow(QMainWindow):
     def notify(self, text: str) -> None:
         self.statusBar().showMessage(text, 15000)
 
+    def toast_down(self, down: heartbeat.Down, toasts: bool = True) -> None:
+        """One error toast for a daemon that died or hangs (none with `toasts = false`); the key
+        is remembered first, so a toast that fails is not retried every tick (the status bar
+        says it instead)."""
+        self.settings.setValue(TOASTED_KEY, self.heartbeats.toasted)
+        self.settings.sync()
+        if not toasts:
+            self.statusBar().showMessage(down.title, 30000)
+            return
+        try:
+            if self.toaster is None:
+                from ..notify import Toaster
+                self.toaster = Toaster()
+            self.toaster(down.title, down.body, f"daemon {down.key}")
+        except Exception as exc:              # noqa: BLE001 - best effort, as the daemon's toasts are
+            self.statusBar().showMessage(f"{down.title} (toast failed: {exc})", 30000)
+
     # ------------------------------------------------------------ refresh
     def refresh(self) -> None:
         self.model_menu.sync()
@@ -511,6 +551,8 @@ class MainWindow(QMainWindow):
                 continue
             states.append(snap.state)
             lines.append(f"{snap.project}: {snap.state} — {snap.why}")
+            if down := self.heartbeats.check(view.project.name, snap.daemon):
+                self.toast_down(down, view.project.cfg.toasts)
             if not snap.error or folder not in self._good:
                 self._good[folder] = snap     # a read that failed part-way keeps the title where it was
             idx = self.tabs.indexOf(view)

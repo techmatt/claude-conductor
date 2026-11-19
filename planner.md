@@ -107,6 +107,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **pause R** / **resume R** / **clear R** | Signal `pause: <repo>` / `resume: <repo>` / `clear: <repo>` (once the red report is read with Matt). |
 | **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid`. |
 | **open X** / **ping me** / **run X** / **stop X** / **use Fable** / **use Opus** | *Simple actions*. |
+| **stats** [N weeks] | `read` `stats` (`weeks`); say what moved, citing rows. |
 | **check reports** | Unreviewed reports (item, status, finish), oldest first, then running as "not in yet". |
 | **process X** / **process next** | *Reading a report*, the carry by `edit_state`, then signal `reviewed: <repo>/<NNN_name>`; next: dependencies first, then finish order. |
 | **ask X: …** | `queue_item` with `resume: <repo>/<NNN_name>`, Matt's words as body: X's session, forked, answers readonly. |

@@ -18,6 +18,7 @@ uv run conductor outline <item> [--control <folder>]       # ask a running execu
 uv run conductor amend <item> <text…|file> [--control <folder>]  # add to an item's instructions (progress.md)
 uv run conductor checkpoint [<label…>] [--control <folder>]   # a new checkpoint (inbox.md)
 uv run conductor session [<label…>] [--control <folder>]      # a checkpoint plus the session.md digest (inbox.md)
+uv run conductor stats [<project or control folder>] [--weeks N]   # the scoreboard (stats.md)
 uv run conductor open <item> [--control <folder>]          # a finished item's session, in a new console
 uv run conductor run-target <name> [--stop] [--control <folder>]   # start a [run.<name>] target, open its URL
 uv run conductor pick <repo>/<manifest path> [--control <folder>]  # open a picker in the browser (picks.md)

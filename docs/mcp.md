@@ -59,7 +59,7 @@ before `request.md`. An edit that changes nothing writes nothing.
 - `report` (`name`: `NNN`, `NNN_name`, `repo/NNN_name`): first its header lines, title and
   section list with sizes; `section` reads one, `"all"` the whole; `audit`: its notes;
 - `question` (an id or suffix), `picks` (a picker's saved choices, pretty-printed),
-  `receipt` (a write's path);
+  `receipt` (a write's path), `stats` (`weeks`, default 4: `conductor stats`' text, `stats.md`);
 - conductor's own: `planner`, `vocab`, `bridge` (`planner-bridge.md`), `new-project`,
   `planner-notes`, `planner-ideas`, `ledger` (its last 12 lines and what waits in
   `prompts/inbox`), `doc` (`name`: a `docs/` topic; none names them all).

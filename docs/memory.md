@@ -122,6 +122,20 @@ and what was in `running/`. The app's header and `conductor status` say **died**
 the last heartbeat) instead of *not running*, and **not answering** for a live daemon
 whose heartbeat is more than three samples (at least 90s) old.
 
+**The app toasts it at once** (139, `app/heartbeat.py`): `daemon_died` waits for the next
+start, so fractals' death (Nov 18 5:45pm) went unseen 14h41m. Each app refresh checks every
+project's daemon. One that **died** or that lives but has **not beaten for
+`STUCK_SECONDS` (180)** raises one error toast naming the project (`fractals: the daemon
+died`, with the pid, last heartbeat and how long ago), and the header's daemon button
+becomes **Restart daemon** (died: a plain start, which adopts the running items) or
+**Restart daemon…** (hung: asks, kills the daemon's own process, never its executors, then
+starts one; `actions.restart_daemon`). One toast per daemon (its pid and start time): the
+keys toasted are kept in the app's settings (`daemon_toasted`), so neither another tick
+nor an app restart repeats it. A death must stand `GRACE_SECONDS` (10) first, so a
+self-restart's handover is not one. A daemon stopped on purpose (a `stop: daemon` signal
+from the app or a planner, Ctrl+C, a restart) removes `daemon.json` and stays quiet.
+`toasts = false` puts it in the app's status bar instead.
+
 **Staging is cheap already.** A staged item holds no process while it waits for its
 lock: the stage session ends with its plan, and the resume is a new
 `claude --resume`.

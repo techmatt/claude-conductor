@@ -29,7 +29,8 @@ PLANNER_FILES = {"planner": "planner.md", "vocab": "planner-vocab.md", "bridge":
                  "planner-ideas": "planner-ideas.md"}
 CONTROL_FILES = {"state": "state.md", "paged": "paged.md", "habits": "habits.md", "inbox": "inbox.md",
                  "review": "review.md", "session": "session.md", "remote-diag": "remote-diag.md"}
-READ_KINDS = (*CONTROL_FILES, "report", "audit", "question", "picks", "receipt", *PLANNER_FILES, "ledger", "doc")
+READ_KINDS = (*CONTROL_FILES, "report", "audit", "question", "picks", "receipt", "stats", *PLANNER_FILES,
+              "ledger", "doc")
 LEDGER_LINES = 12
 
 
@@ -275,7 +276,8 @@ def _report(cfg: config_mod.Config, ref: str, suffix: str) -> Path | str:
     return reports / f"{repo}__{name}{suffix}"
 
 
-def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str = "", part: int = 1) -> tuple[str, bool]:
+def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str = "", part: int = 1,
+         weeks: int | None = None) -> tuple[str, bool]:
     """(text, is_error) for `read`. `cfg` is None only for conductor's own files."""
     what = (what or "").strip().lower()
     again = f'read(what="{what}"' + (f', name="{name}"' if name else "") + (
@@ -302,6 +304,15 @@ def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str 
                 return f"no {path.name}, and `state.md` has no *{'Planner habits' if what == 'habits' else 'Paged'}*", True
             return paged("\n".join(body).strip("\n") + f"\n\n(from state.md: {path.name} doesn't exist yet)", part, again), False
         return _file(path, section, part, again)
+    if what == "stats":                     # `conductor stats` (docs/stats.md); `name` may carry the weeks
+        from . import stats
+        if weeks is None and name.strip().isdigit():
+            weeks = int(name)
+        log = EventLog(cfg.events_db)
+        try:
+            return paged(stats.report(log, cfg.project, weeks or stats.WEEKS), part, again), False
+        finally:
+            log.close()
     if what in ("report", "audit"):
         if not name:
             return "name the report: `repo/NNN_name`, `NNN_name` or `NNN`", True

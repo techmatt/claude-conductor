@@ -215,6 +215,8 @@ what Matt acts on (115, `notify.note`); everything else is panel only:
   `tamper`, `hold`, `checkout_dirty`, `run_failed`, `pick_failed`, `amend_refused`,
   `request_failed`, `invalid`, `push_failed`, `memory_critical`, `daemon_died`, a
   `daemon_stop` on an error, and the watch's stuck-item flag (`watch_flag` `quiet`).
+- **A daemon down now**, from the app, not the daemon (139): one toast when a project's
+  daemon dies or stops answering for 3 minutes (`memory.md`, *Death made visible*).
 
 Panel only: report `warnings:`, non-blocking questions with a default (`design` ones too), progress
 and outlines, ETA overruns, `memory` pressure and `load_high`, retros queued, parked

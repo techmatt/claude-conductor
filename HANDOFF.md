@@ -52,6 +52,7 @@ Live, by area (the doc named holds the detail):
 
 - **Split state, hunts on yield** (137): `state.md` is the wavefront; `habits.md` and `paged.md` are control files (the digest reads `habits.md`, else the old section); standing rulings live in each repo's `docs/rulings.md`, named in the preamble and diff review when present. Bug hunts default to recent changes and stop after two thin rounds (`templates.md`).
 - **Planner MCP tools** (136 trial, 138; `docs/mcp.md`): `conductor mcp`, registered in the Claude desktop app, is the planner's surface: `start_session`, `status`, `read`, and writes (`queue_item`, `amend`, `signal`, `edit_state`, `answer`, `park`, `note`) that write the bridge's files `by: planner` and return the receipt; a down daemon refuses before writing. The file bridge is the fallback (`planner-bridge.md`).
+- **Scoreboard, dead daemons** (139): `conductor stats` / `read(what="stats")` (`docs/stats.md`); the app toasts a dead or hung daemon once, offering a restart (`memory.md`).
 
 Planner docs: `planner.md` (returned whole by `start_session` with `session.md`; 13 KB since 138), `planner-bridge.md` (the bridge fallback), `planner-vocab.md` (rare ops only, 125), `claude-ai-new-project.md` (only new / park / resume and setup); README is an overview plus an index into `docs/`.
 
@@ -87,7 +88,6 @@ Chores:
 - Warn when a test lane starts with `CONDUCTOR_PORT` taken (an item's own dev server made `@smoke` fail to bind).
 - Preamble: a conductor tool's `Connection closed` (daemon restart) means keep working and retry, never end the turn (009 red at 2:35am); "detached" is conductor's `start` only; a long item writes its report per milestone with real numbers. (workbench 013, #265)
 
-- A dead daemon goes unnoticed (fractals' died Nov 18 5:45pm, 14h41m unseen; queue writes got no receipts). Proposed: the app toasts a few minutes stale and offers a restart. Since 138 every tool write refuses at once naming it. (fractals, #1930, as is the next)
 - Promote **process all** / **review all** from planner-vocab.md into planner.md's *Processing reports* when a cleanup frees room.
 
 - **`external_data` landing mid-run** (105, not built): its branch lands only at the end or by `land:`. If it bites: a `land_now` progress field fast-forwarding main to the branch head between steps, refused while another item holds the repo.
@@ -106,6 +106,7 @@ Still not live:
 - **122**: hook denies unseen in items; a helper's `agent_id`? denials of legit calls (`conductor: refused`)?
 - **120's lines**: unseen live: a real Workflow call reaching the hook? stages naming defaults?
 - **119**: unseen live: Helium's **Run game** by the card viewer; old-command servers replaced.
+- **139**: the dead-daemon toast is sandbox-proven only; `stats`' corrections rule right?
 - **138**: tools seen only via `tests/mcp_client.py` and the sandbox (`status` ran in a linked chat, 136). A 30s receipt wait in claude.ai? `start_session`'s ~20 KB vs bridge stages?
 - **137**: unseen live: no project is split yet (the planner splits each by **split state**); is 15 KB right after aicomplete's split (~13.5 KB moving)? Do executors read `docs/rulings.md` first, and do hunts stop on yield without dropping real bugs (watch *Time* lines)?
 - **117's lines**: unseen live: `told_to_stop` matching "don't stop" too; kept paths named and found. **108**: do notes name files?

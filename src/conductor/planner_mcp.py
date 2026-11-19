@@ -60,11 +60,13 @@ TOOLS = [
         "Read by name, capped ~8 KB a part (`part` for the next). what: state | paged | habits | inbox | review | "
         "session | remote-diag (control files; `section` = a ## heading) | report (name = NNN or repo/NNN_name: "
         "header and section list first, then `section`, or \"all\") | audit | question (id) | picks (picker name) | "
-        "receipt (a write's path) | planner | vocab | bridge | new-project | planner-notes | planner-ideas | "
+        "receipt (a write's path) | stats (`weeks`, default 4: items per week and model, spend by kind, "
+        "corrections, planner writes per session) | planner | vocab | bridge | new-project | planner-notes | planner-ideas | "
         "ledger (conductor prompts run and waiting) | doc (name = a conductor docs/ topic)."),
      "inputSchema": {"type": "object", "properties": {
          "project": P, "what": {"type": "string"}, "name": {"type": "string"},
-         "section": {"type": "string"}, "part": {"type": "integer"}}, "required": ["what"]}},
+         "section": {"type": "string"}, "part": {"type": "integer"}, "weeks": {"type": "integer"}},
+        "required": ["what"]}},
     {"name": "queue_item", "description": (
         "Write a queue item (or, `held`, a proposed one). `name`: a slug (numbered next) or NNN_slug (an existing "
         "one is rewritten). `meta`: front-matter beyond repo (template, max_hours, alongside, …). Returns the "
@@ -253,7 +255,8 @@ class PlannerServer:
         if name == "read":
             what = (a.get("what") or "").lower()
             cfg = None if what in (*rd.PLANNER_FILES, "doc", "ledger") else self.project(a, live=False)
-            text, err = rd.read(cfg, what, a.get("name") or "", a.get("section") or "", int(a.get("part") or 1))
+            text, err = rd.read(cfg, what, a.get("name") or "", a.get("section") or "", int(a.get("part") or 1),
+                                int(a["weeks"]) if a.get("weeks") else None)
             if err:
                 raise Refused(text)
             return text

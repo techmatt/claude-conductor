@@ -4,7 +4,8 @@ The app changes nothing in the queue itself: approve, cancel, reorder, clear, re
 stop are `signals/` files the daemon carries out and logs. `checkpoint` and `session` here
 are the CLI's: the app has no way to make a checkpoint (112). Besides those it writes only an
 answer file (the same function `conductor answer` uses) and an amend file (as `conductor
-amend` does), starts the daemon, and opens a console on a finished item's session.
+amend` does), starts (or, dead or hung, restarts) the daemon, and opens a console on a finished
+item's session.
 """
 
 from __future__ import annotations
@@ -170,6 +171,27 @@ def start_daemon(control: Path):
     """Spawn the daemon detached; its output goes to `.conductor/daemon.out.log`."""
     control = Path(control).resolve()
     return procs.spawn_daemon(control, control / ".conductor" / "daemon.out.log")
+
+
+def restart_daemon(control: Path):
+    """A daemon that died or stopped answering (`heartbeat`): kill its process, only it (its
+    executors run on and the new daemon adopts them), then start a new one."""
+    import json
+    import psutil
+    lock = Path(control).resolve() / ".conductor" / "daemon.json"
+    try:
+        info = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        info = {}
+    pid = info.get("pid") if isinstance(info, dict) else None
+    if pid and procs.alive(pid, info.get("create_time")):
+        try:
+            p = psutil.Process(pid)
+            p.kill()
+            p.wait(10)
+        except psutil.Error:
+            pass
+    return start_daemon(control)
 
 
 def restart_all(control: Path):

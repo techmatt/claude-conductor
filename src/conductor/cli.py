@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | rename-repo | remote | app | mcp`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | stats | open | open-path | run-target | pick | init | rename-repo | remote | app | mcp`."""
 
 from __future__ import annotations
 
@@ -461,6 +461,29 @@ def cmd_events(args) -> int:
     return 0
 
 
+def stats_config(arg: str | None) -> config_mod.Config:
+    """A project by name (`aicomplete`: one the app remembers, else a `*-control` beside this
+    checkout) or by control folder; none: $CONDUCTOR_CONTROL or the current folder."""
+    if arg and not (Path(arg) / config_mod.CONFIG_NAME).is_file():
+        from . import planner_read
+        cfgs, _ = planner_read.configs([])
+        if cfg := planner_read.find_project(cfgs, arg):
+            return cfg
+        raise config_mod.ConfigError(planner_read.unknown(arg, cfgs))
+    return config_mod.load(_control(arg))
+
+
+def cmd_stats(args) -> int:
+    from . import stats
+    cfg = stats_config(args.project)
+    log = EventLog(cfg.events_db)
+    try:
+        print(stats.report(log, cfg.project, args.weeks))
+    finally:
+        log.close()
+    return 0
+
+
 def cmd_remote(args) -> int:
     """`remote test`: the built-in worker test (docs/remote-status.md, *Worker test*)."""
     try:
@@ -550,6 +573,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("label", nargs="*", help="default: start")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_session)
+    sp = sub.add_parser("stats", help="a scoreboard from the event log: items per week and model, spend by kind, "
+                                      "corrections, planner writes per session (docs/stats.md)")
+    sp.add_argument("project", nargs="?", help="a project name or control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.add_argument("--weeks", type=int, default=4, help="weeks shown, this one included (default 4)")
+    sp.set_defaults(fn=cmd_stats)
     sp = sub.add_parser("open", help="open a finished item's session in a new console (claude --resume)")
     sp.add_argument("item", help="sandbox/001_x, 001_x or 001")
     sp.add_argument("--control", help="control folder (default: $CONDUCTOR_CONTROL or .)")

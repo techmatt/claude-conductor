@@ -175,6 +175,15 @@ def no_update_pending(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def app_toasts(monkeypatch) -> list[tuple[str, str, str]]:
+    """The app's own toasts (a dead daemon's, `app/heartbeat.py`) are recorded, never shown."""
+    from conductor import notify
+    shown: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(notify.Toaster, "__call__", lambda self, title, body, tag: shown.append((title, body, tag)))
+    return shown
+
+
+@pytest.fixture(autouse=True)
 def claude_config(tmp_path, monkeypatch):
     """Claude Code's config folder, where the fake executor keeps its session transcripts
     and a resume item's launch looks for its original's: never the real `~/.claude`."""

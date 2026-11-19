@@ -47,12 +47,13 @@ one's reason in its tooltip). A checkpoint clears the count too. A second line, 
 line (`memory.line`, as in the inbox's *Now*), shows only when it needs Matt: amber under
 pressure, red when critical (with the biggest item). At `ok` it is hidden and takes no
 space; `conductor status` and the inbox's *Now* still show it always.
-One daemon button toggles with its state: *Start daemon* spawns `<python> -m conductor run <folder>` (the
-console `python.exe` even when the app runs under `pythonw.exe`; git calls pass
-`CREATE_NO_WINDOW` too, so nothing flashes a console window)
-detached through a launcher that exits (no live parent, no window, its own process group, out of the caller's job object when
-allowed: `restart.md`, *Platform notes*), output appended unbuffered (`python -u`) to `.conductor/daemon.out.log`; *Stop daemon…* asks first,
-then writes a `stop: daemon` signal. Executors and stages keep running either way.
+One daemon button toggles with its state: *Start daemon* spawns `<python> -m conductor run <folder>`
+(console `python.exe` even under `pythonw.exe`; nothing flashes a window) detached through
+a launcher that exits (`restart.md`, *Platform notes*), output appended unbuffered to
+`.conductor/daemon.out.log`; *Stop daemon…* asks, then writes `stop: daemon`. Executors
+and stages keep running either way. A daemon dead or silent 3 minutes: one toast, and
+**Restart daemon** (139; `memory.md`, *Death made visible*).
+
 Each run target gets a **Run <name>** button beside them, reading `● up`, `● starting`
 or `● down` (green, amber, grey; probed each refresh on a background thread, so a button shows the previous refresh's answer); a click writes `run: <name>`,
 which opens the URL (starting the target first when it is down). While a target is
