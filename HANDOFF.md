@@ -51,9 +51,9 @@ Live, by area (the doc named holds the detail):
 - **Remote workers** (87, opt-in, removable; `docs/remote-workers.md`): `[remote]` starts a LAN broker; a farming item's (`remote: true`, or by default since 105) `farm-seeds` shards a seeded job over browser tabs (wasm), a local-remote worker and the main box behind per-kind fingerprint gates (89), merged byte-identical. Live on aicomplete (88). Status page, app chip, Workers tab, one URL, diag, per-browser cores, placement (`remote-status.md`, `-url`, `-diag`, `-cores`, `-placement`). 114 (`farm-seeds.md`): it names the commit it runs from and warns on a dirty tree; `farm-seeds --cancel`, a stop signal or a hard kill leaves no native shard running (kill-on-close job) and closes its broker job. 118: it makes its out folder. 116 (`remote-status.md`): one bundle a browser core; an out-of-memory retries in a fresh core, then reloads the page; a failed gate's reason is shown. 124 (`remote-status.md`, *Worker test*): `conductor remote test` / **Test workers** runs a built-in job (no project build) and reports per worker; a worker's counts survive an hour's silence; a `remote` item running the native sim directly is reminded once to farm. 126 (`remote-placement.md`): main-box outputs reach the broker as files; a lost broker means a reconnect, else the main box finishes the job, said; *Shards today* recounted from `who.json` notes; a worker's shard copied only once late. 130: farm steps run in a tree pinned at start (`farm-seeds.md`; 133: `--at <commit>` farms an older revision); *Now*: a worker's latest gate; load tells once a stretch, 40% own share (`memory.md`). 134: a failed run shows a shard's output tail once per cause.
 
 - **Split state, hunts on yield** (137): `state.md` is the wavefront; `habits.md` and `paged.md` are control files (the digest reads `habits.md`, else the old section); standing rulings live in each repo's `docs/rulings.md`, named in the preamble and diff review when present. Bug hunts default to recent changes and stop after two thin rounds (`templates.md`).
-- **MCP trial** (136, removable; `docs/mcp.md`): `conductor mcp`, one read-only `status(project?)` tool, registered in the Claude desktop app's `claude_desktop_config.json`; does a linked claude.ai chat see it? `planner.md` untouched until it does.
+- **Planner MCP tools** (136 trial, 138; `docs/mcp.md`): `conductor mcp`, registered in the Claude desktop app, is the planner's surface: `start_session`, `status`, `read`, and writes (`queue_item`, `amend`, `signal`, `edit_state`, `answer`, `park`, `note`) that write the bridge's files `by: planner` and return the receipt; a down daemon refuses before writing. The file bridge is the fallback (`planner-bridge.md`).
 
-Planner docs: `planner.md` (its *Start*, then read whole at step 5 with `session.md`, the only two files a start stages), `planner-vocab.md` (rare ops only, 125), `claude-ai-new-project.md` (only new / park / resume and setup); README is an overview plus an index into `docs/`.
+Planner docs: `planner.md` (returned whole by `start_session` with `session.md`; 13 KB since 138), `planner-bridge.md` (the bridge fallback), `planner-vocab.md` (rare ops only, 125), `claude-ai-new-project.md` (only new / park / resume and setup); README is an overview plus an index into `docs/`.
 
 A next prompt should know:
 - A behaviour change updates `planner.md` (and `claude-ai-new-project.md` where it covers the topic) and the matching `docs/` file, not README's body.
@@ -67,7 +67,7 @@ Accepted gaps nobody plans to fix unless they bite live in `docs/known-limits.md
 Chores:
 
 - Corelight's `.gitignore` lacks `picks/`, `session.md` and `review.md` (a startup `warning`), and its control folder has no remote (auto-push needs only `origin`): its planner's and Matt's.
-- **Matt's saved start preference** should match `planner.md` *Start* (120): step 2 lists fractals' repos (the line: report 120).
+- **Matt's saved start preference** is replaced by `start_session` (the new text: report 138).
 - `ask` holds the whole session for its window (147 idle 10 min); fix: a non-blocking `ask` answered by message. (aicomplete 153, #6654)
 - Check a first outline against its done-when list (147: two watch tells re-sent rows). (aicomplete 153)
 - **Needs a human**: a toast click doesn't open the app (try a `conductor-app:` URI plus `launch_action`); an app-started daemon's windows may open behind.
@@ -87,9 +87,8 @@ Chores:
 - Warn when a test lane starts with `CONDUCTOR_PORT` taken (an item's own dev server made `@smoke` fail to bind).
 - Preamble: a conductor tool's `Connection closed` (daemon restart) means keep working and retry, never end the turn (009 red at 2:35am); "detached" is conductor's `start` only; a long item writes its report per milestone with real numbers. (workbench 013, #265)
 
-- A dead daemon goes unnoticed (fractals' died Nov 18 5:45pm, 14h41m unseen; queue writes got no receipts). Proposed: the app watches each heartbeat and, a few minutes stale, toasts and offers a restart. 136's `status` tool names it when asked. (fractals, #1930, as is the next)
+- A dead daemon goes unnoticed (fractals' died Nov 18 5:45pm, 14h41m unseen; queue writes got no receipts). Proposed: the app toasts a few minutes stale and offers a restart. Since 138 every tool write refuses at once naming it. (fractals, #1930, as is the next)
 - Promote **process all** / **review all** from planner-vocab.md into planner.md's *Processing reports* when a cleanup frees room.
-- `review: all`: staging review.md right after the signal's commit returned the previous one (Nov 19). planner.md: stage it with the signal's receipt, re-stage once if its header names an older signal, as session.md. (aicomplete #12904)
 
 - **`external_data` landing mid-run** (105, not built): its branch lands only at the end or by `land:`. If it bites: a `land_now` progress field fast-forwarding main to the branch head between steps, refused while another item holds the repo.
 
@@ -107,6 +106,7 @@ Still not live:
 - **122**: hook denies unseen in items; a helper's `agent_id`? denials of legit calls (`conductor: refused`)?
 - **120's lines**: unseen live: a real Workflow call reaching the hook? stages naming defaults?
 - **119**: unseen live: Helium's **Run game** by the card viewer; old-command servers replaced.
+- **138**: tools seen only via `tests/mcp_client.py` and the sandbox (`status` ran in a linked chat, 136). A 30s receipt wait in claude.ai? `start_session`'s ~20 KB vs bridge stages?
 - **137**: unseen live: no project is split yet (the planner splits each by **split state**); is 15 KB right after aicomplete's split (~13.5 KB moving)? Do executors read `docs/rulings.md` first, and do hunts stop on yield without dropping real bugs (watch *Time* lines)?
 - **117's lines**: unseen live: `told_to_stop` matching "don't stop" too; kept paths named and found. **108**: do notes name files?
 - **115's lines**: unseen live: toast settle/coalesce times, a renumbered item's `depends_on`, the standing fold.

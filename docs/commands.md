@@ -26,7 +26,7 @@ uv run conductor init <control folder> --project NAME --repo NAME=PATH [--repo �
 uv run conductor rename-repo <old> <new> [--path P] [--control <folder>]   # daemon stopped (rename-repo.md)
 uv run conductor remote test [<control folder>]           # the built-in worker test (remote-status.md)
 uv run conductor app [<control folder> …]                  # the desktop app (app.md)
-uv run conductor mcp [--control <folder> …]                # trial stdio MCP server, `status` (mcp.md)
+uv run conductor mcp [--control <folder> …]                # the planner's stdio MCP server (mcp.md)
 ```
 
 The control folder argument defaults to `$CONDUCTOR_CONTROL`, then the current folder.

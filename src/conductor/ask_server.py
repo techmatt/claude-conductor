@@ -593,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def serve_stdio(server) -> int:
     """Feed newline-delimited JSON-RPC from stdin to `server.handle` until stdin closes
-    (also `status_mcp`'s loop)."""
+    (also `planner_mcp`'s loop)."""
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     for line in sys.stdin:

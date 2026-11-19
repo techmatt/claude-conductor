@@ -13,8 +13,6 @@ Gaps nobody plans to fix unless they bite. Each says what would change that. A l
 ## Control folder and requests
 
 - **Tamper attribution.** A change is attributed (30) only to an item whose hook saw it name a changed control path. A change made by a script that never names the path, or by a stage or merge executor (no hook), still ends every active item red.
-- **Half-written request targets.** Requests trust the planner to write `request.md` last: a target still being written by a writer that allows shared reads could be read half-done (the readable check catches only a writer holding it locked).
-- **Receipts can lag a heavy tick** by 2.5–3.2s. On 2026-10-30 the planner's first stage missed one at least six times (once over a minute under load); on 2026-10-31 never. If it recurs: stage once after a short wait, or a write returns when its receipt exists.
 
 ## Executors
 
@@ -43,7 +41,6 @@ Gaps nobody plans to fix unless they bite. Each says what would change that. A l
 - **Deferred design calls** live only in a cleanup report's **Deferred** and, once ruled, `state.md`. Conductor tracks none; a standing inbox section could, if they get lost.
 - **Audit notes are uncapped.** A cleanup template inlines every unused audit note into its prompt. If a repo collects dozens, cap the count per cleanup (oldest first). (Repeats are deduped since 122: `templates.md`.)
 - **31's planner action rules** (signals only from Matt's words, `reviewed:` only inside processing) are rules, not checks.
-- **`planner.md` *Start* step 3** assumes a workspace shell and `TZ=America/Los_Angeles`. Matt's saved preference must carry steps 1–5, since the file is first read at step 5.
 
 ## App and pickers
 

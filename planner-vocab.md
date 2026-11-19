@@ -4,7 +4,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 
 | Phrase | What the planner does |
 |---|---|
-| **backlog X** | Only on Matt's word: his prompt as `backlog\<repo>\<name>.md` (queue front-matter, no number); drawn when that queue empties. |
+| **backlog X** | Only on Matt's word: his prompt by `note(kind="backlog")` (queue front-matter, no number); drawn when that queue empties. |
 | **show backlog** | The inbox's *Night shift*. |
 | **watch now** | Signal `watch: now` (refused while one is live). |
 | **autopilot off / night / on** | Signal `autopilot: off\|night\|always`: whether the night shift may start work itself (draws, watches); the app's header shows it. |
@@ -14,7 +14,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **postmortem Y** | Y's events, prompt, report: what went wrong. |
 | **reorder R: X Y** | Only when Matt asks. Signal `reorder: <repo or proposed> X Y` (only the items that swap, listed in their **new** order; the current order is a no-op): numbers swap, each renamed item is a new id. Fix old names in `state.md`. |
 | **test cleanup R** / **claude.md cleanup R** / **disk space cleanup R** | Queues `template: test_cleanup` / `claude_md_cleanup` / `disk_cleanup` (body: Matt's extras). |
-| **process all** / **review all** | Signal `review: all`; stage `review.md` once its header names that signal. **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls ruled as for a cleanup); then rewrite the marker in `planner-notes.md`. |
+| **process all** / **review all** | Signal `review: all`; `read` `review` once its header names that signal (an older one: read again, once). **process X** for each report in order, then conductor's past the marker (what each changes here, *Deferred* calls ruled as for a cleanup); then `note(kind="reviewed_mark")`. |
 | **defaults all** [except …] | Every open question but the exceptions takes its default: those needing work → one follow-up item, the rest → `state.md` rulings; flags any Matt should really look at. |
 | **ultracode X** | Queued: rewrites its front-matter. Running: offers the rest as a new item with `ultracode: true`. |
 | **retry X** | Signal `retry: <repo>/<NNN_name>`: a finished red item's kept session resumes in its kept worktree, then finishes and merges as usual, releasing its red's hold (`docs/api-retry.md`). For a red the API caused (`API error` reason) once it is back; an outage's API failure is retried by itself first. |
@@ -29,8 +29,8 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **general cleanup R** | Queues `template: general_cleanup`, `ultracode: true`; it takes every unused note. |
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3; a cap: it stops on yield), focus as body; "notes only" adds `readonly: true`. Scope: recent changes since the last hunt. |
 | **full bug hunt R** [Nh] … | The same, body led by "Full bug hunt: every lens.": each lens gets one real round, then stop on yield. |
-| **trim state** | One request rewriting `state.md` to the wavefront (plan, status, queue, next, Matt's items, maintenance, pending fixes), dropping histories and what the repo's docs hold. |
-| **split state** | Once per project: a request moving *Planner habits* to `habits.md` and *Paged* to `paged.md` (each `# <project> — …` then the lines) and deleting them from `state.md`, plus a parked edit or item per repo writing its rulings to `docs/rulings.md`, then deleting *Standing rulings* from `state.md` once it lands. |
+| **trim state** | One `edit_state` rewriting `state.md` to the wavefront (plan, status, queue, next, Matt's items, maintenance, pending fixes), dropping histories and what the repo's docs hold. |
+| **split state** | Once per project: `edit_state` with `content` for `habits.md` and `paged.md` (each `# <project> — …` then the lines), then one deleting those sections from `state.md`, plus a parked edit or item per repo writing its rulings to `docs/rulings.md`, then deleting *Standing rulings* from `state.md` once it lands. |
 | **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
 | **notes used X, Y** / **R** | Signal `audit_used: <repo>/<NNN_name>, …` / `audit_used: <repo>/all`: notes an item already handled. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |

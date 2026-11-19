@@ -7,7 +7,8 @@ queues as headless `claude -p` sessions (each in its own git worktree, merged in
 `alongside`), and records everything in an append-only event log from which the inbox and
 every other view is derived.
 
-`planner.md` is how a planner session uses it (rare ops in `planner-vocab.md`);
+`planner.md` is how a planner session uses it, through conductor's MCP tools (`docs/mcp.md`;
+rare ops in `planner-vocab.md`, the file-bridge fallback in `planner-bridge.md`);
 `claude-ai-new-project.md` is how a project is started, parked and resumed. This file and
 `docs/` are how conductor works: the canon for commands, file formats, fields and event
 kinds, a topic per file. `CLEANUP.md` is the maintenance pass, with each file's size budget.
@@ -70,7 +71,7 @@ command (`docs/restart.md`).
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
-| `docs/mcp.md` | Trial: `conductor mcp`, a read-only `status` tool for a linked planner chat; registration, removal |
+| `docs/mcp.md` | `conductor mcp`, the planner's tools: each write and its receipt, reads, reach, registration |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/restart.md` | The restart rule, self-restart on a code change; process groups, detached launches |
 | `docs/development.md` | The test suite, its lanes and the fake executor |

@@ -6,9 +6,10 @@ Starts the server named in the config, initializes, lists tools, calls `ask` and
 the result text. The fake executor uses `call_tool` for its `FAKE ask` and `FAKE progress` lines.
 
     python tests/mcp_client.py --status [project] [--control <folder> ...]
+    python tests/mcp_client.py --planner <tool> '<arguments as JSON>' [--control <folder> ...]
 
-Starts `conductor mcp` (the trial status server, docs/mcp.md) as the desktop app would and
-prints what `status` returns.
+Starts `conductor mcp` (the planner's server, docs/mcp.md) as the desktop app would and
+prints what the tool returns.
 """
 
 import json
@@ -69,20 +70,39 @@ def call_ask(mcp_config: Path, arguments: dict) -> tuple[str, bool]:
     return call_tool(mcp_config, "ask", arguments)
 
 
-def call_status(project: str | None = None, controls: list[Path] = ()) -> tuple[str, bool]:
-    """Call the trial status server's one tool, the server started as `conductor mcp`."""
+PLANNER_TOOLS = ["status", "start_session", "read", "queue_item", "amend", "signal", "edit_state",
+                 "answer", "park", "note"]
+
+
+def call_planner(tool: str, arguments: dict, controls: list[Path] = ()) -> tuple[str, bool]:
+    """Call one tool of the planner's server (`conductor mcp`, docs/mcp.md), started as the
+    desktop app starts it, with `--control` for each folder given."""
     cmd = [sys.executable, "-m", "conductor", "mcp", *(a for c in controls for a in ("--control", str(c)))]
     c = Client(command=cmd)
     try:
         tools = c.start()
-        assert [t["name"] for t in tools] == ["status"], tools
-        result = c.request("tools/call", {"name": "status", "arguments": {"project": project} if project else {}})
+        assert [t["name"] for t in tools] == PLANNER_TOOLS, tools
+        result = c.request("tools/call", {"name": tool, "arguments": arguments})
         return result["content"][0]["text"], result.get("isError", False)
     finally:
         c.close()
 
 
-if __name__ == "__main__" and sys.argv[1:2] == ["--status"]:
+def call_status(project: str | None = None, controls: list[Path] = ()) -> tuple[str, bool]:
+    return call_planner("status", {"project": project} if project else {}, controls)
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["--planner"]:
+    # python tests/mcp_client.py --planner <tool> '<arguments as JSON>' [--control <folder> ...]
+    rest, controls = sys.argv[2:], []
+    while "--control" in rest:
+        i = rest.index("--control")
+        controls.append(Path(rest[i + 1]))
+        del rest[i:i + 2]
+    sys.stdout.reconfigure(encoding="utf-8")
+    text, is_error = call_planner(rest[0], json.loads(rest[1]) if len(rest) > 1 else {}, controls)
+    print(("ERROR: " if is_error else "") + text)
+elif __name__ == "__main__" and sys.argv[1:2] == ["--status"]:
     rest, controls = sys.argv[2:], []
     while "--control" in rest:
         i = rest.index("--control")

@@ -484,7 +484,7 @@ def cmd_app(args) -> int:
 
 
 def cmd_mcp(args) -> int:
-    from .status_mcp import main as mcp_main
+    from .planner_mcp import main as mcp_main
     return mcp_main(args.control)
 
 
@@ -587,7 +587,7 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("app", help="the desktop app (tray icon, one tab per control folder)")
     sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
     sp.set_defaults(fn=cmd_app)
-    sp = sub.add_parser("mcp", help="trial stdio MCP server: one read-only `status` tool (docs/mcp.md)")
+    sp = sub.add_parser("mcp", help="the planner's stdio MCP server: status, reads and every planner write (docs/mcp.md)")
     sp.add_argument("--control", action="append", help="a control folder (repeatable; default: the app's projects)")
     sp.set_defaults(fn=cmd_mcp)
     args = p.parse_args(argv)
