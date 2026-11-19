@@ -23,6 +23,9 @@ TMP_ROOT = REPO.parent / f"{REPO.name}-pytest-tmp"
 # The machine's port-block registry (portblocks.py) is never read or written by a test, nor
 # by a daemon one starts; the tests of port blocks point it at a file of their own.
 os.environ["CONDUCTOR_PORTS"] = "off"
+# Nor the machine's model setting (models.py): unset, so `opus`; a test that switches it sets
+# $CONDUCTOR_MODEL_FILE to a file of its own before it starts a daemon.
+os.environ["CONDUCTOR_MODEL_FILE"] = str(TMP_ROOT / "no-model-setting.json")
 
 
 def _writable(fn, path, _exc) -> None:

@@ -241,7 +241,8 @@ class SetupMixin:
             rec["remote"] = True                 # what it ran with, `remote:` or the default (its start event)
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=bool(stage),
-                                                     settings=paths.settings, fork_of=rec.get("resume_session")),
+                                                     settings=paths.settings, fork_of=rec.get("resume_session"),
+                                                     model=rec.get("model")),
                                     cwd, paths.prompt, paths.log, paths.stderr, env=env)
         except OSError as exc:
             self.log.append("start", item=item.id, paths=[cfg.rel(md_path)], session_id=rec["session_id"],
@@ -267,6 +268,8 @@ class SetupMixin:
             extra["remote"] = True
         if rec.get("resume_of"):
             extra |= {"resume_of": rec["resume_of"], "resume_session": rec["resume_session"]}
+        if rec.get("model"):
+            extra["model"] = rec["model"]       # what ran it (models.py); none from a pre-135 stage
         if rec["beside"]:
             extra["beside"] = rec["beside"]
         if rec["parked"]:
@@ -324,7 +327,8 @@ class SetupMixin:
         write_text(paths.stage_prompt, executor.build_stage_prompt(cfg, item, rec, picks.section(cfg, item.needs_pick),
                                                                    talk.waiting_amends(cfg.control, item.id)))
         try:
-            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], None), Path(rec["worktree"]),
+            run.popen = procs.spawn(executor.command(cfg, rec["session_id"], None, model=rec.get("model")),
+                                    Path(rec["worktree"]),
                                     paths.stage_prompt, paths.stage_log, paths.stage_stderr)
         except OSError as exc:
             self._discard_stage(run, f"stage launch failed: {exc}")
@@ -335,4 +339,4 @@ class SetupMixin:
         self.stages[item.id] = run
         self.log.append("stage", item=item.id, paths=[cfg.rel(paths.stage_log)], session_id=rec["session_id"],
                         pid=run.popen.pid, worktree=rec["worktree"], deadline=rec["deadline"],
-                        **self._setup_seconds(rec))
+                        **({"model": rec["model"]} if rec.get("model") else {}), **self._setup_seconds(rec))

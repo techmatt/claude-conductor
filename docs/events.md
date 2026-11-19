@@ -16,7 +16,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `invalid` | (red) bad item, signal, stray queue folder, bad config, a queue file written for an item that already launched (set aside as `.md.bad`) | error, path; `applied` (lines already applied) for a part-applied signal |
 | `hold` | a queue head cannot run, an item is set aside (its dependency cancelled), or a merge waits (reason changed) | reason; merge; alone (only this item holds) |
 | `setup` | a setup runner spawned (`executors.md`, *Setup*); paths: the setup log | commands, pid, stage (true for a stage's setup) |
-| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `scheduling.md`); resume_of, resume_session (`resume.md`); parked (the parked edits it carries: `parked.md`); error (launch failed, setup included) |
+| `start` | executor launched | session_id, pid, deadline, port, worktree, branch; resumed, landed (a staged item); setup_seconds; template, template_version, notes (a template item; a cleanup's notes); alongside (its line), beside (ids executing or in setup in its repo then; `scheduling.md`); resume_of, resume_session (`resume.md`); parked (the parked edits it carries: `parked.md`); model (the id it ran on, 135: `executors.md`, *Model*; also on `stage`, `resolve`, `finish`); error (launch failed, setup included) |
 | `stage` | a blocked queue head launched read-only | session_id, pid, worktree, deadline; setup_seconds |
 | `staged` | the stage finished cleanly | session_id, worktree, plan (first 500 chars), cost_usd, questions (its plan's `Questions:` or `## Questions`, `questions.md`), questions_parsed (their count) |
 | `worktree` | created, moved (a staged worktree to current main), removed (merged), kept (red), discarded; a leftover removed on retry | action, branch, base, note (a shared folder created; `leftover removed on retry`) |
@@ -78,6 +78,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `retro_skip` | a `partial` whose every unmet bar waits on Matt queued no retro (`retros.md`, 131) | waits (each `matt:` part with `(on <what it names>)`, 132), by |
 | `backlog_draw` | a backlog item moved into its repo's empty queue; paths: the queue file, the backlog file | from, full_length, night, by |
 | `autopilot` | an `autopilot:` signal set the mode (`night-shift.md`); the last one holds | mode (`off`, `night`, `always`), was, by |
+| `model` | a `model:` signal set the machine-wide model (`executors.md`, *Model*); the file holds it, not this log | model (`opus`, `fable`), model_id, was, by |
 | `ack` | `ack: invalid` (`signals.md`) | what, events (`invalid` ids), by |
 | `backlog_sleep` | at night, draws stop: the budget is spent, or nothing is eligible (once a night per reason) | key, reason, until, spent_hours, budget_hours |
 | `push` | main was pushed to the remote (`push.md`); repo: none for the control folder | target (repo or `.control`), remote, branch, sha, why (`merge`, `start`, `signal`, `closeout`, `commit`), up_to_date, recovered (the first success after a failure) |

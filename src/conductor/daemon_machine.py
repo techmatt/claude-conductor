@@ -117,7 +117,7 @@ class MachineMixin:
             env |= remote.item_launch(cfg.control, prompt, item.id)
         try:
             run.popen = procs.spawn(executor.command(cfg, rec["session_id"], paths.mcp, resume=True,
-                                                     settings=paths.settings),
+                                                     settings=paths.settings, model=rec.get("model")),
                                     wt or cfg.repos[item.repo], prompt, paths.log, paths.stderr, env=env)
         except OSError as exc:
             rec["interrupted"] = f"{why}; resuming its session failed: {exc}"

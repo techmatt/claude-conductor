@@ -68,6 +68,7 @@ run: <target> [stop]              one target: it; several, no match: ask; none: 
 notify: <text>                    a toast (ping me)
 tell: <repo>/<NNN_name> <text>    a running item
 ack: invalid [#<event>]           a rejected signal dealt with (none named: all)
+model: opus|fable                 every project's next new session (machine-wide)
 ```
 
 A path (absolute or control-relative; one Matt names or the planner wrote) lies in the control folder, a repo, the worktrees, conductor or `open_roots`.
@@ -184,7 +185,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 | **ETA on X?** | X's latest outline, else progress line, with when posted; neither: says so, never guesses. |
 | **pause R** / **resume R** | Signal `pause: <repo>` / `resume: <repo>`: running items commit, stop what they started and wait, clocks stopped; nothing new starts. |
 | **ack X** / **dismiss rejected** | Signal `ack: invalid #<event>` / `ack: invalid` (every live one). |
-| **open X** / **show me X** / **ping me** / **run X** / **stop X** | *Simple actions*. |
+| **open X** / **show me X** / **ping me** / **run X** / **stop X** / **use Fable** / **use Opus** | *Simple actions*. |
 | **clear R** | Signal `clear: <repo>`, once the red report is read with Matt. |
 
 **Processing reports**

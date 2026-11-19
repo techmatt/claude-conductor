@@ -92,6 +92,11 @@ def prepare(cfg: Config, log: EventLog, rec: dict) -> str | None:
         return f"resume: {orig}'s session {sid} has no transcript in Claude Code's projects folder"
     run = original_run(cfg, orig)
     rec["resume_session"] = sid
+    # A fork keeps its source session's model, as a stage does (models.py); a source from
+    # before 135 recorded none, and the fork passes none either.
+    start = log.last("start", item=orig)
+    rec["model"] = (fin.detail.get("model") or run.get("model")
+                    or (start.detail.get("model") if start else None))
     rec["resume_cost"] = fin.detail.get("cost_usd") or 0     # the fork's result counts it: `own_cost`
     on_main = not run.get("worktree") and not run.get("readonly")     # `worktrees = false`: it committed to main
     if fin.detail.get("merged"):

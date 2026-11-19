@@ -753,16 +753,17 @@ def hook_settings(cfg: Config, item: Item) -> str:
 
 
 def command(cfg: Config, session_id: str, mcp: Path | None, resume: bool = False,
-            settings: Path | None = None, fork_of: str | None = None) -> list[str]:
+            settings: Path | None = None, fork_of: str | None = None, model: str | None = None) -> list[str]:
     """`--session-id` for a new session; `--resume` continues a staged one; `fork_of`
     (a resume item) resumes that finished session as a fork under `session_id`, leaving
     the original as it was. A stage gets no --mcp-config (it may not ask) and no
-    --settings (nobody messages a stage)."""
+    --settings (nobody messages a stage). `model`: the full id (`models.py`); a resume
+    passes the one its session was launched with, None (a run from before 135) passes none."""
     from .procs import resolve
     session = (["--resume", fork_of, "--fork-session", "--session-id", session_id] if fork_of
                else ["--resume" if resume else "--session-id", session_id])
     return [resolve(cfg.command[0]), *cfg.command[1:], "-p", "--dangerously-skip-permissions",
-            "--output-format", "stream-json", "--verbose", *session,
+            "--output-format", "stream-json", "--verbose", *session, *(["--model", model] if model else []),
             *(["--mcp-config", str(mcp)] if mcp else []), *(["--settings", str(settings)] if settings else []),
             *cfg.args]
 

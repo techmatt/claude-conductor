@@ -13,7 +13,7 @@ from pathlib import Path
 
 from typing import TYPE_CHECKING
 
-from . import audits, desktop, executor, items, nightshift, picks, procs, state, talk
+from . import audits, desktop, executor, items, models, nightshift, picks, procs, state, talk
 from .daemon_push import CONTROL
 from . import review as review_mod
 from . import session as session_mod
@@ -67,6 +67,7 @@ FORMS = {
     "watch": "`watch: now`",
     "push": "`push: <repo>` or `push: control`",
     "autopilot": "`autopilot: off|night|always`",
+    "model": "`model: opus|fable`",
     "ack": "`ack: invalid` or `ack: invalid #<event> ...`",
     "pause": "`pause: <repo>`",
     "resume": "`resume: <repo>`",
@@ -294,6 +295,11 @@ class SignalsMixin:
                 value = {"on": "always"}.get(value.lower(), value.lower())
                 if value not in nightshift.AUTOPILOT:
                     raise ValueError(f"line {n}: autopilot: expects `off`, `night` or `always`, got {value!r}")
+            elif key == "model":
+                value = value.lower()
+                if value not in models.MODELS:
+                    raise ValueError(f"line {n}: model: expects {' or '.join(f'`{m}`' for m in models.MODELS)}, "
+                                     f"got {value!r}")
             else:
                 raise ValueError(f"line {n}: unknown signal key {key!r}")
             out.append((key, value))
@@ -379,6 +385,14 @@ class SignalsMixin:
             self._ack([int(i.lstrip("#")) for i in value.split()[1:]], rel)
         elif key == "autopilot":
             self.log.append("autopilot", paths=[rel], mode=value, was=nightshift.autopilot(self.log),
+                            by=self._by or "unknown")
+        elif key == "model":
+            # Machine-wide (models.py): every project's next new session, nothing running.
+            if models.current() == value:
+                self._noop(f"model is already {models.describe(value)}; nothing changed")
+                return
+            was = models.set_model(value, self._by or "unknown")
+            self.log.append("model", paths=[rel], model=value, model_id=models.MODELS[value], was=was,
                             by=self._by or "unknown")
 
     def _one(self, found: list[Path], verb: str, ref: str, where: str) -> Path:

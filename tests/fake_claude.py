@@ -17,6 +17,7 @@
     FAKE pick <path>                         add `pick: <path>` to the report header, after carry:
                                              (and slow:)
     FAKE env <NAME>                          write `NAME=<its value>` into the report
+    FAKE model                               write `MODEL=<its --model, or none>` into the report
     FAKE note <text>                         write <text> into the report (`\n` starts a new line)
     FAKE error                               emit an is_error result
     FAKE api-error <n>                       the session's first <n> runs exit 1 on a Cloudflare 403,
@@ -347,6 +348,8 @@ for ln in lines:
             post_tool_use("mcp__conductor__progress" if parts[2] == "progress" else parts[2], agent=True)
         case "env":
             memory += f"{parts[2]}={os.environ.get(parts[2])}\n"
+        case "model":
+            memory += f"MODEL={args[args.index('--model') + 1] if '--model' in args else 'none'}\n"
         case "note":
             memory += ln.split(" ", 2)[2].replace("\\n", "\n") + "\n"
     if parts[1] == "write":                                 # Claude Code's Write tool, with its input

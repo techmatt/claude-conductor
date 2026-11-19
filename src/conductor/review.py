@@ -63,6 +63,7 @@ def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: 
     out = [f"# Review — {cfg.project}", "",
            f"Written for `{rel}` at {clock(now())}: `review: {what}`. Nothing is marked reviewed: "
            "`reviewed:` comes only from processing a report read in full, as process X / process all does.",
+           f"Now: {inbox.model_line()}.",
            *(["", "## Warnings", *warned] if (warned := inbox.warning_lines(view, finishes)) else []),
            *(["", "## Staging questions: open rulings", *rulings] if rulings else []),
            "", "## Unreviewed reports" if not item_id else "## Report",

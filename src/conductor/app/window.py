@@ -15,6 +15,7 @@ from ..util import clock
 from . import actions, icon, stale, status, theme
 from .events_panel import EventsPanel
 from .model import PRIORITY, Project, Snapshot, overall, restart_due
+from .model_menu import ModelMenu
 from .proposed_panel import ProposedPanel
 from .questions_panel import QuestionsPanel
 from .repos_panel import ReposPanel
@@ -406,6 +407,9 @@ class MainWindow(QMainWindow):
         rem = QAction("Remove project", self)
         rem.triggered.connect(self.remove_current)
         bar.addAction(rem)
+        bar.addSeparator()
+        self.model_menu = ModelMenu(self, self.notify)      # machine-wide, so here, not per project
+        bar.addWidget(self.model_menu.button)
         self.tray = self._make_tray() if tray and QSystemTrayIcon.isSystemTrayAvailable() else None
         # A remembered folder that fails to load now (drive not mounted, conductor.toml
         # mid-edit) stays remembered; only Remove project forgets one.
@@ -497,6 +501,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ refresh
     def refresh(self) -> None:
+        self.model_menu.sync()
         states, lines = [], []
         for folder, view in list(self.views.items()):
             try:
@@ -572,6 +577,7 @@ class MainWindow(QMainWindow):
         menu = QMenu()
         show = menu.addAction("Open Conductor")
         show.triggered.connect(self.show_window)
+        menu.addMenu(self.model_menu.tray_menu(menu))
         menu.addSeparator()
         quit_ = menu.addAction("Quit (daemons keep running)")
         quit_.triggered.connect(self.quit)

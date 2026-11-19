@@ -73,6 +73,8 @@ How a planner reads the header (`planner.md`, *Reading a report*, points here):
 - A `conductor:` line under the header overrides `status:`: `NOT on main` (red after a
   `done` report; branch kept) or `landed on main … despite …` (conductor's own red; no
   hold). Kept work Matt wants lands with **land X**.
+- `model: <id>` (135), stamped by conductor after the whole header at the finish: the model
+  the item ran on (`executors.md`, *Model*). None on a run from before 135.
 - A non-`none` `slow:` or `friction:`: mention it in a line only if it points at a fix; it
   counts toward *Maintenance*.
 - `warnings:`: raise it to Matt first, kind by kind, with the item's own judgement of

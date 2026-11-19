@@ -2,7 +2,7 @@
 
 The verbs: read, clear, land, retry, approve, cancel, reorder, review, reviewed, session_opened, tell,
 outline, audit, audit_used, checkpoint, session, run, tool, pick, retire, open, notify, stop, restart, watch, push, autopilot, ack,
-pause, resume.
+pause, resume, model.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -41,6 +41,7 @@ autopilot: night             # off | night | always (`on` = always): may the nig
 ack: invalid #2712           # that rejected signal is dealt with (plain `ack: invalid`: every one still live)
 pause: sandbox               # its items commit, stop what they started and wait, clocks stopped; nothing new starts
 resume: sandbox              # they carry on, deadlines moved by the pause; the queue is released (night-shift.md)
+model: fable                 # opus | fable: every project's next new session (executors.md, Model)
 ```
 
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
@@ -161,12 +162,14 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   rejected signals leave the app's "N rejected" and the inbox (`inbox.md`), not Events.
   An id already clear (acknowledged, past a checkpoint, never a rejection), or a plain
   `ack: invalid` with none live, is a no-op: `nothing to acknowledge …` in the receipt,
-  no event (129; before, it rejected the file and so made a new notice). The app's
-  **Dismiss** sends `ack: invalid`.
+  no event (129). The app's **Dismiss** sends `ack: invalid`.
+- **model** (135) — `model: opus|fable` writes the machine's setting and logs `model`
+  (model, model_id, was); the receipt: `model is now Fable (claude-fable-5-2) …`.
 
 **Tidy-ups** (129): a line whose wish already holds logs nothing (so no notice) and is
 named in the receipt's `result`: `ack:` of a clear id, `reviewed:`, `retire:`,
-`audit_used:` again (or `<repo>/all` with none), `pause:` when paused, `resume:` when not.
+`audit_used:` again (or `<repo>/all` with none), `pause:` when paused, `resume:` when not,
+`model:` as set.
 (`run|tool: X stop` of one not running logs `run_stop` with a note.) Still refused: a
 wrong thing (unknown, or not finished).
 

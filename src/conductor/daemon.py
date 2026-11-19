@@ -29,7 +29,7 @@ from pathlib import Path
 
 import psutil
 
-from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, notify, parked, picker, picks, procs, questions,
+from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, models, notify, parked, picker, picks, procs, questions,
                request, session, state, talk, targets, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
@@ -699,6 +699,10 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "prompt": str(paths.prompt),
             "worktree": None, "branch": None, "base": None, "shared": [], "staged": bool(stage),
             "pid": None, "create_time": None,
+            # Fixed now, for every launch of this session (models.py): a stage keeps its own
+            # model (switching would re-bill its context uncached); a fork takes its source's
+            # (`resume_items.prepare`); a stage from before 135 recorded none and passes none.
+            "model": stage.get("model") if stage else models.current_id(),
         }
         if item.template:
             rec["template_version"] = audits.template_version(item.template)
@@ -798,6 +802,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "item_hash": file_hash(item.path),
             "log": str(paths.stage_log), "stderr": str(paths.stage_stderr), "prompt": str(paths.stage_prompt),
             "worktree": None, "branch": None, "base": None, "shared": [], "pid": None, "create_time": None,
+            "model": models.current_id(),       # its launch resumes on it (`launch`)
         }
         run = self._stage_run(rec)
         self._save(run)

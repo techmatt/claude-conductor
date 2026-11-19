@@ -18,7 +18,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
-from . import daemon_signals, inbox, items, parked, request, session, talk
+from . import daemon_signals, inbox, items, models, parked, request, session, talk
 from .events import Event
 from .util import FrontMatterError, clock, now, read_text, split_front_matter, write_text
 
@@ -55,6 +55,14 @@ def tell_result(ev: Event) -> str:
         return (f"message #{ev.id} to {ev.item}: it waits on question {q}, whose call hands back for "
                 f"the message; {q} stays open (only an answer file answers it)")
     return f"message #{ev.id} to {ev.item}: delivered after its next tool call"
+
+
+def model_result(ev: Event) -> str:
+    """A `model:` signal's receipt: what the setting is now, and what it reaches."""
+    d = ev.detail
+    return (f"model is now {models.describe(d.get('model'))} (was {models.LABELS.get(d.get('was'), d.get('was'))}): "
+            "every project's next new session runs on it; running items, and staged ones when they "
+            "resume, keep theirs")
 
 
 def _q(value) -> str:
@@ -97,7 +105,9 @@ class ReceiptsMixin:
                 commit = next((e for e in got if e.kind == "commit"), None)
                 request = next((e for e in got if e.kind == "request"), None)
                 tells = [e for e in got if e.kind == "tell"]
+                model = next((e for e in got if e.kind == "model"), None)
                 result = (f"committed {commit.detail.get('sha', '')[:8]}" if commit else
+                          model_result(model) if model else
                           "nothing to commit: every target is identical to HEAD (was the edited copy sent? "
                           "resend it from a fresh workspace path)"
                           if request and request.detail.get("identical") else

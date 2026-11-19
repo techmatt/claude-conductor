@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-from . import audits, load, memory, nightshift, parked, picks, questions, talk
+from . import audits, load, memory, models, nightshift, parked, picks, questions, talk
 from .config import Config
 from .events import QUESTION_KINDS, RED_KINDS, Event, EventLog, live_invalids, signal_invalid
 from .request import is_closeout
@@ -262,6 +262,8 @@ def describe(ev: Event) -> str:
                 text += f"; beside {', '.join(d['beside'])}"
             if d.get("parked"):
                 text += f"; carries {len(d['parked'])} parked edit(s)"
+            if d.get("model"):
+                text += f"; on {d['model']}"
             if d.get("error"):
                 text += f"; launch failed: {d['error']}"
         case "setup":
@@ -461,6 +463,9 @@ def describe(ev: Event) -> str:
                     + (f"; FAILED: {', '.join(d['failed'])}" if d.get("failed") else ""))
         case "autopilot":
             text = f"autopilot **{d.get('mode')}** (was {d.get('was')})"
+        case "model":
+            text = (f"model **{models.describe(d.get('model'))}** for every project's new sessions "
+                    f"(was {models.LABELS.get(d.get('was'), d.get('was'))})")
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
         case _:
@@ -634,6 +639,12 @@ def fold_commits(evs: list[Event]) -> tuple[list[Event], dict[int, Event]]:
 NOW_FILE_SECONDS = 30.0
 
 
+def model_line() -> str:
+    """*Now*'s model line: the machine-wide setting new sessions take (models.py)."""
+    return (f"model for new sessions: **{models.describe()}**, every project "
+            f"(`model: {'|'.join(models.MODELS)}`; running and staged items keep theirs)")
+
+
 def now_files(cfg: Config) -> list[str]:
     """*Now* lines a process outside the daemon keeps in `.conductor/now/<name>.line`
     (today the remote-workers broker), each shown only while rewritten in the last 30s."""
@@ -746,6 +757,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     out.append(f"- {'**' + mem + '**' if level != 'ok' else mem}")
     if busy := memory.load_line(cfg):
         out.append(f"- {busy}")
+    out.append(f"- {model_line()}")
     out += [f"- {line}" for line in now_files(cfg)]
     decisions = decide(cfg, view)
     for repo in cfg.repos:
@@ -756,7 +768,9 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
             if rec["repo"] != repo:
                 continue
             text = rec["name"] + {"merge": " (merging)", "setup": " (setting up)"}.get(rec.get("phase"), "")
-            if tags := ([resume_label(rec)] if rec.get("resume_of") else []) + (
+            other_model = [f"on {models.describe(models.name_of(rec['model']))}"] if (
+                rec.get("model") and rec["model"] != models.current_id()) else []
+            if tags := other_model + ([resume_label(rec)] if rec.get("resume_of") else []) + (
                     ["alongside"] if rec.get("alongside") else []) + (
                     [f"beside {', '.join(rec['beside'])}"] if rec.get("beside") else []):
                 text += f" ({', '.join(tags)})"

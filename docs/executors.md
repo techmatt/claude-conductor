@@ -4,7 +4,7 @@ Each item runs as
 
 ```
 claude -p --dangerously-skip-permissions --output-format stream-json --verbose --session-id <uuid>
-       --mcp-config reports/<repo>__NNN_name.mcp.json --settings reports/<repo>__NNN_name.settings.json
+       --model <id> --mcp-config reports/<repo>__NNN_name.mcp.json --settings reports/<repo>__NNN_name.settings.json
 ```
 
 with cwd = the item's worktree (the repo itself when `worktrees = false`) and the
@@ -121,5 +121,30 @@ without a result, or setup still running past `max_hours` (`stage_minutes` for a
 stage) is a red launch error for a run (`setup 'npm ci' exited 1 (see
 code__001_x.setup.log)`, worktree discarded) and discards a stage. Setup time counts
 toward those deadlines. Code: `daemon_setup.py` (`SetupMixin`), `setup_run.py`.
+
+## Model
+
+Which Claude model a new session runs on is one setting for the whole machine (135),
+`opus` (the default) or `fable`, in `~/.conductor/model.json` (`$CONDUCTOR_MODEL_FILE`
+names another; the test suite's). `models.py`'s `MODELS` table maps each name to a full id
+(`opus` → `claude-opus-5-5`, `fable` → `claude-fable-5-2`): when a model ships, that table is
+the one place to change. Claude Code's own aliases (`--model opus`, `--model fable`) resolve
+to the latest too (its `--help`, 2.1.328); conductor passes the full id so the id a run records
+says exactly what ran.
+
+Every daemon reads the setting at each launch of a **new** session: an item, a stage, a watch,
+a merge executor. The id is fixed in the run record (`model`) then, and
+every later launch of that session passes it again: a staged item resumed at launch (switching
+would re-bill the stage's context uncached), an API-wait or `retry:` resume (`api-retry.md`),
+a machine-restart resume (`restart.md`). A fork (an `ask`, a post-audit, a workflow retro:
+`resume.md`) takes its source session's model (the source's `finish` or `start` event). A run or stage from before 135 recorded none and
+passes no `--model`, as before. Subagents and Workflow agents inherit their lead's; there is no
+per-item override.
+
+Set it with the app's **Model** button (toolbar and tray, `app.md`) or a `model: opus|fable`
+signal to any project (`signals.md`; its receipt says what it is now). The `start`, `stage`,
+`resolve` and `finish` events carry `model`, the report gets a `model: <id>` line after its
+header (`reports.md`), and *Now* in the inbox, `session.md` and `review.md` names the setting;
+a running item on another model says `(on <Model>)` there.
 
 The report it ends with, its header and the outcome: `reports.md`.

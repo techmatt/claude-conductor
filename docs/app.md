@@ -13,7 +13,7 @@ imported only by this command; the daemon and CLI never need it.
 exits 0; the running app adds those folders (remembered), selects the last one named
 and comes forward. So repeating a launch never adds a second tray icon, and no second
 app rewrites the remembered list from its own stale copy. If the name can't be claimed
-the app runs alone, as before. Code: `app/single.py`.
+the app runs alone. Code: `app/single.py`.
 Code: `src/conductor/app/` — `model.py`, `item_model.py` (an item's Conversation and trail),
 `streamlog.py` (a stream-json log as text) and
 `actions.py` have no Qt (they reuse `state.scan`, `state.decide`, `questions`, `config`). The widgets are `window.py`, one
@@ -22,8 +22,7 @@ Code: `src/conductor/app/` — `model.py`, `item_model.py` (an item's Conversati
 
 **What it reads and writes.** It opens `events.db` with a `file:…?mode=ro` URI, so it
 can neither create nor write it; a missing `events.db` reads as an empty log and stays
-missing. (Opening a WAL database read-only while no daemon has it open leaves an empty
-`events.db-wal` and an `events.db-shm` beside it — SQLite's, harmless, git-ignored.)
+missing. (It can leave an empty `events.db-wal` and `-shm`: SQLite's, harmless, ignored.)
 The URI keeps a mapped drive as is and puts a UNC server in the path
 (`file:////server/share/…`), which SQLite accepts. Every 1.5s it re-reads only events
 with `id >` the last one seen, and rescans the control folder; a read that fails for a
@@ -32,7 +31,10 @@ moment (database busy) counts as no change, and only a log with fewer events tha
 refreshes, and each panel refreshes on its own, so one bad file cannot freeze the rest.
 On Windows its reads can briefly block the daemon's renames; the daemon retries those
 (`util.retry_io`, up to 3s). It never moves a queue file. Its only writes are signal files, answer
-files, its own settings, starting the daemon, and opening a console on a finished session.
+files, its own settings, the model, starting the daemon, and opening a console on a finished session.
+
+**Model: Opus / Fable** (135; toolbar, tray) sets the machine's model for new sessions
+(`executors.md`, *Model*) in `~/.conductor/model.json`: no project's, so no signal.
 
 **Header.** One short line: the state (`1 running · 1 staged`, `held after red: …`,
 `2 open question(s)`, `idle`; the project is the tab's name), its daemon
@@ -64,8 +66,7 @@ several; while any repo is paused an amber **PAUSED <repo> since <time>** sits b
 **Autopilot: Off / Night only / Always** is a menu writing `autopilot: <mode>`
 (`night-shift.md`, *Autopilot*); beside it, muted, what autopilot starts next
 (`nightshift.plan`). Labels that don't fit a narrow window are clipped, their tooltips whole.
-The app has **no way to make a checkpoint** (112: its *New checkpoint…* button is gone): a
-checkpoint comes only from a planner's `session:` / `checkpoint:` signal or the CLI
+The app has **no way to make a checkpoint** (112): a checkpoint comes only from a planner's `session:` / `checkpoint:` signal or the CLI
 (`conductor session` / `checkpoint`), so a session's closeout can't be skipped. The Events
 tab's *since checkpoint #N* still names the current one.
 

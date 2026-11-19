@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import audits, executor, git, items, parked, procs, state, talk, worktrees
+from . import audits, executor, git, items, models, parked, procs, state, talk, worktrees
 from .util import file_hash, now, parse_stamp, read_text, stamp, write_text
 
 if TYPE_CHECKING:
@@ -36,6 +36,35 @@ def stamp_report(report: Path, text: str) -> bool:
             break
         at, seen = n + 1, seen + 1
     lines.insert(at, f"{STAMP_KEY} {text}")
+    write_text(report, "\n".join(lines) + "\n")
+    return True
+
+
+MODEL_KEY = "model:"
+_HEADER_LINE = re.compile(r"^\**(status|blocks|carry|slow|pick|friction|warnings|partial|conductor|model)\**\s*:",
+                          re.IGNORECASE)
+
+
+def stamp_model(report: Path, model_id: str) -> bool:
+    """Put `model: <id>` (what ran the item, models.py) after a report's header lines, so it
+    never splits the header `read_header` reads; replaces an earlier one there. False when
+    there is no report."""
+    try:
+        lines = read_text(report).splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    at, drop = 0, []
+    for n, ln in enumerate(lines):
+        s = ln.strip()
+        if not s or s == "---":
+            continue
+        if not _HEADER_LINE.match(s):
+            break
+        if s.lower().startswith(MODEL_KEY):
+            drop.append(n)
+        at = n + 1
+    lines.insert(at, f"{MODEL_KEY} {model_id}")
+    lines = [ln for n, ln in enumerate(lines) if n not in drop]   # all before `at`: indices hold
     write_text(report, "\n".join(lines) + "\n")
     return True
 
@@ -183,15 +212,16 @@ class MergeMixin:
         for stale in (paths.merge_log, paths.merge_stderr):
             stale.unlink(missing_ok=True)
         session = str(uuid.uuid4())
+        model = models.current_id()                 # a new session: the toggle's model now
         res = {"state": "running", "step": step, "files": m.files, "head": git.head(wt), "hashes": hashes,
                "touched": touched, "untracked": worktrees.untracked(wt), "session_id": session,
                "log": str(paths.merge_log), "started": stamp(),
                "deadline": stamp(now() + timedelta(minutes=cfg.merge_minutes)), "tamper_before": len(run.tamper),
-               "pid": None, "create_time": None}
+               "pid": None, "create_time": None, "model": model}
         rec["resolve"] = res
         self._save(run)
         try:
-            run.resolver = procs.spawn(executor.command(cfg, session, None), wt, paths.merge_prompt,
+            run.resolver = procs.spawn(executor.command(cfg, session, None, model=model), wt, paths.merge_prompt,
                                        paths.merge_log, paths.merge_stderr)
         except OSError as exc:
             # Conductor's machinery, not the item's content: abort and land again next tick.
@@ -202,7 +232,7 @@ class MergeMixin:
         res["pid"], res["create_time"] = run.resolver.pid, procs.create_time(run.resolver.pid)
         self._save(run)
         self.log.append("resolve", item=rec["item"], paths=[cfg.rel(paths.merge_log)], files=m.files, step=step,
-                        session_id=session, pid=res["pid"], deadline=res["deadline"], commit=stopped,
+                        session_id=session, pid=res["pid"], deadline=res["deadline"], commit=stopped, model=model,
                         note=f"prose conflict while rebasing onto {cfg.opts(repo).main}; a merge executor resolves it")
         return False
 
@@ -306,6 +336,9 @@ class MergeMixin:
                 continue
             self.log.append("warning", item=item_id, tell=msg.get("id"),
                             note=f"message #{msg.get('id')} was never delivered: the executor exited first")
+        if rec.get("model"):
+            stamp_model(Path(rec["report"]), rec["model"])
+            extra["model"] = rec["model"]
         if text := self._outcome_stamp(rec):
             stamp_report(Path(rec["report"]), text)
         # A readonly resume item (an ask) has nothing to protect, so its red never holds; a self-audit writes (113).
