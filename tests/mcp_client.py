@@ -19,12 +19,12 @@ from pathlib import Path
 
 
 class Client:
-    def __init__(self, mcp_config: Path | None = None, command: list[str] | None = None):
+    def __init__(self, mcp_config: Path | None = None, command: list[str] | None = None, env: dict | None = None):
         if command is None:
             spec = json.loads(Path(mcp_config).read_text(encoding="utf-8"))["mcpServers"]["conductor"]
             command = [spec["command"], *spec["args"]]
         self.proc = subprocess.Popen(command, stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE, text=True, encoding="utf-8")
+                                     stdout=subprocess.PIPE, text=True, encoding="utf-8", env=env)
         self.next_id = 0
 
     def request(self, method: str, params: dict | None = None) -> dict:
@@ -50,6 +50,10 @@ class Client:
         self.notify("notifications/initialized")
         return self.request("tools/list")["tools"]
 
+    def call(self, tool: str, arguments: dict) -> tuple[str, bool]:
+        result = self.request("tools/call", {"name": tool, "arguments": arguments})
+        return result["content"][0]["text"], result.get("isError", False)
+
     def close(self) -> None:
         self.proc.stdin.close()
         self.proc.wait(timeout=10)
@@ -74,16 +78,19 @@ PLANNER_TOOLS = ["status", "start_session", "read", "queue_item", "amend", "sign
                  "answer", "park", "note"]
 
 
+def planner_command(controls: list[Path] = ()) -> list[str]:
+    """`conductor mcp` as the desktop app starts it: the launcher, which runs the server."""
+    return [sys.executable, "-m", "conductor", "mcp", *(a for c in controls for a in ("--control", str(c)))]
+
+
 def call_planner(tool: str, arguments: dict, controls: list[Path] = ()) -> tuple[str, bool]:
     """Call one tool of the planner's server (`conductor mcp`, docs/mcp.md), started as the
     desktop app starts it, with `--control` for each folder given."""
-    cmd = [sys.executable, "-m", "conductor", "mcp", *(a for c in controls for a in ("--control", str(c)))]
-    c = Client(command=cmd)
+    c = Client(command=planner_command(controls))
     try:
         tools = c.start()
         assert [t["name"] for t in tools] == PLANNER_TOOLS, tools
-        result = c.request("tools/call", {"name": tool, "arguments": arguments})
-        return result["content"][0]["text"], result.get("isError", False)
+        return c.call(tool, arguments)
     finally:
         c.close()
 

@@ -28,7 +28,8 @@ or a control folder; with none, `$CONDUCTOR_CONTROL`, then the current folder. `
   next. Each week's mean, then the latest six sessions: requests (and how many were
   refused), planner signal files, items queued and rewritten (`enqueue` / `edited`, not
   conductor's own watches, retros and backlog draws), amendments and answers `by: planner`,
-  and `mcp`: the writes known to come through the MCP tools.
+  `other` (the server's proposed, parked and backlog writes, `planner_write`), then each of
+  those writes by route: `mcp` (through the MCP tools) and `bridge` (the rest).
 
 ## The corrections rule
 
@@ -49,8 +50,9 @@ point back, an amendment to a running item, and a planner's own edit. It overcou
 
 ## The planner counts
 
-What the log can't see: reads (`status`, `read`) leave no trace, so `mcp` counts only
-MCP writes it can tell apart: signal files named `planner-<stamp>-<nnnnnn>.signal` (the
-bridge's have no counter) and requests named `…-mcp…`. MCP queue items, amendments,
-answers and parked lines look the same as the bridge's and are counted in their own
-columns, not in `mcp`.
+Every write through the MCP server carries `via: mcp` in its events (140, `mcp.md`,
+*Attribution*): a write is `mcp` when its event says so (before 140, only signal files
+named `planner-<stamp>-<nnnnnn>.signal` and requests named `…-mcp…` could be told), else
+`bridge`. An item `approve:` moved into the queue counts as queued but on neither route:
+the approve signal was the write. Reads (`status`, `read`) leave no trace. Proposed,
+parked and backlog writes over the bridge log no event, so `bridge` misses them.

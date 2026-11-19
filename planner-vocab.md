@@ -30,7 +30,7 @@ The rest of `planner.md`'s **Vocab**: read only when Matt uses one of these phra
 | **bug hunt R** [Nh] [focus] [notes only] | Queues `template: bug_hunt`, `ultracode: true`, `max_hours` N + 1 (default N = 3; a cap: it stops on yield), focus as body; "notes only" adds `readonly: true`. Scope: recent changes since the last hunt. |
 | **full bug hunt R** [Nh] … | The same, body led by "Full bug hunt: every lens.": each lens gets one real round, then stop on yield. |
 | **trim state** | One `edit_state` rewriting `state.md` to the wavefront (plan, status, queue, next, Matt's items, maintenance, pending fixes), dropping histories and what the repo's docs hold. |
-| **split state** | Once per project: `edit_state` with `content` for `habits.md` and `paged.md` (each `# <project> — …` then the lines), then one deleting those sections from `state.md`, plus a parked edit or item per repo writing its rulings to `docs/rulings.md`, then deleting *Standing rulings* from `state.md` once it lands. |
+| **split state** | Once per project: one `edit_state` on `state.md` with `sections` moving *Planner habits* to `habits.md` and *Paged* to `paged.md`, plus a parked edit or item per repo writing its rulings to `docs/rulings.md`, then `sections` deleting *Standing rulings* once it lands. |
 | **memory?** / **how's the box?** | The memory line; under pressure, the latest `memory` event's biggest. |
 | **notes used X, Y** / **R** | Signal `audit_used: <repo>/<NNN_name>, …` / `audit_used: <repo>/all`: notes an item already handled. |
 | **mark reviewed X** | Signal `reviewed:` without processing (refused if X hasn't finished). |

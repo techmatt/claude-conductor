@@ -119,6 +119,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._init_receipts()                     # before the log: every event may be a receipt's
         self._init_toasts()
         self.log = EventLog(cfg.events_db, on_append=self._on_event)
+        self.log.before_append = self._mark_via     # `via: mcp` on a write the planner's server marked
         self.runs: dict[str, Run] = {}              # executing, or finished and waiting to merge
         self.stages: dict[str, Run] = {}            # staging processes still running
         self.landings: dict[str, Run] = {}          # `land:` requests for kept red branches (daemon_merge)

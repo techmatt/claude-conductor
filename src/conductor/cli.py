@@ -507,8 +507,15 @@ def cmd_app(args) -> int:
 
 
 def cmd_mcp(args) -> int:
-    from .planner_mcp import main as mcp_main
-    return mcp_main(args.control)
+    if args.selftest:
+        from .mcp_launcher import selftest
+        sys.stdout.reconfigure(encoding="utf-8")
+        return selftest(Path(args.control[0]) if args.control else None)
+    if args.worker:
+        from .planner_mcp import main as mcp_main
+        return mcp_main(args.control)
+    from .mcp_launcher import main as launcher_main
+    return launcher_main(args.control)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -617,6 +624,9 @@ def main(argv: list[str] | None = None) -> int:
     sp.set_defaults(fn=cmd_app)
     sp = sub.add_parser("mcp", help="the planner's stdio MCP server: status, reads and every planner write (docs/mcp.md)")
     sp.add_argument("--control", action="append", help="a control folder (repeatable; default: the app's projects)")
+    sp.add_argument("--worker", action="store_true", help="the server itself (the launcher runs it fresh per code change)")
+    sp.add_argument("--selftest", action="store_true",
+                    help="call every tool through the launcher against the sandbox (or --control), a line each")
     sp.set_defaults(fn=cmd_mcp)
     args = p.parse_args(argv)
     try:

@@ -1,8 +1,8 @@
 """The planner MCP server's reads (docs/mcp.md): `status` and `read`, plain text, capped.
 
 A read returns at most `CAP` bytes of a file, cut at a line; the rest comes as further parts
-(`part`). Every path is inside a known project's control folder or is one of conductor's own
-planner files: nothing in a code repo.
+(`part`). Every path is inside a known project's control folder, is one of conductor's own
+planner files or reports, or is a tracked text file of a project's code repo (`repo_file`).
 """
 
 from __future__ import annotations
@@ -29,9 +29,13 @@ PLANNER_FILES = {"planner": "planner.md", "vocab": "planner-vocab.md", "bridge":
                  "planner-ideas": "planner-ideas.md"}
 CONTROL_FILES = {"state": "state.md", "paged": "paged.md", "habits": "habits.md", "inbox": "inbox.md",
                  "review": "review.md", "session": "session.md", "remote-diag": "remote-diag.md"}
-READ_KINDS = (*CONTROL_FILES, "report", "audit", "question", "picks", "receipt", "stats", *PLANNER_FILES,
-              "ledger", "doc")
+READ_KINDS = (*CONTROL_FILES, "report", "audit", "question", "picks", "receipt", "stats", "repo", *PLANNER_FILES,
+              "ledger", "doc", "conductor-report")
+CONDUCTOR_KINDS = (*PLANNER_FILES, "doc", "ledger", "conductor-report")    # no project needed
 LEDGER_LINES = 12
+# A repo file the planner has to look at itself, over the file bridge (`read("repo")` refuses it).
+IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tif", ".tiff", ".svg", ".pdf")
+LISTED = 200                # names a folder read lists
 
 
 # ----------------------------------------------------------------- paging
@@ -286,6 +290,8 @@ def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str 
         tail = (_text(ROOT / "prompts" / "ledger.md") or "").splitlines()[-LEDGER_LINES:]
         waiting = sorted(p.name for p in (ROOT / "prompts" / "inbox").glob("*.md"))
         return "\n".join(tail) + f"\n\nwaiting in prompts/inbox: {', '.join(waiting) or 'none'}", False
+    if what == "conductor-report":
+        return conductor_report(name, section, part, again)
     if what in PLANNER_FILES or what == "doc":
         rel = PLANNER_FILES.get(what) or f"docs/{Path(name).stem}.md"
         path = ROOT / rel
@@ -325,6 +331,8 @@ def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str 
         if what == "report" and not section:
             return outline(text), False
         return _file(found, "" if section == "all" else section, part, again)
+    if what == "repo":
+        return repo_file(cfg, name, section, part, again)
     if what == "question":
         q = questions.find(cfg.control, name) if name else None
         if q is None:
@@ -348,6 +356,98 @@ def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str 
             return f"no receipt {name!r} (name the write's path: `signals/planner-….signal`, `queue/<repo>/NNN_x.md`)", True
         return _file(path, "", part, again)
     return f"unknown `what` {what!r}; one of: {', '.join(READ_KINDS)}", True
+
+
+def unreviewed() -> str:
+    """Conductor's own reports past the planner's mark (`session.reports_past_marker`)."""
+    past = session.reports_past_marker(ROOT)
+    if past is None:
+        return f"(no {session.NOTES}: no mark to count from)"
+    marker, found = past
+    if marker is None:
+        return f"(no `{session.MARKER}` line in {session.NOTES})"
+    return (f"Past the mark ({marker}): {', '.join(n for n, _ in found)}" if found
+            else f"Past the mark ({marker}): none")
+
+
+def conductor_report(name: str, section: str, part: int, again: str) -> tuple[str, bool]:
+    """Conductor's own `reports/<name>_report.md` (git-ignored, beside its prompts) by number
+    (`139`), name or prefix: header and sections first, as a project report reads; with no
+    name, what is past the planner's mark. Every read ends with that line."""
+    reports = {p.name.removesuffix("_report.md"): p for p in (ROOT / "reports").glob("*_report.md")}
+    want = name.strip().removesuffix(".md").removesuffix("_report")
+    if not want:
+        return unreviewed() + "\n\nName one: `NNN`, `NNN_name`, or a cleanup pass's name.", False
+    if want in reports:
+        hits = [want]
+    elif want.isdigit():                    # `139` is `139_x`, never `1390_y`
+        hits = sorted(n for n in reports if (m := re.match(r"(\d+)_", n)) and int(m[1]) == int(want))
+    else:
+        hits = sorted(n for n in reports if n.startswith(want))
+    if len(hits) != 1:
+        recent = ", ".join(sorted(reports, key=lambda n: reports[n].stat().st_mtime)[-8:])
+        why = f"{name!r} names several: {', '.join(hits)}" if hits else f"no conductor report {name!r}"
+        return f"{why}; newest: {recent}", True
+    text = _text(reports[hits[0]])
+    if text is None:
+        return f"{reports[hits[0]].name} doesn't read", True
+    tail = f"\n\n{unreviewed()}"
+    if not section:
+        return outline(text) + tail, False
+    got, err = _file(reports[hits[0]], "" if section == "all" else section, part, again)
+    return (got if err else got + tail), err
+
+
+def repo_file(cfg: config_mod.Config, name: str, section: str, part: int, again: str) -> tuple[str, bool]:
+    """A tracked text file of one of the project's code repos, read-only, by `<repo>/<path>`
+    (`section` a `## ` heading); a folder (`<repo>/<dir>/`, or `<repo>`) lists its tracked
+    names. Refused: a path outside the repo, untracked or git-ignored, an image or binary."""
+    from . import git
+    ref = name.replace("\\", "/").strip()
+    repo, _, rel = ref.partition("/")
+    if repo not in cfg.repos:
+        return f"name `<repo>/<path>`: no repo {repo!r} in {cfg.project}; repos: {', '.join(cfg.repos)}", True
+    root = Path(cfg.repos[repo])
+    parts = [p for p in rel.split("/") if p not in ("", ".")]
+    if ".." in parts or ":" in rel or rel.startswith("/") or (parts and parts[0] == ".git"):
+        return f"{ref!r} is outside {repo}: a path inside the repo, as `git ls-files` names it", True
+    rel = "/".join(parts)
+    try:
+        tracked = git.run(root, "ls-files", "-z", "--", rel or ".").split("\0")
+    except Exception as exc:
+        return f"{repo} doesn't answer git ({exc})", True
+    tracked = [t for t in tracked if t]
+    if rel not in tracked:
+        if tracked:                         # a folder: its names, one level down
+            cut = len(rel) + 1 if rel else 0
+            below = sorted({t[cut:].split("/", 1)[0] + ("/" if "/" in t[cut:] else "") for t in tracked})
+            more = f"\n… and {len(below) - LISTED} more" if len(below) > LISTED else ""
+            return f"{repo}/{rel + '/' if rel else ''} (tracked):\n" + "\n".join(below[:LISTED]) + more, False
+        target = root / rel
+        if target.exists():
+            why = "git-ignored" if git.run(root, "check-ignore", "--", rel, check=False).strip() else "untracked"
+            return f"{repo}/{rel} is {why}: only tracked files read", True
+        return f"no tracked file or folder {repo}/{rel}", True
+    if rel.lower().endswith(IMAGES):
+        return (f"{repo}/{rel} is an image: the planner looks at it itself, over the file bridge "
+                "(planner-bridge.md)"), True
+    try:
+        data = (root / rel).read_bytes()
+    except OSError as exc:
+        return f"{repo}/{rel} doesn't read ({exc})", True
+    if b"\0" in data[:8000]:
+        return f"{repo}/{rel} is binary: only text files read", True
+    try:
+        text = data.decode("utf-8-sig").replace("\r\n", "\n")
+    except UnicodeDecodeError:
+        return f"{repo}/{rel} is not UTF-8 text", True
+    if section and section != "all":
+        found = section_text(text, section)
+        if found is None:
+            heads = [h for h, _, _ in sections(text)] or [h for h, _, _ in sections(text, "### ")]
+            return f"no section {section!r} in {repo}/{rel}; sections: {'; '.join(heads) or 'none'}", True
+        text = found
+    return paged(text, part, again), False
 
 
 def _text(path: Path) -> str | None:

@@ -468,6 +468,8 @@ def describe(ev: Event) -> str:
                     f"(was {models.LABELS.get(d.get('was'), d.get('was'))})")
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
+        case "planner_write":
+            text = f"planner wrote {', '.join(ev.paths)} ({d.get('what')}, via {d.get('via', 'the bridge')})"
         case _:
             extras = ", ".join(f"{k}={v}" for k, v in d.items())
             text = f"{ev.kind} {who} {extras}".strip()
@@ -692,7 +694,7 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
     changes += [e for e in events if e.kind == "merge"]
     other = [e for e in events if e not in red + holds + finished + changes + asked and not nightshift.is_watch_act(e)
              and e.kind not in ("read", "enqueue", "start", "ask", "hold", "stage", "worktree", "progress", "setup",
-                                "finish", "request", "commit", *NIGHT_KINDS)]
+                                "finish", "request", "commit", "planner_write", *NIGHT_KINDS)]
 
     out = [heading or f"# Inbox — {cfg.project}", ""]
     since = f"since read mark #{mark}" + (f" ({clock(mark_ev.ts)})" if mark_ev else "")

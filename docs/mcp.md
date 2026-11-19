@@ -4,7 +4,8 @@
 server named `conductor` that a claude.ai planner chat linked to this machine calls through
 the Claude desktop app (as `mcp__remote-devices__conductor__<tool>`). It replaces the file
 bridge's stage / commit / later receipt stage with typed calls that return their result
-(136 trial, 138 surface). The bridge still works: `planner-bridge.md`.
+(136 trial, 138 surface, 140 the gaps closed). The bridge still works (`planner-bridge.md`),
+but is the exception: images, or a planner note saying why.
 
 ## The rule for every write
 
@@ -15,8 +16,20 @@ signal, request, queue or proposed item, amendment, answer file, parked line, ba
 (and `WARNING: …`), `pending (<write>): <what holds it>` or `REFUSED: <reason>` (ending with
 the accepted form), then up to four event lines. A rewritable file (queue, proposed, parked,
 backlog) waits for a receipt whose `written_ms` is at least the write's. No receipt in time:
-it says so and names `read(what="receipt")` for later. The daemon, the event log and the app
-are unchanged: the server is one more writer of the planner's files.
+it says so and names `read(what="receipt")` for later. The server is one more writer of the
+planner's files; the daemon only tells its writes apart (*Attribution*).
+
+## Attribution
+
+Before each write lands the server writes a mark, `receipts/.mcp/<the write's path, / as ~>`
+(`daemon_receipts.mark`; for a signal or amendment, just before its rename). The daemon's
+`EventLog.before_append` hook adds `via: mcp` to every event of a marked write: one whose
+paths hold it, every event of a marked signal file or request (`_receipt` context), and an
+item renumbered from the marked name. The write's receipt says `via: "mcp"` and takes the
+mark away; a mark no receipt took is pruned with the receipts (3 days). Proposed, parked
+and backlog writes, which log no event of their own, log `planner_write` (`what`, the path)
+when marked, so they show too. A bridge write is one without `via`; `conductor stats`
+counts both per session (`stats.md`).
 
 **A daemon that takes no writes** (no `daemon.json` process, or a stale heartbeat:
 `state.daemon_info`) refuses every project write before anything is written:
@@ -33,7 +46,7 @@ are unchanged: the server is one more writer of the planner's files.
 | `queue_item(project, repo, name, body, meta?, held?)` | `queue/<repo>/NNN_name.md` or `proposed/` | the receipt: `queued as <id>; <start>`, or a rewrite's `rewritten: … (what changed)` |
 | `amend(project, item, text)` | `queue/<repo>/NNN_name.amend[.N].md` (`actions.amend`) | the receipt |
 | `signal(project, lines)` | `signals/planner-<stamp>-<n>.signal` (`actions.write_signal`) | the receipt |
-| `edit_state(project, file, edits? \| content?, message?)` | `requests/<YYYYMMDD-HHMM>-mcp<SS><n>/` | the receipt (`committed <sha>`) |
+| `edit_state(project, file, edits? \| sections? \| content?, message?)` | `requests/<YYYYMMDD-HHMM>-mcp<SS><n>/` | the receipt (`committed <sha>`) |
 | `answer(project, question, text)` | `questions/<id>.answer.md` | the receipt |
 | `park(project, repo, line)` | a `- ` line appended to `parked/<repo>.md` | the receipt |
 | `note(kind, …)` | below | the receipt, or what was written |
@@ -52,6 +65,14 @@ so a retry needs no read. The request carries edit blocks (applied by the daemon
 the live copy); text holding a conflict marker, or `content`, goes as a whole file written
 before `request.md`. An edit that changes nothing writes nothing.
 
+`sections` (140) moves text without retyping it: in order, `{op, section, to?, body?}` on
+`file`'s `## ` sections (`section`: the heading, else the one heading it starts, case and
+`*` free), `delete`, `replace` (the heading kept, `body` under it) or `move` (appended to
+`to`, a tracked file or a new `.md`, created). One request carries it all: the source as
+edit blocks (whole when they wouldn't apply the same way), a move's destination whole; the
+default message names each op (`state: move *Paged* to paged.md`). A section not found, or
+several, refuses with the file's section list, nothing written.
+
 **`read`** `what`:
 - control files: `state`, `paged`, `habits` (an unsplit project's `state.md` section when the
   file doesn't exist), `inbox`, `review`, `session`, `remote-diag`; `section` picks a `## `
@@ -60,9 +81,16 @@ before `request.md`. An edit that changes nothing writes nothing.
   section list with sizes; `section` reads one, `"all"` the whole; `audit`: its notes;
 - `question` (an id or suffix), `picks` (a picker's saved choices, pretty-printed),
   `receipt` (a write's path), `stats` (`weeks`, default 4: `conductor stats`' text, `stats.md`);
+- `repo` (`name`: `<repo>/<path>`): a tracked text file of a project's code repo, read-only,
+  paged and `section`ed like the rest; `<repo>` or a folder lists its tracked names. Refused
+  with the reason: a repo not the project's, a path outside it (`..`, `.git`), untracked,
+  git-ignored, binary, not UTF-8, or an image (`.png`, `.jpg`, … `.svg`, `.pdf`: the
+  planner looks at those itself, over the bridge);
 - conductor's own: `planner`, `vocab`, `bridge` (`planner-bridge.md`), `new-project`,
   `planner-notes`, `planner-ideas`, `ledger` (its last 12 lines and what waits in
-  `prompts/inbox`), `doc` (`name`: a `docs/` topic; none names them all).
+  `prompts/inbox`), `doc` (`name`: a `docs/` topic; none names them all), `conductor-report`
+  (`name`: `139`, a name or its start: header and sections first, as `report`; none: what is
+  past the planner's *Last report reviewed* mark, the line every such read ends with).
 
 **`note`** kinds: `backlog` (`backlog/<repo>/<name>.md`, receipt) and, in conductor's own
 folder (no receipt): `conductor_prompt` (`prompts/inbox/<YYYYMMDD-HHMMSS>-<project>-<name>.md`),
@@ -72,8 +100,8 @@ line under *Waiting on evidence* in `planner-ideas.md`).
 
 **Reach.** Projects are the `--control` folders, else the app's remembered list (QSettings
 `conductor/conductor-app`, key `controls`), else `*-control` folders beside this repo. Paths
-are built from names checked against the project (repos, item names, tracked files); nothing
-in a code repo is read or written.
+are built from names checked against the project (repos, item names, tracked files); in a
+code repo only tracked files are read (`read` `repo`), and nothing is written.
 
 ## Registration
 
@@ -85,12 +113,30 @@ The Claude desktop app (`%LOCALAPPDATA%\AnthropicClaude`) reads local MCP server
               "args": ["-m", "conductor", "mcp"]}
 ```
 
-The venv's python, not `uv run`: the app's PATH may lack `uv`. The app starts the server
-once and keeps it, so a change to the server's code or tool list takes a full quit and
-restart of the app. The other route, a desktop extension (`.mcpb`), was not taken.
+The venv's python, not `uv run`: the app's PATH may lack `uv`. The other route, a desktop
+extension (`.mcpb`), was not taken.
+
+## The launcher
+
+The app starts the server once and keeps it, so `conductor mcp` is a thin launcher
+(`mcp_launcher.py`, 140) holding no tool code: it relays each line to a worker (`conductor
+mcp --worker`, the server itself, `planner_mcp.main`) and, before an `initialize` or
+`tools/call`, starts a fresh worker when any `.py` under `src/conductor` changed (path,
+mtime, size) since the running one started, or it died, replaying the client's
+`initialize`. A worker that dies mid-call answers that call with an error; the next call
+starts another. So a prompt that changes a tool's behaviour is live at the next call; a
+new or renamed tool, a changed description or schema, or a change to the launcher itself
+still takes a full quit and restart of the app, which lists tools once.
 
 ## Testing
 
 `tests/mcp_client.py --planner <tool> '<json>' [--control <folder>]` calls a tool as the app
-would; `--status [project]` for `status`. `tests/test_planner_mcp.py` drives each tool against
-a test control folder, ticking the daemon while the call waits for its receipt.
+would (through the launcher); `--status [project]` for `status`. `tests/test_planner_mcp.py`
+drives each tool against a test control folder, ticking the daemon while the call waits for
+its receipt.
+
+`conductor mcp --selftest [--control <folder>]`, after any prompt that touches the server,
+calls every tool through the launcher against the sandbox (`conductor-sandbox-control`
+beside this checkout), one `ok` / `FAIL` line each, exit 1 on a failure. Its writes stay
+harmless: a held probe item (`selftest_probe`) then a `cancel:` of it, a session start; the
+other writes check the refusal that names what is there. The sandbox daemon must be up.

@@ -22,11 +22,12 @@ BY = "app"
 _counter = itertools.count(1)
 
 
-def write_signal(control: Path, *lines: str, by: str = BY) -> Path:
+def write_signal(control: Path, *lines: str, by: str = BY, before=None) -> Path:
     """`signals/<by>-<YYYYmmdd-HHMMSS>-<nnnnnn>.signal`, written as `.tmp` then renamed, so
     the daemon (which skips `.tmp`) never reads half a file. Every event it produces
     carries `by: <by>` (`app`; the CLI passes `cli`). The daemon applies files in name
-    order, so the counter is zero-padded: two clicks in one second stay in click order."""
+    order, so the counter is zero-padded: two clicks in one second stay in click order.
+    `before(final path)` runs just before the rename (the planner's server marks its write)."""
     sdir = Path(control) / "signals"
     sdir.mkdir(parents=True, exist_ok=True)
     text = "".join(f"{ln}\n" for ln in (f"by: {by}", *lines))
@@ -39,6 +40,8 @@ def write_signal(control: Path, *lines: str, by: str = BY) -> Path:
             break
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
+    if before:
+        before(final)
     os.replace(tmp, final)
     return final
 
@@ -84,7 +87,7 @@ def outline(control: Path, item_id: str, by: str = BY) -> Path:
     return write_signal(control, f"outline: {item_id}", by=by)
 
 
-def amend(control: Path, item_id: str, text: str, by: str = BY) -> Path:
+def amend(control: Path, item_id: str, text: str, by: str = BY, before=None) -> Path:
     """An addition to queued, staged or running `item_id`'s instructions, any length:
     `queue/<repo>/NNN_name.amend[.N].md` (after any already waiting), written as `.tmp`
     then renamed. The daemon logs `amended` and delivers it by the item's state."""
@@ -101,6 +104,8 @@ def amend(control: Path, item_id: str, text: str, by: str = BY) -> Path:
     tmp = final.with_name(final.name + ".tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(f"---\nby: {by}\n---\n\n{text}\n")
+    if before:                          # as `write_signal`'s
+        before(final)
     os.replace(tmp, final)
     return final
 

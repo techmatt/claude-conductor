@@ -130,12 +130,23 @@ def corrections(events: list[Event], since: datetime) -> dict[datetime, list[tup
     return out
 
 
+def _via_mcp(ev: Event, path: str = "") -> bool:
+    """A write the planner's server made: its event's `via: mcp` (140); before that, only an
+    MCP signal file's name or request's `-mcp` told."""
+    return (ev.detail.get("via") == "mcp" or bool(path and MCP_SIGNAL.match(path))
+            or "-mcp" in str(ev.detail.get("request", "")))
+
+
 def sessions(events: list[Event], since: datetime, conductor_items: set[str]) -> list[Session]:
     """Planner sessions (a `session:` checkpoint to the next) begun since `since`, with what
-    the planner wrote in each."""
+    the planner wrote in each, and by which route: `mcp` (the server's tools) or `bridge`
+    (the rest). An item `approve:` moved into the queue is counted queued, on neither route."""
     out: list[Session] = []
     signals_seen: set[str] = set()
+    approved: set[str] = set()
     for ev in events:
+        if ev.kind == "approve" and ev.item:
+            approved.add(ev.item)
         if ev.kind == "checkpoint" and ev.detail.get("session"):
             out.append(Session(ev.detail.get("number") or "?", ev.ts))
             signals_seen = set()
@@ -147,15 +158,22 @@ def sessions(events: list[Event], since: datetime, conductor_items: set[str]) ->
             if p.startswith("signals/planner-") and p not in signals_seen:
                 signals_seen.add(p)
                 c["signals"] += 1
-                c["mcp"] += bool(MCP_SIGNAL.match(p))
+                c["mcp" if _via_mcp(ev, p) else "bridge"] += 1
+        route = "mcp" if _via_mcp(ev) else "bridge"
         if ev.kind in ("request", "request_failed"):
             c["requests"] += 1
             c["refused"] += ev.kind == "request_failed"
-            c["mcp"] += "-mcp" in str(ev.detail.get("request", ""))
+            c[route] += 1
         elif ev.kind in ("enqueue", "edited") and ev.item not in conductor_items:
             c["queued" if ev.kind == "enqueue" else "rewrites"] += 1
+            if not (ev.kind == "enqueue" and ev.item in approved):
+                c[route] += 1
         elif ev.kind in ("amended", "answer") and ev.detail.get("by") == "planner":
             c["amends" if ev.kind == "amended" else "answers"] += 1
+            c[route] += 1
+        elif ev.kind == "planner_write":        # proposed, parked, backlog: logged only for the server's
+            c["other"] += 1
+            c[route] += 1
     return [s for s in out if parse_stamp(s.ts) >= since]
 
 
@@ -164,7 +182,7 @@ def _hours(h: float) -> str:
 
 
 SESSION_KEYS = (("requests", 4), ("refused", 8), ("signals", 4), ("queued", 7), ("rewrites", 8),
-                ("amends", 6), ("answers", 7), ("mcp", 4))
+                ("amends", 6), ("answers", 7), ("other", 6), ("mcp", 4), ("bridge", 7))
 
 
 def _cols(value, fmt: str) -> str:
@@ -248,9 +266,9 @@ def report(log: EventLog, project: str, weeks: int = WEEKS, today: datetime | No
     lines.append("")
     sess = sessions(events, since, conductor_items)
     lines.append(f"Planner writes per session (weeks: the mean; then the latest {SESSIONS_SHOWN}; "
-                 "mcp: made through the MCP tools):")
+                 "by route: mcp, the server's tools; bridge, the rest):")
     if sess:
-        lines.append("  week/#   n   req  refused  sig  queued  rewrite  amend  answer  mcp")
+        lines.append("  week/#   n   req  refused  sig  queued  rewrite  amend  answer  other  mcp  bridge")
         for w in week_keys:
             ss = [s for s in sess if week_of(s.ts) == w]
             if ss:

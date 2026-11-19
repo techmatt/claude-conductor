@@ -62,6 +62,8 @@ events: [812, 813]
   signal's, side effects included; a request's `request`, `commit` (and a `closeout:`
   request's `read`). Past eight (`LINES`; a `session:` warns once per unreviewed
   report) the body ends `… and N more`.
+- `via`: `"mcp"` for a write the planner's MCP server marked (`mcp.md`, *Attribution*);
+  absent for the bridge's.
 - `written_ms`: the write's mtime in ms when conductor took it (absent for a signal or
   request, gone by then). A rewritten queue or proposed item overwrites its receipt:
   one whose `written_ms` is older than the rewrite is the previous version's.

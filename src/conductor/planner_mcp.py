@@ -5,11 +5,12 @@ chat linked to this machine through the Claude desktop app.
 
 Every tool that changes something writes the file the planner wrote over the file bridge
 (a signal, request, queue item, amendment, answer, parked line or backlog item, `by:
-planner`), waits for its receipt and returns it: the daemon and the event log are unchanged.
-A project whose daemon is down is said before anything is written. Reads are in
-`planner_read`. The projects are `--control` folders, else the app's remembered list, else
-the `*-control` folders beside this repo; only their control folders and conductor's own
-planner files are reachable.
+planner`), marked first as the server's (`daemon_receipts.mark`: its events carry `via:
+mcp`), waits for its receipt and returns it. A project whose daemon is down is said before
+anything is written. Reads are in `planner_read`. The projects are `--control` folders, else
+the app's remembered list, else the `*-control` folders beside this repo; their control
+folders, their code repos' tracked files (read only) and conductor's own planner files and
+reports are reachable. The desktop app runs `mcp_launcher`, which runs this code fresh.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from pathlib import Path
 import yaml
 
 from . import config as config_mod
+from . import daemon_receipts as receipts
 from . import git, items, questions, request, state
 from . import planner_read as rd
 from .app import actions
@@ -61,8 +63,11 @@ TOOLS = [
         "session | remote-diag (control files; `section` = a ## heading) | report (name = NNN or repo/NNN_name: "
         "header and section list first, then `section`, or \"all\") | audit | question (id) | picks (picker name) | "
         "receipt (a write's path) | stats (`weeks`, default 4: items per week and model, spend by kind, "
-        "corrections, planner writes per session) | planner | vocab | bridge | new-project | planner-notes | planner-ideas | "
-        "ledger (conductor prompts run and waiting) | doc (name = a conductor docs/ topic)."),
+        "corrections, planner writes per session by route) | repo (name = <repo>/<path>: a tracked text file of "
+        "a code repo, read-only; a folder lists its names; images stay on the file bridge) | planner | vocab | "
+        "bridge | new-project | planner-notes | planner-ideas | ledger (conductor prompts run and waiting) | doc "
+        "(name = a conductor docs/ topic) | conductor-report (name = NNN or a name: header first, as report; "
+        "none: what is past the planner's mark)."),
      "inputSchema": {"type": "object", "properties": {
          "project": P, "what": {"type": "string"}, "name": {"type": "string"},
          "section": {"type": "string"}, "part": {"type": "integer"}, "weeks": {"type": "integer"}},
@@ -85,13 +90,19 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {
          "project": P, "lines": {"type": "array", "items": {"type": "string"}}}, "required": ["project", "lines"]}},
     {"name": "edit_state", "description": (
-        "Change a tracked control file (state.md, paged.md, habits.md, conductor.toml, …) by request: `edits` "
-        "are old/new pairs of whole lines, checked against the file now (a miss returns the lines near it, "
-        "nothing written), or `content` replaces the file. Returns the receipt."),
+        "Change a tracked control file (state.md, paged.md, habits.md, conductor.toml, …) by request, one of: "
+        "`edits`, old/new pairs of whole lines checked against the file now (a miss returns the lines near it, "
+        "nothing written); `sections`, in order, {op: delete | move | replace, section: a ## heading, to: the "
+        "file a move appends it to (a new .md is created), body: a replace's text under the heading}: text "
+        "moves without retyping it, and a miss names the sections there are; or `content`, the whole file. "
+        "Returns the receipt."),
      "inputSchema": {"type": "object", "properties": {
          "project": P, "file": {"type": "string"},
          "edits": {"type": "array", "items": {"type": "object", "properties": {
              "old": {"type": "string"}, "new": {"type": "string"}}, "required": ["old", "new"]}},
+         "sections": {"type": "array", "items": {"type": "object", "properties": {
+             "op": {"type": "string", "enum": ["delete", "move", "replace"]}, "section": {"type": "string"},
+             "to": {"type": "string"}, "body": {"type": "string"}}, "required": ["op", "section"]}},
          "content": {"type": "string"}, "message": {"type": "string"}}, "required": ["project", "file"]}},
     {"name": "answer", "description": "Answer an open question (its id or a suffix). Returns the receipt.",
      "inputSchema": {"type": "object", "properties": {
@@ -248,13 +259,22 @@ class PlannerServer:
     def wait(self, cfg: config_mod.Config, rel: str, since_ms: int | None = None) -> str:
         return receipt(cfg, rel, since_ms, self.receipt_seconds)
 
+    @staticmethod
+    def mark(cfg: config_mod.Config, path: Path) -> None:
+        """Mark the write about to land at `path` as the server's (`daemon_receipts.mark`)."""
+        receipts.mark(cfg.control, cfg.rel(path))
+
+    def marker(self, cfg: config_mod.Config):
+        """`before=` for `actions.write_signal` / `actions.amend`: the mark, just before the rename."""
+        return lambda path: self.mark(cfg, path)
+
     # ------------------------------------------------------------- dispatch
     def call(self, name: str, a: dict) -> str:
         if name == "status":
             return rd.status(self.controls, a.get("project"))
         if name == "read":
             what = (a.get("what") or "").lower()
-            cfg = None if what in (*rd.PLANNER_FILES, "doc", "ledger") else self.project(a, live=False)
+            cfg = None if what in rd.CONDUCTOR_KINDS else self.project(a, live=False)
             text, err = rd.read(cfg, what, a.get("name") or "", a.get("section") or "", int(a.get("part") or 1),
                                 int(a["weeks"]) if a.get("weeks") else None)
             if err:
@@ -268,7 +288,7 @@ class PlannerServer:
     # ------------------------------------------------------------- tools
     def start_session(self, cfg: config_mod.Config, a: dict) -> str:
         label = " ".join((a.get("label") or "start").split())
-        path = actions.write_signal(cfg.control, f"session: {label}", by=BY)
+        path = actions.write_signal(cfg.control, f"session: {label}", by=BY, before=self.marker(cfg))
         rel = cfg.rel(path)
         got = self.wait(cfg, rel)
         if got.startswith("REFUSED"):
@@ -300,6 +320,7 @@ class PlannerServer:
         if other.is_file():
             raise Refused(f"{name} is {'queued' if held else 'proposed'} already: rewrite it there "
                           f"(held={str(not held).lower()}), or signal `approve:` / `cancel:`")
+        self.mark(cfg, path)
         ms = write_file(path, item_text(meta, a.get("body") or ""))
         return self.wait(cfg, cfg.rel(path), ms)
 
@@ -312,7 +333,7 @@ class PlannerServer:
             raise Refused(f"{ref!r} is ambiguous: {', '.join(hits)}" if hits else
                           f"no queued, staged or running item {ref!r}; a correction to finished work is a new item")
         try:
-            path = actions.amend(cfg.control, hits[0], a.get("text") or "", by=BY)
+            path = actions.amend(cfg.control, hits[0], a.get("text") or "", by=BY, before=self.marker(cfg))
         except ValueError as exc:
             raise Refused(str(exc)) from None
         return self.wait(cfg, cfg.rel(path))
@@ -324,7 +345,7 @@ class PlannerServer:
         lines = [ln for ln in lines if not ln.lower().startswith("by:")]
         if not lines:
             raise Refused("no signal lines")
-        path = actions.write_signal(cfg.control, *lines, by=BY)
+        path = actions.write_signal(cfg.control, *lines, by=BY, before=self.marker(cfg))
         return self.wait(cfg, cfg.rel(path))
 
     def answer(self, cfg: config_mod.Config, a: dict) -> str:
@@ -334,6 +355,7 @@ class PlannerServer:
             raise Refused(f"no question {a.get('question')!r}; open: {', '.join(open_qs) or 'none'}")
         if not (a.get("text") or "").strip():
             raise Refused("the answer is empty")
+        self.mark(cfg, q.answer_path)
         questions.write_answer(q, a["text"], by=BY)
         return self.wait(cfg, cfg.rel(q.answer_path))
 
@@ -344,6 +366,7 @@ class PlannerServer:
             raise Refused("the parked line is empty")
         path = cfg.path("parked", f"{repo}.md")
         old = rd._text(path) or ""
+        self.mark(cfg, path)
         ms = write_file(path, old + ("" if not old or old.endswith("\n") else "\n") + f"- {line}\n")
         return self.wait(cfg, cfg.rel(path), ms)
 
@@ -357,40 +380,115 @@ class PlannerServer:
             raise Refused(f"name {name!r}: a slug")
         meta = {"repo": repo, **{k: v for k, v in (a.get("meta") or {}).items() if k != "repo"}}
         path = cfg.path("backlog", repo, f"{name}.md")
+        self.mark(cfg, path)
         ms = write_file(path, item_text(meta, a.get("body") or ""))
         return self.wait(cfg, cfg.rel(path), ms)
 
-    def edit_state(self, cfg: config_mod.Config, a: dict) -> str:
-        rel = (a.get("file") or "").replace("\\", "/").strip("/")
-        tracked = set(git.ls_files(cfg.control))
-        if not rel or ".." in rel.split("/") or (rel not in tracked and rel not in EDITABLE):
-            raise Refused(f"{rel!r} is not a tracked control file; tracked: "
+    def tracked_file(self, cfg: config_mod.Config, rel: str, tracked: set[str], new_ok: bool = False) -> str:
+        """`rel` checked: a tracked control file (or one of `EDITABLE`); with `new_ok`, also a
+        new `.md` file that doesn't exist yet (a move's destination)."""
+        rel = (rel or "").replace("\\", "/").strip("/")
+        fresh = new_ok and rel.endswith(".md") and not (cfg.control / rel).exists()
+        try:
+            request._check_target(rel)
+        except request.RequestError as exc:
+            raise Refused(str(exc)) from None
+        if rel not in tracked and rel not in EDITABLE and not fresh:
+            raise Refused(f"{rel!r} is not a tracked control file"
+                          + (" (nor a new .md file)" if new_ok else "") + "; tracked: "
                           + ", ".join(sorted(t for t in tracked if t.endswith((".md", ".toml")))[:20]))
-        edits, content = a.get("edits") or [], a.get("content")
-        if bool(edits) == (content is not None):
-            raise Refused("give `edits` (old/new pairs) or `content` (the whole file), not both or neither")
+        return rel
+
+    def edit_state(self, cfg: config_mod.Config, a: dict) -> str:
+        tracked = set(git.ls_files(cfg.control))
+        rel = self.tracked_file(cfg, a.get("file") or "", tracked)
+        edits, content, ops = a.get("edits") or [], a.get("content"), a.get("sections") or []
+        if sum((bool(edits), content is not None, bool(ops))) != 1:
+            raise Refused("give one of `edits` (old/new pairs), `sections` (section operations) or `content` "
+                          "(the whole file)")
         current = rd._text(cfg.control / rel)
-        if edits:
+        pairs: dict[str, list[tuple[str, str]]] = {}
+        whole: dict[str, str] = {}
+        if ops:
+            if current is None:
+                raise Refused(f"{rel} doesn't exist yet: nothing to take sections from")
+            pairs, whole, said = self.section_ops(cfg, rel, current, ops, tracked)
+            default = f"{Path(rel).stem}: {said}"
+        elif edits:
             if current is None:
                 raise Refused(f"{rel} doesn't exist yet: send `content` to create it")
-            pairs = [(_lines(e.get("old") or ""), _lines(e.get("new") or "")) for e in edits]
+            pairs[rel] = [(_lines(e.get("old") or ""), _lines(e.get("new") or "")) for e in edits]
             try:
-                new_text = request.apply_edits(current, rel, pairs)
+                request.apply_edits(current, rel, pairs[rel])
             except request.RequestError as exc:
                 n = int(m.group(1)) if (m := re.search(r"edit (\d+)", str(exc))) else 1
                 raise Refused(f"{exc}\nNothing was written. The lines of {rel} nearest edit {n}'s old text, "
-                              f"now:\n{near(_progress(current, pairs[:n - 1]), pairs[n - 1][0])}") from None
+                              f"now:\n{near(_progress(current, pairs[rel][:n - 1]), pairs[rel][n - 1][0])}") from None
+            default = f"{Path(rel).stem}: planner edit"
         else:
-            new_text = content if content.endswith("\n") else content + "\n"
-        if new_text == current:
-            return f"no change: {rel} already reads that way; nothing written"
-        message = " ".join((a.get("message") or f"{Path(rel).stem}: planner edit").split())
+            whole[rel] = content if content.endswith("\n") else content + "\n"
+            default = f"{Path(rel).stem}: planner edit"
+        if all(request.apply_edits(rd._text(cfg.control / t) or "", t, p) == rd._text(cfg.control / t)
+               for t, p in pairs.items()) and all(rd._text(cfg.control / t) == text for t, text in whole.items()):
+            return f"no change: {', '.join([*pairs, *whole])} already read(s) that way; nothing written"
+        return self.send_request(cfg, pairs, whole, " ".join((a.get("message") or default).split()))
+
+    def section_ops(self, cfg: config_mod.Config, rel: str, text: str, ops: list, tracked: set[str]):
+        """`sections` of `edit_state`, in order: {op: delete | move | replace, section: a `## `
+        heading's start, to: the file a move appends it to (created if missing), body: a
+        replace's new text under the heading}. Returns (edit pairs per file, whole files,
+        what was done). A section not found names those that exist; nothing is written."""
+        texts = {rel: text}
+        pairs: dict[str, list[tuple[str, str]]] = {rel: []}
+        whole: dict[str, str] = {}
+        said = []
+        for n, op in enumerate(ops, 1):
+            kind, name = str(op.get("op") or "").lower(), str(op.get("section") or "")
+            if kind not in ("delete", "move", "replace"):
+                raise Refused(f"section op {n}: `op` is delete, move or replace, not {kind!r}")
+            old, head = find_section(texts[rel], name, rel, n)
+            if kind == "delete":
+                new = ""
+                said.append(f"drop *{head}*")
+            elif kind == "replace":
+                body = (op.get("body") or "").replace("\r\n", "\n").strip("\n")
+                new = f"## {head}\n\n{body}\n\n" if body else f"## {head}\n\n"
+                said.append(f"rewrite *{head}*")
+            else:
+                to = self.tracked_file(cfg, op.get("to") or "", tracked, new_ok=True)
+                if to == rel:
+                    raise Refused(f"section op {n}: a move needs another file than {rel}")
+                if to not in texts:
+                    texts[to] = rd._text(cfg.control / to) or ""
+                base = texts[to].rstrip("\n")
+                texts[to] = whole[to] = (base + "\n\n" if base else "") + old.rstrip("\n") + "\n"
+                new = ""
+                said.append(f"move *{head}* to {to}")
+            pairs[rel].append((old, new))
+            texts[rel] = texts[rel].replace(old, new, 1)
+        try:                                    # as edit blocks only if they apply the same way
+            ok = (all(o.endswith("\n") for p in pairs[rel] for o in p if o)
+                  and request.apply_edits(text, rel, pairs[rel]) == texts[rel])
+        except request.RequestError:
+            ok = False
+        if not ok:
+            whole[rel], pairs = texts[rel], {}
+        return pairs, whole, "; ".join(said)
+
+    def send_request(self, cfg: config_mod.Config, pairs: dict[str, list[tuple[str, str]]],
+                     whole: dict[str, str], message: str) -> str:
+        """One request (`request.py`): edit blocks for `pairs` (applied by the daemon against the
+        live copy), whole files for `whole` (written before `request.md`); marked, waited for."""
+        if any(_marker(t) for ps in pairs.values() for p in ps for t in p):
+            for t, ps in pairs.items():         # a conflict marker in the text: those go whole
+                whole[t] = request.apply_edits(rd._text(cfg.control / t) or "", t, ps)
+            pairs = {}
         d = cfg.path("requests", f"{datetime.now():%Y%m%d-%H%M}-mcp{datetime.now():%S}{next(_counter):03d}")
-        blocks = "" if content is not None or any(_marker(t) for p in pairs for t in p) else "".join(
-            f"<<<<<<< {rel}\n{old}=======\n{new}>>>>>>>\n" for old, new in pairs)
-        if not blocks:                          # whole file: the target first, request.md last
-            write_file(d / rel, new_text)
-        head = yaml.safe_dump({"targets": [rel], "message": message}, sort_keys=False, allow_unicode=True)
+        self.mark(cfg, d)
+        for t, text in whole.items():           # whole files first, request.md last
+            write_file(d / t, text)
+        blocks = "".join(f"<<<<<<< {t}\n{old}=======\n{new}>>>>>>>\n" for t, ps in pairs.items() for old, new in ps)
+        head = yaml.safe_dump({"targets": [*pairs, *whole], "message": message}, sort_keys=False, allow_unicode=True)
         write_file(d / "request.md", f"---\n{head}---\n{blocks}")
         return self.wait(cfg, cfg.rel(d))
 
@@ -429,6 +527,24 @@ class PlannerServer:
 
 
 # ----------------------------------------------------------------- edit helpers
+def find_section(text: str, name: str, rel: str, n: int) -> tuple[str, str]:
+    """The `## ` section of `text` whose heading is `name` (else starts with it; case and `*`
+    ignored), as (its text from the heading to the next `## `, its heading); refused naming
+    the sections there are when none or several match."""
+    want = name.strip().strip("*").strip().lower()
+    lines = text.splitlines(keepends=True)
+    found = rd.sections(text)
+    heads = [h for h, _, _ in found]
+    exact = [s for s in found if s[0].strip("*").strip().lower() == want]
+    hits = exact or [s for s in found if want and s[0].strip("*").strip().lower().startswith(want)]
+    if len(hits) != 1:
+        why = f"{len(hits)} sections start {name!r}" if hits else f"no `## ` section {name!r}"
+        raise Refused(f"section op {n}: {why} in {rel}; nothing was written. Its sections: "
+                      + ("; ".join(heads) or "none"))
+    head, a, b = hits[0]
+    return "".join(lines[a:b]), head
+
+
 def _lines(text: str) -> str:
     """Whole lines, as the request's edit blocks take them: an empty side stays empty."""
     text = text.replace("\r\n", "\n")

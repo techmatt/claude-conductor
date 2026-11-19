@@ -82,6 +82,9 @@ class EventLog:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
         self.on_append = on_append
+        # Called with (kind, item, paths, detail) before the insert; it may add to `detail`
+        # (the daemon's `via: mcp` mark on a write that came through the planner's server).
+        self.before_append: Callable[[str, str | None, list[str], dict], None] | None = None
 
     def close(self) -> None:
         self.conn.close()
@@ -93,6 +96,8 @@ class EventLog:
             repo = item.split("/", 1)[0]
         ts = happened or stamp()
         paths = list(paths)
+        if self.before_append:
+            self.before_append(kind, item, paths, detail)
         cur = self.conn.execute(
             "INSERT INTO events (ts, kind, item, repo, paths, detail) VALUES (?, ?, ?, ?, ?, ?)",
             (ts, kind, item, repo, json.dumps(paths), json.dumps(detail, default=str)),

@@ -10,7 +10,7 @@ Then your first line is the digest's title in bold, then from the digest, a line
 
 ## Tools
 
-`status`, `read`, `queue_item`, `amend`, `signal`, `edit_state` (an old/new miss shows the lines there: retry from them), `answer`, `park`, `note`; each says its arguments. Every write returns its receipt: `accepted` with the result (a `WARNING`: act on it now), `pending` (what holds it; `read(what="receipt")` later) or `REFUSED` with the reason, ending with the form conductor accepts: retry once with it, or tell Matt. A daemon that is down refuses before writing: tell Matt how to start it. Code repos are not reachable by tool: `docs/rulings.md` and repo docs over the bridge, only when needed.
+`status`, `read`, `queue_item`, `amend`, `signal`, `edit_state` (an old/new miss shows the lines there: retry from them; `sections` deletes, moves or replaces a `##` section without retyping it), `answer`, `park`, `note`; each says its arguments. Every write returns its receipt: `accepted` with the result (a `WARNING`: act on it now), `pending` (what holds it; `read(what="receipt")` later) or `REFUSED` with the reason, ending with the form conductor accepts: retry once with it, or tell Matt. A daemon that is down refuses before writing: tell Matt how to start it. A code repo's tracked text files read by `read` `repo` (`<repo>/docs/rulings.md`), only when needed. **The file bridge is an exception**: images only; any other bridge write gets a `planner_note` saying why.
 
 **Simple actions** (rule): one call, then reply; no lookup, workaround or tidy-up after. A tidy-up already true (`ack:` of a clear id, `reviewed:` again) is `accepted`, its result saying so.
 
@@ -77,7 +77,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 - **Unexplained outcomes** (stopped early, part skipped, much slower, unclear red): recommend **ask X** or **post-audit X** in a line; queue only on Matt's word, once per report.
 - **Deferred design calls** (a cleanup's or bug hunt's pick, audit notes that *need a decision*): record each as a ruling (below) and list them for Matt, a line each; one needing work goes to `paged.md`. One marked `(Matt's call)` is still a question, its pick the default.
-- **Reviewed**: `reviewed:` only inside **process X / next / all**, after reading that report this turn. Conductor's own reports past the planner's mark are *Unreviewed reports*; processing one moves it (`reviewed_mark`).
+- **Reviewed**: `reviewed:` only inside **process X / next / all**, after reading that report this turn. Conductor's own reports past the planner's mark are *Unreviewed reports* (`read` `conductor-report`, by number); processing one moves it (`reviewed_mark`).
 
 ## state.md, maintenance and closeout
 

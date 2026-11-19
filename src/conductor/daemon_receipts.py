@@ -29,6 +29,21 @@ WRITE_WAKE_SECONDS = 0.25       # how often a poll's sleep looks for a new plann
 LINES = 8                       # event lines in a receipt's body; the rest are only ids
 # Events that mean the write (or a line of it) was not carried out.
 REFUSALS = ("invalid", "request_failed", "amend_refused", "late", "open_refused", "pick_failed")
+# The planner's MCP server marks each write before it lands: `receipts/.mcp/<write rel, `/` as
+# `~`>`. Every event the write logs carries `via: mcp`, its receipt too, and the receipt
+# takes the mark away; a bridge write is one without it (docs/mcp.md, *Attribution*).
+MARKS = ".mcp"
+VIA = "mcp"
+
+
+def mark_path(control: Path, write_rel: str) -> Path:
+    return Path(control) / ROOT / MARKS / write_rel.strip("/").replace("/", "~")
+
+
+def mark(control: Path, write_rel: str) -> None:
+    """Say that `write_rel` (a signal, request folder, queue / proposed / backlog item,
+    amendment, answer or parked file) is about to be written by the planner's server."""
+    write_text(mark_path(control, write_rel), f"{now().isoformat(timespec='seconds')}\n")
 
 
 def rel_for(write_rel: str) -> str:
@@ -72,6 +87,7 @@ def _q(value) -> str:
 class ReceiptsMixin:
     def _init_receipts(self) -> None:
         self._capturing: list[Event] | None = None  # events of the signal file or request being handled
+        self._capturing_rel: str | None = None      # that write's path
         self._noted: list[str] | None = None        # its no-op lines' notes (`_noop`): receipt only, no event
         self._pruned_at = 0.0
         self.proposed_seen: dict[str, int] = {}     # proposed file → the mtime its receipt covers
@@ -93,10 +109,11 @@ class ReceiptsMixin:
         notes: list[str] = []
         prev, self._capturing = self._capturing, got
         prev_notes, self._noted = self._noted, notes
+        prev_rel, self._capturing_rel = self._capturing_rel, rel
         try:
             yield got
         finally:
-            self._capturing, self._noted = prev, prev_notes
+            self._capturing, self._noted, self._capturing_rel = prev, prev_notes, prev_rel
         if got or always:
             refusal = next((e for e in got if e.kind in REFUSALS and (e.kind != "invalid" or rel in e.paths)), None)
             if refusal:
@@ -120,6 +137,32 @@ class ReceiptsMixin:
                 if request and (fold := session.state_warning(request.detail)):     # 106: fold before it grows
                     warning = "; ".join(filter(None, [warning, fold]))
                 self._write_receipt(rel, got, result=result, warning=warning or None)
+
+    def _marked(self) -> set[str]:
+        """The writes the planner's server has marked and whose receipt hasn't taken the mark."""
+        try:
+            return {n.replace("~", "/") for n in os.listdir(self.cfg.path(ROOT, MARKS))}
+        except OSError:
+            return set()
+
+    def _mark_via(self, kind: str, item: str | None, paths: list[str], detail: dict) -> None:
+        """`EventLog.before_append`: an event of a marked write (its own path, the signal file
+        or request being handled, or the name a renumbered item was written under) carries
+        `via: mcp`."""
+        if "via" in detail or not (marks := self._marked()):
+            return
+        rels = [*paths, *([self._capturing_rel] if self._capturing_rel else [])]
+        if (old := detail.get("renumbered_from")) and item:
+            rels.append(f"queue/{item.split('/', 1)[0]}/{old}.md")
+        if any(r.strip("/") in marks for r in rels):
+            detail["via"] = VIA
+
+    def _planner_write(self, rel: str, what: str, repo: str | None = None) -> list[Event]:
+        """A `planner_write` event for a marked proposed, parked or backlog write, the kinds
+        that otherwise log none, so the server's writes of them show in the log too."""
+        if rel not in self._marked():
+            return []
+        return [self.log.append("planner_write", repo=repo, paths=[rel], what=what)]
 
     def _noop(self, note: str) -> None:
         """A signal line whose wish already holds (`ack:` of a clear id, `reviewed:` of a reviewed
@@ -238,30 +281,34 @@ class ReceiptsMixin:
 
     def process_proposed(self) -> None:
         """A receipt for each new or rewritten `proposed/` file: waiting for Matt's approval,
-        or refused for what `approve:` would refuse it for. No event: a proposal changes nothing."""
+        or refused for what `approve:` would refuse it for. No event (a proposal changes
+        nothing) but the MCP server's `planner_write`."""
         fresh, self.proposed_seen = self._new_versions(items.item_files(self.cfg.path("proposed")), self.proposed_seen)
         for p, rel in fresh:
             repo = items.front_repo(p)
+            evs = self._planner_write(rel, "proposed", repo if repo in self.cfg.repos else None)
             if repo not in self.cfg.repos:
-                self._write_receipt(rel, [], reason=f"`repo: {repo}` is not a configured repo")
+                self._write_receipt(rel, evs, reason=f"`repo: {repo}` is not a configured repo")
             elif errors := items.parse(p, repo).errors:
-                self._write_receipt(rel, [], reason="; ".join(errors))
+                self._write_receipt(rel, evs, reason="; ".join(errors))
             else:
-                self._write_receipt(rel, [], result=f"proposed for {repo}: waits for Matt (`approve: {p.stem}`)")
+                self._write_receipt(rel, evs, result=f"proposed for {repo}: waits for Matt (`approve: {p.stem}`)")
 
     def process_parked(self) -> None:
         """A receipt for each new or rewritten `parked/<repo>.md`: how many edits wait there
-        (`parked.md`). No event; conductor's own take or put-back rewrites it too."""
+        (`parked.md`). No event but the MCP server's `planner_write`; conductor's own take or
+        put-back rewrites it too."""
         files = [p for p in sorted(self.cfg.path(parked.ROOT).glob("*.md")) if not p.name.endswith(".done.md")]
         fresh, self.parked_seen = self._new_versions(files, self.parked_seen)
         for p, rel in fresh:
             if p.stem not in self.cfg.repos:
-                self._write_receipt(rel, [], reason=f"`{p.stem}` is not a configured repo")
+                self._write_receipt(rel, self._planner_write(rel, "parked"), reason=f"`{p.stem}` is not a configured repo")
                 continue
+            evs = self._planner_write(rel, "parked", p.stem)
             n, rules = parked.counts(self.cfg.control, p.stem)
             tagged = f" ({rules} `[rules]`)" if rules else ""
-            self._write_receipt(rel, [], result=f"{n} parked edit(s) waiting for {p.stem}{tagged}: "
-                                                "the next serial item carries them")
+            self._write_receipt(rel, evs, result=f"{n} parked edit(s) waiting for {p.stem}{tagged}: "
+                                                 "the next serial item carries them")
 
     def _new_versions(self, paths: list[Path], seen: dict[str, int]) -> tuple[list[tuple[Path, str]], dict[str, int]]:
         """The readable files among `paths` that are new or rewritten since `seen` (rel → the
@@ -315,15 +362,20 @@ class ReceiptsMixin:
         whose `depends_on` will hold it), `refused` with `reason` (and, for a signal cut short,
         the lines `applied` before it), or `pending` with what it waits for (`result`); then
         one line per event."""
+        via = None
         if not pending:
             self._pending.pop(rel, None)
+            mark = mark_path(self.cfg.control, rel)
+            if mark.exists():               # the server's write: said, and the mark taken away
+                via = VIA
+                mark.unlink(missing_ok=True)
         try:
             mtime = self.cfg.path(*rel.split("/")).stat().st_mtime_ns // 1_000_000
         except OSError:
             mtime = None                    # a signal or request is gone by now; its name is unique anyway
         outcome = "refused" if reason else "pending" if pending else "accepted"
         meta = {"write": rel, "outcome": outcome, "result": pending or result, "warning": warning,
-                "reason": reason, "applied": applied, "at": clock(now()), "written_ms": mtime,
+                "reason": reason, "applied": applied, "at": clock(now()), "written_ms": mtime, "via": via,
                 "events": [e.id for e in evs]}
         lines = [self._line(e) for e in evs[:LINES]]
         if len(evs) > LINES:                # a `session:` warns once per unreviewed report
@@ -336,7 +388,8 @@ class ReceiptsMixin:
             return
         self._pruned_at = time.time()
         cutoff = time.time() - KEEP_SECONDS
-        for p in self.cfg.path(ROOT).rglob("*.md"):
+        marks = self.cfg.path(ROOT, MARKS)      # a mark no receipt took (a write that never landed)
+        for p in [*self.cfg.path(ROOT).rglob("*.md"), *(marks.iterdir() if marks.is_dir() else [])]:
             try:
                 if p.stat().st_mtime < cutoff:
                     p.unlink()

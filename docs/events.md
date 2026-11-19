@@ -3,6 +3,8 @@
 `events.db`, table `events(id, ts, kind, item, repo, paths, detail)`. `ts` is local
 ISO time with offset; `paths` is a JSON list (relative inside the control folder); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 
+Any event of a write the planner's MCP server made (a signal file and all its lines' events, a request, a queue item's `enqueue` / `edited`, an amendment, an answer, a `planner_write`) carries `via: mcp` (140, `mcp.md`, *Attribution*); a bridge write's has no `via`. `delivered`'s `via` (`hook`, `prompt`, `resume`) is its own and never `mcp`.
+
 | kind | when | notable detail |
 |---|---|---|
 | `daemon_start` / `daemon_stop` | daemon lifecycle | pid, control, code (start: its code version, `restart.md`); running and staging items at stop, note; stop `reason` (`signal`: a `stop: daemon` signal, with its paths and by; `interrupt`: Ctrl+C; `error`: three ticks in a row failed on `OSError`, with error) |
@@ -50,6 +52,7 @@ ISO time with offset; `paths` is a JSON list (relative inside the control folder
 | `tell` | a `tell:` (or `outline:`) signal queued a message for a running executor (event id = message id); `by: conductor` for a memory, load or started-beside message | text, by; outline_request (an `outline:` signal's fixed request); beside; waiting_on (the open question its `ask` hands back for: `questions.md`; `answers` before 58); pause, resume |
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`; an amendment also `prompt`/`resume`; `progress` in older logs), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
+| `planner_write` | the MCP server wrote a proposed item, parked file or backlog item (which log no event of their own); not in the inbox | what (`proposed`, `parked`, `backlog`), via; paths: the file |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
 | `run_start` / `run_ready` / `run_open` / `run_stop` | a run target or tool (`tool: true`) started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd (`reused`: note) / waited_seconds / url, opened / note |
 | `run_failed` | a run target or tool (`tool: true`) never came up, or its URL could not be opened (red; holds no queue) | target, error, log_tail |

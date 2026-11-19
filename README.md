@@ -71,7 +71,7 @@ command (`docs/restart.md`).
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
-| `docs/mcp.md` | `conductor mcp`, the planner's tools: each write and its receipt, reads, reach, registration |
+| `docs/mcp.md` | `conductor mcp`, the planner's tools: each write and its receipt, attribution, reads, reach, registration, the launcher, the self-check |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/stats.md` | `conductor stats`: items per week and model, spend by kind, corrections, planner writes per session |
 | `docs/restart.md` | The restart rule, self-restart on a code change; process groups, detached launches |

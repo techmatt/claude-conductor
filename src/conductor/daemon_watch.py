@@ -88,17 +88,19 @@ class WatchMixin:
     # ---------------------------------------------------------------- backlog
     def process_backlog(self) -> None:
         """A receipt for each new or rewritten backlog file: waiting to be drawn, or refused
-        for what would make it invalid in the queue. No event: a backlog write changes nothing."""
+        for what would make it invalid in the queue. No event (a backlog write changes nothing)
+        but the MCP server's `planner_write`."""
         files = [p for repo in self.cfg.repos for p in items.item_files(self.cfg.path("backlog", repo))]
         fresh, self.backlog_seen = self._new_versions(files, self.backlog_seen)
         for p, rel in fresh:
             repo = p.parent.name
             item = nightshift.parse(p, repo)
+            evs = self._planner_write(rel, "backlog", repo)
             if item.errors:
-                self._write_receipt(rel, [], reason="; ".join(item.errors))
+                self._write_receipt(rel, evs, reason="; ".join(item.errors))
             else:
                 full = " (full-length: drawn only after Matt acts)" if nightshift.full_length(item.meta()) else ""
-                self._write_receipt(rel, [], result=f"in the backlog for {repo}: drawn when its queue is empty{full}")
+                self._write_receipt(rel, evs, result=f"in the backlog for {repo}: drawn when its queue is empty{full}")
 
     def _settled(self, rel: str) -> bool:
         """A receipted backlog file old enough to draw: its receipt comes as soon as it reads,

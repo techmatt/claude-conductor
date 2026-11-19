@@ -70,8 +70,9 @@ def test_the_scoreboard_counts_items_spend_corrections_and_planner_writes(env):
     assert fixes == "  Nov 16  4 of 5 queued (depends 1, land 1, name 1, resume 1: 005 006 007 002)"
     session = next(ln for ln in lines if ln.startswith("  #7 ")).split()
     # requests 2 (1 refused), signals 2 (one file's two events counted once), queued 1, rewrites 0,
-    # amends 1, answers 0, mcp 2 (the request and the countered signal file)
-    assert session[1:] == ["2", "1", "2", "1", "0", "1", "0", "2"]
+    # amends 1, answers 0, other 0; mcp 2 (the request and the countered signal file, from before
+    # `via` marked them), bridge 4 (the other request and signal, the enqueue, the amendment)
+    assert session[1:] == ["2", "1", "2", "1", "0", "1", "0", "0", "2", "4"]
     assert len(text.encode("utf-8")) < 2500
 
 
