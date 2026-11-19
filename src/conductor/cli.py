@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | rename-repo | remote | app`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | open | open-path | run-target | pick | init | rename-repo | remote | app | mcp`."""
 
 from __future__ import annotations
 
@@ -483,6 +483,11 @@ def cmd_app(args) -> int:
     return app_main([str(f) for f in folders])
 
 
+def cmd_mcp(args) -> int:
+    from .status_mcp import main as mcp_main
+    return mcp_main(args.control)
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         # Redirected output on Windows defaults to the ANSI code page; under pythonw
@@ -582,6 +587,9 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("app", help="the desktop app (tray icon, one tab per control folder)")
     sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
     sp.set_defaults(fn=cmd_app)
+    sp = sub.add_parser("mcp", help="trial stdio MCP server: one read-only `status` tool (docs/mcp.md)")
+    sp.add_argument("--control", action="append", help="a control folder (repeatable; default: the app's projects)")
+    sp.set_defaults(fn=cmd_mcp)
     args = p.parse_args(argv)
     try:
         return args.fn(args)

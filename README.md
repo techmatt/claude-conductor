@@ -70,6 +70,7 @@ command (`docs/restart.md`).
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
+| `docs/mcp.md` | Trial: `conductor mcp`, a read-only `status` tool for a linked planner chat; registration, removal |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/restart.md` | The restart rule, self-restart on a code change; process groups, detached launches |
 | `docs/development.md` | The test suite, its lanes and the fake executor |

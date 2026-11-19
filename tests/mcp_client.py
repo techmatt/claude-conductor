@@ -4,6 +4,11 @@
 
 Starts the server named in the config, initializes, lists tools, calls `ask` and prints
 the result text. The fake executor uses `call_tool` for its `FAKE ask` and `FAKE progress` lines.
+
+    python tests/mcp_client.py --status [project] [--control <folder> ...]
+
+Starts `conductor mcp` (the trial status server, docs/mcp.md) as the desktop app would and
+prints what `status` returns.
 """
 
 import json
@@ -13,9 +18,11 @@ from pathlib import Path
 
 
 class Client:
-    def __init__(self, mcp_config: Path):
-        spec = json.loads(Path(mcp_config).read_text(encoding="utf-8"))["mcpServers"]["conductor"]
-        self.proc = subprocess.Popen([spec["command"], *spec["args"]], stdin=subprocess.PIPE,
+    def __init__(self, mcp_config: Path | None = None, command: list[str] | None = None):
+        if command is None:
+            spec = json.loads(Path(mcp_config).read_text(encoding="utf-8"))["mcpServers"]["conductor"]
+            command = [spec["command"], *spec["args"]]
+        self.proc = subprocess.Popen(command, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, text=True, encoding="utf-8")
         self.next_id = 0
 
@@ -62,6 +69,28 @@ def call_ask(mcp_config: Path, arguments: dict) -> tuple[str, bool]:
     return call_tool(mcp_config, "ask", arguments)
 
 
-if __name__ == "__main__":
+def call_status(project: str | None = None, controls: list[Path] = ()) -> tuple[str, bool]:
+    """Call the trial status server's one tool, the server started as `conductor mcp`."""
+    cmd = [sys.executable, "-m", "conductor", "mcp", *(a for c in controls for a in ("--control", str(c)))]
+    c = Client(command=cmd)
+    try:
+        tools = c.start()
+        assert [t["name"] for t in tools] == ["status"], tools
+        result = c.request("tools/call", {"name": "status", "arguments": {"project": project} if project else {}})
+        return result["content"][0]["text"], result.get("isError", False)
+    finally:
+        c.close()
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["--status"]:
+    rest, controls = sys.argv[2:], []
+    while "--control" in rest:
+        i = rest.index("--control")
+        controls.append(Path(rest[i + 1]))
+        del rest[i:i + 2]
+    sys.stdout.reconfigure(encoding="utf-8")
+    text, is_error = call_status(rest[0] if rest else None, controls)
+    print(("ERROR: " if is_error else "") + text)
+elif __name__ == "__main__":
     text, is_error = call_ask(Path(sys.argv[1]), json.loads(sys.argv[2]))
     print(("ERROR: " if is_error else "") + text)

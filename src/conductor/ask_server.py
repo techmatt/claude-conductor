@@ -586,10 +586,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--session-id")
     p.add_argument("--workdir")
     args = p.parse_args(argv)
-    sys.stdin.reconfigure(encoding="utf-8")
-    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     server = Server(Path(args.control), args.item, args.default_minutes, args.session_id,
                     workdir=Path(args.workdir) if args.workdir else None)
+    return serve_stdio(server)
+
+
+def serve_stdio(server) -> int:
+    """Feed newline-delimited JSON-RPC from stdin to `server.handle` until stdin closes
+    (also `status_mcp`'s loop)."""
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     for line in sys.stdin:
         line = line.strip()
         if not line:
