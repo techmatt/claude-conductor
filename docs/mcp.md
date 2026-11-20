@@ -49,6 +49,7 @@ counts both per session (`stats.md`).
 | `edit_state(project, file, edits? \| sections? \| content?, message?)` | `requests/<YYYYMMDD-HHMM>-mcp<SS><n>/` | the receipt (`committed <sha>`) |
 | `answer(project, question, text)` | `questions/<id>.answer.md` | the receipt |
 | `park(project, repo, line)` | a `- ` line appended to `parked/<repo>.md` | the receipt |
+| `memory_note(project, repo, note, op, body?, description?, edits?)` | `memory-edits/<stamp>-<n>.md`, applied by the daemon (`memory-notes.md`) | the receipt |
 | `note(kind, …)` | below | the receipt, or what was written |
 
 **`queue_item`**: `name` is a slug (`fix_menu`: numbered as the repo's next item,
@@ -56,10 +57,15 @@ counts both per session (`stats.md`).
 is then rewritten) or `NNN_slug` (written as given; an existing one is rewritten; a taken
 number is renumbered by the daemon, its receipt saying so). `meta` is the front-matter
 beside `repo`. An item queued while the same name is proposed (or the reverse) is refused.
+`warn` (143) adds a `WARNING` for a body asking an executor to write under `~/.claude`
+(`memory_note` instead; `amend` too) or a `readonly` one naming `farm-seeds` or remote
+workers without `remote: true`.
 
 **`edit_state`**: `file` is a tracked control file, or `state.md`, `paged.md`, `habits.md`
-before they are tracked. `edits` (old/new, whole lines) are first applied to the file on
-disk with `request.apply_edits`; a miss writes nothing and returns the error plus the
+before they are tracked. `edits` (old/new) are first applied to the file on disk: `old`
+as whole lines when those occur once, else any piece of the text that occurs once, widened
+to the lines around it (`widen`, 143: state.md lines run to 2 KB, and a few words cost the
+line typed twice); none or several writes nothing and returns the error plus the
 file's lines around the best match for the missed edit's first old line (`near`, numbered),
 so a retry needs no read. The request carries edit blocks (applied by the daemon against
 the live copy); text holding a conflict marker, or `content`, goes as a whole file written
@@ -78,7 +84,9 @@ several, refuses with the file's section list, nothing written.
   file doesn't exist), `inbox`, `review`, `session`, `remote-diag`; `section` picks a `## `
   (else `### `) heading by its start, case-free;
 - `report` (`name`: `NNN`, `NNN_name`, `repo/NNN_name`): first its header lines, title and
-  section list with sizes; `section` reads one, `"all"` the whole; `audit`: its notes;
+  section list with sizes; `section` reads one, `"all"` the whole; `audit`: its notes. A
+  resume's prompt (`.api2.md`) never makes a name ambiguous; a missing report says why
+  (`missing; red: <reasons>`, 143);
 - `question` (an id or suffix), `picks` (a picker's saved choices, pretty-printed),
   `receipt` (a write's path; none: the server's writes of the last 2 h, 142), `stats` (`weeks`, default 4: `conductor stats`' text, `stats.md`);
 - `repo` (`name`: `<repo>/<path>`): a tracked text file of a project's code repo, read-only,
@@ -175,7 +183,8 @@ another chat had split state.md and queued two items). One launcher serves every
 (pid 11284 served aicomplete and fractals all afternoon), so the server can't say whose a
 write was. Instead `status` names the planner writes since the newest `session:` checkpoint
 (`planner_read.session_writes`: requests, queued and rewritten items, the planner's
-amendments, answers and reviews, `planner_write`s; the newest 4, each with its route), and
+amendments, answers and reviews, `planner_write`s, memory notes; the newest 4, each with
+its route; not conductor's own queue writes or an `approve:`'s move, 143), and
 every write's receipt ends with their count. A chat that sees one it didn't make, or a
 session number past its own digest's, has another chat writing beside it.
 

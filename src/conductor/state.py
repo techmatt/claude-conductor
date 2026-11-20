@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import audits, git, globs, items, picks, procs, resume
+from . import audits, git, globs, items, picks, procs, quiet, resume
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
@@ -303,6 +303,8 @@ def early_starts(cfg: Config, view: View, decisions: dict[str, Decision]) -> lis
                 continue
             if any(view.status_of(items.resolve_ref(ref, repo, known)) != "done" for ref in item.depends_on):
                 continue
+            if quiet.blocks(cfg.control, item.id, item.template):
+                continue
             held |= set(item.locks)
             out.append(item)
     return out
@@ -369,14 +371,20 @@ def start_estimate(cfg: Config, view: View, item: Item) -> str:
 
 def parked_estimate(cfg: Config, view: View, item: Item) -> str:
     """Which waiting parked edits `item` will carry as the queue stands, for its receipt:
-    none unless it is serial, and none an earlier serial item in its queue takes first."""
+    none unless it is serial, and none an earlier serial item in its queue takes first.
+    With edits waiting it always says which (143: aicomplete's receipts said nothing while a
+    `[rules]` edit waited); with none waiting, nothing."""
     from . import parked
-    edits = parked.eligible(item, parked.waiting(cfg.control, item.repo))
+    waiting = parked.waiting(cfg.control, item.repo)
+    if not waiting:
+        return ""
+    if not parked.serial(item):
+        return f"carries none of the {len(waiting)} parked edit(s) waiting: not a serial item"
+    edits = list(waiting)
     queue = view.queued.get(item.repo, [])
     for q in queue[:next((i for i, q in enumerate(queue) if q.id == item.id), len(queue))]:
-        edits = [e for e in edits if e not in parked.eligible(q, edits)]
-    if not edits:
-        return ""
+        if edits and parked.eligible(q, edits):
+            return f"carries none of the {len(waiting)} parked edit(s) waiting: {q.name} ahead of it takes them"
     shown = "; ".join(e.text if len(e.text) <= 60 else e.text[:59] + "…" for e in edits[:3])
     return f"carries {len(edits)} parked edit(s) as things stand: {shown}" + ("; …" if len(edits) > 3 else "")
 
@@ -406,6 +414,8 @@ def _decide_head(cfg: Config, view: View, repo: str, head: Item, known: list[str
     for lock in head.locks:
         if lock in held_locks:
             waits.append((f"lock {lock} held by {held_locks[lock]}", True))
+    if why := quiet.blocks(cfg.control, head.id, head.template):
+        waits.append((why, False))                     # a stage is an executor too
     stage = view.staged.get(head.id)
     if waits:
         reason = waits[0][0]
@@ -441,7 +451,7 @@ def _hold(cfg: Config, view: View, repo: str, head: Item, known: list[str]) -> D
         return hold(f"queue held after red {ev.item} (event #{ev.id}); write `clear: {repo}` to signals/")
     if (ev := view.planner_hold.get(repo)) and head.template != "watch":
         return hold(f"needs_planner: report for {ev.item} unread (finish #{ev.id}); move the read mark past it")
-    unknown = [lock for lock in head.locks if lock not in cfg.locks]
+    unknown = [lock for lock in head.locks if lock not in cfg.locks and lock != quiet.LOCK]
     if unknown:
         return hold(f"unknown lock(s) {unknown}; declare them in conductor.toml")
     for ref in head.depends_on:

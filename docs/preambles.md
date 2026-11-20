@@ -90,8 +90,8 @@ entries and anything the prompt says to commit go in `carry:`.
   picker's. It is in the run record and the `start` event (`port`), and in the executor's
   environment as `CONDUCTOR_PORT`; the preamble names it only where the repo can serve.
   Stages and merge executors get none.
-- **Threads.** `{free}` is `load.FREE_THREADS`, `{threads}` `load.run_threads()` (the box's
-  less 4 and 2 of headroom). `load_high` logs under 2 free for ~3 min and messages only an
+- **Threads.** One budget (143): `{threads}`, `load.run_threads()` (the box's threads less
+  `load.FREE_THREADS`, 4, and 2 of headroom), counting child processes. `load_high` logs under 2 free for ~3 min and messages only an
   item that is a real share of it; a Git Bash `nice -n 10` gives `BELOW_NORMAL` on Windows,
   inherited by children.
 - **Scratch.** The daemon makes `out/<item>/` at launch; `out/keep/` stays shared and

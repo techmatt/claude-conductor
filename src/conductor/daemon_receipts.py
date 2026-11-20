@@ -18,7 +18,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
-from . import daemon_signals, inbox, items, models, parked, request, session, talk
+from . import daemon_signals, inbox, items, memory_notes, models, parked, request, session, talk
 from .events import Event
 from .util import FrontMatterError, clock, now, read_text, split_front_matter, write_text
 
@@ -28,7 +28,7 @@ PRUNE_EVERY = 3600
 WRITE_WAKE_SECONDS = 0.25       # how often a poll's sleep looks for a new planner write (`_nap`)
 LINES = 8                       # event lines in a receipt's body; the rest are only ids
 # Events that mean the write (or a line of it) was not carried out.
-REFUSALS = ("invalid", "request_failed", "amend_refused", "late", "open_refused", "pick_failed")
+REFUSALS = ("invalid", "request_failed", "amend_refused", "late", "open_refused", "pick_failed", "memory_refused")
 # The planner's MCP server marks each write before it lands: `receipts/.mcp/<write rel, `/` as
 # `~`>`. Every event the write logs carries `via: mcp`, its receipt too, and the receipt
 # takes the mark away; a bridge write is one without it (docs/mcp.md, *Attribution*).
@@ -267,7 +267,8 @@ class ReceiptsMixin:
     def _planner_writes(self) -> dict[str, int]:
         """Each entry of the folders the planner writes into, by path → mtime (ns). A request
         folder's mtime moves as its files are added."""
-        dirs = [self.cfg.path(d) for d in ("requests", "signals", "proposed", "questions", parked.ROOT)]
+        dirs = [self.cfg.path(d) for d in ("requests", "signals", "proposed", "questions", parked.ROOT,
+                                           memory_notes.ROOT)]
         dirs += [self.cfg.path(top, repo) for top in ("queue", "backlog") for repo in self.cfg.repos]
         out = {}
         for d in dirs:
@@ -309,6 +310,27 @@ class ReceiptsMixin:
             tagged = f" ({rules} `[rules]`)" if rules else ""
             self._write_receipt(rel, evs, result=f"{n} parked edit(s) waiting for {p.stem}{tagged}: "
                                                  f"{self._parked_carrier(p.stem)}")
+
+    def process_memory_edits(self) -> None:
+        """Each `memory-edits/<stamp>.md` the planner's `memory_note` wrote: applied to the repo's
+        executor memory under `~/.claude` (`memory_notes`, 143; no executor may write there),
+        logged `memory_note` or `memory_refused`, its receipt written, the request deleted."""
+        for p in memory_notes.take(self.cfg.control):
+            rel = self.cfg.rel(p)
+            try:
+                text = read_text(p)
+            except (OSError, UnicodeDecodeError):
+                continue                        # still being written: a later tick
+            try:
+                meta, body = memory_notes.parse(text)
+                detail = memory_notes.apply(self.cfg.repos, meta, body)
+            except memory_notes.NoteRefused as exc:
+                ev = self.log.append("memory_refused", paths=[rel], reason=str(exc))
+                self._write_receipt(rel, [ev], reason=str(exc))
+            else:
+                ev = self.log.append("memory_note", repo=detail.pop("repo"), paths=[rel], **detail)
+                self._write_receipt(rel, [ev], result=f"{ev.repo} memory note {detail['note']}: {detail['result']}")
+            p.unlink(missing_ok=True)
 
     def _parked_carrier(self, repo: str) -> str:
         """Who will carry the parked edits: the first queued item that would take any, by name,

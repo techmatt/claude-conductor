@@ -75,7 +75,7 @@ def call_ask(mcp_config: Path, arguments: dict) -> tuple[str, bool]:
 
 
 PLANNER_TOOLS = ["status", "start_session", "read", "queue_item", "amend", "signal", "edit_state",
-                 "answer", "park", "note"]
+                 "answer", "park", "memory_note", "note"]
 
 
 def planner_command(controls: list[Path] = ()) -> list[str]:

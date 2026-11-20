@@ -92,6 +92,7 @@ class Config:
     state_budget_kb: float = 15.0    # `state.md` past this: receipt warning, **due** split state or trim state (session.state_size; 137)
     auto_retros: bool = True         # conductor queues a due workflow retro itself (daemon_retros, docs/retros.md)
     api_retry_minutes: list[float] = field(default_factory=lambda: [2.0, 10.0, 30.0])  # waits before each API retry (docs/api-retry.md)
+    api_retry_night_minutes: float = 90.0   # the last retry's wait at least this in the night shift's hours (143)
     # Memory (`memory.py`): sampled every N seconds (0: off); a level is commit at or over
     # a percent of its limit, or free RAM at or under a size (0 turns either off).
     memory_sample_seconds: float = 30.0
@@ -408,6 +409,7 @@ def parse(control: Path, text: str, claim: bool = False) -> Config:
         toasts=bool(defaults.get("toasts", True)),
         auto_retros=_flag(defaults, "auto_retros", True),
         api_retry_minutes=[float(x) for x in defaults.get("api_retry_minutes", [2, 10, 30])],
+        api_retry_night_minutes=float(defaults.get("api_retry_night_minutes", 90.0)),
         doc_budget_kb=float(defaults.get("doc_budget_kb", 15.0)),
         state_budget_kb=float(defaults.get("state_budget_kb", 15.0)),
         **{k: float(defaults.get(k, getattr(Config, k))) for k in MEMORY_KEYS + NIGHT_KEYS},

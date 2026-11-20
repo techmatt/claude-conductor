@@ -470,6 +470,7 @@ def selftest(control: Path | None = None, out=None) -> int:
               lambda t, e: e and ("Its sections:" in t or "doesn't exist yet" in t))
         check("answer", {"question": NONE, "text": "x"}, lambda t, e: e and t.startswith("no question"))
         check("park", {"repo": NONE, "line": "x"}, lambda t, e: e and t.startswith("no repo"))
+        check("memory_note", {"repo": NONE, "note": "x", "op": "delete"}, lambda t, e: e and t.startswith("no repo"))
         check("note", {"kind": "backlog", "repo": NONE, "name": "x", "body": "x"},
               lambda t, e: e and t.startswith("no repo"))
         together("reads-at-once", [("read", {"what": "conductor-report"}, lambda t, e: not e and "Past the mark" in t),

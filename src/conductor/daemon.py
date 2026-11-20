@@ -29,12 +29,12 @@ from pathlib import Path
 
 import psutil
 
-from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, models, notify, parked, picker, picks, procs, questions,
+from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, memory_notes, models, notify, quiet, parked, picker, picks, procs, questions,
                request, session, state, talk, targets, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
-from .daemon_api import ApiMixin, own_cost
+from .daemon_api import ApiMixin, own_cost, stub_report
 from .daemon_machine import MachineMixin
 from .daemon_memory import MemoryMixin
 from .daemon_merge import MergeMixin
@@ -248,6 +248,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self._prepare_receipts()
         self._prepare_backlog()
         parked.prepare(self.cfg.control)
+        memory_notes.prepare(self.cfg.control)
         self._read_code()
         self.log.append("daemon_start", pid=os.getpid(), control=str(self.cfg.control), code=self.code_version)
         if self._died:
@@ -356,6 +357,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_requests()
         self.process_proposed()
         self.process_parked()
+        self.process_memory_edits()
         self.process_questions()
         self.process_talk()
         self.runner.poll()
@@ -750,6 +752,8 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             if stale.exists():
                 stale.unlink()
         self.runs[item.id] = run
+        if quiet.LOCK in item.locks and not error:     # the box is this item's until it finishes (143)
+            quiet.claim(cfg.control, cfg.project, item.id)
         if not error and rec["worktree"] and cfg.opts(item.repo).setup and item.template != "watch":
             # Setup runs off the loop; `check_runs` starts the executor once it is done. A watch
             # only reads: it skips setup (an `npm ci` would cost it minutes).
@@ -962,8 +966,11 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             elif wt and worktrees.changed(wt):
                 reasons.append("uncommitted changes left in the worktree (not merged)")
             branch = {"branch": rec["branch"]} if wt else {}
-            for sha, made, subject in reversed(git.commits_dated(cwd, rec.get("repo_head"), after_head)):
+            commits = list(reversed(git.commits_dated(cwd, rec.get("repo_head"), after_head)))
+            for sha, made, subject in commits:
                 self.log.append("commit", item=item_id, scope=repo, sha=sha, subject=subject, happened=made, **branch)
+            if rec.get("api_exhausted") and problem:        # daemon_api: something for `read(report)` (143)
+                stub_report(self.log, rec, commits, any(r.startswith("uncommitted") for r in reasons))
             if rec.get("paths") and rec.get("repo_head") and after_head != rec["repo_head"]:
                 changed = [f for f in git.changed_files(cwd, rec["repo_head"], after_head)
                            if not cfg.opts(repo).is_prose(f)]          # prose is outside `paths`
@@ -992,6 +999,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
             "turns": (result or {}).get("num_turns"), "launch_failed": bool(launch_error),
         }
         rec["exited"] = stamp()
+        quiet.release(cfg.control, item_id)
         # The judgement is saved before anything else happens, so a restart from here on
         # resumes it (`merge` or `concluding`) instead of judging the item again.
         rec["phase"] = "merge" if wt and status != "red" and not launch_error and not rec.get("readonly") \

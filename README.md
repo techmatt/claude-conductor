@@ -68,6 +68,7 @@ command (`docs/restart.md`).
 | `docs/remote-placement.md` | Who runs a shard; `main_slots`; leases |
 | `docs/remote-cores.md` | A browser's core count |
 | `docs/parked.md` | Parked edits: `parked/<repo>.md`, which item carries them, what goes back |
+| `docs/memory-notes.md` | Executor memory notes under `~/.claude`: the planner's `memory_note`, applied by the daemon |
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |

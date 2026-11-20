@@ -468,6 +468,10 @@ def describe(ev: Event) -> str:
                     f"(was {models.LABELS.get(d.get('was'), d.get('was'))})")
         case "warning" | "config_reload":
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
+        case "memory_note":
+            text = f"{who} executor memory note `{d.get('note')}`: {d.get('result')} ({d.get('via', 'the bridge')})"
+        case "memory_refused":
+            text = f"memory note refused: {d.get('reason')}"
         case "planner_write":
             text = f"planner wrote {', '.join(ev.paths)} ({d.get('what')}, via {d.get('via', 'the bridge')})"
         case _:

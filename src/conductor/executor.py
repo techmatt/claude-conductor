@@ -73,9 +73,9 @@ file write goes through Write or Edit. Never `sed -i`, a heredoc into a file, or
 the whole change (every edit checked before any is written); run it alone, never mid-chain. The hooks refuse %TEMP%,
 elevation, `&` jobs, sleeps and the like too, each saying what to do instead. Heavy compute
 (sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
-PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) and leaves {free}
-hardware threads free: sims and tests at {threads} threads, half that while another item runs
-beside you, a full test suite only between sims. A load message is information: finish the
+PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) on at most
+{threads} threads in all, child processes counted, half that while another item runs
+beside you; a full test suite only between sims. A load message is information: finish the
 unit in flight, start the next one smaller. At most 2 heavy subagents (builds, sims,
 browsers) at once and 10 agents in any fan-out (a Workflow declares `const MAX_AGENTS = <n>`),
 whatever a Workflow or Ultracode note says. Brief a helper with the prompt's rulings word for
@@ -298,7 +298,8 @@ mcp__conductor__wait_for (`minutes` near a subagent's length, never a path nothi
 never by ending your turn.
 """
 
-CALLS_BG = ", and commands matching {globs} always run in the background"
+CALLS_BG = (", and commands matching {globs} always run in the background (a pytest call naming test "
+            "files without `--slow` stays in the foreground)")
 
 PROMPT_FOLLOWS = "The prompt follows.\n\n---\n\n"
 
@@ -598,7 +599,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         only = only[:-1] + ROOTS_TOO + "." if only.endswith(".") else only + ROOTS_TOO
     text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
-        free=load.FREE_THREADS, threads=load.run_threads(), kept=kept.where(cfg, item, run).as_posix(),
+        threads=load.run_threads(), kept=kept.where(cfg, item, run).as_posix(),
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
         writes=writes,

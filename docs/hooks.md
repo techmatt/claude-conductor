@@ -71,7 +71,7 @@ and not enforced.
 | Working papers under the results folder, committed | 73 (aicomplete 079) | full |
 | Reusable reads in `out/keep/`, named in the report | 110, 117 | full |
 | Scripts in files (read-only one-liners pass the hook) | 72 | full (a clause) |
-| Heavy compute below normal priority, `{free}` threads free, `{threads}` threads, half beside others | 72, 73 | full; light `nice` and threads |
+| Heavy compute below normal priority, at most `{threads}` threads in all, children counted, half beside others (143: one budget; "leave 4 free" read as a second) | 72, 73, 143 | full; light `nice` and threads |
 | A full test suite only between sims | 86 (aicomplete 142) | both |
 | A load message is information: finish the unit, go smaller | 80, 82 | full |
 | At most 2 heavy subagents, over any Workflow or Ultracode note | 73 | full |

@@ -171,7 +171,7 @@ def sessions(events: list[Event], since: datetime, conductor_items: set[str]) ->
         elif ev.kind in ("amended", "answer") and ev.detail.get("by") == "planner":
             c["amends" if ev.kind == "amended" else "answers"] += 1
             c[route] += 1
-        elif ev.kind == "planner_write":        # proposed, parked, backlog: logged only for the server's
+        elif ev.kind in ("planner_write", "memory_note"):   # proposed, parked, backlog (the server's only); memory notes
             c["other"] += 1
             c[route] += 1
     return [s for s in out if parse_stamp(s.ts) >= since]

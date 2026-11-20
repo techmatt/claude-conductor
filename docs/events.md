@@ -3,7 +3,7 @@
 `events.db`, table `events(id, ts, kind, item, repo, paths, detail)`. `ts` is local
 ISO time with offset; `paths` is a JSON list (relative inside the control folder); `detail` is a JSON object. Triggers reject UPDATE and DELETE.
 
-Any event of a write the planner's MCP server made (a signal file and all its lines' events, a request, a queue item's `enqueue` / `edited`, an amendment, an answer, a `planner_write`) carries `via: mcp` (140, `mcp.md`, *Attribution*); a bridge write's has no `via`. `delivered`'s `via` (`hook`, `prompt`, `resume`) is its own and never `mcp`.
+Any event of a write the planner's MCP server made (a signal file and all its lines' events, a request, a queue item's `enqueue` / `edited`, an amendment, an answer, a `planner_write`, a `memory_note`) carries `via: mcp` (140, `mcp.md`, *Attribution*); a bridge write's has no `via`. `delivered`'s `via` (`hook`, `prompt`, `resume`) is its own and never `mcp`.
 
 | kind | when | notable detail |
 |---|---|---|
@@ -53,6 +53,8 @@ Any event of a write the planner's MCP server made (a signal file and all its li
 | `delivered` | the message or amendment reached the executor | tell or amend, via (`hook`; an amendment also `prompt`/`resume`; `progress` in older logs), text, waited_seconds, after_seq (progress lines by then); kept (an amendment's `.amend.md`) |
 | `amended` | an amend file was taken (the event id is the amendment's number) | text, by, state (`queued`/`staging`/`staged`/`running`), delivery |
 | `planner_write` | the MCP server wrote a proposed item, parked file or backlog item (which log no event of their own); not in the inbox | what (`proposed`, `parked`, `backlog`), via; paths: the file |
+| `memory_note` | the daemon changed an executor memory note on the planner's `memory_note` request (143, `memory-notes.md`) | repo, note, op (`write`, `edit`, `delete`), path, result, via; paths: the request |
+| `memory_refused` | a `memory_note` request not carried out (nothing written) | reason; paths: the request |
 | `amend_refused` | an amend file for a merging or finished item, or empty or unreadable (red; the file stays) | state, reason, path, hash, by |
 | `run_start` / `run_ready` / `run_open` / `run_stop` | a run target or tool (`tool: true`) started (or was already starting: `reused`), answered, had its URL opened, was stopped | target; pid, command, cwd (`reused`: note) / waited_seconds / url, opened / note |
 | `run_failed` | a run target or tool (`tool: true`) never came up, or its URL could not be opened (red; holds no queue) | target, error, log_tail |

@@ -24,7 +24,9 @@ At the exit, before anything is reaped or judged (`finish` → `_api_wait`):
   (`try`, `at`, `since`, `error`) in its record, and an `api_retry` event (`state:
   waiting`, `attempt`, `of`, `at`, `error`). Jobs it launched with `start` keep running:
   nothing is reaped.
-- After the wait (`[defaults] api_retry_minutes`, default `[2, 10, 30]`: one per try) the
+- After the wait (`[defaults] api_retry_minutes`, default `[2, 10, 30]`: one per try; the
+  last at least `api_retry_night_minutes`, 90, when it starts in the night shift's hours:
+  143, aicomplete 297 spent all three rate-limit retries in 40 minutes at 3am) the
   same session resumes in the same worktree (`claude -p --resume <session id>`), told that the
   API dropped it, when, and to check what was in flight and carry on
   (`reports/<repo>__NNN_name.apiN.md`), plus any amendments sent meanwhile. Its deadline moves
@@ -35,7 +37,9 @@ At the exit, before anything is reaped or judged (`finish` → `_api_wait`):
 - When the tries are spent, or the session can't be resumed (no transcript, the worktree
   gone or off its branch), the item is red with one reason: `API error (<the line>); N
   retries spent` (or `could not resume: …`). A missing report is not added: it is the API's
-  doing too. `api_retry_minutes = []` reds at once, as before 111.
+  doing too. Instead conductor writes a **stub report** at the item's report path (143,
+  `daemon_api.stub_report`): `status: red`, the commits on its branch, its last progress
+  line and outline, and that `retry:` resumes it, so `read(report)` has something. `api_retry_minutes = []` reds at once, as before 111.
 - A run's `total_cost_usd` counts its whole session, so the resumed run's total is the
   item's. The `finish` carries `api_tries`.
 
@@ -57,8 +61,10 @@ with `state: retry` and `by`; the `finish` carries `retried`.
 
 ## Around it
 
-- **Retros.** A red whose every reason is an API error or a launch failure (`api_only`)
-  triggers no workflow retro and is never the one picked (`retros.md`).
+- **Retros.** A red with an API error among its reasons, or whose every reason is a launch
+  failure (`api_only`), triggers no workflow retro and is never the one picked (`retros.md`).
+  Whatever else an API red names (uncommitted work) follows from the cut: 297's
+  `uncommitted changes` reason queued 298, a retro that mostly audited the outage (143).
 - **Resume items** (ask, self-audit) never hold their queue on a red: they are readonly,
   there is nothing to protect (`resume.md`).
 - **A fork's cost** is its own: the original's `cost_usd` at launch (`resume_cost`) is taken

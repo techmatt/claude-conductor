@@ -91,6 +91,7 @@ doc_budget_kb = 15            # a repo doc past this is **due** in session.md (i
 state_budget_kb = 15          # state.md past this: request receipt warning, **due** trim or split state (receipts.md)
 auto_retros = true            # queue a due workflow retro unasked (retros.md)
 api_retry_minutes = [2, 10, 30]  # an API failure resumes the session after each wait; [] = red at once (api-retry.md)
+api_retry_night_minutes = 90     # the last of them at least this long in the night shift's hours (143)
 memory_sample_seconds = 30    # memory sample and heartbeat interval; 0 = off (memory.md)
 memory_keep_hours = 24        # samples kept in .conductor/memory.jsonl
 memory_pressure_percent = 90  # pressure: commit at or over this % of its limit (0 = off) ...

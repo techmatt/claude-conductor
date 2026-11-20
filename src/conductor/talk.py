@@ -321,6 +321,16 @@ def backgrounds(command: str, globs: list[str]) -> bool:
     return any(fnmatchcase(text, g) for g in globs)
 
 
+SMALL_PYTEST_RE = re.compile(r"\bpytest\b.*\btest\w*\.py\b")
+
+
+def small_pytest(command: str) -> bool:
+    """A pytest call naming test files, without `--slow` or `-m ""`, runs in the foreground
+    whatever the `background` globs say (143: fractals 060 waited on ~16 such calls); the
+    shell cap still moves one that runs long to the background."""
+    return bool(SMALL_PYTEST_RE.search(command)) and "--slow" not in command and not re.search(r"-m\s*(\"\"|'')", command)
+
+
 def pre_tool(event: dict, cap_seconds: float, background: list[str]) -> dict | None:
     """The tool input a shell call should run with instead, or None to leave it be."""
     if event.get("tool_name") not in SHELL_TOOLS or not isinstance(event.get("tool_input"), dict):
@@ -328,7 +338,7 @@ def pre_tool(event: dict, cap_seconds: float, background: list[str]) -> dict | N
     tool = dict(event["tool_input"])
     if tool.get("run_in_background") or not isinstance(tool.get("command"), str):
         return None
-    if backgrounds(tool["command"], background):
+    if backgrounds(tool["command"], background) and not small_pytest(tool["command"]):
         tool.pop("timeout", None)
         return tool | {"run_in_background": True}
     cap = round(cap_seconds * 1000)

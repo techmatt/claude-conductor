@@ -13,13 +13,23 @@ runs when all of these hold:
   `alongside` item always may, either side (*Readonly items*, *Alongside items* below),
   and so may two with disjoint legacy `paths`; an exclusive template never shares;
 - the repo is not held after a red (below) and no `needs_planner` report is unread;
-- every named lock is declared in `conductor.toml` and free;
+- every named lock is declared in `conductor.toml` and free (`quiet` needs no declaration);
+- no item of any project holds `quiet` (below; a watch is exempt);
 - any `needs_pick` picker's choices are saved (a wait, no stage: `picks.md`);
 - every `depends_on` item finished with status `done` (a dependency still queued
   or running elsewhere means *wait*; one that ended `partial`/`red`, is unknown,
   or sits later in the same queue means *hold*; one that was cancelled sets the item
   aside, below);
 - the item id has not run before (a re-run is a new item number).
+
+**Quiet** (143, `quiet.py`): `locks: [quiet]` is for an item with a timing bar. From its
+launch to its finish no other item of any project starts (a watch still does: it only
+reads), and it waits for another project's quiet item to clear; the wait reads `quiet:
+<project>'s <item> holds the box for a timing bar since <time>` and never stages. What
+already runs keeps running: check `status` before queuing one. The holder is the
+machine-wide `~/.conductor/quiet.json`, counted only while its item's run record is in
+setup or exec, so a dead daemon or a finished item holds nothing. fractals 060 lost a
+30-minute reading to another project's item.
 
 **Holds** are logged as `hold` events (once per reason change). Waiting on a busy lock
 or a running dependency is not a hold. A finished item waiting to merge keeps the repo

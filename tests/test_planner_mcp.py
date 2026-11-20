@@ -108,7 +108,7 @@ def test_an_edit_state_miss_returns_the_current_lines_and_the_retry_applies(env)
     git(env.control, "commit", "-qam", "state")
     alive(env)
     text, is_error = call(env, "edit_state", {"file": "state.md", "edits": [{"old": "- 004 queud", "new": "- 004 done"}]})
-    assert is_error and "edit 1 for state.md: its old lines are not found" in text and "Nothing was written" in text
+    assert is_error and "edit 1 for state.md: its old text is not in the file now" in text and "Nothing was written" in text
     assert "   5| - 004 queued" in text
     assert not list((env.control / "requests").glob("*")) if (env.control / "requests").is_dir() else True
     text, is_error = call(env, "edit_state", {"file": "state.md", "edits": [{"old": "- 004 queued", "new": "- 004 done"}],
@@ -116,6 +116,12 @@ def test_an_edit_state_miss_returns_the_current_lines_and_the_retry_applies(env)
     assert not is_error and text.startswith("accepted: committed "), text
     assert "- 004 done\n- 005 queued" in read_text(env.control / "state.md")
     assert git(env.control, "log", "-1", "--format=%s").strip() == "state: 004 done"
+    # 143: a piece of one line found once is enough; one found several times refuses.
+    text, is_error = call(env, "edit_state", {"file": "state.md", "edits": [{"old": "00", "new": "01"}]})
+    assert is_error and "its old text occurs 2 times: give a longer piece" in text, text
+    text, is_error = call(env, "edit_state", {"file": "state.md", "edits": [{"old": "queued", "new": "waiting"}]})
+    assert not is_error and text.startswith("accepted: committed "), text
+    assert "- 004 done\n- 005 waiting\n" in read_text(env.control / "state.md")
     text, is_error = call(env, "edit_state", {"file": "habits.md", "content": "# test — planner habits\n\n- be brief\n"})
     assert text.startswith("accepted: committed "), text
     assert "- be brief" in read_text(env.control / "session.md") if (env.control / "session.md").exists() else True
@@ -322,7 +328,7 @@ def test_the_selftest_prints_a_passing_line_for_every_tool(env):
     lines = out.getvalue().splitlines()
     assert box["code"] == 0, out.getvalue()
     assert [ln.split()[1] for ln in lines[:-1]] == [*planner_mcp.TOOL_NAMES, "reads-at-once", "write+read"]
-    assert all(ln.startswith("ok ") for ln in lines[:-1]) and lines[-1].startswith("12 of 12 ok")
+    assert all(ln.startswith("ok ") for ln in lines[:-1]) and lines[-1].startswith("13 of 13 ok")
     assert "3 sent together, 3 answered" in lines[-3] and "2 sent together, 2 answered" in lines[-2]
 
 

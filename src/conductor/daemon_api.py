@@ -85,9 +85,50 @@ def own_cost(rec: dict, result: dict | None) -> float | None:
 
 
 def api_only(reasons) -> bool:
-    """A red whose every reason is the API's or a failed launch: nothing the executor did."""
+    """A red the API caused or a launch failed: nothing the executor did. Whatever else an
+    API red names (uncommitted work, no report) follows from the cut (143: aicomplete 297's
+    `uncommitted changes` reason queued a retro that mostly audited the outage)."""
     reasons = [str(r) for r in reasons or []]
-    return bool(reasons) and all(r.startswith((API_REASON, "launch failed")) for r in reasons)
+    return any(r.startswith(API_REASON) for r in reasons) or (
+        bool(reasons) and all(r.startswith("launch failed") for r in reasons))
+
+
+STUB = """\
+status: red
+blocks: {item} until it is retried or redone
+carry: none
+friction: {reason}
+
+# {name}: stub report, written by conductor
+
+The API stopped this item and its retries ran out before it wrote a report ({reason}).
+Conductor wrote this from its log at {now}; nothing below is the executor's.
+
+- Commits on `{branch}` ({count}): {commits}
+- Last progress line: {progress}
+- Outline: {outline}
+- The worktree is kept{dirty}: `retry: {item}` resumes the session there.
+"""
+
+
+def stub_report(log, rec: dict, commits: list[tuple[str, str, str]], dirty: bool) -> bool:
+    """At an API red with no report: a stub at the item's report path, so `read(report)` has
+    something (143: aicomplete 297 left six commits and no report). False if one exists."""
+    from .inbox import latest_outline, outline_line, progress_line
+    path = Path(rec["report"])
+    if path.exists():
+        return False
+    item = rec["item"]
+    p = log.last("progress", item=item, has="note")
+    o = latest_outline(log, item)
+    text = STUB.format(
+        item=item, name=rec.get("name") or item,
+        reason=rec.get("api_exhausted"), now=clock(now()), branch=rec.get("branch") or "main",
+        count=len(commits), commits="; ".join(f"{sha[:8]} {subject}" for sha, _, subject in commits[-8:]) or "none",
+        progress=f"{clock(p.ts)}: {progress_line(p)}" if p else "none", outline=outline_line(o) if o else "none",
+        dirty=", with uncommitted changes" if dirty else "")
+    retry_io(write_text, path, text)
+    return True
 
 
 class ApiMixin:
@@ -108,7 +149,11 @@ class ApiMixin:
             rec["api_exhausted"] = f"{API_REASON} ({err}); " + (
                 f"{n} retr{'y' if n == 1 else 'ies'} spent" if n else "not retried")
             return False
-        at = now() + timedelta(minutes=waits[n])
+        wait = waits[n]
+        from .nightshift import night
+        if n == len(waits) - 1 and night(self.cfg):   # 143: 297 spent all three in 40 min at 3am
+            wait = max(wait, self.cfg.api_retry_night_minutes)
+        at = now() + timedelta(minutes=wait)
         rec.update(api_tries=n + 1, api_wait={"try": n + 1, "at": stamp(at), "since": stamp(), "error": err})
         self._save(run)
         self.log.append("api_retry", item=rec["item"], state="waiting", attempt=n + 1, of=len(waits),

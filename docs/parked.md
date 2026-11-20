@@ -17,10 +17,11 @@ Each write gets a receipt, `receipts/parked/<repo>.md`, saying how many edits wa
 
 **Who carries them.** At launch (`_start_exec`, the prompt's second half) a **serial**
 item, meaning not `alongside`, not `readonly`, not a template and not a `resume:` item,
-takes every untagged line. It takes the `[rules]` lines only when its front-matter says
-`rules: true` (`items.md`), the item that bumps the rules revision. So an item that must
-keep identical results, such as a cleanup, never gets one (aicomplete's 025 held its
-node-cut fix back for exactly that reason). Taken lines move out of `parked/<repo>.md`
+takes every line, `[rules]` ones too. Until 143 a `[rules]` line rode only a `rules: true`
+item, and none came: fractals' and aicomplete's waited across several items while every
+receipt said the next serial item would take them. A `[rules]` edit now writes the repo's
+`docs/rulings.md` like any other edit; a template (a cleanup that must keep identical
+results) still never carries one. Taken lines move out of `parked/<repo>.md`
 into the done file at once, and the run record keeps them (`parked: [{n, text}]`, so a
 restart never takes them twice). The `start` event lists them (`parked`).
 
@@ -40,6 +41,8 @@ done, and every other one, whether skipped or unanswered, goes back to the top o
 **Visibility.** The inbox's *Now* line per repo shows `N parked edit(s) waiting (K
 `[rules]`)`, and the digest's *Maintenance facts* has `parked edits waiting: N`. A queue
 receipt names what the item will carry as the queue stands (`carries 2 parked edit(s)
-as things stand: …`, after 58's start estimate). An earlier serial item in the same
-queue takes them first, so one behind it carries nothing. It is an estimate: a line
-added before the launch rides too.
+as things stand: …`, after 58's start estimate). While edits wait it always says (143):
+one behind an earlier serial item reads `carries none of the N parked edit(s) waiting:
+<item> ahead of it takes them`, one not serial `…: not a serial item`. It is an estimate:
+a line added before the launch rides too. The park receipt names the queued item that
+will carry them, by the same rule.

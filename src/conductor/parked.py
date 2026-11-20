@@ -5,9 +5,9 @@ next serial item launched there, so no prompt carries them by hand.
                              `[rules]` first marks one that changes play
     parked/<repo>.done.md    conductor's: each edit handed out, with its item and event
 
-`parked/` is runtime (it ignores itself). An item carries untagged lines when it is
-serial (not `alongside`, readonly, a template or a resume item), and `[rules]` lines only
-when it also says `rules: true`. Its report answers each `parked P<n>: done | skipped
+`parked/` is runtime (it ignores itself). A serial item (not `alongside`, readonly, a
+template or a resume item) carries every line, `[rules]` ones too (143: they write the
+repo's `docs/rulings.md`; before, only a `rules: true` item took them). Its report answers each `parked P<n>: done | skipped
 (why)`; a skipped or unanswered one, or every one of an item that went red, goes back.
 """
 
@@ -75,8 +75,8 @@ def serial(item: Item) -> bool:
 
 
 def eligible(item: Item, edits: list[Edit]) -> list[Edit]:
-    """What `item` would carry of `edits`: nothing unless serial; `[rules]` ones only with `rules: true`."""
-    return [e for e in edits if not e.rules or item.rules] if serial(item) else []
+    """What `item` would carry of `edits`: every one when it is serial, else none."""
+    return list(edits) if serial(item) else []
 
 
 def take(control: Path, item: Item, event_hint: str = "") -> list[Edit]:

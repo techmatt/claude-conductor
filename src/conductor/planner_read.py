@@ -223,13 +223,19 @@ def session_writes(log: EventLog) -> tuple[str, list[str]] | None:
     if cp is None:
         return None
     lines = []
-    for ev in log.query(since_id=cp.id):
+    evs = log.query(since_id=cp.id)
+    # Conductor's own queue writes (a retro, a watch, a backlog draw) and an `approve:`'s move
+    # are no planner's: 143, aicomplete read an auto-queued post-audit as another chat's.
+    conductor_queued = {e.item for e in evs if e.kind in ("retro", "watch", "backlog_draw", "approve")}
+    for ev in evs:
         via = "mcp" if ev.detail.get("via") == "mcp" else "bridge"
         d = ev.detail
         if ev.kind == "request":
             what = f"request: {d.get('message') or ', '.join(d.get('targets') or [])}"
-        elif ev.kind == "enqueue" and d.get("template") != "watch" and ev.item:
+        elif ev.kind == "enqueue" and d.get("template") != "watch" and ev.item and ev.item not in conductor_queued:
             what = f"queued {ev.item}"
+        elif ev.kind == "memory_note":
+            what = f"memory note {d.get('repo')}/{d.get('note')}: {d.get('op')}"
         elif ev.kind == "edited" and ev.item:
             what = f"rewrote {ev.item}"
         elif ev.kind in ("amended", "answer", "reviewed") and d.get("by") == "planner":
@@ -309,13 +315,37 @@ def outline(text: str) -> str:
             + f"\n\nWhole: {len(text.encode('utf-8'))} bytes. Read one with `section`, or `section: \"all\"`.")
 
 
+def _missing(cfg: config_mod.Config, ref: str, repos: list[str]) -> str | None:
+    """Why an item `ref` names has no report, in one answer: running, or finished without
+    one (`missing; red: <reasons>`); None when `ref` names no single item."""
+    log = EventLog(cfg.events_db)
+    try:
+        fins = {e.item: e for e in log.query(kinds=["finish"]) if e.item}
+        view = state.scan(cfg, log)
+    finally:
+        log.close()
+    known = sorted({*fins, *view.running})
+    hits = sorted({h for r in repos for h in items.ref_matches(ref, r, known)})
+    if len(hits) != 1:
+        return None
+    if hits[0] in view.running:
+        return f"no report for {hits[0]} yet: it is running"
+    d = fins[hits[0]].detail
+    return (f"no report for {hits[0]}: missing; {d.get('status')}: "
+            f"{'; '.join(map(str, d.get('reasons') or [])) or 'no reason logged'}")
+
+
 def _report(cfg: config_mod.Config, ref: str, suffix: str) -> Path | str:
     """A report (or its audit notes) by `repo/NNN_name`, `NNN_name` or `NNN`."""
     reports = cfg.path("reports")
+    # Not `.prompt.md`, `.audit.md` or a resume's prompt (`.api2.md`, `.retry1.md`: 143, aicomplete
+    # 297's three API retries made "297" ambiguous while its report was missing).
     names = [p.name[:-len(suffix)].replace("__", "/", 1) for p in reports.glob(f"*__*{suffix}")
-             if p.name.endswith(suffix) and (suffix != ".md" or not re.search(r"\.[a-z]+\.md$", p.name))]
+             if p.name.endswith(suffix) and (suffix != ".md" or not re.search(r"\.[a-z]+\d*\.md$", p.name))]
     repos = [ref.split("/", 1)[0]] if "/" in ref else list(cfg.repos)
     hits = sorted({h for r in repos for h in items.ref_matches(ref, r, names)})
+    if not hits and suffix == ".md" and (why := _missing(cfg, ref, repos)):
+        return why
     if len(hits) != 1:
         return (f"no report {ref!r}" if not hits else f"{ref!r} names several: {', '.join(hits)}")
     repo, name = hits[0].split("/", 1)

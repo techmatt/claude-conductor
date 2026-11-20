@@ -123,7 +123,9 @@ run made 20 such calls of 1–10 minutes, about 113 minutes in all. Two parts:
   A call already `run_in_background` is left alone. A command matching one of the
   repo's `background` globs (`fnmatch` on the whole command with runs of whitespace
   collapsed, case-sensitive, `*` crossing spaces: `npm test*`, `*playwright test*`)
-  gets `run_in_background: true` and loses its `timeout`. Any other call whose
+  gets `run_in_background: true` and loses its `timeout`, unless it is a pytest call naming
+  test files without `--slow` or `-m ""` (`talk.small_pytest`, 143: fractals 060 waited on
+  ~16 such calls), which stays foreground under the cap. Any other call whose
   `timeout` is missing (Claude Code's default is 2 minutes) or longer than the cap gets
   `timeout` = the cap. It prints `{"hookSpecificOutput": {"hookEventName":
   "PreToolUse", "permissionDecision": "allow", "updatedInput": …}}`, or nothing.

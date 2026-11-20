@@ -53,7 +53,7 @@ The caution that a rate or timing read now is inflated (aicomplete 068: such rea
 budget) rides the event, the sample (`load.high: {since, free}` in `memory.jsonl`), *Now*'s
 load line (`· **high** since 9:12am: timing reads inflated`) and, once per stretch, the next
 `progress` or `wait_for` return (`memory.load_high`), so an item timing something checks one
-call rather than being messaged. The budget the preamble sets (4 free, `load.FREE_THREADS`) is
+call rather than being messaged. The budget the preamble sets (`load.run_threads()` threads, children counted; 143) is
 unchanged. Memory sampling off means no warning.
 
 **Writes.** Each tree also sums the bytes its tools have written (`Tree.writes`, Windows

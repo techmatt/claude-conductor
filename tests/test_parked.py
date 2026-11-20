@@ -22,14 +22,18 @@ def test_who_carries_what(env):
     rules = items.parse(env.queue("002_r", "bump the rules", rules="true"), "code")
     side = items.parse(env.queue("003_s", "art", alongside="card art only"), "code")
     tpl = items.parse(env.queue("004_t", "", template="general_cleanup"), "code")
-    assert [e.text for e in parked.eligible(serial, edits)] == ["rename hardware to Chips"]
+    # 143: a `[rules]` edit rides any serial item, `rules: true` or not.
+    assert [e.text for e in parked.eligible(serial, edits)] == ["rename hardware to Chips", "[rules] node-cut costs 2"]
     assert len(parked.eligible(rules, edits)) == 2 and rules.meta()["rules"] is True
     assert parked.eligible(side, edits) == [] and parked.eligible(tpl, edits) == []
-    # The receipt's estimate: the first serial item takes them; one behind it carries nothing.
+    # The receipt's estimate: the first serial item takes them; one behind it, or one not
+    # serial, says it carries none while edits wait, and why.
     view = state.scan(env.cfg, env.d.log)
-    assert state.parked_estimate(env.cfg, view, serial).startswith("carries 1 parked edit(s) as things stand")
-    assert "node-cut" in state.parked_estimate(env.cfg, view, rules)       # 001 leaves the [rules] line
-    assert state.parked_estimate(env.cfg, view, side) == ""
+    first = state.parked_estimate(env.cfg, view, serial)
+    assert first.startswith("carries 2 parked edit(s) as things stand") and "node-cut" in first
+    assert state.parked_estimate(env.cfg, view, rules) == \
+        "carries none of the 2 parked edit(s) waiting: 001_a ahead of it takes them"
+    assert state.parked_estimate(env.cfg, view, side).endswith("waiting: not a serial item")
 
 
 def test_answers_and_settle():
@@ -70,19 +74,19 @@ def test_a_serial_item_carries_them_and_the_skipped_one_goes_back(env):
     env.tick_until(lambda: env.finished("code/001_a"))
     prompt = read_text(executor.RunPaths.for_name(env.d.cfg, "code", "001_a").prompt)
     assert "## Parked edits (also do these)" in prompt
-    assert "- P1. rename hardware to Chips\n- P2. drop the old splash" in prompt and "node-cut" not in prompt
+    assert "- P1. rename hardware to Chips\n- P2. drop the old splash\n- P3. [rules] node-cut costs 2" in prompt
     [start] = env.events("start")
-    assert start.detail["parked"] == ["rename hardware to Chips", "drop the old splash"]
+    assert start.detail["parked"] == ["rename hardware to Chips", "drop the old splash", "[rules] node-cut costs 2"]
     fin = env.finished("code/001_a")
     assert fin.detail["parked_done"] == ["rename hardware to Chips"]
-    assert fin.detail["parked_back"] == ["drop the old splash"]
+    assert fin.detail["parked_back"] == ["drop the old splash", "[rules] node-cut costs 2"]
     assert [e.text for e in parked.waiting(env.control, "code")] == ["drop the old splash", "[rules] node-cut costs 2"]
     done = read_text(parked.path(env.control, "code", done=True))
     assert "- rename hardware to Chips — 001_a (" in done and "drop the old splash — 001_a" in done
     assert (env.control / "parked" / ".gitignore").read_text(encoding="utf-8") == "*\n"
     env.d.write_inbox(force=True)
     inbox = read_text(env.control / "inbox.md")
-    assert "2 parked edit(s) waiting (1 `[rules]`)" in inbox and "parked edits: 1 done, 1 back" in inbox
+    assert "2 parked edit(s) waiting (1 `[rules]`)" in inbox and "parked edits: 1 done, 2 back" in inbox
 
 
 @pytest.mark.slow

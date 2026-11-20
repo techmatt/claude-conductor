@@ -280,7 +280,7 @@ def test_answer_receipt_marks_a_flagged_question(env):
 
 
 FULL_LINES = ("A skip in the prompt or a message binds", "default overrides prompt", "`out/`", "%TEMP%", "below-normal priority",
-              "4 hardware threads", "At most 2 heavy subagents", "half that while another item", "`carry:`",
+              "threads in all, child processes counted", "At most 2 heavy subagents", "half that while another item", "`carry:`",
               "over an hour of the time limit", "mcp__conductor__wait_for")
 LIGHT_LINES = ("A skip in prompt or message", "default overrides prompt", "`out/001_a/`", "%TEMP%", "`nice -n 10`",
                "threads, a full suite only between sims", "over an hour left", "mcp__conductor__wait_for")

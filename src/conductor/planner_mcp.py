@@ -30,7 +30,7 @@ import yaml
 
 from . import config as config_mod
 from . import daemon_receipts as receipts
-from . import git, items, questions, request, state
+from . import git, items, memory_notes, questions, request, state
 from . import planner_read as rd
 from .app import actions
 from .daemon_receipts import rel_for
@@ -105,8 +105,8 @@ TOOLS = [
          "project": P, "lines": {"type": "array", "items": {"type": "string"}}}, "required": ["project", "lines"]}},
     {"name": "edit_state", "description": (
         "Change a tracked control file (state.md, paged.md, habits.md, conductor.toml, …) by request, one of: "
-        "`edits`, old/new pairs of whole lines checked against the file now (a miss returns the lines near it, "
-        "nothing written); `sections`, in order, {op: delete | move | replace, section: a ## heading, with or without `## `, to: the "
+        "`edits`, old/new pairs checked against the file now, `old` whole lines or a piece of one line found "
+        "once (a miss or several returns the lines near it, nothing written);`sections`, in order, {op: delete | move | replace, section: a ## heading, with or without `## `, to: the "
         "file a move appends it to (a new .md is created), body: a replace's text under the heading}: text "
         "moves without retyping it, and a miss names the sections there are; or `content`, the whole file. "
         "Returns the receipt."),
@@ -125,6 +125,17 @@ TOOLS = [
     {"name": "park", "description": "Add a parked edit line for a repo (`[rules]` first for a rules edit). Returns the receipt.",
      "inputSchema": {"type": "object", "properties": {
          "project": P, "repo": {"type": "string"}, "line": {"type": "string"}}, "required": ["project", "repo", "line"]}},
+    {"name": "memory_note", "description": (
+        "Change a repo's executor memory note (Claude Code's memory under ~/.claude, which no item may write): "
+        "op write (body: the whole note; description: its MEMORY.md line, needed for a new one) | edit (edits: "
+        "old/new, each old a unique piece of the note) | delete. The daemon makes it. Returns the receipt."),
+     "inputSchema": {"type": "object", "properties": {
+         "project": P, "repo": {"type": "string"}, "note": {"type": "string", "description": "file name, no .md"},
+         "op": {"type": "string", "enum": ["write", "edit", "delete"]}, "body": {"type": "string"},
+         "description": {"type": "string"},
+         "edits": {"type": "array", "items": {"type": "object", "properties": {
+             "old": {"type": "string"}, "new": {"type": "string"}}, "required": ["old", "new"]}}},
+         "required": ["project", "repo", "note", "op"]}},
     {"name": "note", "description": (
         "The rarer writes. kind: backlog (project, repo, name, body, meta: a pre-approved item) | conductor_prompt "
         "(name = slug, body: into conductor's prompts/inbox) | prompt_support (name = file name, body: "
@@ -402,7 +413,7 @@ class PlannerServer:
                           f"(held={str(not held).lower()}), or signal `approve:` / `cancel:`")
         self.mark(cfg, path)
         ms = write_file(path, item_text(meta, a.get("body") or ""))
-        return self.wait(cfg, cfg.rel(path), ms)
+        return self.wait(cfg, cfg.rel(path), ms) + warn(a.get("body") or "", meta)
 
     def amend(self, cfg: config_mod.Config, a: dict) -> str:
         view = self.view(cfg)
@@ -416,7 +427,7 @@ class PlannerServer:
             path = actions.amend(cfg.control, hits[0], a.get("text") or "", by=BY, before=self.marker(cfg))
         except ValueError as exc:
             raise Refused(str(exc)) from None
-        return self.wait(cfg, cfg.rel(path))
+        return self.wait(cfg, cfg.rel(path)) + warn(a.get("text") or "")
 
     def signal(self, cfg: config_mod.Config, a: dict) -> str:
         lines = a.get("lines") or []
@@ -449,6 +460,20 @@ class PlannerServer:
         self.mark(cfg, path)
         ms = write_file(path, old + ("" if not old or old.endswith("\n") else "\n") + f"- {line}\n")
         return self.wait(cfg, cfg.rel(path), ms)
+
+    def memory_note(self, cfg: config_mod.Config, a: dict) -> str:
+        """A request the daemon carries out (`memory_notes`): the file, then its receipt."""
+        repo = self.repo(cfg, a.get("repo") or "")
+        meta = {"repo": repo, "note": (a.get("note") or "").strip().removesuffix(".md"),
+                "op": (a.get("op") or "").strip().lower()}
+        if a.get("description"):
+            meta["description"] = " ".join(str(a["description"]).split())
+        if a.get("edits"):
+            meta["edits"] = [{"old": e.get("old") or "", "new": e.get("new") or ""} for e in a["edits"]]
+        path = cfg.path(memory_notes.ROOT, f"{stamp()}-{_next():03d}.md")
+        self.mark(cfg, path)
+        write_file(path, item_text(meta, a.get("body") or ""))
+        return self.wait(cfg, cfg.rel(path))
 
     def note(self, cfg: config_mod.Config, a: dict) -> str:
         if a.get("kind") != "backlog":
@@ -497,13 +522,15 @@ class PlannerServer:
         elif edits:
             if current is None:
                 raise Refused(f"{rel} doesn't exist yet: send `content` to create it")
-            pairs[rel] = [(_lines(e.get("old") or ""), _lines(e.get("new") or "")) for e in edits]
-            try:
-                request.apply_edits(current, rel, pairs[rel])
-            except request.RequestError as exc:
-                n = int(m.group(1)) if (m := re.search(r"edit (\d+)", str(exc))) else 1
-                raise Refused(f"{exc}\nNothing was written. The lines of {rel} nearest edit {n}'s old text, "
-                              f"now:\n{near(_progress(current, pairs[rel][:n - 1]), pairs[rel][n - 1][0])}") from None
+            pairs[rel], text = [], current
+            for n, e in enumerate(edits, 1):
+                try:
+                    old, new = widen(text, str(e.get("old") or ""), str(e.get("new") or ""))
+                except Refused as exc:
+                    raise Refused(f"edit {n} for {rel}: {exc}\nNothing was written. The lines of {rel} nearest "
+                                  f"edit {n}'s old text, now:\n{near(text, str(e.get('old') or ''))}") from None
+                pairs[rel].append((old, new))
+                text = text.replace(old, new, 1)
             default = f"{Path(rel).stem}: planner edit"
         else:
             whole[rel] = content if content.endswith("\n") else content + "\n"
@@ -606,6 +633,25 @@ class PlannerServer:
         return f"{path.name}: added under {heading.removeprefix('## ')}"
 
 
+# ----------------------------------------------------------------- prompt checks
+# 143: fractals amended 060 to edit a memory note under ~/.claude, which the hook refuses
+# every executor; aicomplete 296, readonly, asked for remote workers it had no farm for.
+HOME_CLAUDE_RE = re.compile(r"~[/\\]\.claude\b|\.claude[/\\](projects|memory|CLAUDE\.md)|\bmemory note", re.I)
+FARM_RE = re.compile(r"farm-seeds|\bremote workers?\b", re.I)
+
+
+def warn(text: str, meta: dict | None = None) -> str:
+    """WARNING lines for a prompt or amendment that asks what its executor can't do."""
+    out = []
+    if HOME_CLAUDE_RE.search(text):
+        out.append("WARNING: this asks the executor to write under ~/.claude (memory or a CLAUDE.md), which the hook "
+                   "refuses every item: change an executor memory note with `memory_note` instead")
+    if meta and meta.get("readonly") and not meta.get("remote") and FARM_RE.search(text):
+        out.append("WARNING: a readonly item gets no farm without `remote: true`, and this one names farm-seeds or "
+                   "remote workers: add `remote: true` to its meta (rewrite it with the same name)")
+    return "".join(f"\n{w}" for w in out)
+
+
 # ----------------------------------------------------------------- edit helpers
 def find_section(text: str, name: str, rel: str, n: int) -> tuple[str, str]:
     """The `## ` section of `text` whose heading is `name` (else starts with it; case and `*`
@@ -625,6 +671,27 @@ def find_section(text: str, name: str, rel: str, n: int) -> tuple[str, str]:
     return "".join(lines[a:b]), head
 
 
+def widen(text: str, old: str, new: str) -> tuple[str, str]:
+    """An `edit_state` (old, new) as whole lines of `text`, as the request's edit blocks take
+    them: `old` as given when its lines occur once, else a substring that occurs once, widened
+    to the lines around it (143: state.md lines run to 2 KB, and a few words cost the line
+    typed twice). Refused when it occurs no time or several."""
+    o, n = _lines(old), _lines(new)
+    raw, new = old.replace("\r\n", "\n"), new.replace("\r\n", "\n")
+    if not raw.strip():
+        raise Refused("its `old` is empty")
+    if text.count(o) == 1:
+        return o, n
+    count = text.count(raw)
+    if count != 1:
+        raise Refused(f"its old text occurs {count} times: give a longer piece of it" if count
+                      else "its old text is not in the file now")
+    i = text.index(raw)
+    start, end = text.rfind("\n", 0, i) + 1, text.find("\n", i + len(raw))
+    end = len(text) if end < 0 else end + 1
+    return text[start:end], text[start:i] + new + text[i + len(raw):end]
+
+
 def _lines(text: str) -> str:
     """Whole lines, as the request's edit blocks take them: an empty side stays empty."""
     text = text.replace("\r\n", "\n")
@@ -633,13 +700,6 @@ def _lines(text: str) -> str:
 
 def _marker(text: str) -> bool:
     return any(ln.startswith(("<<<<<<< ", request.EDIT_CLOSE)) or ln == request.EDIT_MID for ln in text.splitlines())
-
-
-def _progress(text: str, pairs: list[tuple[str, str]]) -> str:
-    """`text` after the edits before the one that missed (they apply in order)."""
-    for old, new in pairs:
-        text = text.replace(old, new, 1)
-    return text
 
 
 def near(text: str, old: str) -> str:

@@ -189,6 +189,7 @@ def claude_config(tmp_path, monkeypatch):
     and a resume item's launch looks for its original's: never the real `~/.claude`."""
     path = tmp_path / "claude-config"
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(path))
+    monkeypatch.setenv("CONDUCTOR_QUIET_FILE", str(tmp_path / "quiet.json"))    # never the box's (quiet.py)
     return path
 
 
