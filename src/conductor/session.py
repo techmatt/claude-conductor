@@ -152,6 +152,17 @@ def maintenance(cfg: Config, log: EventLog, view: View, repo: str,
         out.append(f"- `CLAUDE.md`: {len(data) / 1024:.1f} KB, {data.count(b'\n')} lines")
     except OSError:
         out.append("- `CLAUDE.md`: none")
+    # While state.md still holds rulings, whether this repo has the doc they move to (142:
+    # fractals could learn it only from a `read` of the repo's folder).
+    try:
+        state_md = read_text(cfg.control / "state.md")
+    except (OSError, UnicodeDecodeError):
+        state_md = ""
+    held = [k for k in state_sections(state_md) if "rulings" in k]
+    if held:
+        there = (cfg.repos[repo] / "docs" / "rulings.md").is_file()
+        out.append(f"- `docs/rulings.md`: {'exists' if there else 'missing'} (state.md still has "
+                   f"*{held[0].capitalize()}*)")
     if docs is not None:
         out += [ln for key in sorted(k for k in docs[0] if k.startswith(f"{repo}:"))
                 if (ln := size_line(key, *docs, cfg.doc_budget_kb, "doc trim"))]

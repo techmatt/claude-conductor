@@ -308,7 +308,17 @@ class ReceiptsMixin:
             n, rules = parked.counts(self.cfg.control, p.stem)
             tagged = f" ({rules} `[rules]`)" if rules else ""
             self._write_receipt(rel, evs, result=f"{n} parked edit(s) waiting for {p.stem}{tagged}: "
-                                                 "the next serial item carries them")
+                                                 f"{self._parked_carrier(p.stem)}")
+
+    def _parked_carrier(self, repo: str) -> str:
+        """Who will carry the parked edits: the first queued item that would take any, by name,
+        never a template (142: fractals was told "the next serial item" with a template next)."""
+        edits = parked.waiting(self.cfg.control, repo)
+        for f in items.item_files(self.cfg.path("queue", repo)):
+            item = items.parse(f, repo)
+            if not item.errors and parked.eligible(item, edits):
+                return f"{item.id} carries them at its launch"
+        return "no queued item carries them yet: the next serial one queued will (not a template, readonly or alongside one)"
 
     def _new_versions(self, paths: list[Path], seen: dict[str, int]) -> tuple[list[tuple[Path, str]], dict[str, int]]:
         """The readable files among `paths` that are new or rewritten since `seen` (rel → the

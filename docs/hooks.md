@@ -28,7 +28,7 @@ and not enforced.
 
 | Rule | Origin | Lives |
 |---|---|---|
-| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried); 133 (aicomplete 267, 270 each lost a call) | hook; since 128 a sentence in full and a clause in light naming each refused form; since 133 a plain "Never …: the hooks refuse each", and "Write a script, then run it" in both |
+| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried); 133 (aicomplete 267, 270 each lost a call) | hook; since 128 a sentence in full and a clause in light naming each refused form; since 133 a plain "Never …: the hooks refuse each", and "Write a script, then run it" in both; since 142 (aicomplete 292: 20 edit scripts, one failing unseen mid background chain) "one script for the whole change (every edit checked before any is written); run it alone, never mid-chain" in full, "run it alone" in light |
 | No `%TEMP%`, `$TMP`, `/tmp`, `mktemp` or temp-file APIs | 61 | hook; a clause in both |
 | Never `isolation: worktree` (it lands in the main checkout) | — (aicomplete 040) | hook only |
 | Helpers never `git checkout`/`restore`/`switch`/`stash`/`clean -f`/`reset --hard` | 86 (aicomplete 144), 122 | hook only |

@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 
 from . import config as config_mod
 from . import items, questions, session, state
 from .events import EventLog
 from .inbox import latest_outline, outline_line, progress_line
-from .util import clock, duration, now, parse_stamp, read_text
+from .util import FrontMatterError, clock, duration, now, parse_stamp, read_text, split_front_matter
 
 CAP = 8000                  # bytes a read returns per part
 STATUS_CHARS = 1500         # `status` lands in the planner's context every call
@@ -33,6 +35,11 @@ READ_KINDS = (*CONTROL_FILES, "report", "audit", "question", "picks", "receipt",
               "ledger", "doc", "conductor-report")
 CONDUCTOR_KINDS = (*PLANNER_FILES, "doc", "ledger", "conductor-report")    # no project needed
 LEDGER_LINES = 12
+WRITES_HOURS = 2            # `read("receipt")` with no name: the server's writes this far back
+WRITES_SHOWN = 20
+STATUS_WRITES = 4           # planner writes since the session start that `status` names
+WRITE_CHARS = 70
+MARKS_DIR = ".mcp"          # daemon_receipts.MARKS
 # A repo file the planner has to look at itself, over the file bridge (`read("repo")` refuses it).
 IMAGES = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tif", ".tiff", ".svg", ".pdf")
 LISTED = 200                # names a folder read lists
@@ -155,6 +162,8 @@ def project_status(cfg: config_mod.Config) -> str:
     log = EventLog(cfg.events_db)
     try:
         out = [f"{cfg.project} — {daemon_line(cfg, log)}"]
+        if head := session_writes(log):
+            out += [head[0], *(f"  {ln}" for ln in head[1][-STATUS_WRITES:])]
         view = state.scan(cfg, log)
         decisions = state.decide(cfg, view)
         for repo in cfg.repos:
@@ -202,6 +211,38 @@ def project_status(cfg: config_mod.Config) -> str:
         log.close()
     text = "\n".join(out)
     return text if len(text) <= STATUS_CHARS else text[:STATUS_CHARS - 12] + "\n…(cut)"
+
+
+def session_writes(log: EventLog) -> tuple[str, list[str]] | None:
+    """(head, lines) for the planner writes since the newest session start, oldest first,
+    or None with no session yet (142: aicomplete session 36 learned only from a `status` that
+    another chat had split state.md and queued two items). One launcher serves every linked
+    chat, so the server can't tell whose a write was: a chat reads the list for writes it
+    didn't make, and a session number newer than its own digest's means another chat began."""
+    cp = log.last("checkpoint", has="session")
+    if cp is None:
+        return None
+    lines = []
+    for ev in log.query(since_id=cp.id):
+        via = "mcp" if ev.detail.get("via") == "mcp" else "bridge"
+        d = ev.detail
+        if ev.kind == "request":
+            what = f"request: {d.get('message') or ', '.join(d.get('targets') or [])}"
+        elif ev.kind == "enqueue" and d.get("template") != "watch" and ev.item:
+            what = f"queued {ev.item}"
+        elif ev.kind == "edited" and ev.item:
+            what = f"rewrote {ev.item}"
+        elif ev.kind in ("amended", "answer", "reviewed") and d.get("by") == "planner":
+            what = {"amended": f"amended {ev.item} #{ev.id}", "answer": f"answered {d.get('question') or ev.item}",
+                    "reviewed": f"reviewed {ev.item}"}[ev.kind]
+        elif ev.kind == "planner_write":
+            what = f"wrote {d.get('what')}" + (f" {ev.paths[0]}" if ev.paths else "")
+        else:
+            continue
+        lines.append(f"{clock(ev.ts)} {_cut(what, WRITE_CHARS)} ({via})")
+    head = (f"planner writes since session #{cp.detail.get('number') or '?'} began {clock(cp.ts)}: {len(lines)}"
+            + (" (the newest below; one you didn't make is another chat's)" if lines else ""))
+    return head, lines
 
 
 def one_line(cfg: config_mod.Config) -> str:
@@ -351,12 +392,54 @@ def read(cfg: config_mod.Config | None, what: str, name: str = "", section: str 
             text = _text(path) or ""
         return paged(text, part, again), False
     if what == "receipt":
+        if not name.strip():
+            return recent_writes(cfg), False
         rel = name.replace("\\", "/").lstrip("/")
         path = cfg.control / "receipts" / (rel if rel.endswith(".md") else rel + ".md")
         if ".." in rel or not path.is_file():
             return f"no receipt {name!r} (name the write's path: `signals/planner-….signal`, `queue/<repo>/NNN_x.md`)", True
         return _file(path, "", part, again)
     return f"unknown `what` {what!r}; one of: {', '.join(READ_KINDS)}", True
+
+
+def recent_writes(cfg: config_mod.Config, hours: float = WRITES_HOURS) -> str:
+    """The server's writes to this project in the last `hours`, newest first (142: four calls
+    timed out at the bridge and neither session could tell what had landed): a receipt marked
+    `via: mcp` with its outcome, or a mark no receipt has taken yet (written, not yet taken)."""
+    root = cfg.control / "receipts"
+    cutoff, rows = time.time() - hours * 3600, []
+    for p in root.rglob("*.md") if root.is_dir() else []:
+        try:
+            if MARKS_DIR in p.parts or p.stat().st_mtime < cutoff:
+                continue
+            meta, _ = split_front_matter(_text(p) or "")
+        except (OSError, FrontMatterError):
+            continue
+        if (meta or {}).get("via") == "mcp":
+            rows.append((p.stat().st_mtime, f"- {clock(datetime.fromtimestamp(p.stat().st_mtime))} "
+                                            f"`{meta.get('write')}`: {say_outcome(meta)}"))
+    marks = root / MARKS_DIR
+    for p in marks.iterdir() if marks.is_dir() else []:
+        try:
+            if p.stat().st_mtime >= cutoff:
+                rows.append((p.stat().st_mtime, f"- {clock(datetime.fromtimestamp(p.stat().st_mtime))} "
+                                                f"`{p.name.replace('~', '/')}`: written, no receipt yet "
+                                                "(the daemon hasn't taken it: `status`)"))
+        except OSError:
+            continue
+    rows.sort(reverse=True)
+    head = f"The server's writes to {cfg.project} in the last {hours:g} h, newest first"
+    if not rows:
+        return f"{head}: none."
+    shown = [r for _, r in rows[:WRITES_SHOWN]]
+    more = [f"- … {len(rows) - WRITES_SHOWN} more"] if len(rows) > WRITES_SHOWN else []
+    return "\n".join([f"{head} (one: read(what=\"receipt\", name=<path>)):", *shown, *more])
+
+
+def say_outcome(meta: dict) -> str:
+    out = meta.get("outcome") or "?"
+    said = meta.get("reason") if out == "refused" else meta.get("result")
+    return f"{out}: {' '.join(str(said or '').split())[:NOTE_CHARS]}"
 
 
 def unreviewed() -> str:

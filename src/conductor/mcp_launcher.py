@@ -34,7 +34,7 @@ from . import procs
 
 PACKAGE = Path(__file__).resolve().parent
 REPLAY_ID = "launcher-initialize"
-CALL_SECONDS = 150.0        # a write waits 30s for its receipt, a session start up to 60s more
+CALL_SECONDS = 75.0         # under the bridge's 80 s; the worker answers within 65 (CALL_BUDGET, 142)
 READY_SECONDS = 30.0        # a fresh worker's replayed `initialize`
 TRAFFIC = PACKAGE.parents[1] / "out" / "mcp-traffic.log"
 TRAFFIC_BYTES = 1_000_000   # then it moves to `.1`, the one kept before it

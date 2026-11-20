@@ -488,6 +488,9 @@ def saved_line(c: dict) -> str:
             f"{_count(c.get('notes'), 'note')}; `picks/{c.get('name')}.choices.json`")
 
 
+STALE = "a premise (a file it calls missing) may be stale, check main"     # 142
+
+
 def staged_questions(log: EventLog, view: View) -> list[str]:
     """Staging questions as open rulings, each with its default (`questions.plan_questions`):
     an item staged and not launched yet, then one that launched on its defaults (its `start`
@@ -503,13 +506,23 @@ def staged_questions(log: EventLog, view: View) -> list[str]:
                 out.append(f"- `{item_id}`, staged {clock(ev.ts)}: its {n} question{'s' * (n != 1)} "
                            f"answered by amendment #{amend.id} ({clock(amend.ts)})")
                 continue
-            out.append(f"- `{item_id}`, staged {clock(ev.ts)}, asks before it launches (answer: an amendment):")
+            merges = len(log.query(since_id=ev.id, repo=item_id.split("/", 1)[0], kinds=["merge"]))
+            moved = f"; {_count(merges, 'merge')} since it staged: {STALE}" if merges else ""
+            out.append(f"- `{item_id}`, staged {clock(ev.ts)}, asks before it launches (answer: an amendment){moved}:")
             out += questions.default_lines(ev.detail["questions"])
     for item_id in dict.fromkeys([*view.running, *(f.item for f in view.unreviewed())]):
         if (st := log.last("start", item=item_id)) and (qs := st.detail.get("stage_defaults")):
             state = "running" if item_id in view.running else "finished, report unreviewed"
+            if (amend := log.last("amended", item=item_id)) and amend.id > st.id:    # 142: 292's six
+                ids = [e.id for e in log.query(since_id=st.id, item=item_id, kinds=["amended"])]
+                out.append(f"- `{item_id}` launched {clock(st.ts)} on its defaults, {state}: its "
+                           f"{_count(len(qs), 'question')} answered by amendment "
+                           f"{', '.join(f'#{i}' for i in ids)} ({clock(amend.ts)})")
+                continue
+            landed = st.detail.get("landed") or 0
+            moved = f"; {landed} commit(s) landed between staging and launch: {STALE}" if landed else ""
             out.append(f"- `{item_id}` launched {clock(st.ts)} on its defaults, {state} "
-                       f"(a ruling now: an amendment while it runs, else a follow-up):")
+                       f"(a ruling now: an amendment while it runs, else a follow-up){moved}:")
             out += questions.default_lines(qs)
     return out
 

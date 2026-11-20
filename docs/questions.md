@@ -117,7 +117,19 @@ gets *Staging questions unanswered: defaults stand* in its resume message, listi
 its default, and its `start` event carries them (`stage_defaults`). The digests keep them
 under the same heading, "launched on its defaults", while it runs (answer: an amendment,
 delivered as a message) and after it finishes until its report is reviewed (a ruling for a
-follow-up).
+follow-up). An amendment after the launch answers them too (142: aicomplete 292's six were
+listed as open after two amendments ruled on them): the entry becomes one line, "its N
+questions answered by amendment #a, #b".
+
+**Main moved under a stage** (142: 292 staged before 291 merged, asked whether
+`docs/rulings.md` existed, and launched on the default "it does not" with the file on main).
+The launch's `start` carries `landed` (commits since the stage); with any, the resume
+message's defaults paragraph adds *Main moved since you staged (N commit(s))*: re-check each
+question's premise on the current tree, and follow the tree over a default it answers. The
+digests mark such an entry "N commit(s) landed between staging and launch: a premise (a file
+it calls missing) may be stale, check main", and a still-staged one with merges in its repo
+since it staged "N merges since it staged: …". Re-checking premises in code was weighed and
+not taken: a question's premise is prose.
 
 The ask server resolves the question by creating `<id>.result.json` exclusively
 (`outcome`: `answered` | `default` | `cancelled` | `by_message`, `text`, `at`, `by`); the daemon only

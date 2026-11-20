@@ -69,8 +69,8 @@ The box. Scratch and run output go in `out/{item_name}/` (git-ignored); anything
 under the repo's results folder (`experiments/results/{item_name}/`), committed; read outputs
 a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Every
 file write goes through Write or Edit. Never `sed -i`, a heredoc into a file, or a heredoc or
-`-c`/`-e` script that writes one: conductor's hooks refuse each, and each try is a lost call.
-For a scripted change, Write a small script file, then run it. The hooks refuse %TEMP%,
+`-c`/`-e` script that writes one: conductor's hooks refuse each. For a scripted change, Write one script for
+the whole change (every edit checked before any is written); run it alone, never mid-chain. The hooks refuse %TEMP%,
 elevation, `&` jobs, sleeps and the like too, each saying what to do instead. Heavy compute
 (sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
 PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) and leaves {free}
@@ -166,7 +166,7 @@ Progress: a `progress` (mcp__conductor__progress) line at start and on launching
 Bounds. A skip in prompt or message binds (a default overriding the prompt starts
 `default overrides prompt: <line>`). Scratch: `out/{item_name}/`. Heavy compute: `nice -n 10`,
 {threads} threads, a full suite only between sims. Write files with Write/Edit only: hooks
-refuse heredoc, `-c`/`-e` and `sed -i` writes (Write a script, then run it), %TEMP% and the like.{leftover}
+refuse heredoc, `-c`/`-e` and `sed -i` writes (Write a script, then run it alone), %TEMP% and the like.{leftover}
 
 Latitude. Conflicts: locked rulings{rulings_light}, goal, done-when bars, method; report what gave way,
 don't ask. Score bars strictly; check a numeric target is reachable before chasing it. Three
@@ -409,7 +409,14 @@ Staging questions unanswered: defaults stand. Take the default you named for eac
 shapes the work (its cost, a bar, a design), say so in your report, since the planner sees
 them as rulings still open:
 {lines}
+{stale}
+"""
 
+# After STAGE_DEFAULTS when main moved between staging and launch (142: aicomplete 292 took
+# the default for "`docs/rulings.md` does not exist" with the file on main by launch).
+STAGE_STALE = """Main moved since you staged ({n} commit(s)): first re-check each question's premise on
+the tree you have now. A file a question calls missing may exist; a question the tree
+answers is no longer open: follow the tree, not the default, and say so in your report.
 """
 
 AMEND = """
@@ -625,7 +632,8 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     head = RESUME_HEAD.format(old=resume["old"][:10], new=resume["new"][:10], main=cfg.opts(item.repo).main,
                               landed=landed)
     if defaults:
-        head += STAGE_DEFAULTS.format(lines="\n".join(questions.default_lines(list(defaults), "")))
+        head += STAGE_DEFAULTS.format(lines="\n".join(questions.default_lines(list(defaults), "")),
+                                      stale=STAGE_STALE.format(n=n) if n else "")
     tail = (RESUME_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
     return head + text.rstrip() + "\nThe prompt is the one you read while staging.\n" + extra + tail
 

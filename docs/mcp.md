@@ -40,7 +40,7 @@ counts both per session (`stats.md`).
 
 | tool | writes / reads | returns |
 |---|---|---|
-| `status(project?)` | `state.scan`, `daemon.json`, `events.db` | per repo the running item (elapsed, kill time, the newest progress line *with a note*, the outline), staged, queue (six names, why the head waits), red hold; proposed; open questions; ≤1.5 KB. No project: a line each |
+| `status(project?)` | `state.scan`, `daemon.json`, `events.db` | the planner writes since the newest session start (count, the newest 4: *Two chats*); per repo the running item (elapsed, kill time, the newest progress line *with a note*, the outline), staged, queue (six names, why the head waits), red hold; proposed; open questions; ≤1.5 KB. No project: a line each |
 | `start_session(project, label?)` | signal `session: <label>` | `planner.md` whole, `=====`, then `session.md` (paged) once its header names the signal |
 | `read(project?, what, name?, section?, part?)` | see below | the text, ≤8 KB a part (`CAP`), cut at a line, `[part 1 of 3; next: read(…, part=2)]` |
 | `queue_item(project, repo, name, body, meta?, held?)` | `queue/<repo>/NNN_name.md` or `proposed/` | the receipt: `queued as <id>; <start>`, or a rewrite's `rewritten: … (what changed)` |
@@ -66,8 +66,8 @@ the live copy); text holding a conflict marker, or `content`, goes as a whole fi
 before `request.md`. An edit that changes nothing writes nothing.
 
 `sections` (140) moves text without retyping it: in order, `{op, section, to?, body?}` on
-`file`'s `## ` sections (`section`: the heading, else the one heading it starts, case and
-`*` free), `delete`, `replace` (the heading kept, `body` under it) or `move` (appended to
+`file`'s `## ` sections (`section`: the heading, else the one heading it starts, case,
+`*` and a leading `## ` free, 142), `delete`, `replace` (the heading kept, `body` under it) or `move` (appended to
 `to`, a tracked file or a new `.md`, created). One request carries it all: the source as
 edit blocks (whole when they wouldn't apply the same way), a move's destination whole; the
 default message names each op (`state: move *Paged* to paged.md`). A section not found, or
@@ -80,7 +80,7 @@ several, refuses with the file's section list, nothing written.
 - `report` (`name`: `NNN`, `NNN_name`, `repo/NNN_name`): first its header lines, title and
   section list with sizes; `section` reads one, `"all"` the whole; `audit`: its notes;
 - `question` (an id or suffix), `picks` (a picker's saved choices, pretty-printed),
-  `receipt` (a write's path), `stats` (`weeks`, default 4: `conductor stats`' text, `stats.md`);
+  `receipt` (a write's path; none: the server's writes of the last 2 h, 142), `stats` (`weeks`, default 4: `conductor stats`' text, `stats.md`);
 - `repo` (`name`: `<repo>/<path>`): a tracked text file of a project's code repo, read-only,
   paged and `section`ed like the rest; a markdown file with `## ` sections comes header-first
   as a report does (141; `section`, or `"all"`, for the text); `<repo>` or a folder lists its tracked names. Refused
@@ -135,7 +135,7 @@ before it finishes its own. In the worker (`PlannerServer.submit`), `status` and
 at once on a pool; every write runs on its project's lane, one thread, so writes to one
 project apply in the order they came; conductor's own notes share a lane. A call never ends
 unanswered: a worker that exits answers each call it had with an error (a write may have
-landed: `status`, a receipt), and a call over `CALL_SECONDS` (150) gets an error and its late
+landed: `status`, a receipt), and a call over `CALL_SECONDS` (75) gets an error and its late
 reply is dropped. A JSON-RPC batch (an array) is answered as one array; values run together
 on a line are split. The worker reads the protocol from private copies of its pipes, fds 0
 and 1 pointed at NUL: on Windows a child (git) started on a call's thread blocks while
@@ -151,6 +151,33 @@ The old launcher took one call at a time and dropped a batch array silently; Cla
 own client, sending three reads at once, got all three through it, so the app's path does
 something those don't, unseen without the log. A lost `edit_state` (aicomplete, 2:07pm) left
 no request, mark or commit: it never ran.
+
+**142's 80 s timeouts.** Around 2:17-2:25pm on 2026-11-19, `edit_state`, `status`, `note`
+and `read` calls timed out at the bridge's 80 s in aicomplete and fractals with nothing
+written: no request, receipt or `planner_write` event in either project in that window, both
+daemons alive. The app's launcher then was still 140's (one call at a time; the traffic log
+starts with 141's own tests at 2:17pm and the app's new launcher at 2:29pm, after the
+restart), so this is 141's lost-calls case, fixed there. What 142 adds:
+
+- **A call budget.** The bridge gives up at 80 s, and an answer after it is lost. The worker
+  answers every call within `CALL_BUDGET` (65 s) of its arrival: a receipt wait shrinks to
+  what is left, and a write still queued behind its project's other writes with under
+  `CALL_MIN_LEFT` (8 s) left is refused with "not written: … Nothing was written; send it
+  again", never written late. The launcher's own limit (`CALL_SECONDS`, 75) stays under 80.
+  Three writes sent together, each waiting 30 s for a slow daemon, would otherwise pass 80.
+- **Writes findable afterwards.** `read(what="receipt")` with no `name` lists the server's
+  writes to the project in the last 2 h, newest first (`planner_read.recent_writes`): each
+  receipt marked `via: mcp` with its outcome, and each mark no receipt has taken yet
+  ("written, no receipt yet").
+
+**Two chats on one project** (142: aicomplete session 36 learned only from `status` that
+another chat had split state.md and queued two items). One launcher serves every linked chat
+(pid 11284 served aicomplete and fractals all afternoon), so the server can't say whose a
+write was. Instead `status` names the planner writes since the newest `session:` checkpoint
+(`planner_read.session_writes`: requests, queued and rewritten items, the planner's
+amendments, answers and reviews, `planner_write`s; the newest 4, each with its route), and
+every write's receipt ends with their count. A chat that sees one it didn't make, or a
+session number past its own digest's, has another chat writing beside it.
 
 ## Testing
 

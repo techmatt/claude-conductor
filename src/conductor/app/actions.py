@@ -97,7 +97,11 @@ def amend(control: Path, item_id: str, text: str, by: str = BY, before=None) -> 
     repo, _, name = item_id.partition("/")
     qdir = Path(control) / "queue" / repo
     qdir.mkdir(parents=True, exist_ok=True)
-    taken = [a[1] for p in qdir.glob(f"{name}.amend*.md")
+    # Past every amend file still waiting and every receipt of one taken: the daemon deletes an
+    # amend file once it takes it, so a second amendment would reuse the first's name and
+    # its receipt path, and read the first's receipt (142).
+    rdir = Path(control) / "receipts" / "queue" / repo
+    taken = [a[1] for d in (qdir, rdir) for p in d.glob(f"{name}.amend*.md")
              if (a := items.amend_of(p)) and a[0] == name and isinstance(a[1], int)]
     n = max(taken, default=0) + 1
     final = qdir / (f"{name}.amend.md" if n == 1 else f"{name}.amend.{n}.md")

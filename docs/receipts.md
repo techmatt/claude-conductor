@@ -19,6 +19,11 @@ The write's path under `receipts/`, with `.signal` or `.md` changed to `.md`:
 | `backlog/<repo>/bug_sweep.md` | `receipts/backlog/<repo>/bug_sweep.md` (`night-shift.md`; a draw rewrites it) |
 | `parked/<repo>.md` | `receipts/parked/<repo>.md` (72; conductor's own take or put-back rewrites it) |
 
+An amend file is deleted once the daemon takes it, so its name is free again; a writer names
+a new one past both the amend files waiting and the amend receipts kept (`actions.amend`
+does, 142: aicomplete 292's second amendment was `.amend.md` again and read the first's
+receipt).
+
 Every signal file and request gets one, whoever wrote it (the app's too).
 
 ## What
@@ -76,7 +81,7 @@ events: [812, 813]
 | amendment | `amended` | `amendment #N, <state>: <delivery>`, then `delivered #N (<via>, after Ns)` | `amend_refused` |
 | answer | `answer`, `late` | `answered: the executor has it` (and `; its default overrode the prompt: <line>` for a flagged question) | `late` (the question had resolved) |
 | proposed item | readable, new or changed (no event) | `proposed for <repo>: waits for Matt` | what `approve:` would refuse: an unknown `repo:`, item errors |
-| parked edits | readable, new or changed (no event; `process_parked`) | `N parked edit(s) waiting for <repo> (K `[rules]`): the next serial item carries them` | a file naming no configured repo |
+| parked edits | readable, new or changed (no event; `process_parked`) | `N parked edit(s) waiting for <repo> (K `[rules]`): <id> carries them at its launch` (the first queued item that takes any, never a template, 142), or `no queued item carries them yet: …` | a file naming no configured repo |
 
 `<start>` is when the item will start and why, read from the scheduler's rules at queue
 time (`state.start_estimate`; a guess, not a promise): `starts now`, `starts now, beside

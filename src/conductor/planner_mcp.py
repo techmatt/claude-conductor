@@ -42,6 +42,11 @@ SERVER_NAME = "conductor"
 BY = "planner"
 RECEIPT_SECONDS = 30.0      # a receipt lands within seconds with the daemon up (receipts.md, *How long*)
 RECEIPT_POLL = 0.2
+# Every call answers within this of its arrival: the bridge gives up at 80 s, and an answer
+# after that is lost (142: four calls in two projects, nothing said). A write still queued
+# behind its project's others with under `CALL_MIN_LEFT` left is refused, nothing written.
+CALL_BUDGET = 65.0
+CALL_MIN_LEFT = 8.0
 RECEIPT_LINES = 4           # event lines a write returns
 NEAR = 4                    # lines either side of a missed edit's best match
 EDITABLE = ("state.md", "paged.md", "habits.md")    # creatable even before they are tracked
@@ -71,7 +76,7 @@ TOOLS = [
         "Read by name, capped ~8 KB a part (`part` for the next). what: state | paged | habits | inbox | review | "
         "session | remote-diag (control files; `section` = a ## heading) | report (name = NNN or repo/NNN_name: "
         "header and section list first, then `section`, or \"all\") | audit | question (id) | picks (picker name) | "
-        "receipt (a write's path) | stats (`weeks`, default 4: items per week and model, spend by kind, "
+        "receipt (a write's path; no name: the server's writes of the last 2 h, for a call that never answered) | stats (`weeks`, default 4: items per week and model, spend by kind, "
         "corrections, planner writes per session by route) | repo (name = <repo>/<path>: a tracked text file of "
         "a code repo, read-only; a folder lists its names; images stay on the file bridge) | planner | vocab | "
         "bridge | new-project | planner-notes | planner-ideas | ledger (conductor prompts run and waiting) | doc "
@@ -101,7 +106,7 @@ TOOLS = [
     {"name": "edit_state", "description": (
         "Change a tracked control file (state.md, paged.md, habits.md, conductor.toml, …) by request, one of: "
         "`edits`, old/new pairs of whole lines checked against the file now (a miss returns the lines near it, "
-        "nothing written); `sections`, in order, {op: delete | move | replace, section: a ## heading, to: the "
+        "nothing written); `sections`, in order, {op: delete | move | replace, section: a ## heading, with or without `## `, to: the "
         "file a move appends it to (a new .md is created), body: a replace's text under the heading}: text "
         "moves without retyping it, and a miss names the sections there are; or `content`, the whole file. "
         "Returns the receipt."),
@@ -211,6 +216,12 @@ class PlannerServer:
         self.pool = ThreadPoolExecutor(READERS, thread_name_prefix="mcp-read")
         self.lanes: dict[str, ThreadPoolExecutor] = {}
         self.lanes_lock = threading.Lock()
+        self.call_budget = CALL_BUDGET
+        self.local = threading.local()      # this thread's call: `deadline` (monotonic)
+
+    def left(self) -> float:
+        """Seconds the current call has before its answer is due (`CALL_BUDGET`)."""
+        return getattr(self.local, "deadline", float("inf")) - time.monotonic()
 
     def send(self, obj: dict) -> None:
         with self.out_lock:
@@ -234,6 +245,7 @@ class PlannerServer:
 
     def submit(self, msg: dict) -> None:
         """`handle` now or on its lane; a reply is sent either way."""
+        msg.setdefault("_arrived", time.monotonic())
         where = self.lane(msg)
         if where is None:
             self.handle(msg)
@@ -270,7 +282,12 @@ class PlannerServer:
             if name not in TOOL_NAMES:
                 self.error(mid, -32602, f"unknown tool {name!r}")
                 return
+            self.local.deadline = msg.get("_arrived", time.monotonic()) + self.call_budget
             try:
+                if name not in READ_TOOLS and (left := self.left()) < CALL_MIN_LEFT:
+                    raise Refused(f"not written: this call waited {self.call_budget - left:.0f}s behind the "
+                                  f"project's other writes, too long to answer before the bridge gives up. "
+                                  f"Nothing was written; send it again (recent writes: read(what=\"receipt\")).")
                 text, is_error = self.call(name, params.get("arguments") or {}), False
             except Refused as exc:
                 text, is_error = str(exc), True
@@ -313,7 +330,14 @@ class PlannerServer:
             log.close()
 
     def wait(self, cfg: config_mod.Config, rel: str, since_ms: int | None = None) -> str:
-        return receipt(cfg, rel, since_ms, self.receipt_seconds)
+        """The receipt, waited for no longer than the call's budget leaves (`CALL_BUDGET`)."""
+        got = receipt(cfg, rel, since_ms, max(1.0, min(self.receipt_seconds, self.left() - 3)))
+        log = EventLog(cfg.events_db)
+        try:                                # 142: another chat's writes show in the count
+            head = rd.session_writes(log)
+        finally:
+            log.close()
+        return got + (f"\n({head[0].split(' (')[0]}; `status` names the newest)" if head else "")
 
     @staticmethod
     def mark(cfg: config_mod.Config, path: Path) -> None:
@@ -350,7 +374,7 @@ class PlannerServer:
         if got.startswith("REFUSED"):
             return got
         digest = cfg.control / "session.md"
-        end = time.monotonic() + self.receipt_seconds
+        end = time.monotonic() + max(1.0, min(self.receipt_seconds, self.left() - 3))
         while time.monotonic() < end:           # its header names the signal it was written for
             if rel in (rd._text(digest) or "")[:2000]:
                 break
@@ -587,7 +611,7 @@ def find_section(text: str, name: str, rel: str, n: int) -> tuple[str, str]:
     """The `## ` section of `text` whose heading is `name` (else starts with it; case and `*`
     ignored), as (its text from the heading to the next `## `, its heading); refused naming
     the sections there are when none or several match."""
-    want = name.strip().strip("*").strip().lower()
+    want = name.strip().lstrip("#").strip().strip("*").strip().lower()    # `## Paged` or `Paged` (142)
     lines = text.splitlines(keepends=True)
     found = rd.sections(text)
     heads = [h for h, _, _ in found]
