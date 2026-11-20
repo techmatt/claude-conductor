@@ -44,6 +44,12 @@ template: self_audit          # optional; the only template a resume item may us
   `false`), merges its fixes, and its red holds as any item's. Everything else here (fork,
   record, *Resumed*, never staging, labels) is the same.
 
+- **Model** (144). The fork keeps its source's model, unless the item says `model: opus`
+  (or `fable`): then it runs on that one, as when the source stopped on its model's usage
+  limit (aicomplete 297). `model:` on any other item is refused: a new session takes the
+  machine-wide setting. A red item's own session moves with `retry: <item> model: …`
+  (`api-retry.md`).
+
 ## The launch
 
 - **A fresh worktree at current `main`**, always for an ask, even in a repo with

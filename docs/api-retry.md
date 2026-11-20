@@ -13,7 +13,7 @@ turn and held the queue again. Nothing moved until Matt resumed 211 by hand at 7
 the last five lines of its run log or the end of its stderr match `API_ERROR`: `API Error:`
 with 401, 403, 408, 429 or any 5xx, `Connection error`, `Request timed out` or `Overloaded`;
 `Failed to authenticate`; Cloudflare's `Attention Required!`; `overloaded_error`;
-`rate_limit_error`. Never a 400 (a request too long fails the same way again). A run with
+`rate_limit_error`; a usage limit's `You've hit your <model> limit · resets …` (below). Never a 400 (a request too long fails the same way again). A run with
 a tamper, a kill at `max_hours`, a launch failure, or a watch is judged as before.
 
 ## The retry
@@ -43,6 +43,33 @@ At the exit, before anything is reaped or judged (`finish` → `_api_wait`):
 - A run's `total_cost_usd` counts its whole session, so the resumed run's total is the
   item's. The `finish` carries `api_tries`.
 
+## Usage limits
+
+aicomplete 297 (2026-11-20) exited on Claude Code's `You've hit your Fable limit · resets
+11am (America/Los_Angeles)` (`rate_limit_error`, `api_error: usage_limit_reached`); its
+2 / 10 / 30 retries all fell inside the limit, and Matt finished it by hand with `/model
+opus`. Since 144 `API_ERROR` takes that line whole, and `usage_limit` reads the limited
+model and the reset (`11am`, `8:15pm`, `Nov 22, 3pm`; the next such time; the named zone
+when Python has it, which on Windows without `tzdata` it doesn't, so the box's own):
+
+- **The reset fits the deadline** (reset + 3 min, `USAGE_SLACK`, at or before the run's
+  `deadline`): one wait until then, not a try: `api_wait` carries `usage: true`, the
+  record `usage_waited` (the reset), and `api_retry` (`state: waiting`) `usage_limit` and
+  `reset`. The resume says the limit has reset. Hitting the same reset again falls to the
+  usual tries.
+- **It doesn't**: red at once, `API error (<the line>); the limit resets at <time>, past
+  its deadline <time>; `retry: <item> model: opus` resumes it on another model`. A usage
+  limit whose tries ran out (no reset read) carries the same hint.
+
+## `retry: <item> model: opus|fable`
+
+`retry:` resumes on the model the run recorded unless it names one (144): then that id
+becomes the record's `model`, `models` lists each in order (`[fable id, opus id]`), the
+resume says `now on Opus (…)`, the `api_retry` (`state: retry`) carries `model` and its note
+`on Opus`, and the `finish` carries `model` (and `models`) with the report's `model:` line
+stamped. The machine-wide setting (`model:` signal) is untouched. A resume item takes the
+same override as `model:` front-matter (`resume.md`).
+
 **Seen while it waits**: the inbox and `session.md` show each `api_retry` line; *Now* reads
 `<item> — **waiting on the API** (<error>): try N at <time>`; the app's Repos row reads
 `waiting on API` with the try and error. The night shift's stall check skips it (it has
@@ -55,7 +82,7 @@ item, whose worktree is discarded) and whose session transcript exists. Refused 
 event) for any other status, an item running or landing, one already landed, or while
 another non-readonly item runs in its repo. Its record and file move back from `done/` to
 `running/`, it gets a free port if its own is taken, and its session resumes with
-`.retryN.md`: who asked and the red's reasons. It then finishes, merges and reports as
+`.retryN.md`: who asked and the red's reasons (and a model it names, above). It then finishes, merges and reports as
 usual; a non-red finish clears the red hold it left (a `clear` by conductor). `api_retry`
 with `state: retry` and `by`; the `finish` carries `retried`.
 

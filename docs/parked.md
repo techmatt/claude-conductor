@@ -15,6 +15,18 @@ Each write gets a receipt, `receipts/parked/<repo>.md`, saying how many edits wa
 `parked/<repo>.done.md` is conductor's: each edit handed out, as
 `- <edit> — <item name> (<launch time>)`.
 
+**Withdraw or replace** (144). A waiting line can be taken back or changed by a piece of
+it found in exactly one waiting line (any case): the signal `park: <repo> remove <piece>`
+or `park: <repo> replace <piece> => <new line>` (`park: <repo> <line>` adds one), or MCP
+`park` with `op: remove | replace` and `match`, which writes that signal. The daemon makes
+the change (`parked.apply`), logs `parked_edit` (`op`, `was`, `line`, `waiting`), and the
+receipt names what changed and lists every line that waits after (`P1. … | P2. …`) and who
+carries them. A piece in no line or several is refused, naming them; one already handed
+out names its item from the done file (only a `tell:` reaches it now, or a parked undo).
+Found live: aicomplete held a `[rules]` line moving the round band to 7-10 after Matt's
+Nov 20 ruling (6-8, 10-11 exceptional) superseded it; riding, it would have reverted it.
+Every park receipt (an add over the bridge too) lists what waits.
+
 **Who carries them.** At launch (`_start_exec`, the prompt's second half) a **serial**
 item, meaning not `alongside`, not `readonly`, not a template and not a `resume:` item,
 takes every line, `[rules]` ones too. Until 143 a `[rules]` line rode only a `rules: true`

@@ -138,8 +138,9 @@ every later launch of that session passes it again: a staged item resumed at lau
 would re-bill the stage's context uncached), an API-wait or `retry:` resume (`api-retry.md`),
 a machine-restart resume (`restart.md`). A fork (an `ask`, a post-audit, a workflow retro:
 `resume.md`) takes its source session's model (the source's `finish` or `start` event). A run or stage from before 135 recorded none and
-passes no `--model`, as before. Subagents and Workflow agents inherit their lead's; there is no
-per-item override.
+passes no `--model`, as before. Subagents and Workflow agents inherit their lead's. Two
+overrides (144), for a session stopped by its model's usage limit: `retry: <item> model: opus`
+(`api-retry.md`) and a resume item's `model:` front-matter (`resume.md`).
 
 Set it with the app's **Model** button (toolbar and tray, `app.md`) or a `model: opus|fable`
 signal to any project (`signals.md`; its receipt says what it is now). The `start`, `stage`,

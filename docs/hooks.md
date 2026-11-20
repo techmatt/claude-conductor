@@ -51,6 +51,7 @@ and not enforced.
 | `ask` only when a wrong guess wastes work or is hard to undo, with a default; a call holds the session; block only when every default is worse | 74 | both |
 | A skip binds; a default never un-skips or overrides the prompt without `default overrides prompt:` | 61 (aicomplete 009, 030) | both |
 | **Design asks** (`design: true`): design principle, reversed direction, ~30% split, a reading that removes what it names, departing from Matt's staging answer, a fix changing play | 79, 111 | full word for word; light the split and play-fix only |
+| A `design: true` default changing the shipped build is confirmed afresh before regen and docs | 144 (aicomplete 299 regenerated twice on a default it reverted) | full word for word |
 | An undoable step last | 74 | full |
 | Latitude: rulings, goal, bars, method; say what gave way, never ask | 102 (aicomplete 167) | both |
 | Method is a route; required lines and CLAUDE.md *Working rules* bind | 102, 111 (aicomplete 206) | full |
@@ -65,7 +66,7 @@ and not enforced.
 | `outline` with a row per done-when item; staged: post it first | — | full |
 | An `eta` names its source | 68 | full |
 | Plan from the last tool return's clock | 86, 114 (aicomplete 143, 213) | both |
-| Calibration freeze line, SE gap, diff review before fresh seeds, seeds taken | 74, 86, 117 (aicomplete 223, 234) | *Calibrate* block |
+| Calibration freeze line, SE gap, seeds taken | 74, 86, 117 (aicomplete 223, 234) | *Calibrate* block |
 | Servers on `CONDUCTOR_PORT`, detached, stopped; `npm ci` first | 74, 84 (aicomplete 135-138) | *Servers* block; light a port line |
 | Scratch in `out/<item>/`; the rest of `out/` is not fresh | 61, 116 (fractals 008, 010) | both |
 | Working papers under the results folder, committed | 73 (aicomplete 079) | full |
@@ -85,7 +86,7 @@ and not enforced.
 | `write_roots` writable | 114 (fractals 050) | both |
 | Readonly: nothing merges, so ledger entries go in `carry:` | 79 (aicomplete 109) | both |
 | *Running beside you*; the latest return rules | 74 (aicomplete 080, 081) | both |
-| **Diff review** before the report: one read-only subagent, the diff, rulings, done-when, *What failure looks like*; one more pass at most; a `Diff review:` line | 123 | full, writable, not template; Ultracode's adversarial review counts |
+| **Diff review** before the report: one read-only subagent, the diff, rulings, done-when, *What failure looks like*; one more pass at most; a `Diff review:` line; a rules change gets it before fresh seeds, a config self-check is not it (144, from *Calibrate*: aicomplete 300) | 123, 144 | full, writable, not template; Ultracode's adversarial review counts |
 | Report header, statuses (`done` / `partial` / `red`, a soft-band miss is `done`), the report-path line | 74, 109, 114, 117 | both word for word |
 | `warnings:` from the repo's *Warning checks*; `unchanged from main`; never changes status | 109, 113, 121 | full; light the header line |
 | `partial:` when partial: each unmet bar and why, `matt: ` on one only his call is left on, naming its question or `## For Matt` choice (all such: no retro; conductor checks the naming, 132) | 131, 132 (aicomplete 264) | full only (light at its word cap) |

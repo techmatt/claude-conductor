@@ -46,8 +46,8 @@ Chosen by conductor, never by front-matter:
   `preview…` script): the port, `start`, and `npm ci` before a package's checks. Light
   gets `PORT_LIGHT` instead.
 - *Calibrate* (`CALIBRATE`) for `rules: true` or a body naming a gate, band, target or
-  seed count (`executor.wants_calibrate`): the freeze line, the SE gap, the diff review
-  before fresh seeds, seeds taken in the ledger.
+  seed count (`executor.wants_calibrate`): the freeze line, the SE gap, seeds taken in the
+  ledger. (Its "diff review before fresh seeds" moved into *Diff review* in 144.)
 - *Pickers* (`PICK`) and the header's `pick:` line when the body could produce
   candidates (`executor.PICK_RE`; schema: `picks.md`).
 - *Audit notes* (`templates/audit.md`) for `audit` items and note-keeping templates, with
@@ -60,7 +60,8 @@ Chosen by conductor, never by front-matter:
   comments; the item fixes what is real, at most one more pass on the new diff, and the
   report body carries `Diff review: N found, M fixed, K rejected (why)`. An `ultracode`
   item gets `REVIEW_ULTRA`: its adversarial review counts as this one. Light, template and
-  readonly items skip it.
+  readonly items skip it. Both say a rules change gets it before fresh seeds, and that a
+  self-check of the config diff is not it (144, aicomplete 300).
 - **Standing rulings** (137): when the item's worktree (else the repo's main checkout) has
   `docs/rulings.md` (`executor.has_rulings`), *Latitude* names it first among the locked
   rulings ("read before you start"; the light preamble: "read it first"), the diff review's

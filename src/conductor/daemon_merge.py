@@ -339,6 +339,8 @@ class MergeMixin:
         if rec.get("model"):
             stamp_model(Path(rec["report"]), rec["model"])
             extra["model"] = rec["model"]
+            if len(rec.get("models") or []) > 1:
+                extra["models"] = rec["models"]         # 144: a `retry: … model:` moved it, oldest first
         if text := self._outcome_stamp(rec):
             stamp_report(Path(rec["report"]), text)
         # A readonly resume item (an ask) has nothing to protect, so its red never holds; a self-audit writes (113).

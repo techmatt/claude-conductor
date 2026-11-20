@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import executor, git, items, procs, state, talk
+from . import executor, git, items, models, procs, state, talk
 from . import resume as resume_items
 from .util import clock, now, parse_stamp, retry_io, stamp, write_text
 
@@ -28,10 +28,18 @@ if TYPE_CHECKING:
 # A transient failure of the API, as Claude Code prints it in its last lines, result or stderr.
 # Not a 400 (a request that will fail the same way again).
 API_ERROR = re.compile(
-    r"API Error:\s*(?:40[138]|429|5\d\d|Connection error|Request timed out|Overloaded)\b[^\"\n]{0,120}"
+    r"You['’]ve hit your \w+ limit[^.\"\n]{0,80}"         # a usage limit, with its reset time (144)
+    r"|API Error:\s*(?:40[138]|429|5\d\d|Connection error|Request timed out|Overloaded)\b[^\"\n]{0,120}"
     r"|Failed to authenticate[^\"\n]{0,160}|Attention Required! \| Cloudflare|overloaded_error|rate_limit_error",
     re.IGNORECASE)
 API_REASON = "API error"            # a red reason's start when the retries ran out (`api_only`)
+# 144: "You've hit your Fable limit · resets 11am (America/Los_Angeles)" (aicomplete 297, whose
+# 2/10/30 retries all fell inside the limit).
+USAGE = re.compile(r"hit your (?P<model>\w+) limit.*?resets\s+(?:(?P<mon>[A-Za-z]{3})[a-z]*\s+(?P<day>\d{1,2}),?\s+"
+                   r"(?:at\s+)?)?(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm)\s*(?:\((?P<tz>[^)]+)\))?",
+                   re.IGNORECASE)
+USAGE_SLACK = timedelta(minutes=3)  # resume this long after the reset
+MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
 TAIL_BYTES = 16384
 RETRY_FLOOR = timedelta(minutes=30)
 
@@ -72,6 +80,55 @@ def api_error(log: Path, stderr: Path | None, result: dict | None) -> str | None
         if m := API_ERROR.search(text):
             return " ".join(m.group(0).split())[:200]
     return None
+
+
+def usage_limit(err: str | None, at: datetime | None = None) -> tuple[str, datetime | None] | None:
+    """A usage-limit error → (the limited model, lowercased; its reset, the next such time
+    after `at`, or None when unreadable); None for any other error. The zone it names is
+    used when Python has it, else the box's own."""
+    m = USAGE.search(err or "")
+    if not m:
+        return None
+    at = at or now()
+    tz = at.tzinfo
+    if m["tz"]:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(m["tz"].strip())
+        except Exception:               # no tzdata on Windows: the box's zone
+            tz = at.tzinfo
+    base = at.astimezone(tz)
+    hour = int(m["h"]) % 12 + (12 if m["ap"].lower() == "pm" else 0)
+    try:
+        reset = base.replace(hour=hour, minute=int(m["m"] or 0), second=0, microsecond=0)
+        if m["mon"]:
+            reset = reset.replace(month=MONTHS.index(m["mon"][:3].lower()) + 1, day=int(m["day"]))
+            if reset < base - timedelta(days=1):
+                reset = reset.replace(year=reset.year + 1)
+        elif reset <= base:
+            reset += timedelta(days=1)
+    except ValueError:
+        return m["model"].lower(), None
+    return m["model"].lower(), reset.astimezone(at.tzinfo)
+
+
+RETRY_MODEL = re.compile(r"^(\S+)(?:\s+model\s*[:=]?\s*(\S+))?$", re.IGNORECASE)
+
+
+def retry_parts(value: str) -> tuple[str, str | None]:
+    """`retry:`'s value → (item ref, model name or None): `<item>` or `<item> model: opus` (144)."""
+    m = RETRY_MODEL.match(value.strip())
+    if not m:
+        raise ValueError("retry: expects one item, optionally `model: <name>`")
+    name = m[2].lower() if m[2] else None
+    if name is not None and name not in models.MODELS:
+        raise ValueError(f"retry: model {m[2]!r} is not one of {', '.join(models.MODELS)}")
+    return m[1], name
+
+
+def other_models(limited: str | None) -> list[str]:
+    """The models a `retry: … model:` could move to: every one but the limited."""
+    return [n for n in models.MODELS if n != (limited or "")] or list(models.MODELS)
 
 
 def own_cost(rec: dict, result: dict | None) -> float | None:
@@ -145,10 +202,31 @@ class ApiMixin:
         if not err:
             return False
         waits, n = self.cfg.api_retry_minutes, rec.get("api_tries", 0)
+        limit = usage_limit(err)
+        hint = (f"; `retry: {rec['item']} model: {other_models(limit[0])[0]}` resumes it on another model"
+                if limit else "")
         if n >= len(waits) or rec.get("template") == "watch" or not run.md_path.exists():
             rec["api_exhausted"] = f"{API_REASON} ({err}); " + (
-                f"{n} retr{'y' if n == 1 else 'ies'} spent" if n else "not retried")
+                f"{n} retr{'y' if n == 1 else 'ies'} spent" if n else "not retried") + hint
             return False
+        if limit and limit[1] and rec.get("usage_waited") != stamp(limit[1]):
+            # 144: a usage limit with a reset time: one wait for the reset, not three short tries
+            # inside it; a reset past the deadline is red at once, naming it and the way round.
+            reset = limit[1]
+            if reset + USAGE_SLACK > parse_stamp(rec["deadline"]):
+                rec["api_exhausted"] = (f"{API_REASON} ({err}); the limit resets at {clock(reset)}, past its "
+                                        f"deadline {clock(rec['deadline'])}{hint}")
+                return False
+            at = reset + USAGE_SLACK
+            rec.update(usage_waited=stamp(reset),
+                       api_wait={"try": n, "at": stamp(at), "since": stamp(), "error": err, "usage": True})
+            self._save(run)
+            self.log.append("api_retry", item=rec["item"], state="waiting", attempt=n, of=len(waits),
+                            at=stamp(at), error=err, session_id=rec["session_id"], usage_limit=limit[0],
+                            reset=stamp(reset),
+                            note=f"the {limit[0].title()} usage limit stopped it ({err}); its session resumes at "
+                                 f"{clock(at)}, after the reset, its clock paused")
+            return True
         wait = waits[n]
         from .nightshift import night
         if n == len(waits) - 1 and night(self.cfg):   # 143: 297 spent all three in 40 min at 3am
@@ -194,7 +272,11 @@ class ApiMixin:
         what = (f"`retry:` by {by} resumes this item, which ended red at {clock(since)}"
                 f" ({'; '.join(rec.get('retry_reasons') or [])})" if by
                 else f"the Claude API dropped this session at {clock(since)} ({wait.get('error')})")
-        tries = "" if by else f" (try {n} of {len(cfg.api_retry_minutes)})"
+        if by and len(rec.get("models") or []) > 1:
+            what += f", now on {models.describe(models.name_of(rec['model']))}"
+        elif wait.get("usage"):
+            what = f"the Claude usage limit stopped this session at {clock(since)} ({wait.get('error')}); it has reset"
+        tries = "" if by or wait.get("usage") else f" (try {n} of {len(cfg.api_retry_minutes)})"
         text = RESUMED.format(what=what, now=clock(now()), tries=tries, deadline=clock(deadline),
                               report=paths.report.resolve())
         amends = [m for m in talk.take(cfg.control, item.id, "resume") if talk.is_amend(m)]
@@ -227,13 +309,18 @@ class ApiMixin:
         signal = [rec.pop("retry_signal")] if rec.get("retry_signal") else []
         self.log.append("api_retry", item=item.id, paths=[cfg.rel(prompt), *signal], state="retry" if by else "resumed",
                         attempt=n, pid=run.popen.pid, session_id=rec["session_id"], deadline=rec["deadline"],
-                        **({"by": by} if by else {}),
-                        note=(f"resumed by `retry:` ({by})" if by else f"its session resumed, try {n}")
+                        **({"by": by} if by else {}), **({"model": rec["model"]} if rec.get("model") else {}),
+                        note=(f"resumed by `retry:` ({by})" if by else
+                              "its session resumed after the usage limit reset" if wait.get("usage") else
+                              f"its session resumed, try {n}")
+                             + (f" on {models.describe(models.name_of(rec['model']))}"
+                                if by and len(rec.get("models") or []) > 1 else "")
                              + f"; deadline now {clock(deadline)}")
 
     # ---------------------------------------------------------------- retry: <item>
-    def _retry(self, ref: str, rel: str) -> None:
-        """`retry: <item>`: resume a finished red item's kept session in its kept worktree."""
+    def _retry(self, ref: str, model: str | None, rel: str) -> None:
+        """`retry: <item>`: resume a finished red item's kept session in its kept worktree;
+        `model: <name>` resumes it on that model instead of the one it recorded (144)."""
         from .daemon import Run
         item_id, view = self._finished_item("retry", ref)
         repo, name = item_id.split("/", 1)
@@ -258,6 +345,11 @@ class ApiMixin:
         for key in ("outcome", "api_wait", "api_exhausted", "resolve"):
             rec.pop(key, None)
         rec.update(phase="exec", api_tries=0)
+        rec.pop("usage_waited", None)
+        if model and models.MODELS[model] != rec.get("model"):
+            # 144: aicomplete 297 hit Fable's usage limit; a retry on the recorded model fails the same way.
+            rec["models"] = [*(rec.get("models") or [rec.get("model")]), models.MODELS[model]]
+            rec["model"] = models.MODELS[model]
         rdir = self.cfg.path("running", repo)
         rdir.mkdir(parents=True, exist_ok=True)
         run = Run(rec, rdir / rec_path.name, rdir / md.name)

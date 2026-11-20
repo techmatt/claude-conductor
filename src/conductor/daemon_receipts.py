@@ -123,8 +123,10 @@ class ReceiptsMixin:
                 request = next((e for e in got if e.kind == "request"), None)
                 tells = [e for e in got if e.kind == "tell"]
                 model = next((e for e in got if e.kind == "model"), None)
+                parks = [e for e in got if e.kind == "parked_edit"]
                 result = (f"committed {commit.detail.get('sha', '')[:8]}" if commit else
                           model_result(model) if model else
+                          "; ".join(map(self._parked_result, parks)) if parks else
                           "nothing to commit: every target is identical to HEAD (was the edited copy sent? "
                           "resend it from a fresh workspace path)"
                           if request and request.detail.get("identical") else
@@ -309,7 +311,17 @@ class ReceiptsMixin:
             n, rules = parked.counts(self.cfg.control, p.stem)
             tagged = f" ({rules} `[rules]`)" if rules else ""
             self._write_receipt(rel, evs, result=f"{n} parked edit(s) waiting for {p.stem}{tagged}: "
-                                                 f"{self._parked_carrier(p.stem)}")
+                                                 f"{self._parked_carrier(p.stem)}; waiting: "
+                                                 f"{parked.listing(parked.waiting(self.cfg.control, p.stem))}")
+
+    def _parked_result(self, ev: Event) -> str:
+        """A `park:` line's receipt (144): what changed, then every line that waits after."""
+        d = ev.detail
+        did = {"add": f"parked `{d.get('line')}`", "remove": f"removed `{d.get('was')}`",
+               "replace": f"replaced `{d.get('was')}` with `{d.get('line')}`"}.get(d.get("op"), d.get("op"))
+        waits = [parked.Edit(t, t.lower().startswith(parked.TAG)) for t in d.get("waiting") or []]
+        return (f"{did}; {len(waits)} parked edit(s) now wait for {ev.repo}: {parked.listing(waits)}; "
+                f"{self._parked_carrier(ev.repo)}")
 
     def process_memory_edits(self) -> None:
         """Each `memory-edits/<stamp>.md` the planner's `memory_note` wrote: applied to the repo's

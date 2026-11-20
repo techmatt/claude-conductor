@@ -585,7 +585,8 @@ class Project:
                                  alongside=rec.get("alongside"), beside=rec.get("beside") or [],
                                  resumed=resume_label(rec))
                     if wait := rec.get("api_wait"):     # daemon_api: stopped by the API, not stalled
-                        a.phase, a.progress = "waiting on API", f"try {wait.get('try')} at {clock(wait['at'])}: {wait.get('error')}"
+                        when = "limit reset" if wait.get("usage") else f"try {wait.get('try')}"
+                        a.phase, a.progress = "waiting on API", f"{when} at {clock(wait['at'])}: {wait.get('error')}"
                     elif a.phase == "running" and (p := self.log.last("progress", item=a.item)):
                         a.progress = f"{progress_line(p)} · {clock(p.ts)}"
                         if drift := eta_drift(self.log, a.item):

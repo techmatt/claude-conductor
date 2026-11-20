@@ -15,6 +15,7 @@ from pathlib import Path
 from . import git
 from .config import Config
 from .events import EventLog
+from .models import MODELS
 from .util import clock, read_text, write_text
 
 CONFIG_ENV = "CLAUDE_CONFIG_DIR"          # where Claude Code keeps `projects/<folder>/<session>.jsonl`
@@ -94,9 +95,12 @@ def prepare(cfg: Config, log: EventLog, rec: dict) -> str | None:
     rec["resume_session"] = sid
     # A fork keeps its source session's model, as a stage does (models.py); a source from
     # before 135 recorded none, and the fork passes none either.
+    # 144: `model: <name>` on the item overrides it (a source stopped by its model's usage limit).
     start = log.last("start", item=orig)
     rec["model"] = (fin.detail.get("model") or run.get("model")
                     or (start.detail.get("model") if start else None))
+    if (name := rec.get("model_override")) in MODELS:
+        rec["model"] = MODELS[name]
     rec["resume_cost"] = fin.detail.get("cost_usd") or 0     # the fork's result counts it: `own_cost`
     on_main = not run.get("worktree") and not run.get("readonly")     # `worktrees = false`: it committed to main
     if fin.detail.get("merged"):

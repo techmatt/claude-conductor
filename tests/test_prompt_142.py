@@ -127,7 +127,8 @@ def test_a_parked_receipt_names_the_item_that_carries_it_never_a_template(env):
     p.write_text("- README: say hello\n", encoding="utf-8")
     env.tick_until(lambda: (env.control / "receipts" / "parked" / "code.md").is_file())
     result = split_front_matter(read_text(env.control / "receipts" / "parked" / "code.md"))[0]["result"]
-    assert result == "1 parked edit(s) waiting for code: code/003_work carries them at its launch"
+    assert result == ("1 parked edit(s) waiting for code: code/003_work carries them at its launch; "
+                      "waiting: P1. README: say hello")      # 144: every park receipt lists what waits
     env.release()
 
 

@@ -105,8 +105,9 @@ TOOLS = [
          "project": P, "lines": {"type": "array", "items": {"type": "string"}}}, "required": ["project", "lines"]}},
     {"name": "edit_state", "description": (
         "Change a tracked control file (state.md, paged.md, habits.md, conductor.toml, …) by request, one of: "
-        "`edits`, old/new pairs checked against the file now, `old` whole lines or a piece of one line found "
-        "once (a miss or several returns the lines near it, nothing written);`sections`, in order, {op: delete | move | replace, section: a ## heading, with or without `## `, to: the "
+        "`edits`, old/new pairs checked against the file now, `old` whole lines or a piece found once (a miss "
+        "or several returns the lines near it, nothing written); a piece's `new` replaces that piece alone, "
+        "the rest of its line kept, so an empty `new` needs `old` to be whole lines; `sections`, in order, {op: delete | move | replace, section: a ## heading, with or without `## `, to: the "
         "file a move appends it to (a new .md is created), body: a replace's text under the heading}: text "
         "moves without retyping it, and a miss names the sections there are; or `content`, the whole file. "
         "Returns the receipt."),
@@ -122,9 +123,14 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {
          "project": P, "question": {"type": "string"}, "text": {"type": "string"}},
          "required": ["project", "question", "text"]}},
-    {"name": "park", "description": "Add a parked edit line for a repo (`[rules]` first for a rules edit). Returns the receipt.",
+    {"name": "park", "description": (
+        "A repo's parked edits: op add (the default: `line`, `[rules]` first for a rules edit) | remove (`match`: "
+        "a piece found in one waiting line) | replace (`match`, and `line` the new line). Returns the receipt, "
+        "listing every line that waits after."),
      "inputSchema": {"type": "object", "properties": {
-         "project": P, "repo": {"type": "string"}, "line": {"type": "string"}}, "required": ["project", "repo", "line"]}},
+         "project": P, "repo": {"type": "string"}, "line": {"type": "string"},
+         "op": {"type": "string", "enum": ["add", "remove", "replace"]}, "match": {"type": "string"}},
+         "required": ["project", "repo"]}},
     {"name": "memory_note", "description": (
         "Change a repo's executor memory note (Claude Code's memory under ~/.claude, which no item may write): "
         "op write (body: the whole note; description: its MEMORY.md line, needed for a new one) | edit (edits: "
@@ -453,6 +459,16 @@ class PlannerServer:
     def park(self, cfg: config_mod.Config, a: dict) -> str:
         repo = self.repo(cfg, a.get("repo") or "")
         line = " ".join((a.get("line") or "").split()).removeprefix("- ")
+        op = (a.get("op") or "add").strip().lower()
+        if op in ("remove", "replace"):        # 144: the daemon changes the file, by a `park:` signal
+            match = " ".join((a.get("match") or "").split())
+            if not match or "=>" in match:
+                raise Refused(f"{op} needs `match`: a piece of one waiting line (without `=>`)")
+            if op == "replace" and not line:
+                raise Refused("replace needs `line`: the new line")
+            return self.signal(cfg, {"lines": [f"park: {repo} {op} {match}" + (f" => {line}" if op == "replace" else "")]})
+        if op != "add":
+            raise Refused(f"op {op!r}: add (the default), remove or replace")
         if not line:
             raise Refused("the parked line is empty")
         path = cfg.path("parked", f"{repo}.md")
@@ -514,6 +530,7 @@ class PlannerServer:
         current = rd._text(cfg.control / rel)
         pairs: dict[str, list[tuple[str, str]]] = {}
         whole: dict[str, str] = {}
+        pieces: list[str] = []          # edits whose `old` was a piece of a line (144)
         if ops:
             if current is None:
                 raise Refused(f"{rel} doesn't exist yet: nothing to take sections from")
@@ -530,6 +547,8 @@ class PlannerServer:
                     raise Refused(f"edit {n} for {rel}: {exc}\nNothing was written. The lines of {rel} nearest "
                                   f"edit {n}'s old text, now:\n{near(text, str(e.get('old') or ''))}") from None
                 pairs[rel].append((old, new))
+                if old != _lines(str(e.get("old") or "")):
+                    pieces.append(str(n))
                 text = text.replace(old, new, 1)
             default = f"{Path(rel).stem}: planner edit"
         else:
@@ -538,7 +557,11 @@ class PlannerServer:
         if all(request.apply_edits(rd._text(cfg.control / t) or "", t, p) == rd._text(cfg.control / t)
                for t, p in pairs.items()) and all(rd._text(cfg.control / t) == text for t, text in whole.items()):
             return f"no change: {', '.join([*pairs, *whole])} already read(s) that way; nothing written"
-        return self.send_request(cfg, pairs, whole, " ".join((a.get("message") or default).split()))
+        said = self.send_request(cfg, pairs, whole, " ".join((a.get("message") or default).split()))
+        if pieces and not said.startswith("REFUSED"):
+            said += (f"\nedit{'s' if len(pieces) > 1 else ''} {', '.join(pieces)}: replaced only the piece "
+                     "given, the rest of its line kept")
+        return said
 
     def section_ops(self, cfg: config_mod.Config, rel: str, text: str, ops: list, tracked: set[str]):
         """`sections` of `edit_state`, in order: {op: delete | move | replace, section: a `## `
@@ -675,7 +698,10 @@ def widen(text: str, old: str, new: str) -> tuple[str, str]:
     """An `edit_state` (old, new) as whole lines of `text`, as the request's edit blocks take
     them: `old` as given when its lines occur once, else a substring that occurs once, widened
     to the lines around it (143: state.md lines run to 2 KB, and a few words cost the line
-    typed twice). Refused when it occurs no time or several."""
+    typed twice). Refused when it occurs no time or several. A piece is replaced alone, the
+    rest of its line kept (144: fractals' empty `new` on a line's start left the line's tail
+    behind, accepted): so an empty `new` for a piece short of whole lines is refused,
+    showing the line(s) to send whole instead."""
     o, n = _lines(old), _lines(new)
     raw, new = old.replace("\r\n", "\n"), new.replace("\r\n", "\n")
     if not raw.strip():
@@ -689,7 +715,12 @@ def widen(text: str, old: str, new: str) -> tuple[str, str]:
     i = text.index(raw)
     start, end = text.rfind("\n", 0, i) + 1, text.find("\n", i + len(raw))
     end = len(text) if end < 0 else end + 1
-    return text[start:end], text[start:i] + new + text[i + len(raw):end]
+    whole, rest = text[start:end], text[start:i] + text[i + len(raw):end]
+    if not new.strip() and rest.strip():
+        raise Refused(f"an empty `new` replaces only its piece, which would leave {rest.strip()[:80]!r} of the "
+                      "line behind; to drop the line, send it whole as `old` (it is, now): "
+                      f"{whole.rstrip(chr(10))}")
+    return whole, text[start:i] + new + text[i + len(raw):end]
 
 
 def _lines(text: str) -> str:

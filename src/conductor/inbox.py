@@ -470,6 +470,10 @@ def describe(ev: Event) -> str:
             text = f"{ev.kind}: {d.get('note', 'conductor.toml reloaded')}"
         case "memory_note":
             text = f"{who} executor memory note `{d.get('note')}`: {d.get('result')} ({d.get('via', 'the bridge')})"
+        case "parked_edit":
+            did = {"add": f"parked `{d.get('line')}`", "remove": f"removed parked `{d.get('was')}`",
+                   "replace": f"replaced parked `{d.get('was')}` with `{d.get('line')}`"}.get(d.get("op"), d.get("op"))
+            text = f"{who} {did} ({len(d.get('waiting') or [])} now wait)"
         case "memory_refused":
             text = f"memory note refused: {d.get('reason')}"
         case "planner_write":
@@ -794,7 +798,8 @@ def render(cfg: Config, log: EventLog, view: View, heading: str | None = None, r
                     [f"beside {', '.join(rec['beside'])}"] if rec.get("beside") else []):
                 text += f" ({', '.join(tags)})"
             if wait := rec.get("api_wait"):
-                text += f" — **waiting on the API** ({wait.get('error')}): try {wait.get('try')} at {clock(wait['at'])}"
+                when = "the usage limit's reset" if wait.get("usage") else f"try {wait.get('try')}"
+                text += f" — **waiting on the API** ({wait.get('error')}): {when} at {clock(wait['at'])}"
             elif rec.get("phase", "exec") == "exec":
                 text += now_progress(log, item_id)
             running.append(text)

@@ -53,7 +53,7 @@ def test_a_landing_item_keeps_them(env):
 
 def test_the_full_preamble_says_ask_holds_the_session(env):
     text = render(env)
-    assert "holds this session, so start background work\nfirst" in text
+    assert "holds this session: start background work\nfirst" in text
     assert "changed two things at once" in text
 
 

@@ -3,9 +3,8 @@
 `conductor mcp` (`src/conductor/planner_mcp.py`, reads in `planner_read.py`) is a stdio MCP
 server named `conductor` that a claude.ai planner chat linked to this machine calls through
 the Claude desktop app (as `mcp__remote-devices__conductor__<tool>`). It replaces the file
-bridge's stage / commit / later receipt stage with typed calls that return their result
-(136 trial, 138 surface, 140 the gaps closed). The bridge still works (`planner-bridge.md`),
-but is the exception: images, or a planner note saying why.
+bridge's stage / commit / receipt round with typed calls that return their result (136,
+138, 140). The bridge (`planner-bridge.md`) is the exception: images, or a note saying why.
 
 ## The rule for every write
 
@@ -16,8 +15,8 @@ signal, request, queue or proposed item, amendment, answer file, parked line, ba
 (and `WARNING: …`), `pending (<write>): <what holds it>` or `REFUSED: <reason>` (ending with
 the accepted form), then up to four event lines. A rewritable file (queue, proposed, parked,
 backlog) waits for a receipt whose `written_ms` is at least the write's. No receipt in time:
-it says so and names `read(what="receipt")` for later. The server is one more writer of the
-planner's files; the daemon only tells its writes apart (*Attribution*).
+it says so and names `read(what="receipt")` for later. The daemon tells its writes apart
+(*Attribution*).
 
 ## Attribution
 
@@ -48,7 +47,7 @@ counts both per session (`stats.md`).
 | `signal(project, lines)` | `signals/planner-<stamp>-<n>.signal` (`actions.write_signal`) | the receipt |
 | `edit_state(project, file, edits? \| sections? \| content?, message?)` | `requests/<YYYYMMDD-HHMM>-mcp<SS><n>/` | the receipt (`committed <sha>`) |
 | `answer(project, question, text)` | `questions/<id>.answer.md` | the receipt |
-| `park(project, repo, line)` | a `- ` line appended to `parked/<repo>.md` | the receipt |
+| `park(project, repo, line?, op?, match?)` | add: a line appended to `parked/<repo>.md`; remove / replace: a `park:` signal (144) | the receipt, with what waits |
 | `memory_note(project, repo, note, op, body?, description?, edits?)` | `memory-edits/<stamp>-<n>.md`, applied by the daemon (`memory-notes.md`) | the receipt |
 | `note(kind, …)` | below | the receipt, or what was written |
 
@@ -65,7 +64,8 @@ workers without `remote: true`.
 before they are tracked. `edits` (old/new) are first applied to the file on disk: `old`
 as whole lines when those occur once, else any piece of the text that occurs once, widened
 to the lines around it (`widen`, 143: state.md lines run to 2 KB, and a few words cost the
-line typed twice); none or several writes nothing and returns the error plus the
+line typed twice). A piece's `new` replaces it alone (the receipt says so); an empty one
+for less than whole lines is refused, showing the line (144: fractals' left a line's tail). None or several writes nothing and returns the error plus the
 file's lines around the best match for the missed edit's first old line (`near`, numbered),
 so a retry needs no read. The request carries edit blocks (applied by the daemon against
 the live copy); text holding a conflict marker, or `content`, goes as a whole file written

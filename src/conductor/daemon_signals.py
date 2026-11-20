@@ -13,7 +13,7 @@ from pathlib import Path
 
 from typing import TYPE_CHECKING
 
-from . import audits, desktop, executor, items, models, nightshift, picks, procs, state, talk
+from . import audits, daemon_api, desktop, executor, items, models, nightshift, parked, picks, procs, state, talk
 from .daemon_push import CONTROL
 from . import review as review_mod
 from . import session as session_mod
@@ -42,7 +42,7 @@ FORMS = {
     "read": "`read: <event id>`, `read: latest` or `read: all`",
     "clear": "`clear: <repo>`",
     "land": f"`land: {ITEM}` (a finished red item)",
-    "retry": f"`retry: {ITEM}` (a finished red item)",
+    "retry": f"`retry: {ITEM}` or `retry: {ITEM} model: opus|fable` (a finished red item)",
     "approve": "`approve: <NNN>` (a file in proposed/)",
     "cancel": f"`cancel: {ITEM}` (a queued or proposed item)",
     "reorder": "`reorder: <repo|proposed> <item> <item> ...`",
@@ -71,6 +71,7 @@ FORMS = {
     "ack": "`ack: invalid` or `ack: invalid #<event> ...`",
     "pause": "`pause: <repo>`",
     "resume": "`resume: <repo>`",
+    "park": "`park: <repo> <line>`, `park: <repo> remove <piece>` or `park: <repo> replace <piece> => <new line>`",
 }
 
 
@@ -228,7 +229,8 @@ class SignalsMixin:
             key = key.strip().lower()
             # A message is free text: a ` # ` in it is part of it, not a comment.
             # So is `ack:`'s, whose `#<event>` ids would otherwise read as one.
-            value = value.strip() if key in ("tell", "checkpoint", "session", "notify", "ack") else _strip_comment(value)
+            value = (value.strip() if key in ("tell", "checkpoint", "session", "notify", "ack", "park")
+                     else _strip_comment(value))
             if not sep or not key:
                 raise ValueError(f"line {n}: expected `key: value`, got {s!r}; use `<key>: <value>`, one per line")
             self._line_key = key
@@ -240,7 +242,14 @@ class SignalsMixin:
             elif key in ("clear", "push", "pause", "resume"):
                 if value not in self.cfg.repos and not (key == "push" and value == "control"):
                     raise ValueError(f"line {n}: {key}: {value!r} is not a repo")
-            elif key in ("approve", "cancel", "outline", "review", "session_opened", "audit", "land", "retry"):
+            elif key in ("retry", "park"):
+                try:
+                    repo = (daemon_api.retry_parts if key == "retry" else parked.signal_parts)(value)[0]
+                except ValueError as exc:
+                    raise ValueError(f"line {n}: {exc}, got {value!r}") from None
+                if key == "park" and repo not in self.cfg.repos:
+                    raise ValueError(f"line {n}: park: {repo!r} is not a repo")
+            elif key in ("approve", "cancel", "outline", "review", "session_opened", "audit", "land"):
                 if not value or len(value.split()) != 1:
                     raise ValueError(f"line {n}: {key}: expects one item, got {value!r}")
             elif key == "reviewed":
@@ -340,7 +349,9 @@ class SignalsMixin:
         elif key == "land":
             self._land(value, rel)                      # daemon_merge
         elif key == "retry":
-            self._retry(value, rel)                     # daemon_api
+            self._retry(*daemon_api.retry_parts(value), rel)
+        elif key == "park":
+            self._park(*parked.signal_parts(value), rel)
         elif key == "audit":
             self._audit(value, rel)
         elif key == "audit_used":
@@ -394,6 +405,16 @@ class SignalsMixin:
             was = models.set_model(value, self._by or "unknown")
             self.log.append("model", paths=[rel], model=value, model_id=models.MODELS[value], was=was,
                             by=self._by or "unknown")
+
+    def _park(self, repo: str, op: str, piece: str, new: str | None, rel: str) -> None:
+        """`park:` (144): add a line, or remove / replace the one waiting line holding `piece`;
+        its `parked_edit` event lists what waits after."""
+        try:
+            was, line, after = parked.apply(self.cfg.control, repo, op, piece, new)
+        except parked.Unmatched as exc:
+            raise ValueError(f"park: {exc}") from None
+        self.log.append("parked_edit", repo=repo, paths=[rel], op=op, was=was, line=line,
+                        waiting=[e.text for e in after], by=self._by or "unknown")
 
     def _one(self, found: list[Path], verb: str, ref: str, where: str) -> Path:
         if not found:

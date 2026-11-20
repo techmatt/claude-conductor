@@ -104,6 +104,99 @@ def take(control: Path, item: Item, event_hint: str = "") -> list[Edit]:
     return taken
 
 
+class Unmatched(ValueError):
+    """A remove or replace whose piece names no waiting line, or several."""
+
+
+OPS = ("remove", "replace")
+
+
+def signal_parts(value: str) -> tuple[str, str, str, str | None]:
+    """A `park:` signal's value → (repo, op, piece or line, new line): op `add`, `remove` or
+    `replace` (144). ValueError for a malformed one."""
+    repo, _, rest = value.strip().partition(" ")
+    rest = rest.strip()
+    op, _, tail = rest.partition(" ")
+    if op.lower() not in OPS:
+        if not rest:
+            raise ValueError("park: expects a repo and a line")
+        return repo, "add", rest, None
+    tail = tail.strip()
+    if op.lower() == "remove":
+        if not tail:
+            raise ValueError("park: remove expects a piece of a waiting line")
+        return repo, "remove", tail, None
+    piece, sep, new = tail.partition("=>")
+    if not sep or not piece.strip() or not new.strip():
+        raise ValueError("park: replace expects `<piece> => <new line>`")
+    return repo, "replace", piece.strip(), new.strip()
+
+
+def apply(control: Path, repo: str, op: str, piece: str, new: str | None) -> tuple[str | None, str | None, list[Edit]]:
+    """One `park:` line: (the line as it was, the line now, what waits after). Unmatched
+    for a remove or replace whose piece isn't in exactly one waiting line."""
+    if op != "add":
+        was, after = change(control, repo, piece, new)
+        return was, new, after
+    line = " ".join(piece.split()).removeprefix("- ")
+    p = path(control, repo)
+    try:
+        old = read_text(p)
+    except (OSError, UnicodeDecodeError):
+        old = ""
+    retry_io(write_text, p, old + ("" if not old or old.endswith("\n") else "\n") + f"- {line}\n")
+    return None, line, waiting(control, repo)
+
+
+def change(control: Path, repo: str, piece: str, new: str | None = None) -> tuple[str, list[Edit]]:
+    """Remove (`new` None) or replace the one waiting line that holds `piece` (144: aicomplete's
+    7-10 rounds line, superseded by a ruling, would have reverted it had it ridden). Returns
+    (the line as it was, what waits after). A piece in none or several lines is refused,
+    naming them; one already handed out names its item, since only a message reaches it now."""
+    piece = " ".join(piece.split()).removeprefix("- ")
+    if not piece:
+        raise Unmatched("the piece is empty: give a few words found in one waiting line")
+    p = path(control, repo)
+    try:
+        lines = read_text(p).splitlines()
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    hits = [n for n, ln in enumerate(lines) if (e := _parse(ln)) and piece.lower() in " ".join(e.text.split()).lower()]
+    if len(hits) != 1:
+        waiting_now = [e.text for e in waiting(control, repo)]
+        if hits:
+            raise Unmatched(f"{len(hits)} waiting lines hold {piece!r}: give a longer piece; they are: "
+                            + " | ".join(lines[n][2:].strip()[:120] for n in hits))
+        gone = [ln for ln in _done_lines(control, repo) if piece.lower() in " ".join(ln.split()).lower()]
+        raise Unmatched(f"no waiting line holds {piece!r}" + (
+            f"; it was already handed out ({gone[-1][2:].strip()[:200]}): tell that item, or park its undo"
+            if gone else "") + "; waiting: " + (" | ".join(t[:120] for t in waiting_now) or "none"))
+    n = hits[0]
+    was = lines[n][2:].strip()
+    if new is None:
+        del lines[n]
+    else:
+        new = " ".join(new.split()).removeprefix("- ")
+        if not new:
+            raise Unmatched("the replacement line is empty: remove the line instead")
+        lines[n] = f"- {new}"
+    retry_io(write_text, p, "\n".join(lines).rstrip("\n") + ("\n" if any(ln.strip() for ln in lines) else ""))
+    return was, waiting(control, repo)
+
+
+def _done_lines(control: Path, repo: str) -> list[str]:
+    try:
+        return [ln for ln in read_text(path(control, repo, done=True)).splitlines() if ln.startswith("- ")]
+    except (OSError, UnicodeDecodeError):
+        return []
+
+
+def listing(edits: list[Edit], width: int = 160) -> str:
+    """What waits, for a receipt: `P1. … | P2. …`, each cut at `width`."""
+    return " | ".join(f"P{n}. {e.text if len(e.text) <= width else e.text[:width - 1] + '…'}"
+                      for n, e in enumerate(edits, 1)) or "none"
+
+
 def put_back(control: Path, repo: str, texts: list[str]) -> None:
     """Edits an item skipped, left unanswered or lost to a red go back, ahead of the rest."""
     if not texts:

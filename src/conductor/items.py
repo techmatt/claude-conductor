@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import globs
 from .audits import TEMPLATES, canonical
+from .models import MODELS
 from .picks import NAME_RE as PICK_NAME_RE
 from .util import FrontMatterError, read_text, split_front_matter
 
@@ -15,7 +16,7 @@ NAME_RE = re.compile(r"^(\d{3,}|W\d+)_([A-Za-z0-9][A-Za-z0-9_.-]*)$")
 WATCH_RE = re.compile(r"^W(\d+)_")     # a watch's own series (`W12_watch`): never a queue number
 FIELDS = {"repo", "locks", "depends_on", "after_red", "needs_planner", "readonly", "max_hours",
           "paths", "stage", "ultracode", "audit", "template", "alongside", "resume", "rules", "needs_pick",
-          "remote", "external_data"}
+          "remote", "external_data", "model"}
 GIST_CHARS = 160
 
 
@@ -42,6 +43,7 @@ class Item:
     alongside: str | None = None                        # what it touches: may start beside running items
     resume_of: str | None = None                        # `resume:` the finished item whose session it forks
     needs_pick: str | None = None                       # a picker's name: waits for its choices, then carries them
+    model: str | None = None                            # a resume item's model (`opus`), not its source's (144)
     body: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -55,7 +57,7 @@ class Item:
                 "max_hours": self.max_hours, "paths": self.paths, "stage": self.stage,
                 "ultracode": self.ultracode, "audit": self.audit, "template": self.template,
                 "alongside": self.alongside, "resume_of": self.resume_of, "rules": self.rules,
-                "needs_pick": self.needs_pick, "external_data": self.external_data}
+                "needs_pick": self.needs_pick, "external_data": self.external_data, "model_override": self.model}
 
     def gist(self) -> str:
         """One line on what the item does, for the items started beside it: its `alongside`
@@ -149,6 +151,15 @@ def parse(path: Path, repo: str) -> Item:
             item.errors.append(f"`needs_pick`: {value!r} must be a picker's name")
         else:
             item.needs_pick = value
+    if meta.get("model") is not None:
+        value = str(meta["model"]).strip().lower()
+        if meta.get("resume") is None:
+            item.errors.append("`model` is for a resume item only (a new session takes the machine-wide "
+                               "`model:` signal)")
+        elif value not in MODELS:
+            item.errors.append(f"`model` must be one of {', '.join(MODELS)}")
+        else:
+            item.model = value
     if meta.get("resume") is not None:
         _resume(item, meta)
     elif item.template in RESUME_TEMPLATES:

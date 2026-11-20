@@ -22,6 +22,8 @@
     FAKE error                               emit an is_error result
     FAKE api-error <n>                       the session's first <n> runs exit 1 on a Cloudflare 403,
                                              as aicomplete 211 did (counted from its transcript)
+    FAKE usage-limit <model> <reset>         every run on <model> (`fable`) exits 1 on its usage limit,
+                                             `resets <reset>`, as aicomplete 297 did
     FAKE cost <usd>                          add to the session's `total_cost_usd`, which counts every
                                              prompt in its transcript, a fork's original's included
     FAKE ask <json arguments>                call the ask tool through --mcp-config;
@@ -123,6 +125,16 @@ if API_FAILS and sum(1 for p in told if p.startswith("Conductor: the Claude API 
     emit({"type": "assistant", "message": {"content": [{"type": "text", "text": line}]}, "session_id": session})
     result(line, is_error=True)
     print(line, file=sys.stderr)
+    sys.exit(1)
+
+
+LIMITED = [ln.split(" ", 3) for ln in told_lines if ln.startswith("FAKE usage-limit ")]
+if LIMITED and "--model" in args and args[args.index("--model") + 1].startswith(f"claude-{LIMITED[-1][2]}-"):
+    # What Claude Code printed at Fable's usage limit (aicomplete 297): every run on that model fails.
+    line = (f"You've hit your {LIMITED[-1][2].title()} limit · resets {LIMITED[-1][3]}. Switch to another "
+            "model, or manage usage credits at https://claude.ai/settings/usage, to continue.")
+    emit({"type": "result", "subtype": "success", "is_error": True, "session_id": session, "result": line,
+          "api_error_status": 429, "api_error_type": "rate_limit_error", "total_cost_usd": COST})
     sys.exit(1)
 
 

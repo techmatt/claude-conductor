@@ -2,7 +2,7 @@
 
 The verbs: read, clear, land, retry, approve, cancel, reorder, review, reviewed, session_opened, tell,
 outline, audit, audit_used, checkpoint, session, run, tool, pick, retire, open, notify, stop, restart, watch, push, autopilot, ack,
-pause, resume, model.
+pause, resume, model, park.
 
 Every change to the queue that is not a new item goes through `signals/`, so the daemon
 carries it out between launches and logs it. The planner (or the app) writes a small
@@ -47,7 +47,7 @@ model: fable                 # opus | fable: every project's next new session (e
 One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
 What became of each file is its receipt, `receipts/signals/<name>.md` (`receipts.md`).
 Items are named `NNN_name` or `NNN` (numerically: `7` is `007`). A ` # comment` after a
-value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` (its `#<event>`).
+value is ignored, except in `tell`, `checkpoint`, `session`, `notify`, `park` and `ack` (its `#<event>`).
 
 - **approve** — the `proposed/` file must parse as a valid item whose `repo:` is
   configured, and `<repo>/NNN_name` must not already be queued, running, staged or done.
@@ -73,14 +73,12 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   item, when a renumbered queue item would come before an item of its own queue it
   depends on (it would hold forever), or while an earlier reorder is unfinished. A
   renumbered staged item loses its stage first. A renamed queue item is a new id, so
-  it is enqueued again; amendments already taken (`amended`) move with it, and amend
-  files still waiting beside it (`old.amend.x.md`) are renamed with it (`new.amend.x.md`).
-  An amend file written later under an old name waits with a warning for an item that
-  never comes. Renames go through temp names (`NNN_name.reorder~<new name>`,
-  not `*.md`), journalled in `.conductor/reorder.json`. A rename that fails (a file
-  held open) leaves the journal: a `warning` is logged, every tick rolls it forward
-  until it completes (`reorder` logged with `note`), and that queue launches nothing
-  meanwhile. A restart finishes an interrupted reorder the same way.
+  it is enqueued again; amendments taken (`amended`) and amend files waiting beside it
+  move with it; one written later under an old name waits, with a warning, for nothing.
+  Renames go through temp names (`NNN_name.reorder~<new name>`), journalled in
+  `.conductor/reorder.json`. A failed rename (a file held open) leaves the journal: a
+  `warning`, then every tick rolls it forward until it completes (`reorder` with `note`),
+  that queue launching nothing meanwhile; a restart finishes it the same way.
 - **reviewed** — `reviewed: <repo>/<NNN_name>` (or `NNN_name`, `NNN`; a name without a
   repo is looked up across every repo, and one found in two is ambiguous: refused), or a
   comma list of them (128: `reviewed: 182, 183, wordwarriors/184`), each checked as one
@@ -97,10 +95,9 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   scan (and its first, at start) logs `report_changed` and the item is unreviewed again
   until the next `reviewed:`, which is then accepted (`inbox.md`, *Reviewed reports
   that change*). A report reviewed before hashes were kept is never checked.
-- **session_opened** — `session_opened: <item>` (one finished item, resolved as for
-  `reviewed:`), written by the app's **Terminal** and `conductor open` beside the console
-  they open, logs `session_opened` (`session_id`, `by`), so a later `report_changed`
-  can name it.
+- **session_opened** — `session_opened: <item>` (resolved as for `reviewed:`), written by
+  the app's **Terminal** and `conductor open`, logs `session_opened` (`session_id`, `by`)
+  for a later `report_changed` to name.
 - **review** — `review: all` or `review: <ref>` (one token; the ref resolves as for
   `reviewed:`, so `code/2` works) rewrites `review.md` whole: the unreviewed reports
   (or that one finished item's, reviewed or not) inlined, plus conductor's own past
@@ -109,8 +106,8 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   a non-repo prefix is refused (`review: code/003_x has not finished; only a finished
   item's report can be reviewed`, `review: no finished item '009'`); a multi-word
   value fails the syntax check.
-- **tell** — `tell: <item> <message>`: see `progress.md` (refused while the item is in setup).
-  It never answers a question the item is waiting on (`questions.md`).
+- **tell** — `tell: <item> <message>`: `progress.md` (refused in setup). It never answers
+  a question the item waits on (`questions.md`).
 - **pause** / **resume** — `pause: <repo>`, `resume: <repo>` (a no-op when already so, 129):
   `night-shift.md`, *Pause*.
 - **outline** — `outline: <item>`: a tell of the fixed outline request; see `progress.md`,
@@ -120,7 +117,9 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify` and `ack` 
   `worktrees.md`, *Landing a kept branch*.
 - **retry** — `retry: <item>` (a finished red item, resolved as for `reviewed`): its session
   resumes in its kept worktree and the item finishes, merges and reports as usual; a non-red
-  finish clears its red's hold. `api-retry.md`, *`retry:`*.
+  finish clears its red's hold; `retry: <item> model: opus` moves it to that model (144).
+- **park** — `park: <repo> <line>` adds a parked edit; `… remove <piece>` / `… replace
+  <piece> => <new line>` changes the one waiting line holding the piece (144, `parked.md`).
 - **audit** — `audit: <item>` on a running item (resolved as for `tell`): conductor's own
   *Audit notes* text (`templates/audit.md`, the one `audit: true` gives at launch, with the
   item's notes path) sent as a tell marked `audit: true`; its run record gains `audit`, so

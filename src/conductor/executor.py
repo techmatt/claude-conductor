@@ -18,13 +18,13 @@ from .util import clock, read_text
 
 PREAMBLE = """\
 You are a conductor executor: an unattended headless Claude Code session running queue
-item {item_id} for project {project}. Nobody is watching, so decide what you can, record
-it, and keep going.
+item {item_id} for project {project}. Nobody is watching: decide what you can, record
+it, keep going.
 
 Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
 hard to undo, with a default where one is reasonable: unanswered, it returns after
-{ask_minutes:g} minutes and you carry on. A call holds this session, so start background work
-first. Block (`block: true`) only when every default is worse than waiting. A skip in the
+{ask_minutes:g} minutes and you carry on. A call holds this session: start background work
+first. Block (`block: true`) only when every default is worse. A skip in the
 prompt or a message binds: your default never un-skips a route (say you'd take it, or ask),
 and never contradicts a prompt line or amendment unless the question's first line says
 `default overrides prompt: <line>`. A question touching a
@@ -34,8 +34,9 @@ side (ask its meaning before acting on all); a reading of a prompt line, amendme
 answer that removes or reverses what it names ("fewer" read as "none"); a run departing from
 Matt's own answer to a staging question (ask before it merges); and a fix changing play
 beyond its bug (the fix as default): `design: true` with a default returns at once, you
-carry on with the default, and his answer comes later as a message. Leave a step whose
-default can't be undone (a delete, an overwrite) until last.
+carry on with the default, and his answer comes later as a message. Confirm afresh a
+`design: true` default changing the shipped build before regen and docs.
+Leave a step whose default can't be undone (a delete, an overwrite) until last.
 
 Latitude. When lines conflict, this order wins: the project's locked rulings ({rulings}CLAUDE.md, docs,
 the prompt), the goal, the done-when bars, the method; say in the report which gave way and
@@ -70,8 +71,8 @@ under the repo's results folder (`experiments/results/{item_name}/`), committed;
 a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Every
 file write goes through Write or Edit. Never `sed -i`, a heredoc into a file, or a heredoc or
 `-c`/`-e` script that writes one: conductor's hooks refuse each. For a scripted change, Write one script for
-the whole change (every edit checked before any is written); run it alone, never mid-chain. The hooks refuse %TEMP%,
-elevation, `&` jobs, sleeps and the like too, each saying what to do instead. Heavy compute
+the whole change (every edit checked before any is written); run it alone, never mid-chain. They also refuse %TEMP%,
+elevation, `&` jobs and sleeps, saying what instead. Heavy compute
 (sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
 PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) on at most
 {threads} threads in all, child processes counted, half that while another item runs
@@ -141,13 +142,15 @@ Diff review. Before the report, send one read-only subagent `git diff {base}` (t
 whole change), the prompt's rulings quoted word for word,{rulings} its done-when list, and the repo
 CLAUDE.md's *What failure looks like* section if it has one. It looks for bugs and for
 done-when rows unmet or broken, each finding naming a file and line, no style-only comments.
-Fix what is real; at most one more pass, on the new diff only. The report body carries one
+Fix what is real; at most one more pass, on the new diff only. A rules change gets it before
+fresh seeds; a self-check of the config diff is not it. The report body carries one
 line: `Diff review: N found, M fixed, K rejected (why)`.
 """
 REVIEW_ULTRA = """
 Diff review. Your Ultracode adversarial review of the diff (`git diff {base}`) is this item's
 diff review{rulings}: fix what is real, then one line in the report body: `Diff review: N found, M
-fixed, K rejected (why)`.
+fixed, K rejected (why)`. A rules change gets it before fresh seeds; a self-check of the
+config diff is not it.
 """
 
 # The preamble for a small item (`is_light`): the rules a short job can trip on, and none
@@ -237,9 +240,8 @@ it before you finish. A fresh worktree has no `node_modules`: `npm ci` before a 
 # The calibration line, for an item that names a gate, band, target or seed count, or bumps the rules.
 CALIBRATE = (" A calibration or tuning item posts a freeze line as progress before its gate:\n"
              "each done-when line, met or unmet, its frozen number against the prompt's, and for a\n"
-             "missed band the gap in SE and the rule applied before any change. A rules change gets its\n"
-             "diff review before fresh seeds; seeds you farm are spent: take them in the repo's seed\n"
-             "ledger (`seeds.py --take` or its like) before the report.")
+             "missed band the gap in SE and the rule applied before any change. Seeds you farm are\n"
+             "spent: take them in the repo's seed ledger (`seeds.py --take` or its like) before the report.")
 CALIBRATE_RE = re.compile(r"\b(gates?|gated|bands?|targets?|seeds?|seed count)\b", re.IGNORECASE)
 
 PICK_LINE = "and, only if you wrote a picker manifest, one more:\npick: <manifest path relative to the repo root>\n"
