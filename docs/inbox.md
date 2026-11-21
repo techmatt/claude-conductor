@@ -121,8 +121,9 @@ First **Questions**: every open ask, regardless of the read
 mark, a `design` one marked held for Matt; one whose item finished last, marked "item finished: an answer
 records a ruling" (83). **Staging questions: open rulings**, standing the same way,
 each with its default: a staged item's until an amendment answers them, then one that launched on
-its defaults until an amendment after launch answers them or its report is reviewed, each
-marked when main moved under it (`questions.md`; also in `review.md`). **Warnings**: each unreviewed report's
+its defaults until an amendment after launch answers them or its report is reviewed (one
+line, unquoted, once it finished: 145), each marked when main moved under it (`questions.md`;
+also in `review.md`, which quotes a finished item's in its report's section). **Warnings**: each unreviewed report's
 `warnings:` line by kind, then per-kind repeats in its repo's last five reports
 (`warnings.md`). Then **Unreviewed reports**: every finished item without a `reviewed` event,
 oldest first, with its status (a red one's reasons after it), finish time, finish event id, report path and `carry:`

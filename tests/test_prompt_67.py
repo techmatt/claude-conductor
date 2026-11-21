@@ -125,7 +125,7 @@ def test_unanswered_staging_questions_launch_with_defaults_and_stay_open_rulings
     env.tick_until(lambda: "on its defaults, finished, report unreviewed" in inbox_md())
     from conductor import review, state
     text = review.render(env.d.cfg, state.scan(env.d.cfg, env.d.log), "r", log=env.d.log).text
-    assert "## Staging questions: open rulings" in text and "**default**: yes" in text
+    assert "## Staging questions: open rulings" not in text and "**default**: yes" in text   # 145: in its section
 
 
 def test_wait_for_stops_on_a_failure_line_and_a_dead_worker(env, tmp_path):

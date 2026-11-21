@@ -63,7 +63,7 @@ An `open:` path (absolute or control-relative) lies in the control folder, a rep
 
 ## While items run
 
-- **Questions**: answer once (**answer Q**); after its default it is `late` (if it matters: a new item). *Default overrides prompt* ones first. A *design* one is Matt's, relayed, open past its default till he rules. *Staging questions: open rulings* are raised like open questions; **amend** answers them (then listed answered by #N). One marked "a premise … may be stale": check main before raising it.
+- **Questions**: answer once (**answer Q**); past its default it is `late` (if it matters, a new item). *Default overrides prompt* ones first. A *design* one: relay to Matt, open till he rules. *Staging questions: open rulings* are raised alike; **amend** answers them (*answered by #N*); a finished item's sit in its `review.md` section till **reviewed**. One "a premise … may be stale": check main.
 - **Progress**: `status` shows the latest line and outline. **tell** and **outline** land after the lead's next tool call; longer or not started: **amend**.
 - **Pause**: when Matt needs the box, **pause R** (never a tell asking it to wait); it holds until **resume R**.
 - **Reds**, raised at once with what broke: `memory_critical`; `daemon_died` (its items are red `interrupted`); `run_failed`; `checkout_dirty` (name the files to Matt).

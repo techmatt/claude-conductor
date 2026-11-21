@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import inbox, picks, session
+from . import inbox, picks, questions, session
 from .config import Config
 from .events import Event, EventLog
 from .executor import RunPaths
@@ -33,7 +33,7 @@ def _inline(path: Path) -> list[str]:
         return [f"- the report file could not be read: {exc!r}"]
 
 
-def _item_section(cfg: Config, view: View, ev: Event) -> list[str]:
+def _item_section(cfg: Config, view: View, ev: Event, log: EventLog | None = None) -> list[str]:
     repo, name = ev.item.split("/", 1)
     paths = RunPaths.for_name(cfg, repo, name)
     reviewed = f" · reviewed #{r.id}" if (r := view.reviews.get(ev.item)) and view.reviewed(ev.item) else ""
@@ -49,17 +49,23 @@ def _item_section(cfg: Config, view: View, ev: Event) -> list[str]:
     for label, p in (("amendments", paths.amend), ("audit notes", paths.audit), ("setup log", paths.setup)):
         if p.is_file():
             out.append(f"- {label}: `{cfg.rel(p)}`")
+    if log and (launched := inbox.launch_defaults(log, ev.item)) and not view.reviewed(ev.item):
+        st, qs = launched                   # 145: here, beside the report, not as open rulings
+        out.append(f"- launched {clock(st.ts)} on the defaults of {len(qs)} staging question{'s' * (len(qs) != 1)} "
+                   "(reviewing this report settles them; a ruling against one is a follow-up):")
+        out += questions.default_lines(qs)
     return out + _inline(paths.report)
 
 
 def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: Path | None = None,
            log: EventLog | None = None) -> Bundle:
     """The bundle for `review: all` (`item_id` None) or `review: <item>` (one finished item).
-    With `log`, staging questions still open as rulings follow the warnings (120)."""
+    With `log`, staging questions still open as rulings follow the warnings (120); a finished
+    item's launch defaults go in its own section instead (145)."""
     root = root or session.CONDUCTOR_ROOT
     finishes = [view.finishes[item_id]] if item_id else view.unreviewed()
     what = item_id or "all"
-    rulings = inbox.staged_questions(log, view) if log else []
+    rulings = inbox.staged_questions(log, view, {ev.item for ev in finishes}) if log else []
     out = [f"# Review — {cfg.project}", "",
            f"Written for `{rel}` at {clock(now())}: `review: {what}`. Nothing is marked reviewed: "
            "`reviewed:` comes only from processing a report read in full, as process X / process all does.",
@@ -70,7 +76,7 @@ def render(cfg: Config, view: View, rel: str, item_id: str | None = None, root: 
            *(inbox.unreviewed_lines(view, finishes, picks.saved_at(cfg, view), cfg) or ["- none"])]
     bundle = Bundle("", items=[ev.item for ev in finishes])
     for ev in finishes:
-        out += _item_section(cfg, view, ev)
+        out += _item_section(cfg, view, ev, log)
     if not item_id:
         out += ["", "## Conductor reports"]
         if (past := session.reports_past_marker(root)) is None:

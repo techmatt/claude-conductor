@@ -118,6 +118,7 @@ def test_an_api_red_queues_no_retro_and_leaves_a_stub_report(env, monkeypatch):
 
 def test_retries_spent_leave_a_stub_report_from_the_daemon(env):
     env.d.cfg.api_retry_minutes = [0.0]
+    env.d.cfg.api_retry_night_minutes = 0.0         # run in the night shift's hours, it waited 90 min (145)
     env.queue("001_down", "FAKE commit a.txt one\nFAKE api-error 5")
     env.tick_until(lambda: env.finished("code/001_down"))
     fin = env.finished("code/001_down")

@@ -499,12 +499,23 @@ def saved_line(c: dict) -> str:
 STALE = "a premise (a file it calls missing) may be stale, check main"     # 142
 
 
-def staged_questions(log: EventLog, view: View) -> list[str]:
+def launch_defaults(log: EventLog, item_id: str) -> tuple[Event, list[str]] | None:
+    """`item_id`'s last `start` and the staging questions it launched on the defaults of, when
+    no amendment has answered them since (142); None otherwise."""
+    if (st := log.last("start", item=item_id)) and (qs := st.detail.get("stage_defaults")):
+        if not ((amend := log.last("amended", item=item_id)) and amend.id > st.id):
+            return st, list(qs)
+    return None
+
+
+def staged_questions(log: EventLog, view: View, inlined: set[str] = frozenset()) -> list[str]:
     """Staging questions as open rulings, each with its default (`questions.plan_questions`):
     an item staged and not launched yet, then one that launched on its defaults (its `start`
-    carries `stage_defaults`), shown while it runs and until its report is reviewed (120:
-    helium 011's and aicomplete 234's shipped on defaults unseen). A staged one with an
-    amendment on file since it staged shows as answered, unquoted (118)."""
+    carries `stage_defaults`), quoted while it runs, then one line once it has finished
+    until its report is reviewed (120: helium 011's and aicomplete 234's shipped on defaults
+    unseen; 145: aicomplete 305's six re-quoted beside its report). A finished one in
+    `inlined` (a review bundle carrying its report) is left to its report's section. A
+    staged one with an amendment on file since it staged shows as answered, unquoted (118)."""
     out = []
     for item_id, rec in view.staged.items():
         ev = log.last("staged", item=item_id) if rec.get("phase") == "staged" else None
@@ -520,12 +531,19 @@ def staged_questions(log: EventLog, view: View) -> list[str]:
             out += questions.default_lines(ev.detail["questions"])
     for item_id in dict.fromkeys([*view.running, *(f.item for f in view.unreviewed())]):
         if (st := log.last("start", item=item_id)) and (qs := st.detail.get("stage_defaults")):
-            state = "running" if item_id in view.running else "finished, report unreviewed"
+            running = item_id in view.running
+            state = "running" if running else "finished, report unreviewed"
             if (amend := log.last("amended", item=item_id)) and amend.id > st.id:    # 142: 292's six
                 ids = [e.id for e in log.query(since_id=st.id, item=item_id, kinds=["amended"])]
                 out.append(f"- `{item_id}` launched {clock(st.ts)} on its defaults, {state}: its "
                            f"{_count(len(qs), 'question')} answered by amendment "
                            f"{', '.join(f'#{i}' for i in ids)} ({clock(amend.ts)})")
+                continue
+            if not running:                     # 145: its report says what it took; review settles them
+                if item_id not in inlined:
+                    out.append(f"- `{item_id}` launched {clock(st.ts)} on its defaults, {state}: its "
+                               f"{_count(len(qs), 'question')} settle when its report is reviewed "
+                               f"(`review: {item_id}` quotes them; a ruling against one is a follow-up)")
                 continue
             landed = st.detail.get("landed") or 0
             moved = f"; {landed} commit(s) landed between staging and launch: {STALE}" if landed else ""

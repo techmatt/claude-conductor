@@ -115,9 +115,11 @@ quoted (118: 237's were relayed to Matt as open after the answer was sent).
 one costing 20 min a ladder run): a staged item launching with no amendment since it staged
 gets *Staging questions unanswered: defaults stand* in its resume message, listing each with
 its default, and its `start` event carries them (`stage_defaults`). The digests keep them
-under the same heading, "launched on its defaults", while it runs (answer: an amendment,
-delivered as a message) and after it finishes until its report is reviewed (a ruling for a
-follow-up). An amendment after the launch answers them too (142: aicomplete 292's six were
+under the same heading, "launched on its defaults", quoted while it runs (answer: an
+amendment, delivered as a message). Once it finishes (145: aicomplete 305's six re-quoted
+beside its report), the digests give one line, "its N questions settle when its report is
+reviewed", and `review.md` quotes them in that item's own section, not under the heading;
+`reviewed:` drops them (a ruling against one is a follow-up). An amendment after the launch answers them too (142: aicomplete 292's six were
 listed as open after two amendments ruled on them): the entry becomes one line, "its N
 questions answered by amendment #a, #b".
 

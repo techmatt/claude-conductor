@@ -33,6 +33,7 @@ def test_an_api_failure_resumes_the_same_session_and_finishes_done(env):
 
 def test_retries_spent_is_a_red_naming_the_api_and_queues_no_self_audit(env):
     env.d.cfg.api_retry_minutes = [0.0]
+    env.d.cfg.api_retry_night_minutes = 0.0         # else 143's night wait: 90 min after ~10pm (145)
     env.queue("001_down", "FAKE api-error 5")
     env.tick_until(lambda: env.finished("code/001_down"))
     fin = env.finished("code/001_down")
