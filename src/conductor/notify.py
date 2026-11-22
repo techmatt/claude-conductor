@@ -60,7 +60,7 @@ def _name(item: str | None, repo: str | None, short: bool) -> str:
 def note(kind: str, item: str | None, repo: str | None, detail: dict, ev_id: int = 0,
          short: bool = False) -> Note | None:
     """The toast an event raises, or None: panel only (report warnings, questions with a
-    default, progress, ETA overruns, load and memory warnings, retros queued, parked edits,
+    default unless `design`, progress, ETA overruns, load and memory warnings, retros queued, parked edits,
     watch reports, an empty queue, conductor's own maintenance)."""
     who = _name(item, repo, short)
 
@@ -82,6 +82,10 @@ def note(kind: str, item: str | None, repo: str | None, detail: dict, ev_id: int
         case "ask" if detail.get("block") or detail.get("default") in (None, ""):
             # Held for Matt with no default; a question with a default goes on without him.
             return Note(ev_id, "question", item, repo, f"question from {who}", str(detail.get("text", ""))[:BODY_CHARS])
+        case "ask" if detail.get("design"):
+            # 146: the item goes on with its default, so the answer is worth having before review.
+            return Note(ev_id, "question", item, repo, f"design question from {who} (on its default)",
+                        str(detail.get("text", ""))[:BODY_CHARS])
         case "pick_open" if detail.get("by") not in ("app", "cli"):     # Matt opened it himself
             what = detail.get("name") or detail.get("manifest") or "a picker"
             return Note(ev_id, "picker", item, repo, f"picker `{what}` is open", str(detail.get("url") or ""))

@@ -22,16 +22,18 @@ Chosen by conductor, never by front-matter:
   `template`, `resume`, `audit` or an explicit `max_hours`, and nothing that could produce
   candidates (`PICK_RE`: a short art round needs the picker schema). *Asking* (with the
   two design asks a small item meets), *Progress* (start and long jobs), *Bounds* (skips,
-  scratch, compute, a clause on the hooks, the leftover line), *Latitude* (the conflict
+  scratch, compute, the leftover line), *Latitude* (the conflict
   order, bars, the fix-loop cap, fix the obvious), messages, `CALLS_LIGHT`, where it works,
   a port line where the repo serves, the time limit and the report header. No outline,
-  ETAs, pickers, servers or diff review.
-- **Full** (`PREAMBLE`, ~885 words before its optional blocks) for everything else:
-  *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
+  ETAs, pickers, servers or diff review. Its second line is the file-write rule (Write/Edit
+  only, the forms the hooks refuse).
+- **Full** (`PREAMBLE`, ~900 words before its optional blocks) for everything else:
+  *Files* first (146: Write/Edit or one checked script file run alone; never a heredoc,
+  `sed -i` or a writing `-c`/`-e`; the hooks refuse each), *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
   bars, the fix-loop cap, the wrong-repo guard as the only hard stop, fix the obvious, the
   leftover check), *Measurement* (paired and fresh seeds, a quiet box, ratios beside
   others, re-read quoted numbers), *Progress* (with `outline` and `eta`), *The box*
-  (scratch, results, keeps, a clause on the hooks, load, helpers), *Messages*, then the
+  (scratch, results, keeps, the other refused forms, load, helpers), *Messages*, then the
   optional blocks, where it works, the time limit, the **report-path line** (word for
   word: `tests/fake_claude.py` and the restart preamble find the path by it), the header,
   the status definitions and the report rules.
@@ -50,8 +52,9 @@ Chosen by conductor, never by front-matter:
   ledger. (Its "diff review before fresh seeds" moved into *Diff review* in 144.)
 - *Pickers* (`PICK`) and the header's `pick:` line when the body could produce
   candidates (`executor.PICK_RE`; schema: `picks.md`).
-- *Audit notes* (`templates/audit.md`) for `audit` items and note-keeping templates, with
-  `AUDIT_FIX` for a writable `audit: true` item.
+- *Audit notes* (`templates/audit.md`) for `audit` items, note-keeping templates and (146)
+  every readonly item but a watch, in the light preamble too, with `AUDIT_FIX` for a writable
+  `audit: true` item (`audits.writes_notes`).
 - **Diff review** (`REVIEW`, 123) for a writable full item that isn't a template: before
   the report, one read-only subagent gets `git diff <base>` (the worktree's base, or the
   main checkout's head at launch: `run["repo_head"]`), the prompt's rulings word for word,
@@ -76,7 +79,11 @@ Template texts follow the preamble unchanged; a template item but a watch always
 full one, as do `audit` items and resume items (with *Resumed*). A **readonly** item in a
 worktree, light or full, gets the readonly line in place of the worktree's commit and merge
 paragraph and no leftover step; not a watch, the line adds that nothing merges, so ledger
-entries and anything the prompt says to commit go in `carry:`.
+entries and anything the prompt says to commit go in `carry:`. Since 146 (helium-hustle 045)
+a readonly item's working papers go in `out/keep/<item>/`, named in its report, not the
+committed results folder (full: `PAPERS_READONLY` in *The box*; light: `READONLY_LIGHT` on
+the readonly line), and it skips the repo's warning checks, reporting `warnings: as on main`
+(read as `none`) unless it ran a check its read depends on (`RUN_CHECKS_READONLY`).
 
 ## Filled in at launch
 

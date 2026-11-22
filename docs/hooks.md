@@ -28,7 +28,7 @@ and not enforced.
 
 | Rule | Origin | Lives |
 |---|---|---|
-| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried); 133 (aicomplete 267, 270 each lost a call) | hook; since 128 a sentence in full and a clause in light naming each refused form; since 133 a plain "Never …: the hooks refuse each", and "Write a script, then run it" in both; since 142 (aicomplete 292: 20 edit scripts, one failing unseen mid background chain) "one script for the whole change (every edit checked before any is written); run it alone, never mid-chain" in full, "run it alone" in light |
+| Edit with Write/Edit, never `sed -i`, a heredoc to a file or a file-writing `-c` string | 72, 82 (wordwarriors 174, aicomplete 074, fractals 025, website 003); 128 (helium-hustle 029, wordwarriors 181 still tried); 133 (aicomplete 267, 270 each lost a call) | hook; since 128 a sentence in full and a clause in light naming each refused form; since 133 a plain "Never …: the hooks refuse each", and "Write a script, then run it" in both; since 142 (aicomplete 292: 20 edit scripts, one failing unseen mid background chain) "one script for the whole change (every edit checked before any is written); run it alone, never mid-chain" in full, "run it alone" in light; since 146 (helium-hustle 031-037: five of seven still lost calls) up front, a *Files* paragraph straight after the full preamble's first lines and the light's first line |
 | No `%TEMP%`, `$TMP`, `/tmp`, `mktemp` or temp-file APIs | 61 | hook; a clause in both |
 | Never `isolation: worktree` (it lands in the main checkout) | — (aicomplete 040) | hook only |
 | Helpers never `git checkout`/`restore`/`switch`/`stash`/`clean -f`/`reset --hard` | 86 (aicomplete 144), 122 | hook only |
@@ -69,7 +69,7 @@ and not enforced.
 | Calibration freeze line, SE gap, seeds taken | 74, 86, 117 (aicomplete 223, 234) | *Calibrate* block |
 | Servers on `CONDUCTOR_PORT`, detached, stopped; `npm ci` first | 74, 84 (aicomplete 135-138) | *Servers* block; light a port line |
 | Scratch in `out/<item>/`; the rest of `out/` is not fresh | 61, 116 (fractals 008, 010) | both |
-| Working papers under the results folder, committed | 73 (aicomplete 079) | full |
+| Working papers under the results folder, committed; readonly: in `out/keep/<item>/`, named in the report | 73 (aicomplete 079), 146 (helium-hustle 045: "committed" beside "commit nothing") | full (`PAPERS` / `PAPERS_READONLY`); light readonly the readonly line |
 | Reusable reads in `out/keep/`, named in the report | 110, 117 | full |
 | Scripts in files (read-only one-liners pass the hook) | 72 | full (a clause) |
 | Heavy compute below normal priority, at most `{threads}` threads in all, children counted, half beside others (143: one budget; "leave 4 free" read as a second) | 72, 73, 143 | full; light `nice` and threads |
@@ -89,10 +89,11 @@ and not enforced.
 | **Diff review** before the report: one read-only subagent, the diff, rulings, done-when, *What failure looks like*; one more pass at most; a `Diff review:` line; a rules change gets it before fresh seeds, a config self-check is not it (144, from *Calibrate*: aicomplete 300) | 123, 144 | full, writable, not template; Ultracode's adversarial review counts |
 | Report header, statuses (`done` / `partial` / `red`, a soft-band miss is `done`), the report-path line | 74, 109, 114, 117 | both word for word |
 | `warnings:` from the repo's *Warning checks*; `unchanged from main`; never changes status | 109, 113, 121 | full; light the header line |
+| Readonly items skip the warning checks: `warnings: as on main` unless they ran a check their read depends on (read as `none`) | 146 (helium-hustle 045: a 100 s wasm build measuring nothing it touched) | full (`RUN_CHECKS_READONLY`); light the readonly line |
 | `partial:` when partial: each unmet bar and why, `matt: ` on one only his call is left on, naming its question or `## For Matt` choice (all such: no retro; conductor checks the naming, 132) | 131, 132 (aicomplete 264) | full only (light at its word cap) |
 | Report: what changes for the planner first, ~60 lines, answer every message, flag a two-change comparison, tests only for an unfixed red | 74 | full; light answers by number |
 | Pickers: manifest schema, `pick:` line, never delete a round | 79, 121 | *Pickers* block |
-| Audit notes under fixed headings | 75 | *Audit notes* block (`templates/audit.md`) |
+| Audit notes under fixed headings | 75; 146 every readonly item but a watch (helium-hustle 045) | *Audit notes* block (`templates/audit.md`), in light too for a readonly item |
 
 ### Dropped in 123
 

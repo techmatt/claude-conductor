@@ -15,7 +15,8 @@ warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 ```
 
 A header line beside `slow:` and `friction:` (`reports.md`), read the same way: only
-straight after the first three lines, absent is no problem, `none` is none. The kind is
+straight after the first three lines, absent is no problem, `none` is none, and so is a
+readonly item's `as on main` (146: it skips the checks, `preambles.md`). The kind is
 one word (`design`, `data`, `perf`, `docs`, `security`, or anything a project defines);
 a part without `<kind>:` counts as `other` (`warns.warning_parts`). Every preamble (full,
 light and watch) asks for it: the executor runs its repo's checks and reports what

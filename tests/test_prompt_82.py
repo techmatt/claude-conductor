@@ -11,7 +11,7 @@ from test_prompt_80 import held, load_tells, samples
 
 def test_both_preambles_carry_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "Every file write goes through Write or Edit" in full
+    assert "Write every file with Write or Edit" in full
     assert "A load message is information: finish the unit in flight, start the next one smaller" in full
     assert "a `timeout` sized to its estimate with margin" in full
     light = " ".join(render(env, SHORT).split())

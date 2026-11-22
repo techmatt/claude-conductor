@@ -67,13 +67,13 @@ def test_toasts_within_a_minute_become_one():
 
 def test_only_what_matt_acts_on_toasts():
     quiet = [("finish", {"status": "done", "template": "watch"}), ("ask", {"default": "items", "text": "?"}),
-             ("ask", {"default": "x", "design": True}), ("memory", {"level": "pressure"}), ("queue_empty", {}),
+             ("memory", {"level": "pressure"}), ("queue_empty", {}),
              ("load_high", {}), ("retro", {"of": "x"}), ("progress", {"note": "n"}), ("watch_flag", {"flag": "eta"}),
              ("warning", {"note": "n"}), ("pick_open", {"by": "app"}), ("daemon_stop", {"reason": "signal"})]
     for kind, d in quiet:
         assert notify.note(kind, "code/1_x", "code", d) is None, kind
     loud = [("finish", {"status": "done"}), ("finish", {"status": "red", "template": "watch"}),
-            ("ask", {"block": True}), ("pick_open", {"by": "planner", "name": "art"}), ("tamper", {}),
+            ("ask", {"block": True}), ("ask", {"default": "x", "design": True}), ("pick_open", {"by": "planner", "name": "art"}), ("tamper", {}),
             ("push_failed", {"target": "code"}), ("request_failed", {"request": "r"}), ("invalid", {}),
             ("run_failed", {"target": "web"}), ("daemon_died", {}), ("memory_critical", {}),
             ("watch_flag", {"flag": "quiet", "text": "no progress 20 min"}), ("daemon_stop", {"reason": "error"}),

@@ -129,6 +129,22 @@ class View:
         return audits.notes(cfg, repo, self.finishes, self.audit_used, self.claimed_notes())
 
 
+UNREVIEWED_SHOWN = 8
+
+
+def unreviewed_line(cfg: Config, view: View) -> str | None:
+    """`unreviewed reports: 2 (045_post_audit_044, 046_x)` for `status`, oldest first, or None
+    (146: a planner answering "review all" from `status` missed conductor's own post-audit).
+    Every finished report counts, whoever queued it (a retro, a post-audit); a watch never waits."""
+    evs = view.unreviewed()
+    if not evs:
+        return None
+    short = len(cfg.repos) == 1
+    names = [ev.item.split("/", 1)[1] if short and "/" in ev.item else ev.item for ev in evs[:UNREVIEWED_SHOWN]]
+    more = f" +{len(evs) - UNREVIEWED_SHOWN} more" if len(evs) > UNREVIEWED_SHOWN else ""
+    return f"unreviewed reports: {len(evs)} ({', '.join(names)}{more})"
+
+
 def read_run(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 

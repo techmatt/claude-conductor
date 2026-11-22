@@ -207,6 +207,8 @@ def project_status(cfg: config_mod.Config) -> str:
         out.append(f"proposed: {', '.join(p.stem for p in proposed) or 'none'}")
         if open_qs := [q.id for q in questions.scan(cfg.control) if q.is_open]:
             out.append(f"questions open: {', '.join(open_qs)}")
+        if line := state.unreviewed_line(cfg, view):
+            out.append(line)
     finally:
         log.close()
     text = "\n".join(out)

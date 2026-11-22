@@ -39,7 +39,7 @@ counts both per session (`stats.md`).
 
 | tool | writes / reads | returns |
 |---|---|---|
-| `status(project?)` | `state.scan`, `daemon.json`, `events.db` | the planner writes since the newest session start (count, the newest 4: *Two chats*); per repo the running item (elapsed, kill time, the newest progress line *with a note*, the outline), staged, queue (six names, why the head waits), red hold; proposed; open questions; ≤1.5 KB. No project: a line each |
+| `status(project?)` | `state.scan`, `daemon.json`, `events.db` | the planner writes since the newest session start (count, the newest 4: *Two chats*); per repo the running item (elapsed, kill time, the newest progress line *with a note*, the outline), staged, queue (six names, why the head waits), red hold; proposed; open questions; `unreviewed reports: N (ids)` (146); ≤1.5 KB. No project: a line each |
 | `start_session(project, label?)` | signal `session: <label>` | `planner.md` whole, `=====`, then `session.md` (paged) once its header names the signal |
 | `read(project?, what, name?, section?, part?)` | see below | the text, ≤8 KB a part (`CAP`), cut at a line, `[part 1 of 3; next: read(…, part=2)]` |
 | `queue_item(project, repo, name, body, meta?, held?)` | `queue/<repo>/NNN_name.md` or `proposed/` | the receipt: `queued as <id>; <start>`, or a rewrite's `rewritten: … (what changed)` |

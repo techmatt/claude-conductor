@@ -35,7 +35,7 @@ def test_a_short_item_gets_the_light_preamble(env):
 
 def test_both_preambles_rule_out_elevation(env):
     # aicomplete 103: samply's UAC prompt sat unseen on the desktop for ~30 minutes. Hooked since 122.
-    assert "Write files with Write/Edit only: hooks\nrefuse heredoc" in render(env, SHORT)
+    assert "Write files with Write/Edit only: hooks refuse heredoc" in render(env, SHORT)
     assert "elevation" in render(env, SHORT * 3)
 
 

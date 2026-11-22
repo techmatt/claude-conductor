@@ -71,8 +71,10 @@ def note_path(cfg: Config, repo: str, name: str) -> Path:
 
 
 def writes_notes(meta: dict) -> bool:
-    """An item (its front-matter or run record) that keeps audit notes."""
-    return bool(meta.get("audit")) or meta.get("template") in NOTE_TEMPLATES
+    """An item (its front-matter or run record) that keeps audit notes: `audit: true`, a
+    note-keeping template, or a readonly item that isn't a watch (146, helium-hustle 045)."""
+    return (bool(meta.get("audit")) or meta.get("template") in NOTE_TEMPLATES
+            or bool(meta.get("readonly")) and meta.get("template") != "watch")
 
 
 @dataclass

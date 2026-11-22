@@ -15,7 +15,7 @@ def warnings_text(detail: dict) -> str | None:
     """A finish's `warnings:` worth showing, or None when `none` or absent. A part saying
     the repo has no *Warning checks* section is dropped: that is fine, not a warning (113)."""
     text = str(detail.get("warnings") or "").strip()
-    if not text or text.lower().rstrip(".") == "none":
+    if not text or text.lower().rstrip(".") in ("none", "as on main"):      # a readonly item's (146)
         return None
     kept = [p.strip() for p in _split_parts(text) if p.strip() and not NO_CHECKS_RE.search(p)]
     return "; ".join(kept) or None

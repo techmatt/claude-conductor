@@ -198,7 +198,7 @@ reorder renames it (its old id is gone; the renamed item gets its own hold). `en
 `conductor events`). `conductor status` prints the daemon (running, **not answering**
 with a stale heartbeat, **died**, or not running) and the same memory and load lines, then per repo: running (pid, branch,
 `readonly` or `resume of <orig>`, port, kill time), merging (with the reason it waits), staging/staged, queued, and the
-*audit pending* line when the repo has unused audit notes.
+*audit pending* line when the repo has unused audit notes; then `unreviewed reports: N (ids)` (146).
 `conductor inbox` prints the same thing without moving the mark.
 
 ## Toasts
@@ -212,7 +212,8 @@ what Matt acts on (115, `notify.note`); everything else is panel only:
   that holds its queue ends `· queue <repo> HELD (clear: <repo>)`; the body is the reasons
   and `picker ready: <ref>` when the report named one. A watch's finish toasts only red.
   `queue_empty` (logged when nothing is queued or running in the repo) no longer toasts.
-- **What waits on Matt**: an `ask` that blocks (`block`) or has no default, and a picker opened by
+- **What waits on Matt**: an `ask` that blocks (`block`) or has no default, a `design: true` ask (146),
+  and a picker opened by
   someone else (`pick_open` not `by: app` / `cli`); a `notify:` signal or a watch's action.
 - **Errors (something stopped)**: a `finish` red (the `red` event itself does not toast),
   `tamper`, `hold`, `checkout_dirty`, `run_failed`, `pick_failed`, `amend_refused`,
@@ -221,7 +222,7 @@ what Matt acts on (115, `notify.note`); everything else is panel only:
 - **A daemon down now**, from the app, not the daemon (139): one toast when a project's
   daemon dies or stops answering for 3 minutes (`memory.md`, *Death made visible*).
 
-Panel only: report `warnings:`, non-blocking questions with a default (`design` ones too), progress
+Panel only: report `warnings:`, non-blocking questions with a default (not `design` ones), progress
 and outlines, ETA overruns, `memory` pressure and `load_high`, retros queued, parked
 edits applied, watch reports, the empty queue, conductor's own maintenance.
 

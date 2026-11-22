@@ -21,6 +21,11 @@ You are a conductor executor: an unattended headless Claude Code session running
 item {item_id} for project {project}. Nobody is watching: decide what you can, record
 it, keep going.
 
+Files. Write every file with Write or Edit; for a scripted change, Write one script file for
+the whole change (every edit checked before any is written) and run it alone, never mid-chain.
+Never a heredoc into a file, `sed -i`, or a `-c`/`-e` script that writes one: conductor's hooks
+refuse each, and the call is lost.
+
 Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
 hard to undo, with a default where one is reasonable: unanswered, it returns after
 {ask_minutes:g} minutes and you carry on. A call holds this session: start background work
@@ -66,13 +71,8 @@ whole time limit. Plan from the clock in the last tool return, never your own es
 Staged, your plan ends with the outline: post it first thing.{calibrate}
 {servers}
 The box. Scratch and run output go in `out/{item_name}/` (git-ignored); anything else in
-`out/` is an earlier item's, never a fresh result. Working papers the prompt asks for go
-under the repo's results folder (`experiments/results/{item_name}/`), committed; read outputs
-a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name. Every
-file write goes through Write or Edit. Never `sed -i`, a heredoc into a file, or a heredoc or
-`-c`/`-e` script that writes one: conductor's hooks refuse each. For a scripted change, Write one script for
-the whole change (every edit checked before any is written); run it alone, never mid-chain. They also refuse %TEMP%,
-elevation, `&` jobs and sleeps, saying what instead. Heavy compute
+`out/` is an earlier item's, never a fresh result. {papers} Conductor's hooks also refuse
+%TEMP%, elevation, `&` jobs and sleeps, saying what instead. Heavy compute
 (sweeps, builds, test runs, fan-out) runs at below-normal priority (Bash `nice -n 10 <cmd>`;
 PowerShell `(Start-Process ... -PassThru).PriorityClass = 'BelowNormal'`) on at most
 {threads} threads in all, child processes counted, half that while another item runs
@@ -108,8 +108,7 @@ and, only when `partial`, one more:
 partial: <each unmet bar and why>[; <another>], `matt: ` leading one only Matt's call is left on
 {pick_line}`slow:` names only a part over ~15 minutes or twice your estimate; `friction:`, one
 or two things (prompt, repo docs or tools, conductor) that cost time or tokens; `warnings:`,
-what the repo's CLAUDE.md *Warning checks*{checks} trip (run them before the report; no such
-section is fine) and any other warning you notice, each led by a kind (`design`, `data`,
+what the repo's CLAUDE.md *Warning checks*{checks} trip ({run_checks}) and any other warning you notice, each led by a kind (`design`, `data`,
 `perf`, `docs`, `security` or the repo's own). A warning as on main, or from a check measuring
 nothing you touched, reads `<kind>: unchanged from main: <text>`. A warning never changes your status.
 `done`: goal met; a soft-band or measurement miss that the done-when table reports is still
@@ -159,6 +158,9 @@ LIGHT = """\
 A conductor executor: headless Claude Code, item {item_id},
 project {project}. Nobody is watching.
 
+Write files with Write/Edit only: hooks refuse heredoc, `-c`/`-e` and `sed -i` writes
+(Write a script, then run it alone), %TEMP% and the like.
+
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
 default (unanswered after {ask_minutes:g} min; it holds the session: background work
 first). Block (`block: true`) only if every default is worse. A ruling splitting a pass
@@ -168,8 +170,7 @@ Progress: a `progress` (mcp__conductor__progress) line at start and on launching
 
 Bounds. A skip in prompt or message binds (a default overriding the prompt starts
 `default overrides prompt: <line>`). Scratch: `out/{item_name}/`. Heavy compute: `nice -n 10`,
-{threads} threads, a full suite only between sims. Write files with Write/Edit only: hooks
-refuse heredoc, `-c`/`-e` and `sed -i` writes (Write a script, then run it alone), %TEMP% and the like.{leftover}
+{threads} threads, a full suite only between sims.{leftover}
 
 Latitude. Conflicts: locked rulings{rulings_light}, goal, done-when bars, method; report what gave way,
 don't ask. Score bars strictly; check a numeric target is reachable before chasing it. Three
@@ -178,7 +179,7 @@ failed fixes for one failure: change approach. Unless readonly, fix small obviou
 MESSAGE #n / AMENDMENT #n hook context: Matt's, outranking the prompt.
 {calls}
 {workdir}{paths}{writes}{port}{now}{beside}
-
+{audit}
 Time limit: {max_hours:g}h; killed at {deadline}, later if blocked. Plan by the last tool
 return's clock.
 
@@ -349,6 +350,21 @@ READONLY_CARRY = (" Nothing merges, so seed-ledger entries and anything the prom
 
 READONLY_TREE = READONLY.lstrip()      # says all a worktree item needs: it never commits or merges
 
+# The full preamble's working papers (*The box*) and warning-checks clause; a readonly item
+# commits nothing and measures nothing it touched, so it gets its own (146, helium-hustle 045).
+PAPERS = ("Working papers the prompt asks for go\nunder the repo's results folder "
+          "(`experiments/results/{item_name}/`), committed; read outputs\na later item could reuse go in "
+          "`out/keep/`, kept at `{kept}` for your report to name.")
+PAPERS_READONLY = ("Working papers the prompt asks for, and read\noutputs a later item could reuse, go in "
+                   "`out/keep/{item_name}/` (nothing you write commits; `out/keep/`\nis kept at `{kept}`), "
+                   "named in your report.")
+RUN_CHECKS = "run them before the report; no such\nsection is fine"
+RUN_CHECKS_READONLY = ("readonly: skip them and write `warnings: as on main`,\nunless you ran a check your "
+                       "read depends on: then what it tripped")
+# The light preamble has no *The box*: a readonly light item gets both in one line.
+READONLY_LIGHT = (" Working papers go in `out/keep/{item_name}/`, named in your report. Skip the warning "
+                  "checks (`warnings: as on main`) unless you ran one your read depends on.")
+
 PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: conductor "
          "checks what the branch changed and marks anything else red, unmerged.{prose}")
 
@@ -510,7 +526,7 @@ def _where(cfg: Config, item: Item, run: dict, light: bool = False, watch: bool 
     readonly line: the commit and merge rules are for work that lands."""
     if not item.readonly:
         return _workdir(cfg, item, run, light)
-    carry = "" if watch else READONLY_CARRY
+    carry = "" if watch else READONLY_CARRY + (READONLY_LIGHT.format(item_name=item.name) if light else "")
     if not run.get("worktree"):
         return _workdir(cfg, item, run, light) + READONLY + carry
     shared = SHARED.format(names=", ".join(f"`{s}`" for s in run["shared"])) if run.get("shared") else ""
@@ -601,7 +617,10 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         only = only[:-1] + ROOTS_TOO + "." if only.endswith(".") else only + ROOTS_TOO
     text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
-        threads=load.run_threads(), kept=kept.where(cfg, item, run).as_posix(),
+        threads=load.run_threads(),
+        papers=(PAPERS_READONLY if item.readonly else PAPERS).format(item_name=item.name,
+                                                                     kept=kept.where(cfg, item, run).as_posix()),
+        run_checks=RUN_CHECKS_READONLY if item.readonly else RUN_CHECKS,
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
         writes=writes,

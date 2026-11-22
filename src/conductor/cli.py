@@ -160,6 +160,8 @@ def cmd_status(args) -> int:
         print(f"\nproposed: {', '.join(p.stem for p in proposed)}")
     if open_qs:
         print(f"\nquestions open: {', '.join(q.id for q in open_qs)}")
+    if line := state.unreviewed_line(cfg, view):
+        print(f"\n{line}")
     if cp := view.checkpoint:
         print(f"\n{describe(cp)}, {clock(cp.ts)}; "
               f"{sum(1 for i in view.finishes if view.settled(i))} earlier item(s) settled and hidden")
