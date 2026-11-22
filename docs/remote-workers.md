@@ -57,9 +57,10 @@ that farmed has `remote: true` on its `start` event, however it got it.
 | `host` | The join URL's host: this PC's name unless set (an IP, when other machines can't resolve the name). |
 | `shard_seeds` (25), `seed_seconds` (0.05), `local_below_seconds` (10) | Shard size, and the size check: a job of `count × seed_seconds` under `local_below_seconds` stays local. |
 | `default` (false) | `true`: an item without `remote:` farms unless readonly or a template (*Off unless…*). Not part of the broker's settings digest: changing it restarts nothing. |
-| `start_cores` (4) | A browser worker's core count when its name is new; a known name keeps its learned plan (103; `remote-cores.md`). Still under the tab's cores and its slider cap. |
-| `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so each project's tabs are told apart. The page's title is the top-level `project`. |
-| `lease_seconds` (sized to the shard), `fresh_seconds` (10), `main_slots` (1) | How long a worker may hold a shard without renewing it (*Leases*); a worker not heard from in this long is gone; shards the main box runs at once, over every open job (`remote-placement.md`). A project whose native command is single-threaded sets `main_slots` to its usual thread budget; a multi-threaded one keeps 1. |
+| `start_cores` (4) | A browser worker's core count when its name is new; a known name keeps its learned plan (103; `remote-cores.md`), under the tab's cores and slider cap. |
+| `accent` (`#7c9cff`) | The worker page's accent colour (`#rgb` or `#rrggbb`), so projects' tabs differ; its title is `project`. |
+| `lease_seconds` (sized to the shard), `fresh_seconds` (10), `main_slots` (1) | How long a worker may hold a shard without renewing it (*Leases*); a worker not heard from in this long is gone; shards the main box runs at once, over every open job (`remote-placement.md`): a single-threaded native command's usual thread budget, else 1. |
+| `header`; `keep_*` | A command printing a job's header (`farm-seeds.md`); retention (`retention.md`). |
 
 ## The executor interface
 
@@ -81,7 +82,7 @@ only committed code: aicomplete 204 ran every read natively and starved the box)
 a lost broker means the main box finishes, said (126; `remote-placement.md`). Each run that exits 0 appends `{item, first, count, args, at}` to
 `.conductor/remote/seeds.jsonl`, which the *Kept reads* rows read (`worktrees.md`).
 
-Its farm tree (`pin`, 130), commit, `--at <commit>` (133), dirty-tree warning, failed shards' output, `--cancel`: `farm-seeds.md`.
+Its farm tree (`pin`, 130), commit, `--at`, `--native-only`, `--shard-seeds`, its job record, failed shards, `--cancel`: `farm-seeds.md`.
 
 A `remote` item that runs the native sim itself (the `native` executable's name, or any
 executable under `out/`, with a seed range or game count: the flags `native` puts before

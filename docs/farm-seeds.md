@@ -9,6 +9,30 @@ the item's prompt paragraph: `remote-workers.md`, *The executor interface*.
 `<out file>`'s folder is made first if missing (118: aicomplete 238 farmed 1,152 games,
 then crashed at its merge because `out/keep/` didn't exist).
 
+## Options for a costly job (147)
+
+Before the first seed, `farm-seeds [--at <commit>] [--native-only] [--shard-seeds N] …`
+(`--shard-seeds=N` too; a bad value prints the usage, exit 2):
+
+- **`--native-only`**: no browser takes the job's shards (`Job.native_only` on the board), and
+  no wasm bundle is built for it: the main box and local-remote workers run them. aicomplete
+  316's browser shards of a 256-line oracle took 60-90+ minutes for 2 games.
+- **`--shard-seeds N`**: shards of N seeds instead of `[remote] shard_seeds`, for a job whose
+  seeds cost minutes each (or seconds: larger shards, fewer handovers).
+
+## Its job record (147)
+
+`jobs/<id>/job.json` is written when the job starts, `state: running` with `key`, `args`,
+`out`, `first`, `count`, `shard_seeds`, `native_only`, `item`; a run that stops without its
+output sets `state: cancelled` or `failed`, and a finished one replaces it with the full
+record (`state: done`, who ran each shard, engines, references). So a stopped job's shards
+(`shards/<first seed>.out`) say what they are. A project's native command may lead only the
+job's first shard with its header (aicomplete's spec line: a reader of the rest misread a
+cell, 316); with `[remote] header` set (a command, `{args}` `{first}` `{count}` filled like
+`native`), its stdout for the job's whole range is written once to `jobs/<id>/header`. The
+shard files themselves stay the native command's bytes: the merged output must equal a local
+run's. Old jobs are pruned (`retention.md`).
+
 ## A failed shard's cause (134)
 
 Each shard's native run writes its output (stdout and stderr) to a file of its own; a failure

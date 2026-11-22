@@ -97,6 +97,7 @@ class Job:
     failed: list[str] = field(default_factory=list)         # workers that failed a shard here: no more of its shards
     tally: dict[str, dict] = field(default_factory=dict)    # worker id -> offered, finished, credited, ms, overtaken, mismatched (124)
     errors: list[dict] = field(default_factory=list)        # workers' failed shards with their output's tail (134)
+    native_only: bool = False    # `farm-seeds --native-only` (147): no browser gets its shards
 
     @property
     def complete(self) -> bool:
@@ -315,8 +316,7 @@ class Board(Views):
                 w.label = str(label)[:80]
             jobs = self._active(now)
             for job in jobs:
-                k = self.keys[job.key]
-                if (w.engine == "wasm" and k.bundle != "ready") or (w.engine == "native" and not job.native):
+                if not self._can_run(w, job):
                     continue
                 state, at = w.gates.get(job.key, ("", 0.0))
                 if state == "pending" and now - at > GATE_SECONDS:
@@ -377,10 +377,16 @@ class Board(Views):
         not draining, paused or in error."""
         if w.kind == "main" or w.cores < 1 or not self._fresh(w, now) or w.gates.get(job.key, ("",))[0] != "pass":
             return False
-        if (w.engine == "wasm" and self.keys[job.key].bundle != "ready") or (w.engine == "native" and not job.native):
+        if not self._can_run(w, job):
             return False
         rep = w.report if now - w.report.get("at", 0) <= self.fresh_seconds else {}
         return rep.get("state") not in ("draining", "paused", "error")
+
+    def _can_run(self, w: Worker, job: Job) -> bool:
+        """A browser needs the job's bundle built and a job not `native_only`; a native worker, its command."""
+        if w.engine == "wasm":
+            return not job.native_only and self.keys[job.key].bundle == "ready"
+        return bool(job.native)
 
     def _share(self, job: Job, wid: str, free: int, jobs: list[Job], now: float) -> int:
         """How many of the job's `free` shards the deal by expected finish gives to `wid`'s
@@ -540,48 +546,6 @@ class Board(Views):
             self._credit(wid, day)
             return True
 
-    def _credit(self, wid: str, day: str) -> None:
-        if self.credit_day != day:
-            self.credit_day, self.credits = day, {}
-        self.credits[wid] = self.credits.get(wid, 0) + 1
-
-    def today(self, wid: str, now: float) -> int:
-        """Shards `wid` won on `now`'s local date (the Workers tab), from `recount` at the
-        broker's start plus each win since: a handover, a new broker, a worker forgotten
-        and back, none of them resets it (126)."""
-        return self.credits.get(wid, 0) if self.credit_day == time.strftime("%Y-%m-%d", time.localtime(now)) else 0
-
-    def recount(self) -> None:
-        """Today's wins from the job records: every kept shard has its `<first>.who.json`
-        (`write_who`) in `jobs/<job>/shards/`, written when it won. Only folders touched
-        today are read. A broker start's first act, so the count is the day's, whatever
-        happened to the board before (aicomplete 250: 36 shown, 71 won)."""
-        now = self.clock()
-        day = time.strftime("%Y-%m-%d", time.localtime(now))
-        lt = time.localtime(now)
-        midnight = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
-        counts: dict[str, int] = {}
-        try:
-            folders = [p / "shards" for p in (self.root / "jobs").iterdir()]
-        except OSError:
-            folders = []
-        for sh in folders:
-            try:
-                if sh.stat().st_mtime < midnight:
-                    continue
-                notes = [p for p in sh.glob("*.who.json") if p.stat().st_mtime >= midnight]
-            except OSError:
-                continue
-            for p in notes:
-                try:
-                    wid = json.loads(p.read_text(encoding="utf-8")).get("worker")
-                except (OSError, ValueError, AttributeError):
-                    continue
-                if isinstance(wid, str) and wid:
-                    counts[wid] = counts.get(wid, 0) + 1
-        with self.lock:
-            self.credit_day, self.credits = day, counts
-
     def _plan_result(self, job: Job, s: Shard, w: Worker, ok: bool, ms: float) -> None:
         """A result, for the core counts (`cores.py`): a browser's own shard is a sample and
         won or lost; the main box's copy landing first is a loss for each browser holding it."""
@@ -623,15 +587,18 @@ class Board(Views):
 
     # ------------------------------------------------------------ the main box
     def add_job(self, key: str, fingerprint: str, args: list[str], ranges: list[tuple[int, int]],
-                cwd: str | None, item: str = "") -> str:
+                cwd: str | None, item: str = "", native_only: bool = False) -> str:
         if not ID_RE.match(key) or not ranges or any(a < 0 or n < 1 for a, n in ranges):
             raise ValueError("bad key or ranges")
         with self.lock:
             k = self.keys.setdefault(key, Key(fingerprint))
             if k.fingerprint != fingerprint:   # the same commit, another answer: trust neither old gate
-                self.keys[key] = Key(fingerprint, k.bundle, k.error, k.wasm)
+                k = self.keys[key] = Key(fingerprint, k.bundle, k.error, k.wasm)
                 for w in self.workers.values():
                     w.gates.pop(key, None)
+            bundles = self.root / "bundles"
+            if k.bundle == "ready" and not selftest.is_test(key) and bundles.is_dir() and not (bundles / key / ".ok").exists():
+                k.bundle, k.since = "none", self.clock()   # pruned since (`retention.py`): built again
             self._n += 1
             now = self.clock()
             jid = f"j{int(now)}-{self._n}"
@@ -640,7 +607,7 @@ class Board(Views):
             self.workers.setdefault("main", Worker("main", "main", label="main box", first_seen=now))
             native = {"cwd": cwd, "argv": self.native_argv} if cwd and self.native_argv else None
             self.jobs[jid] = Job(jid, key, list(args), [Shard(i, a, n) for i, (a, n) in enumerate(ranges)],
-                                 native, now, folder, seen=now, item=str(item)[:80])
+                                 native, now, folder, seen=now, item=str(item)[:80], native_only=native_only)
             return jid
 
     def set_bundle(self, key: str, state: str, error: str = "", wasm: str = "", note: str = "") -> None:
@@ -676,6 +643,8 @@ class Board(Views):
             jobs = self._active(now)
             if self.main_slots and self._main_out(jobs) >= self.main_slots:
                 return {"wait": True}              # every main slot is busy, in this job or another
+            if self._older_first(job, jobs, now):
+                return {"wait": True}              # an older job's free shards take the slot first (147)
             free = [s for s in job.shards if not s.done and not self._leased(job, s, now)]
             if free and not self._share(job, "main", len(free), jobs, now):
                 late = self._overdue(job, now) if rerun else []
@@ -693,6 +662,19 @@ class Board(Views):
             if rerun:
                 self.reruns = [t for t in self.reruns if now - t < 3600] + [now]
             return {"shard": s.id, "first": s.first, "count": s.count, "rerun": rerun}
+
+    def _older_first(self, job: Job, jobs: list[Job], now: float) -> bool:
+        """Main slots go to jobs in the order they were made: a free slot waits for an older open
+        job that still has shards nobody holds and that the deal gives the main box. Spread over
+        every open job, no row of a multi-row farm landed early enough to steer the rest
+        (aicomplete 314: ~2h10m, all rows ending together)."""
+        for older in jobs:
+            if older.id == job.id or older.created > job.created:
+                return False
+            free = [s for s in older.shards if not s.done and not self._leased(older, s, now)]
+            if free and self._share(older, "main", len(free), jobs, now):
+                return True
+        return False
 
     def _overdue(self, job: Job, now: float, tail: bool = False) -> list[Shard]:
         """Shards out only on remote workers that a free main slot should copy, the most

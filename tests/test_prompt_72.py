@@ -61,10 +61,10 @@ def test_a_parked_write_gets_a_receipt(env):
 
 def test_the_preambles_carry_the_new_lines(env):
     full = " ".join(render(env, SHORT * 3).split())
-    assert "Never a heredoc into a file, `sed -i`" in full and "conductor's hooks refuse each" in full and "`nice -n 10 <cmd>`" in full
+    assert "Never a heredoc into another file, `sed -i`" in full and "conductor's hooks refuse each" in full and "`nice -n 10 <cmd>`" in full
     assert "`out/001_a/` (git-ignored)" in full
     assert "reversing a direction the brief or an amendment states, however clear the data" in full
     assert "one row per done-when item" in full
     light = " ".join(render(env, SHORT).split())
-    assert "hooks refuse heredoc, `-c`/`-e` and `sed -i` writes" in light and "`nice -n 10`" in light
+    assert "hooks refuse `-c`/`-e`/`sed -i` writes" in light and "`nice -n 10`" in light
     assert executor.SCRATCH == "out"

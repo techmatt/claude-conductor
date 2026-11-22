@@ -25,7 +25,6 @@ import hmac
 import json
 import os
 import re
-import shutil
 import socket
 import sys
 import threading
@@ -42,7 +41,6 @@ PAGE = Path(__file__).with_name("page")
 MAX_BODY = 256 * 1024 * 1024
 FILE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}$")
 RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM\d|LPT\d)(\..*)?$", re.I)     # Windows device names
-JOB_KEEP_DAYS = 7
 JS = "text/javascript; charset=utf-8"      # a module script of any other type is refused by the browser
 TYPES = {".html": "text/html; charset=utf-8", ".js": JS, ".mjs": JS, ".cjs": JS, ".wasm": "application/wasm",
          ".json": "application/json", ".css": "text/css; charset=utf-8"}
@@ -249,7 +247,8 @@ class Handler(BaseHTTPRequestHandler):
             ranges = [(int(a), int(n)) for a, n in b["ranges"]]
             cwd = b.get("cwd")
             return {"job": board.add_job(str(b["key"]), str(b["fingerprint"]), [str(x) for x in b.get("args", [])],
-                                         ranges, str(cwd) if cwd else None, str(b.get("item", "")))}
+                                         ranges, str(cwd) if cwd else None, str(b.get("item", "")),
+                                         native_only=bool(b.get("native_only")))}
         if op == "bundle":
             board.set_bundle(str(b["key"]), str(b["state"]), str(b.get("error", "")), str(b.get("wasm", "")),
                              str(b.get("note", "")))
@@ -434,10 +433,6 @@ def serve(control: Path, stay: bool = False, after: int | None = None, watch: Co
     if after:
         _wait_gone(after)
     r.state.mkdir(parents=True, exist_ok=True)
-    cutoff = time.time() - JOB_KEEP_DAYS * 86400
-    for old in (r.state / "jobs").glob("j*") if (r.state / "jobs").is_dir() else []:
-        if old.stat().st_mtime < cutoff:
-            shutil.rmtree(old, ignore_errors=True)
     board = Board(r.state, r.lease_seconds, r.fresh_seconds, r.bundle_js, native_argv=r.native,
                   seed_seconds=r.seed_seconds, main_slots=r.main_slots, start_cores=r.start_cores)
     restored = board.restore(r.state / BOARD)

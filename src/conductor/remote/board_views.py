@@ -4,6 +4,8 @@ the app's panel and the inbox's *Now* line. A mixin: `Board` holds the data and 
 
 from __future__ import annotations
 
+import json
+import time
 from typing import TYPE_CHECKING
 
 from . import cores as policy, diag
@@ -194,3 +196,45 @@ class Views:
         return (f"remote workers: {len(live)} connected ({', '.join(f'{n} {k}' for k, n in sorted(kinds.items()))}), "
                 f"{sum(w['cores'] for w in live)} cores"
                 + (f"; {len(failed)} failed the fingerprint gate" + (f" ({why})" if why else "") if failed else ""))
+
+    def _credit(self, wid: str, day: str) -> None:
+        if self.credit_day != day:
+            self.credit_day, self.credits = day, {}
+        self.credits[wid] = self.credits.get(wid, 0) + 1
+
+    def today(self, wid: str, now: float) -> int:
+        """Shards `wid` won on `now`'s local date (the Workers tab), from `recount` at the
+        broker's start plus each win since: a handover, a new broker, a worker forgotten
+        and back, none of them resets it (126)."""
+        return self.credits.get(wid, 0) if self.credit_day == time.strftime("%Y-%m-%d", time.localtime(now)) else 0
+
+    def recount(self) -> None:
+        """Today's wins from the job records: every kept shard has its `<first>.who.json`
+        (`write_who`) in `jobs/<job>/shards/`, written when it won. Only folders touched
+        today are read. A broker start's first act, so the count is the day's, whatever
+        happened to the board before (aicomplete 250: 36 shown, 71 won)."""
+        now = self.clock()
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        lt = time.localtime(now)
+        midnight = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+        counts: dict[str, int] = {}
+        try:
+            folders = [p / "shards" for p in (self.root / "jobs").iterdir()]
+        except OSError:
+            folders = []
+        for sh in folders:
+            try:
+                if sh.stat().st_mtime < midnight:
+                    continue
+                notes = [p for p in sh.glob("*.who.json") if p.stat().st_mtime >= midnight]
+            except OSError:
+                continue
+            for p in notes:
+                try:
+                    wid = json.loads(p.read_text(encoding="utf-8")).get("worker")
+                except (OSError, ValueError, AttributeError):
+                    continue
+                if isinstance(wid, str) and wid:
+                    counts[wid] = counts.get(wid, 0) + 1
+        with self.lock:
+            self.credit_day, self.credits = day, counts

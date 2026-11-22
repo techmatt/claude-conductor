@@ -46,7 +46,10 @@ the same way: count a link's target once, at its real home.
 
 Conductor measured what you cannot see (the control folder is never yours to touch).
 It already shrinks a finished item's run logs by dropping the image bytes and file
-copies they repeat, then gzipping them; say if what is left still looks too big.
+copies they repeat, then gzipping them; say if what is left still looks too big. Hourly it
+also removes a reviewed kept worktree's ignored build output (`target/`, `node_modules/`)
+and old farm jobs, bundles and trees under `.conductor/remote/` (conductor's
+`docs/retention.md`): never do those yourself.
 
 {{usage}}
 

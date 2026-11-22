@@ -123,6 +123,7 @@ append_only = ["experiments/history.md"]            # logs only appended to: mer
 background = ["npm test*", "*playwright test*"]       # shell commands executors always background (default none; progress.md)
 doc_budget_exempt = ["docs/cards.md"]                 # docs never listed as trim due (inbox.md)
 warning_checks = ["uv run python tools/design_check.py"]  # commands every executor runs for its `warnings:` line (warnings.md)
+rebuildable = ["target", "node_modules"]  # the default: ignored folders a reviewed kept worktree loses ([] off; retention.md)
 
 [executor]                    # optional
 command = ["claude"]          # the executable (resolved on PATH)

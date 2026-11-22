@@ -36,6 +36,7 @@ command (`docs/restart.md`).
 | `docs/requests.md` | Planner requests: applying, waits, failures and order, edit blocks |
 | `docs/rename-repo.md` | `conductor rename-repo` |
 | `docs/runtime.md` | The `.conductor/` folder: lock, heartbeat, journals, scratch |
+| `docs/retention.md` | Disk retention: a reviewed kept worktree's build output, old farm jobs, bundles, trees; `conductor prune` |
 | `docs/items.md` | Queue items: front-matter, rewriting, `depends_on`, max_hours; legacy `paths:` concurrency and prose files |
 | `docs/scheduling.md` | When an item starts: NNN order, holds, readonly and `alongside` items, exclusive templates |
 | `docs/worktrees.md` | Per-item worktrees, merges, prose conflicts and the merge executor, leftover worktrees; staging |

@@ -19,7 +19,8 @@ RUNTIME = (
 )
 
 REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background", "push", "append_only",
-             "doc_budget_exempt", "warning_checks"}
+             "doc_budget_exempt", "warning_checks", "rebuildable"}
+DEFAULT_REBUILDABLE = ["target", "node_modules"]   # build output a kept worktree loses once reviewed (disk.py)
 
 # Shared prose nearly every item touches: exempt from `paths`, merged textually.
 DEFAULT_PROSE = ["CLAUDE.md", "README.md", "docs/**/*.md"]
@@ -44,6 +45,7 @@ class RepoOptions:
     append_only: list[str] = field(default_factory=list) # files rows are only appended to: merged by union on landing
     doc_budget_exempt: list[str] = field(default_factory=list)  # doc globs the digest's doc trim skips (generated docs)
     warning_checks: list[str] = field(default_factory=list)     # commands the preamble has an executor run for `warnings:`
+    rebuildable: list[str] = field(default_factory=lambda: list(DEFAULT_REBUILDABLE))  # folder names trimmed from a reviewed kept worktree ([] off)
 
     def is_prose(self, path: str) -> bool:
         return any(globs.matches(path, g) for g in self.prose)
@@ -188,7 +190,8 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
         if not isinstance(table["main"], str) or not table["main"]:
             raise ConfigError(f"{where}.main must be a branch name")
         opts.main = table["main"]
-    for key in ("shared", "setup", "prose", "background", "append_only", "doc_budget_exempt", "warning_checks"):
+    for key in ("shared", "setup", "prose", "background", "append_only", "doc_budget_exempt", "warning_checks",
+                "rebuildable"):
         value = table.get(key, getattr(opts, key))
         if isinstance(value, str):
             value = [value]
@@ -199,6 +202,9 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
         p = Path(rel)
         if p.is_absolute() or ".." in p.parts:
             raise ConfigError(f"{where}.shared: {rel!r} must be a path inside the repo")
+    for name in opts.rebuildable:
+        if any(c in name for c in "/\\:*?") or name in (".", "..", ".git", "out"):
+            raise ConfigError(f"{where}.rebuildable: {name!r} must be a folder name (like \"target\"), not a path")
     for key in ("prose", "append_only", "doc_budget_exempt"):
         for glob in getattr(opts, key):
             if globs.invalid(glob):

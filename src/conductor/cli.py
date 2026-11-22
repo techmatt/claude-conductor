@@ -496,6 +496,19 @@ def cmd_remote(args) -> int:
     return selftest.run(_control(args.control))
 
 
+def cmd_prune(args) -> int:
+    """`prune`: the daemon's hourly disk sweep, now (docs/runtime.md, *Retention*)."""
+    from . import disk
+    cfg, log = _open(args.control)
+    live = {f"{p.parent.name}/{p.stem}" for p in cfg.path("running").glob("*/*.md")}
+    try:
+        for line in disk.lines(disk.sweep(cfg, log, live, args.dry_run), args.dry_run):
+            print(line)
+    finally:
+        log.close()
+    return 0
+
+
 def cmd_app(args) -> int:
     from .app import main as app_main     # PySide6 is imported only here
     folders = [_control(f) for f in args.folders]
@@ -621,7 +634,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("action", choices=["test"])
     sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
     sp.set_defaults(fn=cmd_remote)
-    sp = sub.add_parser("app", help="the desktop app (tray icon, one tab per control folder)")
+    sp = sub.add_parser("prune", help="remove reviewed kept worktrees' build output and old farm jobs, bundles, "
+                                      "trees now (the daemon does it hourly)")
+    sp.add_argument("control", nargs="?", help="control folder (default: $CONDUCTOR_CONTROL or .)")
+    sp.add_argument("--dry-run", action="store_true", help="say what would go; remove nothing")
+    sp.set_defaults(fn=cmd_prune)
+    sp = sub.add_parser("app",help="the desktop app (tray icon, one tab per control folder)")
     sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
     sp.set_defaults(fn=cmd_app)
     sp = sub.add_parser("mcp", help="the planner's stdio MCP server: status, reads and every planner write (docs/mcp.md)")

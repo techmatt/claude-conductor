@@ -19,12 +19,14 @@ from .util import clock, read_text
 PREAMBLE = """\
 You are a conductor executor: an unattended headless Claude Code session running queue
 item {item_id} for project {project}. Nobody is watching: decide what you can, record
-it, keep going.
+it, keep going. Time limit: {max_hours:g}h; killed at {deadline}, later by any time blocked or
+paused: plan to it.
 
-Files. Write every file with Write or Edit; for a scripted change, Write one script file for
-the whole change (every edit checked before any is written) and run it alone, never mid-chain.
-Never a heredoc into a file, `sed -i`, or a `-c`/`-e` script that writes one: conductor's hooks
-refuse each, and the call is lost.
+Files. Write every file with Write or Edit; for a scripted change, one script for the whole
+change (every edit checked before any is written) in `out/{item_name}/` (Write, or `cat >
+out/{item_name}/x.py <<'EOF'`), run alone, never mid-chain. Never a heredoc into another
+file, `sed -i`, or a `-c`/`-e` script that writes one: conductor's hooks refuse each, and the
+call is lost.
 
 Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
 hard to undo, with a default where one is reasonable: unanswered, it returns after
@@ -91,8 +93,6 @@ that answers an open question closes it: `progress` with `answered: "<id>"`.
 {calls}
 {workdir}{paths}{writes}{now}{beside}{resumed}
 {audit}{review}
-Time limit: {max_hours:g}h; killed at {deadline}, later by any time blocked or paused.
-
 Write your report to exactly this path:
     {report}
 {only} Conductor reverts anything else in that folder and marks this item red.
@@ -156,10 +156,11 @@ config diff is not it.
 # of the ceremony (outline, ETAs, pickers, servers) that costs it round trips.
 LIGHT = """\
 A conductor executor: headless Claude Code, item {item_id},
-project {project}. Nobody is watching.
+project {project}. Nobody is watching. Time limit: {max_hours:g}h; killed at {deadline}, later
+if blocked. Plan by the last tool return's clock.
 
-Write files with Write/Edit only: hooks refuse heredoc, `-c`/`-e` and `sed -i` writes
-(Write a script, then run it alone), %TEMP% and the like.
+Write files with Write/Edit only: hooks refuse `-c`/`-e`/`sed -i` writes, heredocs outside
+`out/` (scripts: `out/{item_name}/`, run alone), %TEMP% and the like.
 
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
 default (unanswered after {ask_minutes:g} min; it holds the session: background work
@@ -180,9 +181,6 @@ MESSAGE #n / AMENDMENT #n hook context: Matt's, outranking the prompt.
 {calls}
 {workdir}{paths}{writes}{port}{now}{beside}
 {audit}
-Time limit: {max_hours:g}h; killed at {deadline}, later if blocked. Plan by the last tool
-return's clock.
-
 Write your report to exactly this path:
     {report}
 {only}; others there: reverted, red.
@@ -405,8 +403,9 @@ suites, servers or GPU work), {stage_minutes:g} minutes at most. There is no ask
 questions in your plan under a line `Questions:`, one `- ` bullet each, ending
 `(default: <what you will do unanswered>)`; they reach the planner before you launch.
 
-Then write your plan as your final message, ending with its outline: your sections, a few
-words each, the report last. Stop. When the lock is yours, conductor resumes this session in
+Once launched, the item has {max_hours:g}h (killed that long after launch, later by any time
+blocked or paused): size the plan to it, never past it. Then write your plan as your final
+message, ending with its outline: your sections, a few words each, the report last. Stop. When the lock is yours, conductor resumes this session in
 this worktree, moved to the then-current `{main}`, with the instructions for executing.
 
 The prompt follows.
@@ -416,10 +415,11 @@ The prompt follows.
 """
 
 RESUME_HEAD = """\
-You have the lock now. Conductor moved your worktree from {old} to the current `{main}`
-at {new}{landed}. Check what landed since you staged and adjust your plan, re-deriving
-any time, rate or baseline the prompt quotes from it, then execute the prompt you read
-while staging. Everything below now applies.
+You have the lock now. Your time limit starts now: {max_hours:g}h, killed at {deadline} (later
+by any time blocked or paused); size the plan to it. Conductor moved your worktree from {old}
+to the current `{main}` at {new}{landed}. Check what landed since you staged and adjust your
+plan, re-deriving any time, rate or baseline the prompt quotes from it, then execute the prompt
+you read while staging. Everything below now applies.
 
 """
 
@@ -652,7 +652,7 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     landed = (f"; {n} commit(s) landed since you staged (`git log --oneline {resume['old'][:10]}..HEAD`)"
               if n else "; nothing landed since you staged")
     head = RESUME_HEAD.format(old=resume["old"][:10], new=resume["new"][:10], main=cfg.opts(item.repo).main,
-                              landed=landed)
+                              landed=landed, max_hours=max_hours, deadline=clock(deadline))
     if defaults:
         head += STAGE_DEFAULTS.format(lines="\n".join(questions.default_lines(list(defaults), "")),
                                       stale=STAGE_STALE.format(n=n) if n else "")
@@ -747,7 +747,8 @@ def build_stage_prompt(cfg: Config, item: Item, run: dict, choices: str = "", am
     """`amends`: amendments still waiting (a rewrite discarded the stage they were sent to)."""
     tail = (STAGE_AMENDS + "".join(_amend(RESUME_AMEND, m) for m in amends)) if amends else ""
     return STAGE.format(item_id=item.id, project=cfg.project, workdir=_workdir(cfg, item, run),
-                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main) + body(cfg, item) + choices + tail
+                        stage_minutes=cfg.stage_minutes, main=cfg.opts(item.repo).main,
+                        max_hours=item.max_hours or cfg.max_hours) + body(cfg, item) + choices + tail
 
 
 def body(cfg: Config, item: Item, notes: str = "", usage: str = "") -> str:

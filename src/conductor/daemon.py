@@ -369,6 +369,7 @@ class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, Res
         self.process_merges()
         self.process_pushes()
         self.sample_memory()
+        self.keep_disk()                # daemon_reap: the hourly disk sweep (disk.py)
         self.check_update_restart()     # daemon_machine
         from . import remote        # a broker that died starts again: a no-op without `[remote]`
         remote.keep_broker(self.cfg.control, lambda note: self.log.append("warning", note=note))

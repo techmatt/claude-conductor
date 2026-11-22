@@ -30,10 +30,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import diag, failures, settings, tree
-from .board import who_path, write_who
+from . import diag, failures, record, settings, tree
+from .board import write_who
+from .record import MAIN_DONE, kept_by, say, shard_path  # noqa: F401 - callers' names
 
-MAIN_DONE = {"worker": "main", "kind": "main", "engine": "native", "label": "main box"}
 STATUS_TIMEOUT = 0.5        # a dead broker never delays a local start past a second
 CALL_TIMEOUT = 10.0
 BEAT_SECONDS = 2.0          # the job's heartbeat: a job the broker stops hearing about is dropped
@@ -60,10 +60,6 @@ class BrokerDown(Exception):
     def plain(self) -> str:
         """Its words for a stderr line. Never "error": an item's `wait_for` ends on that."""
         return f"it refused `{self.op}` (HTTP {self.refused})" if self.refused else f"it stopped answering `{self.op}`"
-
-
-def say(text: str) -> None:
-    print(f"farm-seeds: {text}", file=sys.stderr, flush=True)
 
 
 # ------------------------------------------------------------------ native runs
@@ -357,10 +353,6 @@ def split(first: int, count: int, size: int) -> list[tuple[int, int]]:
     return [(a, min(size, first + count - a)) for a in range(first, first + count, size)]
 
 
-def shard_path(folder: Path, first: int) -> Path:
-    return folder / "shards" / f"{first:012d}.out"
-
-
 def run_local(r: settings.Remote, cwd: Path, first: int, count: int, out: Path, args: list[str], why: str) -> int:
     say(f"running locally ({why})")
     code, tail = run_shard(r.native, cwd, first, count, out, args)
@@ -373,32 +365,43 @@ def run_local(r: settings.Remote, cwd: Path, first: int, count: int, out: Path, 
 
 
 def farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, count: int, out: Path,
-         args: list[str], pinned: Path | None = None) -> int:
+         args: list[str], pinned: Path | None = None, opts: dict | None = None) -> int:
     t0 = time.time()
+    opts = opts or {}
     try:
         expected = fingerprint(r, cwd)
     except (RuntimeError, OSError) as exc:
         return run_local(r, cwd, first, count, out, args, str(exc))
-    ranges = split(first, count, r.shard_seeds)
+    size = opts.get("shard_seeds") or r.shard_seeds
+    native_only = bool(opts.get("native_only"))
+    ranges = split(first, count, size)
+    item = os.environ.get(settings.ITEM_VAR, "")
     try:
         jid = broker.call("job", {"key": key, "fingerprint": expected, "args": args, "ranges": ranges,
-                                  "cwd": str(cwd), "item": os.environ.get(settings.ITEM_VAR, "")})["job"]
+                                  "cwd": str(cwd), "item": item, "native_only": native_only})["job"]
     except (BrokerDown, KeyError) as exc:
         why = exc.plain() if isinstance(exc, BrokerDown) else "its reply named no job"
         return run_local(r, cwd, first, count, out, args, f"the broker took no job: {why}")
     folder = r.state / "jobs" / jid
     (folder / "main").mkdir(parents=True, exist_ok=True)
-    (folder / OWNER).write_text(json.dumps({"pid": os.getpid(), "item": os.environ.get(settings.ITEM_VAR, "")}),
-                                encoding="utf-8", newline="\n")
+    (folder / OWNER).write_text(json.dumps({"pid": os.getpid(), "item": item}), encoding="utf-8", newline="\n")
+    record.start(folder, key=key, args=args, out=str(out), first=first, count=count, shard_seeds=size,
+                 native_only=native_only, item=item)
+    if r.header:
+        cmd = resolve(settings.fill(r.header, first=str(first), count=str(count), out="", args=list(args)), cwd)
+        record.write_header(r, cmd, cwd, folder)
+    if native_only:
+        say(f"native only: no browser takes this job's shards ({len(ranges)} of {size} seeds)")
     try:
-        return _farm(r, cwd, key, broker, first, count, out, args, ranges, jid, folder, t0, pinned)
+        return _farm(r, cwd, key, broker, first, count, out, args, ranges, jid, folder, t0, pinned,
+                     build=not native_only, item=item)
     finally:
         (folder / OWNER).unlink(missing_ok=True)
 
 
 def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, count: int, out: Path,
           args: list[str], ranges: list[tuple[int, int]], jid: str, folder: Path, t0: float,
-          pinned: Path | None = None) -> int:
+          pinned: Path | None = None, build: bool = True, item: str = "") -> int:
     failed: list[dict] = []                      # main-box shards that failed (`failures.report`)
     errors: list[str] = []
     lost: list[tuple[str, bool]] = []            # what the broker did (its words, refused?): the stderr line, a reconnect
@@ -407,7 +410,7 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
     notes: dict = {}
     link = {"broker": broker}                    # a reconnect swaps it
     sid_of = {a: i for i, (a, _) in enumerate(ranges)}
-    if r.build:
+    if r.build and build:
         threading.Thread(target=ensure_bundle, args=(r, key, cwd, broker, ended, notes, pinned), daemon=True).start()
     log = open(folder / "main.log", "ab")
 
@@ -514,10 +517,12 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
     if CANCEL.is_set():
         log.close()
         _close(broker, jid)
+        record.mark(folder, "cancelled")
         say(f"cancelled: job {jid} closed, its native runs stopped; nothing written to {out}")
         return CANCELLED_EXIT
     if failed:
         log.close()
+        record.mark(folder, "failed")
         try:
             failed += failures.remote(broker.call("state", {"job": jid}))   # its workers' failures too
         except BrokerDown:
@@ -544,6 +549,7 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
         code = _finish_here(r, cwd, folder, args, missing, own, log, why, len(ranges))
         if code:
             log.close()
+            record.mark(folder, "cancelled" if code == CANCELLED_EXIT else "failed")
             if code == CANCELLED_EXIT:
                 say(f"cancelled: its native runs stopped; nothing written to {out}")
             return code
@@ -555,7 +561,7 @@ def _farm(r: settings.Remote, cwd: Path, key: str, broker: Broker, first: int, c
         for a, _ in ranges:
             f.write(shard_path(folder, a).read_bytes())
     os.replace(merged, out)
-    _record(folder, key, args, ranges, state, out, time.time() - t0, notes.get("fallback", ""))
+    record.record(folder, key, args, ranges, state, out, time.time() - t0, notes.get("fallback", ""), item)
     _close(broker, jid)
     return 0
 
@@ -628,50 +634,6 @@ def _close(broker: Broker, jid: str) -> None:
         pass
 
 
-def kept_by(folder: Path, a: int, k: int, state_shard: dict) -> dict:
-    """Who ran the copy of a shard that is in the output: the note written beside it when it
-    was kept (`board.write_who`), else the broker's state, else the main box (a shard run here
-    after the broker went away). The first finish that was kept, never a re-run that lost."""
-    try:
-        who = json.loads(who_path(shard_path(folder, a)).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        who = state_shard if state_shard.get("worker") else MAIN_DONE
-    return {"first": a, "count": k, **{x: who.get(x) for x in ("worker", "kind", "engine", "label", "ms") if x in who}}
-
-
-def _record(folder: Path, key: str, args: list[str], ranges, state: dict, out: Path, wall: float,
-            fallback: str = "") -> None:
-    """Provenance: who ran each shard, whether native and wasm mixed, any gate failure, and
-    (`references.fallback`) why browsers were gated against the native reference."""
-    shards = [kept_by(folder, a, k, s) for (a, k), s in zip(ranges, state.get("shards") or [{}] * len(ranges))]
-    engines = sorted({s["engine"] for s in shards})
-    fps = state.get("fingerprints") or {}
-    differ = bool(fps.get("wasm")) and fps.get("wasm") != fps.get("native")
-    rec = {"key": key, "args": args, "out": str(out), "seconds": round(wall, 2), "engines": engines,
-           "mixed": len(engines) > 1, "shards": shards, "gate_failures": state.get("gate_failures", []),
-           "references": {"native": fps.get("native"), "wasm": fps.get("wasm"), "differ": differ}}
-    if fallback:
-        rec["references"]["fallback"] = fallback
-    if rec["mixed"] and differ:
-        rec["mixed_note"] = "native and wasm references differ: this output need not equal a local run's"
-    (folder / "job.json").write_text(json.dumps(rec, indent=1) + "\n", encoding="utf-8", newline="\n")
-    by: dict[tuple[str, str], int] = {}
-    for s in shards:
-        label = s.get("label") or ""
-        name = ("main box" if s["worker"] == "main" else f"{s['kind']} {label} ({s['worker']})"
-                if label and label != s["worker"] else f"{s['kind']} {s['worker']}")
-        by[(name, s["engine"])] = by.get((name, s["engine"]), 0) + 1
-    parts = ", ".join(f"{name} {n} ({eng})" for (name, eng), n in sorted(by.items()))
-    say(f"{sum(s['count'] for s in shards)} seeds in {len(shards)} shards, {wall:.1f}s: {parts}"
-        + ("; mixed native and wasm" if rec["mixed"] else "")
-        + (", whose references differ (not what a local run gives)" if rec["mixed"] and differ else "")
-        + (f"; {fallback}" if fallback else "")
-        + f"; record {folder / 'job.json'}")
-    for g in rec["gate_failures"]:
-        say(f"{g['kind']} worker {g['worker']} failed the fingerprint gate (expected {g['expected']}, got {g['got']}); "
-            "it was given no shards")
-
-
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     control = os.environ.get(settings.CONTROL_VAR)
@@ -684,14 +646,14 @@ def main(argv: list[str] | None = None) -> int:
         return build_bundle(r, argv[1], Path(argv[2]))
     if argv[:1] == ["--cancel"] and r:
         return cancel(r, os.environ.get(settings.ITEM_VAR, ""), everyone="--all" in argv[1:])
-    rev = None
-    if argv[:1] == ["--at"] and len(argv) > 1:
-        rev, argv = argv[1], argv[2:]
-    elif argv[:1] and argv[0].startswith("--at="):
-        rev, argv = argv[0][5:], argv[1:]
-    if len(argv) < 3 or not argv[0].isdigit() or not argv[1].isdigit() or rev == "":
-        print(f"usage: {settings.COMMAND} [--at <commit>] <first seed> <count> <out file> [project args…]",
-              file=sys.stderr)
+    try:
+        opts, argv = options(argv)
+    except ValueError:
+        opts, argv = {}, []
+    rev = opts.pop("at", None)
+    if len(argv) < 3 or not argv[0].isdigit() or not argv[1].isdigit():
+        print(f"usage: {settings.COMMAND} [--at <commit>] [--native-only] [--shard-seeds N] <first seed> <count> "
+              "<out file> [project args…]", file=sys.stderr)
         return 2
     first, count, out, args = int(argv[0]), int(argv[1]), Path(argv[2]).resolve(), argv[3:]
     if r is None:
@@ -705,12 +667,36 @@ def main(argv: list[str] | None = None) -> int:
     CANCEL.clear()
     old = _on_stop(lambda *_: CANCEL.set())
     try:
-        code = _dispatch(r, first, count, out, args, rev)
+        code = _dispatch(r, first, count, out, args, rev, opts)
     finally:
         _on_stop(old)
     if code == 0:
         note_seeds(r, first, count, args)
     return code
+
+
+def options(argv: list[str]) -> tuple[dict, list[str]]:
+    """The leading options: `--at <commit>` (133), `--native-only` and `--shard-seeds N` (147:
+    a costly agent's browser shards took 60-90+ min for 2 games, aicomplete 316). ValueError
+    for one missing its value."""
+    opts: dict = {}
+    while argv and argv[0].startswith("--"):
+        name, eq, value = argv[0].partition("=")
+        if name == "--native-only" and not eq:
+            opts["native_only"], argv = True, argv[1:]
+            continue
+        if name not in ("--at", "--shard-seeds"):
+            break
+        if not eq:
+            if len(argv) < 2:
+                raise ValueError(name)
+            value, argv = argv[1], argv[2:]
+        else:
+            argv = argv[1:]
+        if not value or (name == "--shard-seeds" and (not value.isdigit() or int(value) < 1)):
+            raise ValueError(name)
+        opts[name[2:].replace("-", "_")] = value if name == "--at" else int(value)
+    return opts, argv
 
 
 STOP_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")   # SIGBREAK: Windows' Ctrl-Break, the console stop
@@ -812,10 +798,12 @@ def rev_key(folder: Path, rev: str) -> tuple[Path, str]:
     return Path(git("rev-parse", "--show-toplevel")), git("rev-parse", "--verify", "--end-of-options", f"{rev}^{{commit}}")
 
 
-def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str], rev: str | None = None) -> int:
+def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[str], rev: str | None = None,
+              opts: dict | None = None) -> int:
     cancel(r, "", live=False)                    # a hard-killed run's job, closed now, not at its heartbeat's end
+    opts = opts or {}
     if rev:
-        return _dispatch_at(r, first, count, out, args, rev)
+        return _dispatch_at(r, first, count, out, args, rev, opts)
     try:
         root, key = repo_key(Path.cwd())
     except (subprocess.CalledProcessError, OSError):
@@ -831,13 +819,14 @@ def _dispatch(r: settings.Remote, first: int, count: int, out: Path, args: list[
         except tree.TreeError as exc:
             say(f"{exc}; running from the working tree")
     try:
-        return _dispatch_in(r, pinned or root, key, first, count, out, args, pinned)
+        return _dispatch_in(r, pinned or root, key, first, count, out, args, pinned, opts)
     finally:
         if pinned:
             tree.release(pinned)
 
 
-def _dispatch_at(r: settings.Remote, first: int, count: int, out: Path, args: list[str], rev: str) -> int:
+def _dispatch_at(r: settings.Remote, first: int, count: int, out: Path, args: list[str], rev: str,
+                 opts: dict) -> int:
     """`--at <rev>` (133): build and farm that commit, not the working tree, so both sides of a
     paired read farm (aicomplete 270 ran its old side natively). Always in a farm tree, `pin` or not."""
     try:
@@ -855,13 +844,13 @@ def _dispatch_at(r: settings.Remote, first: int, count: int, out: Path, args: li
     try:
         say(f"runs from farm tree {pinned} (commit {key}; {copied} file(s) copied in)")
         tree.add_args(root / r.dir, pinned / r.dir, args, missing_only=True)
-        return _dispatch_in(r, pinned, key, first, count, out, args, pinned)
+        return _dispatch_in(r, pinned, key, first, count, out, args, pinned, opts)
     finally:
         tree.release(pinned)
 
 
 def _dispatch_in(r: settings.Remote, root: Path, key: str, first: int, count: int, out: Path, args: list[str],
-                 pinned: Path | None) -> int:
+                 pinned: Path | None, opts: dict | None = None) -> int:
     cwd = root / r.dir if r.dir else root
     if r.native_build:
         built = run_simple(r.native_build, cwd)
@@ -884,7 +873,7 @@ def _dispatch_in(r: settings.Remote, root: Path, key: str, first: int, count: in
         why = exc.plain() if isinstance(exc, BrokerDown) else "no `live` in its reply"
         return run_local(r, cwd, first, count, out, args, f"broker unreachable ({why})")
     # Sharded even with no worker connected: one that joins mid-job takes the shards still pending.
-    return farm(r, cwd, key, broker, first, count, out, args, pinned)
+    return farm(r, cwd, key, broker, first, count, out, args, pinned, opts)
 
 
 if __name__ == "__main__":

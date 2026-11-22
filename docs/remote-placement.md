@@ -57,6 +57,13 @@ once with 6 slots each: 12 `aic-sim` processes on the main box at 100% CPU, 160 
 there against the laptop's 85 s. Sandbox walk: two 16-shard jobs at once with
 `main_slots = 4`, never more than 4 native processes between them.
 
+**Job order (147).** A free main slot goes to the oldest open job first: a claim waits while
+an older open job still has shards nobody holds that the deal gives the main box
+(`Board._older_first`). Spread over every open job, no row of a multi-row farm landed early
+enough to steer the rest (aicomplete 314, ~2h10m, all rows ending together); now rows finish
+in launch order, so launch the one to read first first. Workers poll jobs oldest first as
+before, taking a newer job's shards only when the deal gives them none of an older one's.
+
 ## The tail
 
 A main slot free while the deal keeps the free shards for a remote worker, or with none

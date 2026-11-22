@@ -405,7 +405,7 @@ def test_the_job_record_counts_the_kept_copies_even_with_the_broker_gone(tmp_pat
         client.shard_path(folder, a).write_bytes(b"x")
     write_who(client.shard_path(folder, 0), {"worker": "b1", "kind": "browser", "engine": "wasm", "label": "laptop", "ms": 9})
     write_who(client.shard_path(folder, 4), client.MAIN_DONE)
-    client._record(folder, "k", [], ranges, {}, tmp_path / "out", 1.0)    # no state: the broker was gone
+    client.record.record(folder, "k", [], ranges, {}, tmp_path / "out", 1.0)    # no state: the broker was gone
     rec = json.loads((folder / "job.json").read_text(encoding="utf-8"))
     assert [s["worker"] for s in rec["shards"]] == ["b1", "main", "main"]
     assert rec["engines"] == ["native", "wasm"] and rec["mixed"]

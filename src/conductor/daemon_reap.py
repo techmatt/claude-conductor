@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
 import psutil
 
-from . import git, procs, state, targets, worktrees
+from . import disk, git, procs, state, targets, worktrees
+from .events import EventLog
 from .util import clock, parse_stamp, stamp, write_text
+
+DISK_FIRST_SECONDS = 600.0      # the first disk sweep, this long after the daemon starts
 
 
 class ReapMixin:
@@ -94,6 +98,29 @@ class ReapMixin:
                                  f"{rec['repo']} queue next empties and at the next daemon start")
 
     # ---------------------------------------------------------------- leftover worktrees
+    def keep_disk(self) -> None:
+        """The disk sweep (`disk.py`, 147): hourly, the first `DISK_FIRST_SECONDS` after
+        start, in a thread with its own event-log connection, so walking gigabytes never
+        holds the loop. A sweep still running is never doubled."""
+        now = time.time()
+        if not hasattr(self, "_disk_next"):
+            self._disk_next, self._disk_thread = now + DISK_FIRST_SECONDS, None
+        if now < self._disk_next or (self._disk_thread and self._disk_thread.is_alive()):
+            return
+        self._disk_next = now + disk.SWEEP_SECONDS
+        cfg, live = self.cfg, {*self.runs, *self.stages, *self.landings}
+
+        def work() -> None:
+            log = EventLog(cfg.events_db)
+            try:
+                disk.sweep(cfg, log, live)
+            except Exception as exc:            # noqa: BLE001 - said, and tried again next hour
+                log.append("warning", note=f"disk sweep failed: {exc!r}")
+            finally:
+                log.close()
+        self._disk_thread = threading.Thread(target=work, name="disk-sweep", daemon=True)
+        self._disk_thread.start()
+
     @property
     def _leftovers_file(self) -> Path:
         return self.cfg.state_dir / "leftovers.json"

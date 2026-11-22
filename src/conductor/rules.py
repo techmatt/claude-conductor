@@ -9,7 +9,8 @@ call through: a pattern that can't be matched without real false positives stays
 - **Shell edits**: `sed -i` / `perl -i`, a `-c` / `-e` interpreter string or heredoc script
   that writes a file, a heredoc redirected or `tee`d into a file, PowerShell's `-replace` or
   a here-string into `Set-Content` / `Out-File`. A heredoc that only feeds a command's stdin
-  (`git commit -m "$(cat <<'EOF' …)"`, `git commit -F - <<EOF`) goes through.
+  (`git commit -m "$(cat <<'EOF' …)"`, `git commit -F - <<EOF`) goes through, as does one
+  written only under a relative `out/` (147: a scratch script, `cat > out/x/edit.py <<'PY'`).
 - **Temp**: a file tool's path, or a shell command naming `%TEMP%`, `$TEMP`, `$env:TEMP`,
   `AppData\\Local\\Temp`, Git Bash's `/tmp`, a bare `mktemp` or a temp-file API. Claude Code's
   own task output (`Temp\\claude\\…\\tasks\\`) may still be read from the shell.
@@ -90,6 +91,21 @@ def strip_heredocs(command: str) -> tuple[str, list[tuple[str, str]]]:
     return "\n".join(kept), docs
 
 
+TEE_TARGET_RE = re.compile(r"\btee\b(?:\s+-\S+)*\s+([^\s;|&]+)")
+
+
+def into_scratch(opener: str) -> bool:
+    """A heredoc's every redirect and `tee` target is under `out/` (relative: the item's
+    scratch), a file no item tracks: a script written there to run next (147: aicomplete 314,
+    315 each lost calls writing one so, two runs after the preamble said not to)."""
+    targets = [m.group(1) for m in REDIRECT_RE.finditer(opener)] + TEE_TARGET_RE.findall(opener)
+    def scratch(t: str) -> bool:
+        p = t.strip("'\"").replace("\\", "/")
+        p = p[2:] if p.startswith("./") else p
+        return p.startswith("out/") and ".." not in p.split("/") and len(p) > 4
+    return bool(targets) and all(scratch(t) for t in targets)
+
+
 def shell_edit(command: str, tool: str = "Bash") -> str | None:
     """Why this shell command edits a file, or None."""
     outer, docs = strip_heredocs(command)
@@ -99,6 +115,8 @@ def shell_edit(command: str, tool: str = "Bash") -> str | None:
         # Inside `$(cat <<'EOF' …)` the body becomes an argument (a commit message); elsewhere
         # a stdout redirect or `tee` on its line puts the body in a file.
         if "$(" not in opener.split("<<", 1)[0] and (REDIRECT_RE.search(opener) or TEE_RE.search(opener)):
+            if into_scratch(opener):
+                continue                    # a script into out/ (its `.py <<` is no interpreter)
             return "writes a heredoc into a file"
         if SCRIPT_STDIN_RE.search(opener) and WRITE_RE.search(body):
             return "runs a heredoc script that writes a file"
@@ -212,8 +230,8 @@ def _isolation(what: str) -> str:
 def _shell(cmd: str, tool: str, ti: dict, helper: bool, readonly: bool) -> str | None:
     if why := shell_edit(cmd, tool):
         return (f"conductor: refused: this {why}. Edit files with Write or Edit, and write a script to a "
-                "file (in `out/<item>/`) before running it. Heredocs that only feed a command's stdin, "
-                "like a commit message, are fine.")
+                "file (in `out/<item>/`) before running it: Write, or `cat > out/<item>/x.py <<'EOF'`. "
+                "Heredocs that only feed a command's stdin, like a commit message, are fine.")
     outer = strip_heredocs(cmd)[0]          # a heredoc body is data (a commit message), never run here
     if helper and DISCARD_RE.search(outer):
         return ("conductor: refused: a helper never runs git checkout, restore, switch, stash, clean or "

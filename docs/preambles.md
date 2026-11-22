@@ -24,17 +24,20 @@ Chosen by conductor, never by front-matter:
   two design asks a small item meets), *Progress* (start and long jobs), *Bounds* (skips,
   scratch, compute, the leftover line), *Latitude* (the conflict
   order, bars, the fix-loop cap, fix the obvious), messages, `CALLS_LIGHT`, where it works,
-  a port line where the repo serves, the time limit and the report header. No outline,
-  ETAs, pickers, servers or diff review. Its second line is the file-write rule (Write/Edit
-  only, the forms the hooks refuse).
-- **Full** (`PREAMBLE`, ~900 words before its optional blocks) for everything else:
-  *Files* first (146: Write/Edit or one checked script file run alone; never a heredoc,
+  a port line where the repo serves and the report header. No outline,
+  ETAs, pickers, servers or diff review. Its first line carries the time limit and kill time
+  (147), its second the file-write rule (Write/Edit only, the forms the hooks refuse).
+- **Full** (`PREAMBLE`, ~900 words before its optional blocks) for everything else: the
+  time limit and kill time in its first paragraph (147: aicomplete 316 met its 4h cap only
+  on resume, after planning an overnight farm), then
+  *Files* (146: Write/Edit or one checked script file run alone, in `out/<item>/`, written
+  by Write or a heredoc there (147); never a heredoc into another file,
   `sed -i` or a writing `-c`/`-e`; the hooks refuse each), *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
   bars, the fix-loop cap, the wrong-repo guard as the only hard stop, fix the obvious, the
   leftover check), *Measurement* (paired and fresh seeds, a quiet box, ratios beside
   others, re-read quoted numbers), *Progress* (with `outline` and `eta`), *The box*
   (scratch, results, keeps, the other refused forms, load, helpers), *Messages*, then the
-  optional blocks, where it works, the time limit, the **report-path line** (word for
+  optional blocks, where it works, the **report-path line** (word for
   word: `tests/fake_claude.py` and the restart preamble find the path by it), the header,
   the status definitions and the report rules.
 

@@ -23,7 +23,10 @@ NOW_LINE = (".conductor", "now", "remote.line")   # the inbox's *Now* line while
 
 KEYS = {"dir","native", "native_build", "build", "bundle_js", "fingerprint", "merge", "port", "bind",
         "token", "shard_seeds", "seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds",
-        "main_slots", "start_cores", "accent", "host", "default", "pin"}
+        "main_slots", "start_cores", "accent", "host", "default", "pin", "header",
+        "keep_jobs_days", "keep_jobs_gb", "keep_bundles", "keep_bundles_days", "keep_trees"}
+# Retention of `.conductor/remote/` (`retention.py`, 147): farm-seeds' and the daemon's, never the broker's.
+KEEP_KEYS = ("keep_jobs_days", "keep_jobs_gb", "keep_bundles", "keep_bundles_days", "keep_trees")
 TOKEN_REQUEST = "remote-token"          # the request folder's suffix that pins a generated token (`pin_token`)
 
 
@@ -56,6 +59,12 @@ class Remote:
     project: str = ""                      # conductor.toml's `project` (else the control folder's name)
     default: bool = False                  # an item without `remote:` gets farm-seeds (unless readonly or a template)
     pin: bool = True                       # a farm runs from a farm tree pinned at its start (`tree.py`)
+    header: list[str] = field(default_factory=list)   # argv printing the job's spec header (`{args}` `{first}` `{count}`): jobs/<id>/header
+    keep_jobs_days: float = 2.0            # job folders past this age are pruned (`retention.py`) ...
+    keep_jobs_gb: float = 5.0              # ... and the oldest past this much in all
+    keep_bundles: int = 20                 # wasm bundles: the newest this many ...
+    keep_bundles_days: float = 3.0         # ... none older than this
+    keep_trees: int = 3                    # farm trees no live process holds, past this many in all, are removed
 
     @property
     def state(self) -> Path:
@@ -67,7 +76,8 @@ class Remote:
         d = asdict(self)
         d["control"], d["token"] = str(self.control), self.secret()
         d.pop("default")                   # items' business, not the broker's
-        d.pop("pin")                       # farm-seeds' own
+        for key in ("pin", "header", *KEEP_KEYS):   # farm-seeds' own, and the daemon's retention
+            d.pop(key)
         return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:16]
 
     def secret(self) -> str:
@@ -115,7 +125,8 @@ def load(control: Path) -> Remote | None:
     r = Remote(control=control, native=_argv("native", table.get("native"), True),
                fingerprint=_argv("fingerprint", table.get("fingerprint"), True),
                build=_argv("build", table.get("build"), False),
-               native_build=_argv("native_build", table.get("native_build"), False))
+               native_build=_argv("native_build", table.get("native_build"), False),
+               header=_argv("header", table.get("header"), False))
     project = data.get("project")
     r.project = project if isinstance(project, str) and project else control.name.removesuffix("-control")
     for key in ("dir", "merge", "bind", "token", "bundle_js", "accent", "host"):
@@ -134,20 +145,22 @@ def load(control: Path) -> Remote | None:
         raise RemoteError(f"{CONFIG_NAME}: remote.accent must be a colour like \"#7c9cff\"")
     if r.merge != "concat":
         raise RemoteError(f"{CONFIG_NAME}: remote.merge: only \"concat\" (by seed) is supported")
-    for key in ("port", "shard_seeds", "main_slots", "start_cores"):
+    for key in ("port", "shard_seeds", "main_slots", "start_cores", "keep_bundles", "keep_trees"):
         if key in table:
             if (not isinstance(table[key], int) or isinstance(table[key], bool)
                     or table[key] < (0 if key == "port" else 1)):
                 raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a whole number")
             setattr(r, key, table[key])
-    for key in ("seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds"):
+    for key in ("seed_seconds", "local_below_seconds", "lease_seconds", "fresh_seconds",
+                "keep_jobs_days", "keep_jobs_gb", "keep_bundles_days"):
         if key in table:
             try:
                 value = float(table[key])
                 if value < 0:
                     raise ValueError
             except (TypeError, ValueError):
-                raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a number of seconds") from None
+                unit = "seconds" if key.endswith("seconds") else "days" if key.endswith("days") else "GB"
+                raise RemoteError(f"{CONFIG_NAME}: remote.{key} must be a number of {unit}") from None
             setattr(r, key, value)
     if "{out}" not in r.native:
         raise RemoteError(f"{CONFIG_NAME}: remote.native must hold `{{out}}` (and `{{first}}`, `{{count}}`)")

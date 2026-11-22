@@ -85,7 +85,9 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
     cleans it. The same restore runs when a merge finds the checkout dirty (a daemon
     killed mid-fast-forward), so that case no longer needs a person either.
   - *Uncommitted changes* left in the worktree make the item red (they would be lost).
-  - *Red item:* never merged; branch and worktree kept for inspection (links removed).
+  - *Red item:* never merged; branch and worktree kept for inspection (links removed); once
+    its finish is reviewed or its repo's hold cleared, its ignored build output (`rebuildable`,
+    default `target`, `node_modules`) is removed (147, `retention.md`).
     A report saying `done`/`partial` gets a `conductor:` line under its header (`red
     (…); NOT on main: branch … kept`), so nobody reads it as merged.
   - *Red of conductor's own making:* a control-folder change the guard pins on
@@ -150,7 +152,8 @@ or by a dependency that is still running, and the repo uses worktrees with `stag
 (an item's `stage:` overrides), conductor stages it: it creates the item's worktree and
 launches a session with a stage preamble — read the prompt and what it points at, run
 read-only commands only, nothing long or heavy, no edits, no asks (no `--mcp-config`),
-write a plan as the final message, stop. The item stays in `queue/`; its record is
+write a plan as the final message, stop; it names the item's `max_hours` once launched, so
+the plan is sized to it (147). The item stays in `queue/`; its record is
 `running/<repo>/NNN_name.stage.json` (`stage` event, then `staged` with the plan's
 first 500 characters). At most one staged item per repo. A `template: cleanup`,
 `general_cleanup` or `disk_cleanup` item never stages: what it is handed (audit notes, sizes) is
@@ -161,7 +164,7 @@ When the head can run, conductor checks the worktree is still exactly as cut (HE
 tracked files, and no untracked files beyond what setup made), moves it to current
 `main` (`git reset --hard`), reruns setup, and resumes the **same session in the same
 worktree** with `claude -p --resume <session id>`. The resume message says the lock
-is held, how many commits landed since staging (`git log <old>..HEAD`), and then gives
+is held, the time limit starting now and the kill time (147), how many commits landed since staging (`git log <old>..HEAD`), and then gives
 the full execution preamble. The `start` event carries `resumed: true` and `landed`.
 
 A stage runs setup too, before its session (untracked files are recorded after setup,
