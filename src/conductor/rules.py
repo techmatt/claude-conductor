@@ -230,7 +230,8 @@ def _isolation(what: str) -> str:
 def _shell(cmd: str, tool: str, ti: dict, helper: bool, readonly: bool) -> str | None:
     if why := shell_edit(cmd, tool):
         return (f"conductor: refused: this {why}. Edit files with Write or Edit, and write a script to a "
-                "file (in `out/<item>/`) before running it: Write, or `cat > out/<item>/x.py <<'EOF'`. "
+                "file with Write (in `out/<item>/`) before running it; a heredoc loses a level of "
+                "backslash escaping. "
                 "Heredocs that only feed a command's stdin, like a commit message, are fine.")
     outer = strip_heredocs(cmd)[0]          # a heredoc body is data (a commit message), never run here
     if helper and DISCARD_RE.search(outer):

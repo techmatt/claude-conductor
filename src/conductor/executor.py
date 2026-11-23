@@ -23,10 +23,10 @@ it, keep going. Time limit: {max_hours:g}h; killed at {deadline}, later by any t
 paused: plan to it.
 
 Files. Write every file with Write or Edit; for a scripted change, one script for the whole
-change (every edit checked before any is written) in `out/{item_name}/` (Write, or `cat >
-out/{item_name}/x.py <<'EOF'`), run alone, never mid-chain. Never a heredoc into another
-file, `sed -i`, or a `-c`/`-e` script that writes one: conductor's hooks refuse each, and the
-call is lost.
+change (every edit checked before any is written) in `out/{item_name}/`, written with Write
+(a heredoc loses a level of backslash escaping), run alone, never mid-chain. Never
+a heredoc into another file, `sed -i`, or a `-c`/`-e` script that writes one: conductor's
+hooks refuse each, and the call is lost.
 
 Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
 hard to undo, with a default where one is reasonable: unanswered, it returns after
@@ -160,7 +160,7 @@ project {project}. Nobody is watching. Time limit: {max_hours:g}h; killed at {de
 if blocked. Plan by the last tool return's clock.
 
 Write files with Write/Edit only: hooks refuse `-c`/`-e`/`sed -i` writes, heredocs outside
-`out/` (scripts: `out/{item_name}/`, run alone), %TEMP% and the like.
+`out/` (scripts: `out/{item_name}/`, run alone; heredocs mangle backslashes), %TEMP% and the like.
 
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
 default (unanswered after {ask_minutes:g} min; it holds the session: background work

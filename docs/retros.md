@@ -64,7 +64,9 @@ Each tick after a `finish`, `pause`, `resume` or `retro` event, for each repo:
 
 It is not a night-shift draw: autopilot does not gate it, nor does the time of day.
 `[defaults] auto_retros = false` in `conductor.toml` turns it off; then the digest marks
-it **due** and the planner offers **post-audit X** as before. **post-audit X** stays for
+it **due** and the planner offers **post-audit X** as before. Either way, a planner
+reviewing a report may queue **post-audit X** at once, unasked, when a retro clearly makes
+sense (Matt's standing call, 148: `planner.md` *Maintenance*). **post-audit X** stays for
 retros Matt asks for by hand (`planner-vocab.md`).
 
 ## In the digest

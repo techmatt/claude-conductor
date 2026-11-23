@@ -31,7 +31,9 @@ Chosen by conductor, never by front-matter:
   time limit and kill time in its first paragraph (147: aicomplete 316 met its 4h cap only
   on resume, after planning an overnight farm), then
   *Files* (146: Write/Edit or one checked script file run alone, in `out/<item>/`, written
-  by Write or a heredoc there (147); never a heredoc into another file,
+  by Write, never a heredoc (148: a heredoc loses a level of backslash escaping under
+  conductor, helium-hustle 067, 070, 071; the hook still lets one into `out/` through,
+  147); never a heredoc into another file,
   `sed -i` or a writing `-c`/`-e`; the hooks refuse each), *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
   bars, the fix-loop cap, the wrong-repo guard as the only hard stop, fix the obvious, the
   leftover check), *Measurement* (paired and fresh seeds, a quiet box, ratios beside

@@ -117,7 +117,7 @@ def test_the_preambles_say_how_to_wait_estimate_and_write(env):
     assert "Write every file with Write or Edit" in full and "Never a heredoc into another file, `sed -i`" in full
     assert ("for a scripted change, one script for the whole change (every edit checked before any is "
             "written) in `out/001_a/`") in full and "run alone, never mid-chain." in full   # 133, 142, 146, 147
-    assert "(scripts: `out/001_a/`, run alone)" in light
+    assert "(scripts: `out/001_a/`, run alone; heredocs mangle backslashes)" in light   # 148
     assert "Write files with Write/Edit only: hooks refuse `-c`/`-e`/`sed -i` writes, heredocs outside `out/`" in light
 
 
