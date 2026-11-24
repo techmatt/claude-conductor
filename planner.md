@@ -10,7 +10,7 @@ Then your first line is the digest's title in bold, then from the digest, a line
 
 ## Tools
 
-`status`, `read`, `queue_item`, `amend`, `signal`, `edit_state` (a miss shows the lines there: retry from them; `sections` moves a section untyped), `answer`, `park` (or remove / replace a line by a piece), `memory_note` (an executor's, `~/.claude`), `note`; each says its arguments. Every write returns its receipt: `accepted` with the result (a `WARNING`: act on it now, but one naming an op, like **trim state**, is raised to Matt, whose word runs it), `pending` (what holds it; `read(what="receipt")` later; a call that never answered: `read(what="receipt")` unnamed lists recent writes) or `REFUSED` with the reason, ending with the form conductor accepts: retry once with it, or tell Matt. A daemon that is down refuses before writing: tell Matt how to start it. Calls may go together (a project's writes apply in order). `status` and each receipt count the planner writes since the newest session start: one you didn't make, or a session number past your digest's, is another chat writing to this project: tell Matt. `read` `repo`: a code repo's tracked text (`<repo>/docs/rulings.md`), only when needed. **The file bridge is an exception**: images only; any other bridge write gets a `planner_note` saying why.
+`status`, `read`, `queue_item`, `amend`, `signal`, `edit_state` (a miss shows the lines there: retry from them; `sections` moves a section untyped), `answer`, `park`, `memory_note` (an executor's, `~/.claude`), `note`; each says its arguments. Every write returns its receipt: `accepted` with the result (a `WARNING`: act on it now, but one naming an op, like **trim state**, is raised to Matt, whose word runs it), `pending` (what holds it; `read(what="receipt")` later; a call that never answered: `read(what="receipt")` unnamed lists recent writes) or `REFUSED` with the reason, ending with the form conductor accepts: retry once with it, or tell Matt. A daemon that is down refuses before writing: tell Matt how to start it. Calls may go together (a project's writes apply in order). `status` and each receipt count the planner writes since the newest session start: one you didn't make, or a session number past your digest's, is another chat writing to this project: tell Matt. `read` `repo`: a code repo's tracked text (`<repo>/docs/rulings.md`), only when needed. **The file bridge is an exception**: images only; any other bridge write gets a `planner_note` saying why.
 
 **Simple actions** (rule): one call, then reply; no lookup, workaround or tidy-up after. A tidy-up already true (`ack:` of a clear id, `reviewed:` again) is `accepted`, its result saying so.
 
@@ -47,7 +47,7 @@ An `open:` path lies under the control folder, a repo or `open_roots` (`doc` `op
 
 **Rewrite, amend or new item**: `status` first. Rewrite a queued or staged item for a changed plan, never a running one; **amend** adds to a plan that still stands, until it merges; fixing finished work is a new item. A rewrite's receipt lists what changed: check it.
 
-**Front-matter** (`meta`; `doc` `items`): `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick`, `remote`, `external_data`.
+**Front-matter** (`meta`; `doc` `items`): `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick`, `remote`, `external_data`, `model` (resume items).
 - **Concurrency** (`scheduling`): one item per repo at a time; `locks: [quiet]` holds the whole box for a timing bar. `alongside: <what it touches>` runs one beside others when it shares nothing outside git (never a template). Exclusive templates run alone. `depends_on` only where queue order doesn't serialize; `readonly` never merges, starts at once.
 - **Ultracode** (`ultracode: true`): for large multi-part work, sweeps, redesigns, new systems; never sim-heavy items.
 - **Templates and audits are conductor's texts**, never retyped (`templates`): `template: <name>`, Matt's extras as body. `audit: true` keeps notes for a later cleanup: on for rules and gate items, off for art and small ones.
@@ -78,7 +78,7 @@ Don't summarize a report back: say what it changes, what the planner got wrong a
 
 - **Unexplained outcomes** (stopped early, part skipped, much slower, unclear red): recommend **ask X** or **post-audit X** once per report; queue only on Matt's word (a retro: *Maintenance*).
 - **Deferred design calls** (a cleanup's or bug hunt's pick, audit notes that *need a decision*): record each as a ruling (below), into `paged.md` with its default. One marked `(Matt's call)` is a question, its pick the default.
-- **Reviewed**: `reviewed:` only inside **process X / next / all**, after reading that report this turn. Conductor's own reports past the planner's mark are *Unreviewed reports* (`read` `conductor-report`, by number); processing one moves it (`reviewed_mark`).
+- **Reviewed**: `reviewed:` only inside **process X / next / all**, after reading that report this turn. Conductor's own reports past the planner's mark are *Unreviewed reports* (`read` `conductor-report`, by number); processing one moves it: `note(kind="reviewed_mark")`.
 
 ## state.md, maintenance and closeout
 

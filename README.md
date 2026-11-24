@@ -44,7 +44,7 @@ command (`docs/restart.md`).
 | `docs/executors.md` | Launching an executor: MCP and settings files, `wait_for`, delivery, long calls, setup |
 | `docs/preambles.md` | What it is told: the full, light or watch preamble, its optional blocks (the diff review among them), port and scratch |
 | `docs/hooks.md` | The rule ledger: every executor rule, its origin, and whether the PreToolUse hook enforces it, the preamble says it, or it was dropped |
-| `docs/reports.md` | The report's header and an item's outcome |
+| `docs/reports.md` | The report's header, an item's outcome, and reviewing it (`reviewed:`, `review:`) |
 | `docs/logs.md` | Run logs: compaction and gzip |
 | `docs/ultracode.md` | `ultracode: true`: how it turns on |
 | `docs/templates.md` | Audit notes and the conductor-owned templates (the cleanups, bug hunt, self audit, watch) |
@@ -58,10 +58,12 @@ command (`docs/restart.md`).
 | `docs/signals.md` | Every signal verb; how a signal file applies |
 | `docs/open.md` | Desktop: `open:` (paths, URLs), `notify:` toasts |
 | `docs/receipts.md` | Each planner write's receipt: where, what it says, how long it lives |
-| `docs/inbox.md` | Checkpoints, the `session.md` and `review.md` digests, `inbox.md`, toasts |
+| `docs/inbox.md` | Checkpoints, the `session.md` and `review.md` digests, `inbox.md` |
+| `docs/toasts.md` | Desktop toasts: what toasts, what is panel only, coalescing |
 | `docs/run-targets.md` | `[run.<name>]` targets: start, open, stop |
 | `docs/picks.md` | Picker manifests, picker server and page, saved choices |
 | `docs/remote-workers.md` | Remote workers: `[remote]`, `farm-seeds`, local-remote worker, removal |
+| `docs/remote-trust.md` | Remote workers' trust gate, bundles and provenance |
 | `docs/farm-seeds.md` | `farm-seeds`: the commit it runs from, its dirty-tree warning, a failed shard's cause, `--cancel` and stop signals |
 | `docs/remote-status.md` | The worker page; the app's chip, Workers tab |
 | `docs/remote-url.md` | The one worker URL: PC name, pinned token, handover |
@@ -72,8 +74,10 @@ command (`docs/restart.md`).
 | `docs/memory-notes.md` | Executor memory notes under `~/.claude`: the planner's `memory_note`, applied by the daemon |
 | `docs/memory.md` | Memory and load sampling, pressure levels, launch guard, leftover reaper, a daemon's death |
 | `docs/app.md` | The desktop app: one per user, what it reads and writes, header, actions, project tools, tray |
+| `docs/app-status.md` | The app's icon, tab motion, window title, tray and toast clicks |
 | `docs/app-panels.md` | The app's tabs: Repos (with the Conversation view), Questions, Events, Proposed, Workers |
-| `docs/mcp.md` | `conductor mcp`, the planner's tools: each write and its receipt, attribution, reads, reach, registration, the launcher, the self-check |
+| `docs/mcp.md` | `conductor mcp`, the planner's tools: each write and its receipt, attribution, reads, reach, registration, the self-check |
+| `docs/mcp-launcher.md` | The MCP launcher: calls sent together, the call budget, the traffic log |
 | `docs/events.md` | `events.db` and every event kind with its detail |
 | `docs/stats.md` | `conductor stats`: items per week and model, spend by kind, corrections, planner writes per session |
 | `docs/restart.md` | The restart rule, self-restart on a code change; process groups, detached launches |

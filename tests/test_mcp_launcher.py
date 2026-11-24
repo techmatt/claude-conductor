@@ -1,4 +1,4 @@
-"""`conductor mcp`'s launcher with calls sent together (141, docs/mcp.md *The launcher*):
+"""`conductor mcp`'s launcher with calls sent together (141, docs/mcp-launcher.md):
 every call answered with its own id, whatever happens to the worker."""
 
 import io

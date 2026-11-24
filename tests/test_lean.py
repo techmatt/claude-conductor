@@ -135,11 +135,14 @@ def test_quiet_waits_for_the_next_outline_row_or_the_eta(env):
     rows = [{"title": "a", "eta": clock12(at - timedelta(hours=1)), "done": True},
             {"title": "b", "eta": clock12(at + timedelta(minutes=7)), "done": False},
             {"title": "c", "eta": clock12(at + timedelta(hours=1)), "done": False}]
-    log.append("progress", item=item, outline=rows)
+    # Posted two hours back, as an outline is: a clock time reads on its posting day (or the
+    # next), so a row posted "now" just after midnight could never be late (failed at 12:02am).
+    posted = stamp(at - timedelta(hours=2))
+    log.append("progress", item=item, outline=rows, happened=posted)
     assert env.d._promised(item, at)                        # 048: the next row, 7 minutes off
     rows[1] = {**rows[1], "eta": clock12(at - timedelta(minutes=20))}
     rows[2] = {**rows[2], "eta": clock12(at - timedelta(minutes=10))}
-    log.append("progress", item=item, outline=rows)
+    log.append("progress", item=item, outline=rows, happened=posted)
     assert not env.d._promised(item, at)                    # a late row
 
 

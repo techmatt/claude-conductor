@@ -61,6 +61,16 @@ def _next() -> int:
     with _counter_lock:
         return next(_counter)
 
+
+def fresh(cfg: config_mod.Config, name) -> Path:
+    """`name(n)` (a control-relative path) for the first counter value whose file and receipt
+    are both absent: the daemon deletes what it takes but keeps the receipt, and a new server
+    process starts its counter at 1 again, so a write in the same second would read the old one."""
+    while True:
+        path = cfg.control / name(_next())
+        if not path.exists() and not (cfg.control / rel_for(cfg.rel(path))).exists():
+            return path
+
 P = {"type": "string", "description": "The project (its conductor.toml `project`)."}
 TOOLS = [
     {"name": "status", "description": (
@@ -486,7 +496,8 @@ class PlannerServer:
             meta["description"] = " ".join(str(a["description"]).split())
         if a.get("edits"):
             meta["edits"] = [{"old": e.get("old") or "", "new": e.get("new") or ""} for e in a["edits"]]
-        path = cfg.path(memory_notes.ROOT, f"{stamp()}-{_next():03d}.md")
+        s = stamp()
+        path = fresh(cfg, lambda n: f"{memory_notes.ROOT}/{s}-{n:03d}.md")
         self.mark(cfg, path)
         write_file(path, item_text(meta, a.get("body") or ""))
         return self.wait(cfg, cfg.rel(path))
@@ -613,7 +624,8 @@ class PlannerServer:
             for t, ps in pairs.items():         # a conflict marker in the text: those go whole
                 whole[t] = request.apply_edits(rd._text(cfg.control / t) or "", t, ps)
             pairs = {}
-        d = cfg.path("requests", f"{datetime.now():%Y%m%d-%H%M}-mcp{datetime.now():%S}{_next():03d}")
+        now = datetime.now()
+        d = fresh(cfg, lambda n: f"requests/{now:%Y%m%d-%H%M}-mcp{now:%S}{n:03d}")
         self.mark(cfg, d)
         for t, text in whole.items():           # whole files first, request.md last
             write_file(d / t, text)

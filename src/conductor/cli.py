@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | stats | open | open-path | run-target | pick | init | rename-repo | remote | app | mcp`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | stats | open | open-path | run-target | pick | init | rename-repo | remote | prune | app | mcp`."""
 
 from __future__ import annotations
 
@@ -497,7 +497,7 @@ def cmd_remote(args) -> int:
 
 
 def cmd_prune(args) -> int:
-    """`prune`: the daemon's hourly disk sweep, now (docs/runtime.md, *Retention*)."""
+    """`prune`: the daemon's hourly disk sweep, now (docs/retention.md)."""
     from . import disk
     cfg, log = _open(args.control)
     live = {f"{p.parent.name}/{p.stem}" for p in cfg.path("running").glob("*/*.md")}

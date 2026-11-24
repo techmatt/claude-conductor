@@ -24,6 +24,7 @@ reports/<repo>__NNN_name.log   raw executor output (stream-json; .log.gz once fi
 requests/<stamp>/              planner → conductor: request.md (+ replacement files, or edits)
 signals/                       planner/app → conductor: the verbs in signals.md
 receipts/                      conductor → planner: what became of each write (see receipts.md)
+memory-edits/<stamp>.md        planner → daemon: executor memory-note requests (memory-notes.md); ignores itself
 backlog/<repo>/<name>.md       pre-approved items, drawn into an empty queue (see night-shift.md); ignores itself
 parked/<repo>[.done].md        parked edits for the next serial item (parked.md); ignores itself
 questions/                     executor asks: <id>.md, .answer.md, .result.json, .away

@@ -7,7 +7,7 @@ picker server (`picker`), whose handler threads touch only files and a queue tha
 loop drains into the event log.
 
 `Daemon` is this module plus a mixin per concern: `daemon_signals` (signal
-files and their verbs), `daemon_messages` (questions, progress, deliveries, amendments),
+files and their verbs), `daemon_reorder` (reorder's rename journal), `daemon_messages` (questions, progress, deliveries, amendments),
 `daemon_receipts` (a receipt per planner write), `daemon_reap` (leftover processes and
 worktrees), `daemon_merge` (merges and concluding an item), `daemon_setup` (a repo's
 setup commands, off the loop), `daemon_restart` (restarting itself when its code changes),
@@ -42,6 +42,7 @@ from .daemon_messages import MessagesMixin
 from .daemon_push import PushMixin
 from .daemon_receipts import ReceiptsMixin
 from .daemon_reap import ReapMixin
+from .daemon_reorder import ReorderMixin
 from .daemon_restart import RestartMixin
 from .daemon_retros import RetrosMixin
 from .daemon_setup import SetupMixin
@@ -108,7 +109,7 @@ def _pick_ref(repo: str, value: str | None) -> str | None:
     return f"{repo}/{picks.normal(value)}" if value and value.lower() != "none" else None
 
 
-class Daemon(SignalsMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
+class Daemon(SignalsMixin, ReorderMixin, MessagesMixin, ReapMixin, MergeMixin, SetupMixin, RestartMixin, ReceiptsMixin,
              TemplatesMixin, WatchMixin, PushMixin, MemoryMixin, MachineMixin, RetrosMixin, ApiMixin,
              ToastsMixin, QueueMixin):
     def __init__(self, cfg: Config, echo=print, notifier=None):

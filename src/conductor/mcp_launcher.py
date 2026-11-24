@@ -1,4 +1,4 @@
-"""`conductor mcp`, as the desktop app starts it: a thin launcher (docs/mcp.md, *The launcher*).
+"""`conductor mcp`, as the desktop app starts it: a thin launcher (docs/mcp-launcher.md).
 
 The app starts one server process and keeps it for its whole life, so a server that held
 its code would need a full app restart after every conductor prompt that changes a tool. The

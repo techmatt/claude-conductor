@@ -17,7 +17,7 @@ from .model import Snapshot
 APP = "Conductor"
 GLYPHS = "◐◓◑◒"          # the running title's glyph, one step a tick (about a second)
 NEED = "●"
-WAIT = "🟠"              # nothing running, something waiting (`docs/app.md`, *Waiting*)
+WAIT = "🟠"              # nothing running, something waiting (`docs/app-status.md`, *Waiting*)
 
 
 @dataclass

@@ -61,7 +61,7 @@ Options:
   stage-I Muster, unflagged).
   The call returns at once and the executor carries on with its default, so the item is never
   blocked. Since 146 its `ask` raises a toast (`design question from <item> (on its default)`,
-  `inbox.md` *Toasts*), so Matt can answer while the item still runs (helium-hustle 031 and 037
+  `toasts.md`), so Matt can answer while the item still runs (helium-hustle 031 and 037
   each needed a follow-up item). The question has no deadline: it stays open, marked `design`, in the app and the
   inbox (never counted as `asking`, needing Matt or a watch flag), and outlives its item. When
   an answer file comes the daemon resolves it (`answer`, not `late`) and a running item gets

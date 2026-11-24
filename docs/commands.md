@@ -30,6 +30,7 @@ uv run conductor prune [<control folder>] [--dry-run]     # the hourly disk swee
 uv run conductor app [<control folder> …]                  # the desktop app (app.md)
 uv run conductor mcp [--control <folder> …]                # the planner's stdio MCP server: a launcher running it fresh (mcp.md)
 uv run conductor mcp --selftest [--control <folder>]       # every tool through the launcher against the sandbox, a line each
+uv run conductor mcp --worker [--control <folder> …]       # internal: the server the launcher runs (mcp-launcher.md)
 ```
 
 The control folder argument defaults to `$CONDUCTOR_CONTROL`, then the current folder.

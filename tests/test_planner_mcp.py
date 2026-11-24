@@ -80,6 +80,7 @@ def test_a_start_returns_the_rules_and_the_digest_in_one_call(env):
     assert env.events("checkpoint")[-1].detail.get("by") == "planner"
 
 
+@pytest.mark.slow                                   # 2.6-3.0s serially
 def test_an_item_queued_returns_its_start_and_a_rewrite_what_changed(env):
     alive(env)
     text, is_error = call(env, "queue_item", {"repo": "code", "name": "fix_menu", "body": "do it",

@@ -44,7 +44,7 @@ resume: sandbox              # they carry on, deadlines moved by the pause; the 
 model: fable                 # opus | fable: every project's next new session (executors.md, Model)
 ```
 
-One file may carry several lines; the planner names its files `planner-<stamp>.signal`.
+One file may carry several lines; the planner's are `planner-<stamp>[-<n>].signal` (the MCP server adds the counter).
 What became of each file is its receipt, `receipts/signals/<name>.md` (`receipts.md`).
 Items are named `NNN_name` or `NNN` (numerically: `7` is `007`). A ` # comment` after a
 value is ignored, except in `tell`, `checkpoint`, `session`, `notify`, `park` and `ack` (its `#<event>`).
@@ -79,33 +79,8 @@ value is ignored, except in `tell`, `checkpoint`, `session`, `notify`, `park` an
   `.conductor/reorder.json`. A failed rename (a file held open) leaves the journal: a
   `warning`, then every tick rolls it forward until it completes (`reorder` with `note`),
   that queue launching nothing meanwhile; a restart finishes it the same way.
-- **reviewed** — `reviewed: <repo>/<NNN_name>` (or `NNN_name`, `NNN`; a name without a
-  repo is looked up across every repo, and one found in two is ambiguous: refused), or a
-  comma list of them (128: `reviewed: 182, 183, wordwarriors/184`), each checked as one
-  alone; a ref refused refuses the line, and none of it is marked.
-  It marks each finished item's report as reviewed and logs `reviewed` (item, `finish`:
-  the finish event's id, `status`, `by`: the file's `by:` or `unknown`). Refused for an
-  item that has not finished (queued, staged or running) or is unknown. An item already
-  reviewed is a no-op said only in the receipt's `result` (129; before, a `warning`),
-  naming the earlier `reviewed` event (*Tidy-ups*, below). Reviewed state is derived from the event log (an item is reviewed once a
-  `reviewed` event names it), so it survives restarts, and it is independent of the
-  read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
-  waits on the read mark. Several `reviewed:` lines may share a file. The event keeps
-  `hashes` of the report and its `.audit.md`: when either changes later, the daemon's
-  scan (and its first, at start) logs `report_changed` and the item is unreviewed again
-  until the next `reviewed:`, which is then accepted (`inbox.md`, *Reviewed reports
-  that change*). A report reviewed before hashes were kept is never checked.
-- **session_opened** — `session_opened: <item>` (resolved as for `reviewed:`), written by
-  the app's **Terminal** and `conductor open`, logs `session_opened` (`session_id`, `by`)
-  for a later `report_changed` to name.
-- **review** — `review: all` or `review: <ref>` (one token; the ref resolves as for
-  `reviewed:`, so `code/2` works) rewrites `review.md` whole: the unreviewed reports
-  (or that one finished item's, reviewed or not) inlined, plus conductor's own past
-  the planner's marker for `all` (layout: `inbox.md`, *Review bundle*), and logs `review`.
-  It marks nothing reviewed. A queued or running item, an unknown or ambiguous ref, or
-  a non-repo prefix is refused (`review: code/003_x has not finished; only a finished
-  item's report can be reviewed`, `review: no finished item '009'`); a multi-word
-  value fails the syntax check.
+- **reviewed**, **review**, **session_opened** — marking a finished item's report reviewed, the
+  `review.md` bundle, and a report's session opened: `reports.md`, *Reviewing*.
 - **tell** — `tell: <item> <message>`: `progress.md` (refused in setup). It never answers
   a question the item waits on (`questions.md`).
 - **pause** / **resume** — `pause: <repo>`, `resume: <repo>` (a no-op when already so, 129):

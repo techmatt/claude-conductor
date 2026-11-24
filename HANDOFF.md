@@ -30,7 +30,7 @@ The one file that starts a claude.ai session for conductor work. Read it, then `
 
 ## Status
 
-Last cleanup: 2026-11-17, after prompt 132
+Last cleanup: 2026-11-23, after prompt 148
 
 Phases 1–4 are done; phase 5 runs live with Corelight (`C:\Code\corelight-control`), Word Warriors (`C:\Code\wordwarriors-control`), aicomplete (`C:\Code\aicomplete-control`), fractals (`C:\Code\fractals-control`), workbench (`C:\Code\workbench-control`: small unrelated scripts, a subfolder each; 92) and Helium Hustle (`C:\Code\helium-hustle-control`). Each prompt's report in `reports/` says what it changed; `README.md` and `docs/` hold how it works.
 
@@ -43,7 +43,7 @@ Live, by area (the doc named holds the detail):
 - **Night shift**: a stall check, `W<n>_watch` items every 30 minutes (and for a question blocked 15), backlog draws within a nightly budget, autopilot gating draws only; routine watches one digest line (`docs/night-shift.md`).
 - **Requests and messages** (58): requests apply in write order, wait for late targets and 30s from the folder's newest write for a copy identical to HEAD; edit-block targets (84); a folder with no `request.md` goes stale after an hour; a tell never answers a question; queue receipts give the start and why (`docs/requests.md`, `questions.md`, `receipts.md`).
 - **Parked edits and retros** (59): `parked\<repo>.md` lines go to the next serial item (`[rules]` too since 143), skipped ones come back (`docs/parked.md`); reports add `friction:` and `warnings:` (109: a repo's *Warning checks* or `warning_checks`, by item in the digests, never a hold or toast, unchanged ones folded to *standing*; `docs/warnings.md`); workflow retros (62: `partial`/`red`, past ~1.5× first ETA, or 12 items) queue themselves (107, `docs/retros.md`), never for one cancelled, told to stop, or waiting only on Matt (115–132); a queue file whose number is taken is renumbered (115, `items.md`).
-- **Toasts** (115, `docs/inbox.md` *Toasts*): only what Matt acts on: one per finished item with its queue state merged in (partial/red in the title), questions with no default or `design` (146), a picker opened for him, and errors (red, refused requests and signals, push failures, daemon or run target down, the watch's stuck flag). The rest is panel only; toasts within a minute merge.
+- **Toasts** (115, `docs/toasts.md`): only what Matt acts on: one per finished item with its queue state merged in (partial/red in the title), questions with no default or `design` (146), a picker opened for him, and errors (red, refused requests and signals, push failures, daemon or run target down, the watch's stuck flag). The rest is panel only; toasts within a minute merge.
 - **Executor discipline** (61–148): every executor rule, its origin and where it lives (preamble text, the PreToolUse hook, or dropped) is one row of the rule ledger, `docs/hooks.md`; `docs/preambles.md` is the preambles' structure (123: short preambles, a fix-loop cap, a diff review before every writable full item's report). Also: `append_only` union merges, `out/keep/` (`worktrees.md`), `write_roots`, staging defaults (`questions.md`), `MAX_AGENTS` (`ultracode.md`).
 - **API outages** (111; `docs/api-retry.md`): an executor exiting on an API failure (403 / Cloudflare, auth, 5xx, 429, overloaded) waits in `running/`, clock paused, resuming its session in its worktree after 2 / 10 / 30 min (`api_retry_minutes`), red naming the API only when they're spent; `retry: <item>` resumes a kept red item on demand and lifts its hold when it lands; an API-only red queues no retro; a resume item's red never holds; a fork's cost is its own.
 - **Machine restarts** (105; `docs/restart.md`, *Machine restarts*): a pending Windows Update restart warns once a boot and day while work waits; a run cut off resumes its session in place once, its deadline moved, else red naming the restart; `external_data: true` items commit per step and a red one's inbox line offers `land:` first. A rewritten staged item's amendments stand and are named (105, `items.md`).
@@ -61,7 +61,7 @@ Planner docs: `planner.md` (`start_session` returns it whole), `planner-bridge.m
 
 A next prompt should know:
 - A behaviour change updates `planner.md` (and `claude-ai-new-project.md` where it covers the topic) and the matching `docs/` file, not README's body.
-- Every doc and code file has a size budget (`CLEANUP.md`, *Size budgets*; `uv run python tools/sizes.py`, 1 KB = 1,000 bytes). `planner.md` and `CLAUDE.md` hold theirs: an addition to `planner.md` pays for itself by folding a rule `docs/` already holds into a pointer. `Daemon` is `daemon.py` plus one `daemon_*` mixin per concern; the app's tabs are one `app/*_panel.py` each.
+- Every doc and code file has a size budget (`CLEANUP.md`, *Size budgets*; `uv run python tools/sizes.py`, 1 KB = 1,000 bytes). `planner.md` and `CLAUDE.md` hold theirs: an addition to `planner.md` or this file trims first, in the same item, e.g. folding a rule `docs/` already holds into a pointer; other splits wait until a prompt would pass budget. `Daemon` is `daemon.py` plus one `daemon_*` mixin per concern; the app's tabs are one `app/*_panel.py` each.
 - Tests wait up to `WAIT_SECONDS` (180s, `tests/conftest.py`) for the daemon, so the full lane passes while a project's executor holds the CPU (`docs/development.md`).
 
 ## Open
@@ -77,7 +77,6 @@ Chores:
 - Staging `Questions:` deciding a rule's shape could block launch (156's Q1 cost a rework); since 120, open rulings. (aicomplete 164, #7341, as are the next three)
 - Remind an executor whose outline ETA trails its `eta` by a third (156: two watch tells).
 - Aicomplete's scripts put headless Edge's `--user-data-dir` in `%TEMP%` (Defender scans it, not `out/`; 170): its planner's.
-- Size splits wait until a prompt would pass budget (`tools/sizes.py`); one adding to `planner.md` or this file trims first, in the same item (both at budget again after 135).
 - 116's OOM fix (`index.html`'s recycle, reload) is unrun in a browser: check aicomplete's laptop tab (`coresReplaced`, no `load failed` gate).
 - `wait_for`'s default `fail` pattern matches "error" in ordinary prose (subagent output under ultracode: aicomplete 173 lost ~10 min). Fix: a default that can't match ordinary text. Due from #7766.
 - An item-file edit that only appends answers to the stage's own questions should keep the stage and deliver once (177 restaged, got two copies). (aicomplete 193, due from #8636, as are the next two)
@@ -97,7 +96,6 @@ Chores:
 - ETAs run ~2–3× long (helium-hustle 049, 052); Matt: fix only if trivial (calibrate from `stats`' recent durations, or a preamble line).
 - fractals website 016 (#2582): kill an item's stray processes by tree or by command lines naming its `out/` (015's headless Chrome held port 9433 for 1.5 h); an event when a sibling repo's commit moves an item's pinned target; planner side: check prompts against `docs/rulings.md`, queue a sibling repo's half as its own item, size a browser bar from the last bench.
 - `Path.write_text` CRLF broke tests in helium-hustle 062, 063: the hook normalizes files executors write, or refuses with the fix named (due from helium-hustle closeout s8).
-- planner.md *Reading a report*: name `note` kind `reviewed_mark` (helium-hustle s8 spent two refused signals guessing).
 
 - **`external_data` landing mid-run** (105, not built): its branch lands only at the end or by `land:`. If it bites: a `land_now` progress field fast-forwarding main to the branch head between steps, refused while another item holds the repo.
 
@@ -124,7 +122,7 @@ Still not live:
 - **114–115**, unseen live: `--cancel` freeing `aic-sim.exe`, a killed `native_build` finishing; toast settle times, a renumbered item's `depends_on`.
 - **135**: unseen live: does a `--resume` with `--model` keep the stage's cache; do Fable items obey preamble and hooks?
 - **113's fix-in-place**: unseen live: items fixing instead of noting; post-audits landing small fixes.
-- **112**: aicomplete needs `display_name = "AIcomplete"` (its planner's request); does claude.ai title a chat from the planner's bold first line?
+- **112**: does claude.ai title a chat from the planner's bold first line?
 - **111**: unseen live: a `--resume` after a 403 carrying on mid-step, its cost. **110**: kept reads' 3 items / 2 GB right?
 - **109's `warnings:`**: unseen live. aicomplete's design checker (205) is the first user: its `CLAUDE.md` *Warning checks* or `warning_checks` is its planner's to add; do executors run the checks and copy the parts verbatim?
 - **Farm load** (aicomplete 168, #7341): no broker → `run_local` runs native at full `--threads` (~95 min): cap at `main_slots`. A `remote: true` item's load warning should name `main_slots` as its share. A worker offline mid-item raised no flag: the watch or *Now* should.

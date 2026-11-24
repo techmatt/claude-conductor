@@ -1,4 +1,4 @@
-"""The app's watch on each daemon (`app/heartbeat.py`, docs/app.md *Daemon down*): one toast per
+"""The app's watch on each daemon (`app/heartbeat.py`, docs/memory.md *Death made visible*): one toast per
 death or hang, nothing for a daemon stopped on purpose, a restart action on the button."""
 
 import json

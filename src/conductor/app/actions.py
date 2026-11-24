@@ -36,7 +36,9 @@ def write_signal(control: Path, *lines: str, by: str = BY, before=None) -> Path:
         base = f"{by}-{stamp}-{next(_counter):06d}"
         final = sdir / f"{base}.signal"
         tmp = sdir / f"{base}.tmp"
-        if not final.exists() and not tmp.exists():
+        # A taken signal is deleted but its receipt stays: a second process in the same second
+        # (the planner's server, its counter at 1 again) must not reuse the name and read it.
+        if not final.exists() and not tmp.exists() and not (Path(control) / "receipts" / "signals" / f"{base}.md").exists():
             break
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)

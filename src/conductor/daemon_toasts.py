@@ -1,4 +1,4 @@
-"""Desktop toasts from the event log (`notify.Toasts`; `docs/inbox.md`, *Toasts*)."""
+"""Desktop toasts from the event log (`notify.Toasts`; `docs/toasts.md`)."""
 
 from __future__ import annotations
 

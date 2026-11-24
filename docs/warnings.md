@@ -76,7 +76,7 @@ A new project is offered checks for its domain at setup (`claude-ai-new-project.
   parentheses only (019 wrote "(pre-existing; this item changes no rules)").
 - **Maintenance facts** (`session.md`): per repo, ``- `warnings:` kinds repeated in the
   last N report(s): <kind> (<numbers>); …`` or `none`, like `slow:` and `friction:`.
-- **No toast** since 115: warnings are panel only (`inbox.md`, *Toasts*).
+- **No toast** since 115: warnings are panel only (`toasts.md`).
 
 The planner raises a `warnings:` line to Matt first, with the item's own judgement
 (`planner.md`, *Reading a report*).

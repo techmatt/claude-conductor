@@ -90,3 +90,35 @@ item that changed its repo, a launch failure (worktree or setup included), a
 `paths` violation, uncommitted changes left in the worktree, or a rebase conflict
 (including a prose conflict its merge executor failed to resolve).
 The reasons are listed in the `finish` and `red` events.
+
+## Reviewing
+
+The signals that mark a report read (`signals.md` has the file format and *Tidy-ups*):
+
+- **reviewed** — `reviewed: <repo>/<NNN_name>` (or `NNN_name`, `NNN`; a name without a
+  repo is looked up across every repo, and one found in two is ambiguous: refused), or a
+  comma list of them (128: `reviewed: 182, 183, wordwarriors/184`), each checked as one
+  alone; a ref refused refuses the line, and none of it is marked.
+  It marks each finished item's report as reviewed and logs `reviewed` (item, `finish`:
+  the finish event's id, `status`, `by`: the file's `by:` or `unknown`). Refused for an
+  item that has not finished (queued, staged or running) or is unknown. An item already
+  reviewed is a no-op said only in the receipt's `result` (129; before, a `warning`),
+  naming the earlier `reviewed` event (`signals.md`, *Tidy-ups*). Reviewed state is derived from the event log (an item is reviewed once a
+  `reviewed` event names it), so it survives restarts, and it is independent of the
+  read mark: reading the inbox never marks anything reviewed, and `needs_planner` still
+  waits on the read mark. Several `reviewed:` lines may share a file. The event keeps
+  `hashes` of the report and its `.audit.md`: when either changes later, the daemon's
+  scan (and its first, at start) logs `report_changed` and the item is unreviewed again
+  until the next `reviewed:`, which is then accepted (`inbox.md`, *Reviewed reports
+  that change*). A report reviewed before hashes were kept is never checked.
+- **session_opened** — `session_opened: <item>` (resolved as for `reviewed:`), written by
+  the app's **Terminal** and `conductor open`, logs `session_opened` (`session_id`, `by`)
+  for a later `report_changed` to name.
+- **review** — `review: all` or `review: <ref>` (one token; the ref resolves as for
+  `reviewed:`, so `code/2` works) rewrites `review.md` whole: the unreviewed reports
+  (or that one finished item's, reviewed or not) inlined, plus conductor's own past
+  the planner's marker for `all` (layout: `inbox.md`, *Review bundle*), and logs `review`.
+  It marks nothing reviewed. A queued or running item, an unknown or ambiguous ref, or
+  a non-repo prefix is refused (`review: code/003_x has not finished; only a finished
+  item's report can be reviewed`, `review: no finished item '009'`); a multi-word
+  value fails the syntax check.

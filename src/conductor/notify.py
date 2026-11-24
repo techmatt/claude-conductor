@@ -1,6 +1,6 @@
 """Desktop notifications. Windows toasts through WinRT (`windows-toasts`); elsewhere none.
 
-Only what Matt acts on toasts (115, `docs/inbox.md`, *Toasts*): an item finishing (its queue
+Only what Matt acts on toasts (115, `docs/toasts.md`): an item finishing (its queue
 state merged in), something that waits on him, and errors. Everything else is panel only.
 Toasts for the project within about a minute become one. A toast is best effort: the daemon
 logs a failure as a `warning` and carries on.

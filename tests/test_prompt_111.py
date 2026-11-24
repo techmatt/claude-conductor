@@ -60,6 +60,7 @@ def test_a_resume_items_red_never_holds_and_its_cost_is_its_own(env):
     env.tick_until(lambda: env.finished("code/003_next"))       # the queue never stopped
 
 
+@pytest.mark.slow
 def test_retry_resumes_a_kept_red_item_lands_it_and_lifts_its_hold(env):
     env.queue("001_red", "FAKE commit a.txt one\nFAKE report red")
     env.tick_until(lambda: env.finished("code/001_red"))

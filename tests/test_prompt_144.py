@@ -84,6 +84,7 @@ def test_park_parts_and_retry_parts():
         retry_parts("code/297_x model: sonnet")
 
 
+@pytest.mark.slow
 def test_mcp_park_removes_and_replaces_through_the_daemon(env):
     write_parked(env, SEVEN_TEN, BOTNET)
     alive(env)
@@ -151,6 +152,7 @@ def test_usage_limit_reading():
     assert daemon_api.other_models("fable") == ["opus"]
 
 
+@pytest.mark.slow
 def test_a_resume_item_takes_its_own_model(env, setting):
     env.queue("001_orig", "FAKE commit a.txt one")
     env.tick_until(lambda: env.finished("code/001_orig"))

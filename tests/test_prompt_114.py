@@ -29,6 +29,7 @@ def test_both_preambles_say_a_soft_miss_is_done_and_partial_is_a_real_shortfall(
     assert "part met" not in full + light
 
 
+@pytest.mark.slow
 def test_a_soft_band_only_miss_reported_done_queues_no_retro(env):
     env.queue("001_tune", "FAKE report done")       # the done-when table names its soft-band miss
     env.tick_until(lambda: env.finished("code/001_tune"))

@@ -7,15 +7,16 @@ import json
 import sys
 import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_client import call_planner  # noqa: E402
 
 from conductor import daemon_api, memory_notes, planner_mcp, planner_read, quiet, state, talk  # noqa: E402
-from conductor.events import EventLog  # noqa: E402
-from conductor.util import read_text, split_front_matter  # noqa: E402
+from conductor.util import read_text  # noqa: E402
 from test_planner_mcp import alive  # noqa: E402
 
 
@@ -31,6 +32,7 @@ def call(env, tool: str, args: dict) -> tuple[str, bool]:
     return box["r"]
 
 
+@pytest.mark.slow
 def test_the_planner_changes_an_executor_memory_note_through_the_daemon(env):
     mem = memory_notes.memory_dir(env.repo)
     assert mem.parts[-3:] == ("projects", memory_notes.folder_name(env.repo), "memory")
@@ -57,6 +59,25 @@ def test_the_planner_changes_an_executor_memory_note_through_the_daemon(env):
     assert not err and "deleted; MEMORY.md line dropped" in text, text
     assert not (mem / "reports-to-drive.md").exists() and read_text(mem / "MEMORY.md") == ""
     assert not list((env.control / memory_notes.ROOT).glob("*.md"))      # each request deleted once applied
+
+
+def test_a_new_server_process_never_reuses_a_name_whose_receipt_is_still_there(env, monkeypatch):
+    """Cleanup 11-23: the server's counter starts at 1 in every process, and the daemon deletes what
+    it takes but keeps its receipt: a write in the same second read the earlier write's receipt."""
+    from conductor.app import actions
+    monkeypatch.setattr(planner_mcp, "_counter", iter(range(1, 10)))
+    (env.control / "receipts" / "memory-edits").mkdir(parents=True, exist_ok=True)
+    (env.control / "receipts" / "memory-edits" / "s-001.md").write_text("old", encoding="utf-8")
+    assert planner_mcp.fresh(env.cfg, lambda n: f"memory-edits/s-{n:03d}.md").name == "s-002.md"
+    monkeypatch.setattr(actions, "_counter", iter(range(1, 10)))
+    class Fixed(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 23, 1, 2, 3)
+    monkeypatch.setattr(actions, "datetime", Fixed)
+    (env.control / "receipts" / "signals").mkdir(parents=True, exist_ok=True)
+    (env.control / "receipts" / "signals" / "planner-20261123-010203-000001.md").write_text("old", encoding="utf-8")
+    assert actions.write_signal(env.control, "ack: invalid", by="planner").name == "planner-20261123-010203-000002.signal"
 
 
 def test_queue_item_and_amend_warn_what_the_executor_cannot_do():
