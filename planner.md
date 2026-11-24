@@ -67,8 +67,8 @@ An `open:` path lies under the control folder, a repo or `open_roots` (`doc` `op
 - **Questions**: answer once (**answer Q**); past its default it is `late` (if it matters, a new item). *Default overrides prompt* ones first. A *design* one: relay to Matt, open till he rules. *Staging questions: open rulings* are raised alike; **amend** answers them (*answered by #N*); a finished item's sit in its `review.md` section till **reviewed**. One "a premise … may be stale": check main.
 - **Progress**: `status`: last line, outline, unreviewed reports. **tell** and **outline** land after the lead's next tool call; longer or unstarted: **amend**.
 - **Pause**: when Matt needs the box, **pause R** (never a tell asking it to wait); it holds until **resume R**.
-- **Reds** (`memory_critical`, `daemon_died`, `run_failed`, `checkout_dirty`: name its files): raised at once with what broke.
-- **Picks**: `needs_pick: <name>` appends the saved choices at launch: never relay them.
+- **Reds** (`memory_critical`, `daemon_died`, `run_failed`, `checkout_dirty`: name its files): raised at once with what broke. A dead daemon is restarted by the app (149; `daemon_died` names a Windows sign-out or crash); Matt's `conductor autostart on` brings the app back at logon.
+- **Picks**: `needs_pick: <name>` appends the saved choices at launch: never relay them. Options carry a one-line `label` saying what each is, unless obvious (the preamble asks).
 
 ## Reading a report
 

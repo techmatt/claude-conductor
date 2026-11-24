@@ -52,10 +52,11 @@ Live, by area (the doc named holds the detail):
 
 - **Split state, hunts on yield** (137): `state.md` is the wavefront; `habits.md` and `paged.md` are control files (the digest reads `habits.md`, else the old section); standing rulings live in each repo's `docs/rulings.md`, named in the preamble and diff review when present. Bug hunts default to recent changes and stop after two thin rounds (`templates.md`).
 - **Planner MCP tools** (136, 138, 140; `docs/mcp.md`): `conductor mcp`, in the Claude desktop app, is the planner's surface: `start_session`, `status`, `read` (repo files, conductor's reports: 140), and writes that write the bridge's files `by: planner`, marked `via: mcp` (140), returning the receipt; `edit_state` moves sections (140). A launcher runs the server fresh per code change; `--selftest`. 141: calls sent together each answer, a project's writes in order; traffic log; markdown `repo` reads header-first. 142: calls answer in 65 s; staging questions close on a later amendment. The bridge is the exception (images).
-- **Scoreboard, dead daemons** (139): `conductor stats` / `read(what="stats")` (`docs/stats.md`); the app toasts a dead or hung daemon once, offering a restart (`memory.md`).
+- **Scoreboard, dead daemons** (139, 149): `conductor stats` / `read(what="stats")` (`docs/stats.md`); the app toasts a dead or hung daemon once, and since 149 restarts a dead one, naming Windows' reason; `autostart` (`memory.md`).
 - **143–146**: `memory_note`; API reds leave a stub report; `locks: [quiet]`; one thread budget; `park` by a piece; `retry: X model:`, usage-limit waits; launch defaults in `review.md`; `status` names unreviewed reports; design asks toast; preambles lead with the write rule; readonly: `out/keep/` papers, notes, no checks.
-- **147** (`retention.md`): an hourly disk sweep (`conductor prune`): a reviewed kept worktree's `rebuildable`, old farm jobs, bundles, trees (`[remote] keep_*`), each a `pruned` event; main slots serve farm jobs oldest first; `farm-seeds --native-only`, `--shard-seeds N`, `job.json` from the start, `[remote] header`; heredoc scripts into `out/` allowed; the time limit leads the preambles, stage and resume.
+- **147** (`retention.md`, `farm-seeds.md`): an hourly disk sweep (`conductor prune`, `pruned` events); farm jobs served oldest first; `--native-only`, `--shard-seeds N`, `[remote] header`; the time limit leads the preambles, stage and resume.
 - **148**: scripts by Write, never a heredoc (preambles, refusal); planner.md standing calls: queue a retro that clearly makes sense unasked; *Open questions* only what Matt answers now (the rest → `paged.md`).
+- **149**: picker options' one-line `label` asked for unless obvious, shown under the image; farm-seeds' Ctrl-Break stops at once; `planner.md` budget 15 KB.
 
 Planner docs: `planner.md` (`start_session` returns it whole), `planner-bridge.md`, `planner-vocab.md` (rare ops, 125), `claude-ai-new-project.md` (new / park / resume, setup); README is an overview and an index into `docs/`.
 
@@ -95,6 +96,7 @@ Chores:
 - Merge `cleanup` and `general_cleanup` into one template with a scope knob (notes only | notes + whole-repo audit): both due → the broad one; two sessions only for ~20+ notes (fractals s8 queued 069 + 070, cancelled 069). Matt agreed 11-22; due from #2582.
 - ETAs run ~2–3× long (helium-hustle 049, 052); Matt: fix only if trivial (calibrate from `stats`' recent durations, or a preamble line).
 - fractals website 016 (#2582): kill an item's stray processes by tree or by command lines naming its `out/` (015's headless Chrome held port 9433 for 1.5 h); an event when a sibling repo's commit moves an item's pinned target; planner side: check prompts against `docs/rulings.md`, queue a sibling repo's half as its own item, size a browser bar from the last bench.
+- fractals 076 (#2582): `wait_for` should take an agent id (074 sat on a never-matching log line); a cut's resume preamble names the background subagents running at the cut (SendMessage resumes them).
 - `Path.write_text` CRLF broke tests in helium-hustle 062, 063: the hook normalizes files executors write, or refuses with the fix named (due from helium-hustle closeout s8).
 
 - **`external_data` landing mid-run** (105, not built): its branch lands only at the end or by `land:`. If it bites: a `land_now` progress field fast-forwarding main to the branch head between steps, refused while another item holds the repo.
@@ -109,7 +111,7 @@ Still not live:
 - **124**: the worker test is proven in the sandbox (headless Chrome) only: run it on aicomplete with the laptop joined. Does the farm reminder catch aicomplete's real direct runs, and stay quiet otherwise?
 - **123**: short preambles and the diff review, sandbox only: anything lost from *Dropped in 123*? real bugs found, at what cost?
 - **119–122**, unseen live: Helium's **Run game** by the card viewer, old servers replaced (119); a Workflow call at the hook, stages naming defaults (120); `unchanged from main:`, `UNCHANGED_RE` over-catching (121); hook denies in items, a helper's `agent_id`, legit calls denied (122).
-- **139**: the dead-daemon toast and Restart button are sandbox-proven only; `stats`' corrections rule right?
+- **149**: the app's daemon restart is sandbox-proven (toast 12 s after a kill); autostart off till Matt turns it on. `stats`' corrections rule right (139)?
 - **143**, unseen live: a `[rules]` edit carried; a `memory_note`; a stub report; `quiet` holding another project. **148**: do executors stop writing heredoc scripts?
 - **147**, unseen live: the hourly sweep in a daemon (run by hand via `prune` on every project); job order steering a multi-row farm; `--native-only` on a costly agent; aicomplete's `[remote] header` (`aic-sim farm {args} --header`) is its planner's to add; do 2 days / 5 GB of jobs suit its reads?
 - **144**, fake-tested only: check the usage-limit wait (box's zone) and `retry: … model:` on the first live limit red; build nothing till then.

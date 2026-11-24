@@ -111,8 +111,10 @@ It warns and carries on; it never refuses.
   and closes the job on the broker, so workers drop its shards at once (`Board._unwanted`).
   It says `farm-seeds: cancelled N run(s) of item <id>` and exits 0.
 - **Ctrl-C, Ctrl-Break or SIGTERM** set its cancel: the main-box slots stop, their native
-  runs are killed, the job is closed and it exits 130 (`CANCELLED_EXIT`), writing nothing
-  to `<out file>`. A run that stayed local stops the same way, though its native command
+  runs are killed at once, the job is closed and it exits 130 (`CANCELLED_EXIT`) within a
+  second, writing nothing to `<out file>`. (Until the shim's `-m` run used the imported
+  module, the signal set `__main__`'s cancel, not the one the native runs poll, so a stop
+  waited out every running shard.) A run that stayed local stops the same way, though its native command
   may have begun writing `<out file>`.
 - **A hard kill** (TerminateProcess, as stopping its shell may do) runs no handler. Every
   native shard it starts sits in a kill-on-close job object (`procs.die_with_me`, Windows,

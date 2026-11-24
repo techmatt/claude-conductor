@@ -28,6 +28,7 @@ uv run conductor rename-repo <old> <new> [--path P] [--control <folder>]   # dae
 uv run conductor remote test [<control folder>]           # the built-in worker test (remote-status.md)
 uv run conductor prune [<control folder>] [--dry-run]     # the hourly disk sweep, now (retention.md)
 uv run conductor app [<control folder> …]                  # the desktop app (app.md)
+uv run conductor autostart [on|off|status]                # the app at Windows logon, restarting dead daemons (memory.md)
 uv run conductor mcp [--control <folder> …]                # the planner's stdio MCP server: a launcher running it fresh (mcp.md)
 uv run conductor mcp --selftest [--control <folder>]       # every tool through the launcher against the sandbox, a line each
 uv run conductor mcp --worker [--control <folder> …]       # internal: the server the launcher runs (mcp-launcher.md)

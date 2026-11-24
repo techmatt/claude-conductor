@@ -877,4 +877,8 @@ def _dispatch_in(r: settings.Remote, root: Path, key: str, first: int, count: in
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Run the imported module, not this `__main__` copy: `failures.run_shard` imports
+    # `conductor.remote.client`, and a second copy's CANCEL never hears the stop signal,
+    # so a Ctrl-Break waited out every running shard.
+    from conductor.remote import client
+    sys.exit(client.main())

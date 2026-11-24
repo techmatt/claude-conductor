@@ -120,7 +120,8 @@ def note(kind: str, item: str | None, repo: str | None, detail: dict, ev_id: int
                        f"{detail.get('free')} GiB free, {detail.get('percent')}% committed. {detail.get('action', '')}")
         case "daemon_died":
             return err("the daemon had died",
-                       f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}.")
+                       f"Last heartbeat {detail.get('last_beat_clock', '?')}; nothing ran for {detail.get('gap')}."
+                       + (f" {detail['windows']}." if detail.get("windows") else ""))
         case "daemon_stop" if detail.get("reason") == "error":
             return err("the daemon stopped on an error", str(detail.get("error", "")))
         case "watch_flag" if detail.get("flag") == "quiet":

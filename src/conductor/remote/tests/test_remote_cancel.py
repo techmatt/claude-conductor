@@ -70,7 +70,6 @@ def test_a_hard_killed_run_takes_its_shards_with_it_and_the_next_run_closes_its_
     assert not farm.board.jobs
 
 
-@pytest.mark.slow                                   # ~10.6s serially: the stop lands only as a shard ends
 @pytest.mark.skipif(sys.platform != "win32", reason="Ctrl-Break is Windows' console stop")
 def test_a_stop_signal_closes_the_job(farm, tmp_path):
     farm.setup(main_slots="2")
@@ -83,7 +82,9 @@ def test_a_stop_signal_closes_the_job(farm, tmp_path):
     while time.time() < end and not (farm.board.jobs and psutil.Process(p.pid).children(recursive=True)):
         time.sleep(0.05)
     kids = psutil.Process(p.pid).children(recursive=True)
+    t = time.time()
     p.send_signal(__import__("signal").CTRL_BREAK_EVENT)
     assert p.wait(15) == client.CANCELLED_EXIT
+    assert time.time() - t < 3                   # at once, not as its 10 s shards end
     assert "cancelled: job" in p.stderr.read().decode()
-    assert not farm.board.jobs and _gone(kids)
+    assert not farm.board.jobs and _gone(kids, timeout=3)

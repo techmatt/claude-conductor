@@ -136,6 +136,21 @@ self-restart's handover is not one. A daemon stopped on purpose (a `stop: daemon
 from the app or a planner, Ctrl+C, a restart) removes `daemon.json` and stays quiet.
 `toasts = false` puts it in the app's status bar instead.
 
+**The app restarts a dead daemon** (149). Nov 23 6:15pm the power button shut the PC down
+(Fast Startup: Winlogon's sign-out, event 7002, then a hibernate logged as sleep): every
+process of the session ended, five daemons, their executors and the app among them, with no
+event of their own. Nothing came back until Matt relaunched the app at 6:53pm, which
+toasted; helium-hustle 075 lost 80 minutes. Now a death whose daemon had lived at least
+`MIN_LIFE_SECONDS` (120) is restarted by the app at once (a plain start: running items are
+adopted, a cut session resumes in place) and toasts `<project>: the daemon died;
+restarted`, naming Windows' reason and what it adopts, about 12 s after the kill (measured
+in the sandbox). A younger death (a crash loop) and a hang only toast, as before. Both
+`daemon_died` and the app's toast name the reason from the System log (`winupdate.why_down`:
+sign-out 7002, shut-down asked 1074, unexpected stop 6008, power loss 41, within 5 minutes
+of the last heartbeat). The app dies with a sign-out too: `conductor autostart on` puts
+`conductor-app.cmd` in the Startup folder, so the app starts at logon on its remembered
+projects and restarts each dead daemon (`off` removes it, `status` says which).
+
 **Staging is cheap already.** A staged item holds no process while it waits for its
 lock: the stage session ends with its plan, and the resume is a new
 `claude --resume`.

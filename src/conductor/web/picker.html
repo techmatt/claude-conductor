@@ -54,6 +54,7 @@
   .tile .key { font-family: ui-monospace, Consolas, monospace; }
   .tile .check { display: none; }
   .tile.sel figcaption { color: var(--accent); }
+  .tile figcaption .what { margin-top: 2px; line-height: 1.3; }
   .tile.sel .key { font-weight: 700; }
   .tile.sel .check { display: inline; font-weight: 700; }
   .mag {
@@ -296,7 +297,7 @@
       var cap = el("figcaption");
       cap.appendChild(el("span", "check", r.many ? "✓ keep " : "✓ "));
       cap.appendChild(el("span", "key", o.key));
-      if (o.label) cap.appendChild(el("span", null, " · " + o.label));
+      if (o.label) cap.appendChild(el("div", "what", o.label));   // what it is, under the image (149)
       t.appendChild(cap);
       var mag = el("button", "mag", "⌕");
       mag.type = "button";

@@ -1,4 +1,4 @@
-"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | stats | open | open-path | run-target | pick | init | rename-repo | remote | prune | app | mcp`."""
+"""`conductor run | status | inbox | events | questions | audits | answer | tell | outline | amend | checkpoint | session | stats | open | open-path | run-target | pick | init | rename-repo | remote | prune | app | autostart | mcp`."""
 
 from __future__ import annotations
 
@@ -521,6 +521,16 @@ def cmd_app(args) -> int:
     return app_main([str(f) for f in folders])
 
 
+def cmd_autostart(args) -> int:
+    from . import autostart
+    try:
+        print(autostart.status() if args.state == "status" else autostart.set_on(args.state == "on"))
+    except OSError as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_mcp(args) -> int:
     if args.selftest:
         from .mcp_launcher import selftest
@@ -642,6 +652,9 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("app",help="the desktop app (tray icon, one tab per control folder)")
     sp.add_argument("folders", nargs="*", help="control folders to show (added to the remembered list)")
     sp.set_defaults(fn=cmd_app)
+    sp = sub.add_parser("autostart", help="start the app at Windows logon; it restarts daemons a sign-out killed")
+    sp.add_argument("state", choices=["on", "off", "status"], nargs="?", default="status")
+    sp.set_defaults(fn=cmd_autostart)
     sp = sub.add_parser("mcp", help="the planner's stdio MCP server: status, reads and every planner write (docs/mcp.md)")
     sp.add_argument("--control", action="append", help="a control folder (repeatable; default: the app's projects)")
     sp.add_argument("--worker", action="store_true", help="the server itself (the launcher runs it fresh per code change)")

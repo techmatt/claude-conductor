@@ -17,7 +17,8 @@ what Matt acts on (115, `notify.note`); everything else is panel only:
   `request_failed`, `invalid`, `push_failed`, `memory_critical`, `daemon_died`, a
   `daemon_stop` on an error, and the watch's stuck-item flag (`watch_flag` `quiet`).
 - **A daemon down now**, from the app, not the daemon (139): one toast when a project's
-  daemon dies or stops answering for 3 minutes (`memory.md`, *Death made visible*).
+  daemon dies or stops answering for 3 minutes (`memory.md`, *Death made visible*); since
+  149 a death the app restarted reads `<project>: the daemon died; restarted`.
 
 Panel only: report `warnings:`, non-blocking questions with a default (not `design` ones), progress
 and outlines, ETA overruns, `memory` pressure and `load_high`, retros queued, parked

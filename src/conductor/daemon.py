@@ -30,7 +30,7 @@ from pathlib import Path
 import psutil
 
 from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, memory_notes, models, notify, quiet, parked, picker, picks, procs, questions,
-               request, session, state, talk, targets, worktrees)
+               request, session, state, talk, targets, winupdate, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
@@ -228,10 +228,11 @@ class Daemon(SignalsMixin, ReorderMixin, MessagesMixin, ReapMixin, MergeMixin, S
         mem = memory.latest(self.cfg.state_dir)
         running = sorted(f"{p.parent.name}/{p.name.removesuffix('.run.json')}"
                          for p in self.cfg.path("running").glob("*/*.run.json"))
+        why = winupdate.why_down(parse_stamp(last), parse_stamp(last) + timedelta(minutes=5)) if last else None
         self.log.append("daemon_died", pid=d.get("pid"), started=d.get("started"), last_beat=last,
                         last_beat_clock=clock(last) if last else None, gap=gap, running=running,
                         memory={k: mem.get(k) for k in ("at", "level", "commit", "limit", "free")} if mem else None,
-                        note="it stopped without logging daemon_stop: killed, or its process tree was")
+                        windows=why, note=why or "it stopped without logging daemon_stop: killed, or its process tree was")
 
     def release(self) -> None:
         self._lock = None

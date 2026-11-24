@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
@@ -11,7 +12,8 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, Q
                                QVBoxLayout, QWidget)
 
 from .. import config as config_mod
-from ..util import clock
+from .. import winupdate
+from ..util import clock, parse_stamp
 from . import actions, heartbeat, icon, stale, status, theme
 from .events_panel import EventsPanel
 from .model import PRIORITY, Project, Snapshot, overall, restart_due
@@ -539,6 +541,27 @@ class MainWindow(QMainWindow):
         except Exception as exc:              # noqa: BLE001 - best effort, as the daemon's toasts are
             self.statusBar().showMessage(f"{down.title} (toast failed: {exc})", 30000)
 
+    def revive(self, view: ProjectView, d, down: heartbeat.Down) -> heartbeat.Down:
+        """A daemon that died after a real life: start a new one (it adopts the running items)
+        and word the toast so; a start that fails leaves the plain death toast."""
+        if not down.revive:
+            return down
+        cfg = view.project.cfg
+        running = sorted(f"{p.parent.name}/{p.name.removesuffix('.run.json')}"
+                         for p in cfg.path("running").glob("*/*.run.json"))
+        try:
+            actions.start_daemon(cfg.control)
+        except Exception as exc:              # noqa: BLE001 - the button stays to try by hand
+            down.body += f" Restarting it failed: {exc}"
+            return down
+        why = None
+        try:
+            beat = parse_stamp(d.beat)
+            why = winupdate.why_down(beat, beat + timedelta(minutes=5))
+        except (TypeError, ValueError):
+            pass
+        return heartbeat.revived(view.project.name, d, running, why)
+
     # ------------------------------------------------------------ refresh
     def refresh(self) -> None:
         self.model_menu.sync()
@@ -552,7 +575,7 @@ class MainWindow(QMainWindow):
             states.append(snap.state)
             lines.append(f"{snap.project}: {snap.state} — {snap.why}")
             if down := self.heartbeats.check(view.project.name, snap.daemon):
-                self.toast_down(down, view.project.cfg.toasts)
+                self.toast_down(self.revive(view, snap.daemon, down), view.project.cfg.toasts)
             if not snap.error or folder not in self._good:
                 self._good[folder] = snap     # a read that failed part-way keeps the title where it was
             idx = self.tabs.indexOf(view)

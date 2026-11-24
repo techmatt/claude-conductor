@@ -260,7 +260,10 @@ folder), its images kept the same way:
 `name` is a slug (lowercase letters, digits, `_` or `-`), unique in the project. The first
 option in a row is the current one; `key` is what the next prompt uses, unique within its
 row, as row ids are within the file. `image` is relative to the manifest, inside the repo,
-and PNG, JPEG, GIF, WebP, AVIF or SVG; `intro`, `note` and `label` are optional. For keep or
+and PNG, JPEG, GIF, WebP, AVIF or SVG; `intro` and `note` are optional. Give an option a
+plain one-line `label` saying what it is ("pencil sketch, warm light") unless its image and
+key make that obvious; cut near-duplicates first, and keep a row to one kind of choice (new
+paintings, or ways to lay one out, never both). For keep or
 drop per option, give the row `"kind": "many"`: the choice comes back as the kept keys.
 Rows start with nothing selected (leave out `default`): Matt selects the few he likes. Each
 image shows a few pieces where they can be judged (close-ups, a couple of cards), never a

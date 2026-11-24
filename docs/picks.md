@@ -46,7 +46,11 @@ checkout**, never a worktree. Validation, on every `pick:`; the error names the 
 - `rows`: a non-empty list; each row's `id` a non-empty string unique in the file,
   `label` a non-empty string, `note` an optional string, `options` a non-empty list;
 - each option's `key` a non-empty string without whitespace, unique in its row (it is
-  what the next prompt uses: `"current"`, `"1"`, …); `label` an optional string;
+  what the next prompt uses: `"current"`, `"1"`, …); `label` an optional string, one
+  plain line saying what the option is (149: helium-hustle 077's `side3`, `sky`, `bleed`
+  left Matt unable to tell what he was choosing). The preamble asks for one unless the
+  image and key make it obvious, and asks for near-duplicates cut and one kind of choice
+  per row; a manifest without labels is never refused;
   `image` a path relative to the manifest (`..` allowed while it stays in the repo; no
   absolute path or drive), an existing file ending `.png .jpg .jpeg .gif .webp .avif .svg`;
 - unknown keys are ignored, so the format can grow.
@@ -103,7 +107,7 @@ what it serves): an open tab's Save then fails, and the page says so and keeps i
 choices. Re-send `pick:` and save from the new tab.
 
 **The page.** One row per `id`: label and note, then the options as tiles captioned
-`key · label`, about 256px tall (a size slider, 128–640px, remembered by the browser).
+with the key and, on its own line below, the option's label, about 256px tall (a size slider, 128–640px, remembered by the browser).
 Click a tile to select it; click the selected tile, or its magnifier corner, for a
 full-size overlay where ←/→ step through the row and Enter picks the one shown. **The
 page never alters how an image looks**: no opacity, filter, tint or overlay on any

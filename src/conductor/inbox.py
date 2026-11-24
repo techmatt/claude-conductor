@@ -366,6 +366,8 @@ def describe(ev: Event) -> str:
             text = (f"the previous daemon (pid {d.get('pid')}, started {clock(d['started']) if d.get('started') else '?'}) "
                     f"died without stopping: last heartbeat {clock(d['last_beat']) if d.get('last_beat') else 'never'}, "
                     f"nothing ran for {d.get('gap')}")
+            if d.get("windows"):
+                text += f"; {d['windows']}"
             if d.get("memory"):
                 m = d["memory"]
                 text += f"; memory then: {m.get('commit')} of {m.get('limit')} GiB committed, {m.get('free')} GiB free ({m.get('level')})"
