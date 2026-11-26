@@ -194,8 +194,7 @@ def scan(cfg: Config, log: EventLog) -> View:
         if why := resume.problem(view, item):
             item.errors.append(why)
     for item in (i for q in view.queued.values() for i in q if i.needs_pick and not i.errors):
-        if why := picks.problem(cfg, log, item.needs_pick):
-            item.errors.append(why)
+        item.errors += [why for name in item.needs_pick if (why := picks.problem(cfg, log, name))]
     view.cancelled = {ev.item for ev in log.query(kinds=["cancel"]) if ev.item and ev.detail.get("from") == "queue"}
     known = view.known()
     for item in (i for q in view.queued.values() for i in q if i.depends_on):
@@ -217,8 +216,8 @@ def cancelled_dependency(view: View, item: Item, known: list[str]) -> str | None
 def pick_wait(cfg: Config, view: View, item: Item) -> str:
     """What a `needs_pick` item still waits on, or nothing. A wait, not a hold: the digest's
     *Picks* already asks Matt, so no `hold` event and no toast."""
-    if item.needs_pick and picks.awaited(cfg, view, item.needs_pick):
-        return f"Matt's choices for picker {item.needs_pick} (`needs_pick`)"
+    if waits := picks.waiting(cfg, view, item.needs_pick):
+        return f"Matt's choices for picker{'s' if len(waits) > 1 else ''} {', '.join(waits)} (`needs_pick`)"
     return ""
 
 

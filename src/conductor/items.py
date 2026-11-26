@@ -42,7 +42,7 @@ class Item:
     template: str | None = None                         # a conductor template (`audits.TEMPLATES`)
     alongside: str | None = None                        # what it touches: may start beside running items
     resume_of: str | None = None                        # `resume:` the finished item whose session it forks
-    needs_pick: str | None = None                       # a picker's name: waits for its choices, then carries them
+    needs_pick: list[str] = field(default_factory=list)  # pickers' names: waits for their choices, then carries them
     model: str | None = None                            # a resume item's model (`opus`), not its source's (144)
     body: str = ""
     errors: list[str] = field(default_factory=list)
@@ -147,10 +147,11 @@ def parse(path: Path, repo: str) -> Item:
             item.alongside = value.strip()
     if meta.get("needs_pick") is not None:
         value = meta["needs_pick"]
-        if not isinstance(value, str) or not PICK_NAME_RE.fullmatch(value):
-            item.errors.append(f"`needs_pick`: {value!r} must be a picker's name")
+        names = [value] if isinstance(value, str) else value if isinstance(value, list) and value else None
+        if names is None or not all(isinstance(n, str) and PICK_NAME_RE.fullmatch(n) for n in names):
+            item.errors.append(f"`needs_pick`: {value!r} must be a picker's name or a list of them")
         else:
-            item.needs_pick = value
+            item.needs_pick = list(dict.fromkeys(names))      # helium-hustle 100: two rounds at once
     if meta.get("model") is not None:
         value = str(meta["model"]).strip().lower()
         if meta.get("resume") is None:

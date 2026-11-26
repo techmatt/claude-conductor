@@ -435,13 +435,24 @@ def awaited(cfg: Config, view: View, name: str) -> bool:
                                 for fin in view.finishes.values())
 
 
+def waiting(cfg: Config, view: View, names: list[str]) -> list[str]:
+    """The pickers of a `needs_pick` list whose choices still have to be saved, in order."""
+    return [n for n in names if awaited(cfg, view, n)]
+
+
 def _chosen(key: str, labels: dict[str, str]) -> str:
     return f"`{key}` ({labels[key]})" if labels.get(key) else f"`{key}`"
 
 
-def section(cfg: Config, name: str | None) -> str:
-    """What a `needs_pick` item's prompt gains: the saved choices, row by row with notes.
-    The manifest only adds labels, so one no longer on disk loses nothing Matt chose."""
+def section(cfg: Config, names: list[str] | str | None) -> str:
+    """What a `needs_pick` item's prompt gains: each named picker's saved choices, in the
+    order given (`_one`)."""
+    return "".join(_one(cfg, n) for n in ([names] if isinstance(names, str) else names or []))
+
+
+def _one(cfg: Config, name: str) -> str:
+    """One picker's saved choices, row by row with notes. The manifest only adds labels, so
+    one no longer on disk loses nothing Matt chose."""
     saved = load_choices(cfg.control, name) if name else None
     if saved is None:
         return ""

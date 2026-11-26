@@ -200,7 +200,9 @@ class ReceiptsMixin:
                 how = "the launch it raced was undone; " if d.get("launching") else ""
                 how += "its stage is redone" if d.get("staged") else "it runs the new text"
                 how += f" ({'; '.join(d['changes'])})" if d.get("changes") else ""     # 128: what conductor now holds
-                how += f"; it carries picker {d['choices']}'s saved choices" if d.get("choices") else ""
+                if names := d.get("choices"):          # one name before 150, a list since
+                    names = [names] if isinstance(names, str) else names
+                    how += f"; it carries picker{'s' if len(names) > 1 else ''} {', '.join(names)}'s saved choices"
                 how += f"; now {d['starts']}" if d.get("starts") else ""     # only when the start moved
                 how += f"; {talk.amends_line(d['amendments'])}" if d.get("staged") and d.get("amendments") else ""
                 self._write_receipt(rel, [ev], result=f"rewritten: {how}", warning=d.get("warning"))

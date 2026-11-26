@@ -69,7 +69,7 @@ and not enforced.
 | Calibration freeze line, SE gap, seeds taken | 74, 86, 117 (aicomplete 223, 234) | *Calibrate* block |
 | Servers on `CONDUCTOR_PORT`, detached, stopped; `npm ci` first | 74, 84 (aicomplete 135-138) | *Servers* block; light a port line |
 | Scratch in `out/<item>/`; the rest of `out/` is not fresh | 61, 116 (fractals 008, 010) | both |
-| Working papers under the results folder, committed; readonly: in `out/keep/<item>/`, named in the report | 73 (aicomplete 079), 146 (helium-hustle 045: "committed" beside "commit nothing") | full (`PAPERS` / `PAPERS_READONLY`); light readonly the readonly line |
+| Working papers under the results folder, committed; readonly: in `out/keep/<item>/`, named at its kept path in report and carry lines (150) | 73 (aicomplete 079), 146 (helium-hustle 045: "committed" beside "commit nothing") | full (`PAPERS` / `PAPERS_READONLY`); light readonly the readonly line |
 | Reusable reads in `out/keep/`, named in the report | 110, 117 | full |
 | Scripts in files (read-only one-liners pass the hook) | 72 | full (a clause) |
 | Heavy compute below normal priority, at most `{threads}` threads in all, children counted, half beside others (143: one budget; "leave 4 free" read as a second) | 72, 73, 143 | full; light `nice` and threads |

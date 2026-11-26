@@ -357,13 +357,14 @@ PAPERS = ("Working papers the prompt asks for go\nunder the repo's results folde
           "(`experiments/results/{item_name}/`), committed; read outputs\na later item could reuse go in "
           "`out/keep/`, kept at `{kept}` for your report to name.")
 PAPERS_READONLY = ("Working papers the prompt asks for, and read\noutputs a later item could reuse, go in "
-                   "`out/keep/{item_name}/` (nothing you write commits; `out/keep/`\nis kept at `{kept}`), "
-                   "named in your report.")
+                   "`out/keep/{item_name}/` (nothing you write commits). It is kept at\n`{papers}`: "
+                   "your report and `carry:` lines name files there, never `out/keep/`.")
 RUN_CHECKS = "run them before the report; no such\nsection is fine"
 RUN_CHECKS_READONLY = ("readonly: skip them and write `warnings: as on main`,\nunless you ran a check your "
                        "read depends on: then what it tripped")
 # The light preamble has no *The box*: a readonly light item gets both in one line.
-READONLY_LIGHT = (" Working papers go in `out/keep/{item_name}/`, named in your report. Skip the warning "
+READONLY_LIGHT = (" Working papers go in `out/keep/{item_name}/`, kept at `{papers}`: name files there "
+                  "in your report and `carry:` lines, never `out/keep/`. Skip the warning "
                   "checks (`warnings: as on main`) unless you ran one your read depends on.")
 
 PATHS = ("\nThis item declared `paths:` {globs}. Change nothing outside them: conductor "
@@ -529,7 +530,8 @@ def _where(cfg: Config, item: Item, run: dict, light: bool = False, watch: bool 
     readonly line: the commit and merge rules are for work that lands."""
     if not item.readonly:
         return _workdir(cfg, item, run, light)
-    carry = "" if watch else READONLY_CARRY + (READONLY_LIGHT.format(item_name=item.name) if light else "")
+    carry = "" if watch else READONLY_CARRY + (READONLY_LIGHT.format(item_name=item.name, papers=kept.papers(cfg, item, run).as_posix())
+                                              if light else "")
     if not run.get("worktree"):
         return _workdir(cfg, item, run, light) + READONLY + carry
     shared = SHARED.format(names=", ".join(f"`{s}`" for s in run["shared"])) if run.get("shared") else ""
@@ -621,8 +623,9 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
         threads=load.run_threads(),
-        papers=(PAPERS_READONLY if item.readonly else PAPERS).format(item_name=item.name,
-                                                                     kept=kept.where(cfg, item, run).as_posix()),
+        papers=(PAPERS_READONLY if item.readonly else PAPERS).format(
+            item_name=item.name, kept=kept.where(cfg, item, run).as_posix(),
+            papers=kept.papers(cfg, item, run).as_posix()),
         run_checks=RUN_CHECKS_READONLY if item.readonly else RUN_CHECKS,
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",

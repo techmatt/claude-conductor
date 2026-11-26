@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-from . import audits, items
+from . import audits, items, picks
 from .config import Config
 from .events import Event, EventLog
 from .items import Item
@@ -164,7 +164,8 @@ def pick(cfg: Config, log: EventLog, view: View, repo: str, queue: list[Item]) \
             why.append((f"waits on {', '.join(waits)}", f"{item.name} waits on {', '.join(waits)}"))
             continue
         if wait := pick_wait(cfg, view, item):
-            why.append((f"waits on picker {item.needs_pick}", f"{item.name} waits on {wait}"))
+            why.append((f"waits on picker {', '.join(picks.waiting(cfg, view, item.needs_pick))}",
+                        f"{item.name} waits on {wait}"))
             continue
         if full_length(item.meta()) and (last := last_full(log, repo)) and not matt_since(cfg, log, last):
             why.append(("back-to-back", f"{item.name} is full-length and nothing came from Matt since "

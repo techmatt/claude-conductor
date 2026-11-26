@@ -93,7 +93,7 @@ class QueueMixin:
                     what = changes(seen_text, text) if seen_text is not None and text is not None else []
                     choices = ({"choices": item.needs_pick} if item.needs_pick and not item.errors
                                and any(c.startswith("needs_pick") for c in what)
-                               and not picks.awaited(self.cfg, view, item.needs_pick) else {})
+                               and not picks.waiting(self.cfg, view, item.needs_pick) else {})
                     self.log.append("edited", item=item.id, paths=[self.cfg.rel(item.path)],
                                     staged=item.id in view.staged, changes=what, **choices, **moved,
                                     **dep_warning(item), **self._kept_amends(item.id))

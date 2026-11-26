@@ -1,4 +1,4 @@
-"""`needs_pick: <picker>`: an item waits for a picker's saved choices, then carries them."""
+"""`needs_pick: <picker>` (or a list, 150): an item waits for pickers' saved choices, then carries them."""
 
 import json
 
@@ -47,7 +47,7 @@ def test_it_waits_then_launches_with_the_choices_in_its_prompt(env):
     assert ("- Hero (`hero`): `1` (warmer), changed\n  Matt's note: hair still too orange\n"
             "- Logo (`logo`): `current`\n") in prompt
     assert prompt.index("FAKE report done") < prompt.index("Matt's choices from picker")
-    assert env.events("enqueue")[-1].detail["needs_pick"] == "art_alts"
+    assert env.events("enqueue")[-1].detail["needs_pick"] == ["art_alts"]
 
 
 @pytest.mark.parametrize("retire", [False, True], ids=["unknown", "retired"])
@@ -65,10 +65,10 @@ def test_an_unknown_or_retired_picker_is_refused(env, retire):
     assert not env.events("start")
 
 
-@pytest.mark.parametrize("value", ["Not A Name", "123", "[a, b]"])
+@pytest.mark.parametrize("value", ["Not A Name", "123", "[a, B C]", "[]"])
 def test_a_malformed_name_is_invalid(env, value):
     item = items.parse(env.queue("002_fonts", "x", needs_pick=value), "code")
-    assert any("needs_pick" in e for e in item.errors) and item.needs_pick is None
+    assert any("needs_pick" in e for e in item.errors) and item.needs_pick == []
 
 
 def test_nothing_starts_it_early_and_a_stage_waits_for_the_choices(env):

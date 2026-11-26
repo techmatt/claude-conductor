@@ -120,7 +120,10 @@ tells the executor to commit to its branch, leave nothing uncommitted, and never
   (`KEEP_BYTES`; the newest always stays). Every non-watch prompt for that repo ends with a
   *Kept reads* section naming each folder, its item, when it was kept and its files, and (in a
   project that farms) the seed ranges its `farm-seeds` runs spent, from the ledger
-  `.conductor/remote/seeds.jsonl` (111: 209 checked 204's read for reuse, its seeds spent). A red
+  `.conductor/remote/seeds.jsonl` (111: 209 checked 204's read for reuse, its seeds spent), and
+  says the worktree has none of them: an `out/keep/<item>/` in an older report or carry line
+  means that item's folder there (150: helium-hustle 100 hunted for 099's). A readonly item is
+  told its papers' kept path (`kept.papers`) and to name files there, never `out/keep/`. A red
   item's worktree is kept whole; a `worktrees = false` repo's `out/keep/` simply stays.
 
   *Leftover worktrees.* Removing a merged, readonly or discarded item's worktree can

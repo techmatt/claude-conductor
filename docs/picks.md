@@ -10,7 +10,7 @@ project (`src/conductor/web/picker.html`); it knows nothing about what it shows.
 says "picker" (that brings the schema), under a new name, images in a `shared` folder
 (check `conductor.toml`). "Which go forward" is a `kind: many` row, rows unselected.
 Rounds are `<name>_r<N>`: a saved one retires earlier ones; another Matt is done with:
-**retire X**. **`needs_pick: <name>`** is queued once a report names the picker.
+**retire X**. **`needs_pick: <name>`** (or `[a, b]`) is queued once a report names the picker.
 
 **Manifest.** A JSON file the executor writes in its code repo; the preamble's
 *Pickers* paragraph gives it the schema, since executors never see these docs. The
@@ -169,7 +169,11 @@ front-matter waits until that picker's choices are saved, then appends them to t
 at launch, after the body: the title and save time, then a line per row with the chosen
 key (a many row's kept keys), its option label, `changed`, and Matt's note. The text
 is fixed at launch, in the run record; a staged item's stage waits too, since it would
-read a prompt without them, and its resume message repeats them.
+read a prompt without them, and its resume message repeats them. Since 150 (helium-hustle 100,
+two rounds wired at once) it takes a list too, `needs_pick: [project_art_r1, research_glyphs_r1]`:
+it waits for every picker, and appends each one's section in the order given (a repeat counts
+once; an empty list is refused). The `edited` event's `choices` and the enqueue's `needs_pick`
+are lists since (one name before).
 
 - **Waiting** is a wait, not a hold (the digest's *Picks* already asks Matt): no `hold`
   event or toast. A queue head's wait holds its queue; an `alongside` or readonly item

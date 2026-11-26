@@ -27,7 +27,8 @@ SECTION = """
 ---
 
 Kept reads. Earlier items in this repo left read outputs (their `out/keep/`), newest first.
-Reuse one instead of producing it again when its base still fits (say which in your report).
+Your worktree has none of them: a report or `carry:` line naming `out/keep/<item>/` means that
+item's folder below. Reuse one instead of producing it again when its base still fits (say which in your report).
 Seeds a read farmed are spent: a fresh read takes new ones.
 {rows}
 """
@@ -68,6 +69,13 @@ def where(cfg: Config, item, run: dict) -> Path:
     if wt := run.get("worktree"):
         return root(cfg, item.repo).resolve() / Path(wt).name
     return (cfg.repos[item.repo] / KEEP_DIR).resolve()
+
+
+def papers(cfg: Config, item, run: dict) -> Path:
+    """Where a readonly item's `out/keep/<item>/` can be read once it ends: its report and
+    carry lines name this, since a later item's worktree has no `out/keep/` of its own
+    (helium-hustle 100 hunted for it). A lone `<item>/` is unwrapped by `save`."""
+    return where(cfg, item, run) if run.get("worktree") else where(cfg, item, run) / item.name
 
 
 def listed(cfg: Config, repo: str) -> list[Path]:

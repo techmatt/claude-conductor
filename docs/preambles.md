@@ -85,7 +85,8 @@ full one, as do `audit` items and resume items (with *Resumed*). A **readonly** 
 worktree, light or full, gets the readonly line in place of the worktree's commit and merge
 paragraph and no leftover step; not a watch, the line adds that nothing merges, so ledger
 entries and anything the prompt says to commit go in `carry:`. Since 146 (helium-hustle 045)
-a readonly item's working papers go in `out/keep/<item>/`, named in its report, not the
+a readonly item's working papers go in `out/keep/<item>/` (its report and `carry:` lines name
+them at their kept path, `kept.papers`, since 150), not the
 committed results folder (full: `PAPERS_READONLY` in *The box*; light: `READONLY_LIGHT` on
 the readonly line), and it skips the repo's warning checks, reporting `warnings: as on main`
 (read as `none`) unless it ran a check its read depends on (`RUN_CHECKS_READONLY`).

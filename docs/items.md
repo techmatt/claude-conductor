@@ -23,7 +23,7 @@ template: cleanup        # a conductor-owned prompt (templates.md): cleanup, gen
 resume: sandbox/001_x    # ask a finished item's own session, forked; readonly unless `template: self_audit` (resume.md)
 model: opus              # a resume item only: its fork runs on this model, not its source's (144; resume.md)
 rules: true              # it bumps the rules revision (the preamble's calibration line; `[rules]` parked edits ride any serial item since 143)
-needs_pick: card_fonts   # a picker's name: waits for its saved choices, then carries them (picks.md, *Items that need a pick*)
+needs_pick: card_fonts   # a picker's name, or a list [a, b]: waits for every one's saved choices, then carries them in order (picks.md, *Items that need a pick*)
 remote: true             # `farm-seeds` on its PATH, in a project with `[remote]` (remote-workers.md); ignored without; unset: `[remote] default`
 external_data: true      # changes data outside git: told to commit before each step; a red one offers `land:` (restart.md)
 ---

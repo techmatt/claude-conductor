@@ -49,7 +49,7 @@ def test_a_rewrite_names_what_changed_carries_choices_and_an_identical_one_says_
     env.tick_until(lambda: env.events("edited"))
     [ev] = env.events("edited")
     assert ev.detail["changes"] == ["needs_pick: art_alts added", "body +1 −0 line(s)"]
-    assert ev.detail["choices"] == "art_alts"
+    assert ev.detail["choices"] == ["art_alts"]
     r = receipt(env, "003_fonts")
     assert r["outcome"] == "accepted"
     assert r["result"].startswith("rewritten: it runs the new text (needs_pick: art_alts added; body +1 −0 line(s)); "
