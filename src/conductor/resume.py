@@ -117,11 +117,18 @@ def prepare(cfg: Config, log: EventLog, rec: dict) -> str | None:
 def readable(cfg: Config, orig: str, extract: Path) -> list[Path]:
     """What a resume item may read of its original's record: its prompt, stage prompt (a
     staged item's real one), report, audit notes, amendments, run log and stage log (those
-    that exist; a finished log is `.log.gz`), and the events extract."""
+    that exist; a finished log is `.log.gz`), the run log's step index (written here for a log
+    from before 151), and the events extract."""
     from .executor import RunPaths, stored_log
+    from .runlog import index_log, steps_path
     repo, _, name = orig.partition("/")
     p = RunPaths.for_name(cfg, repo, name)
+    try:
+        index_log(p.log)
+    except OSError:
+        pass
     logs = [s for f in (p.log, p.stage_log) if (s := stored_log(f))]
+    logs += [s for s in (steps_path(p.log),) if s.is_file()]
     return [f for f in (p.prompt, p.stage_prompt, p.report, p.audit, p.amend) if f.is_file()] + logs + [extract]
 
 

@@ -118,6 +118,31 @@ class Worker:
         return f"{self.target.state()}; {self.pid.state()}"
 
 
+class AgentTarget:
+    """`agent` alone: only the named subagent (or `any`) finishing ends the wait (151); the
+    server watches the SubagentStop record (`talk.subagents_done`, `named`)."""
+
+    def __init__(self, agent: str):
+        self.agent = agent
+
+    def check(self) -> str | None:
+        return None
+
+    def state(self) -> str:
+        return f"subagent {self.agent} has not finished" if self.agent != "any" else "no subagent has finished"
+
+
+def named(agent: str | None, rec: dict) -> bool:
+    """Is the SubagentStop record `rec` the subagent `agent` names (its id, or a prefix of six
+    or more characters either way round; `any`: every one)?"""
+    if not agent:
+        return False
+    if agent == "any":
+        return True
+    got = str(rec.get("agent_id") or "")
+    return bool(got) and (got == agent or (min(len(got), len(agent)) >= 6 and (got.startswith(agent) or agent.startswith(got))))
+
+
 def _pid(value) -> tuple[PidTarget | None, str | None]:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         return None, "`pid` must be a positive whole number"
@@ -145,8 +170,14 @@ def target(args: dict, cwd: Path, read: dict[Path, int] | None = None):
     `read`: per log, how far this session's earlier waits read it (for `fresh`)."""
     named = [k for k in ("path", "log") if args.get(k) not in (None, "")]
     worker = args.get("pid") not in (None, "")
-    if len(named) > 1 or not (named or worker):
-        return None, "give one of `path` or `log`, or `pid` alone (a `pid` beside either is the process doing the work)"
+    agent = args.get("agent")
+    if agent is not None and (not isinstance(agent, str) or not agent.strip()):
+        return None, "`agent` must be a subagent's id, or \"any\""
+    if len(named) > 1 or not (named or worker or agent):
+        return None, ("give one of `path` or `log`, or `pid` alone (a `pid` beside either is the process doing "
+                      "the work), or `agent` alone")
+    if agent and not (named or worker):
+        return AgentTarget(agent.strip()), None
     pid, why = _pid(args["pid"]) if worker else (None, None)
     if why or not named:
         return pid, why

@@ -113,6 +113,12 @@ def changed_files(repo: Path, before: str, after: str) -> list[str]:
     return [p for p in out.split("\0") if p]
 
 
+def ignores(repo: Path, rel: str) -> bool:
+    """Does git ignore `rel` in `repo` (its `.gitignore`s or `info/exclude`)?"""
+    return subprocess.run(["git", "-C", str(repo), "check-ignore", "-q", rel],
+                          capture_output=True, **NO_WINDOW).returncode == 0
+
+
 def ignore_locally(repo: Path, folder: str) -> bool:
     """Make sure git ignores `folder/` in `repo`: unless a rule already does, add it to the
     clone's `info/exclude` (never committed, shared by every worktree). True when added."""

@@ -15,6 +15,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from . import git
 from .config import Config
 from .util import clock
 
@@ -69,6 +70,13 @@ def where(cfg: Config, item, run: dict) -> Path:
     if wt := run.get("worktree"):
         return root(cfg, item.repo).resolve() / Path(wt).name
     return (cfg.repos[item.repo] / KEEP_DIR).resolve()
+
+
+def no_results(cfg: Config, repo: str) -> bool:
+    """The repo commits no results folder (151): its `results` is under `out/` or git-ignores
+    (fractal-wallpapers ignores `experiments/`), so working papers go in `out/keep/<item>/`."""
+    rel = cfg.opts(repo).results
+    return rel == KEEP_DIR.as_posix() or rel.startswith("out/") or git.ignores(cfg.repos[repo], f"{rel}/x")
 
 
 def papers(cfg: Config, item, run: dict) -> Path:

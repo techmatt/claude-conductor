@@ -33,12 +33,20 @@ Chosen by conductor, never by front-matter:
   *Files* (146: Write/Edit or one checked script file run alone, in `out/<item>/`, written
   by Write, never a heredoc (148: a heredoc loses a level of backslash escaping under
   conductor, helium-hustle 067, 070, 071; the hook still lets one into `out/` through,
-  147); never a heredoc into another file,
-  `sed -i` or a writing `-c`/`-e`; the hooks refuse each), *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
+  147); the hooks refuse `sed -i`, heredoc-fed Python (`python - <<EOF`, named since 151:
+  helium-hustle 102, 103, 105 still lost calls to it), a writing `-c`/`-e` and a heredoc into
+  a file, and Claude Code's bypass-mode note suggesting shell edits does not apply (151: executors run under
+  `--dangerously-skip-permissions`, whose system prompt prefers `sed` and heredocs; light says
+  both too)), *Asking* (the design-ask list word for word), *Latitude* (the conflict order, method,
   bars, the fix-loop cap, the wrong-repo guard as the only hard stop, fix the obvious, the
-  leftover check), *Measurement* (paired and fresh seeds, a quiet box, ratios beside
+  leftover check, which since 151 asks `design: true` before finishing partial when the only
+  unmet bar needs reads outside the prompt's allowed scope, helium-hustle 112), *Measurement* (paired and fresh seeds, a quiet box, ratios beside
   others, re-read quoted numbers), *Progress* (with `outline` and `eta`), *The box*
-  (scratch, results, keeps, the other refused forms, load, helpers), *Messages*, then the
+  (scratch, results, keeps, the other refused forms, load, helpers; the results folder is the
+  repo's `results`, default `experiments/results`, "unless the repo's CLAUDE.md files them
+  elsewhere"; since 151 a `results` under `out/` or git-ignored, as fractals' repos ignore
+  `experiments/`, gets `PAPERS_KEPT`: papers in `out/keep/<item>/`, named at their kept path,
+  nothing committed, `kept.no_results`), *Messages*, then the
   optional blocks, where it works, the **report-path line** (word for
   word: `tests/fake_claude.py` and the restart preamble find the path by it), the header,
   the status definitions and the report rules.
@@ -115,3 +123,9 @@ the readonly line), and it skips the repo's warning checks, reporting `warnings:
   and its `warning_checks` (`executor.checks_text`; `warnings.md`).
 - **Writable roots.** `write_roots` (`control-folder.md`; default `open_roots`) are named
   writable (`WRITES`) and the only-file line allows them; not readonly items or watches.
+- **Doc budget** (151: fractals 023 measured ~20 cuts with `wc -c`, the bar only in the
+  planner's digest). A writable item whose body (or template) names a trim, a doc or size
+  budget, an `N KB` figure, or a repo doc over `doc_budget_kb` gets a *Doc budget* section
+  after the body: which files count, the limit in bytes (1 KB = 1,024 here, as the digest
+  measures), the repo's `doc_budget_exempt`, and each doc over it on main with its bytes; the
+  report gives each trimmed doc's bytes before and after (`docbudget.section`).

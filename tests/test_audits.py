@@ -195,7 +195,8 @@ def test_content_cleanup_template_is_exclusive_and_its_old_name_runs_it(env):
     env.tick_until(lambda: env.finished("code/001_ca"))
     text = prompt(env, "001_ca")
     assert "Content cleanup of `code`" in text and "{{" not in text and "running notes file" not in text
-    assert text.rstrip().endswith("The planner adds, for this item:\n\nStart with the word lists.")
+    body, _, budget = text.partition("\n## Doc budget\n")        # 151: a docs trim sees the bar
+    assert body.rstrip().endswith("The planner adds, for this item:\n\nStart with the word lists.") and budget
     assert env.finished("code/001_ca").detail["template"] == "content_cleanup"   # recorded under the new name
 
 

@@ -35,7 +35,8 @@ def test_a_short_item_gets_the_light_preamble(env):
 
 def test_both_preambles_rule_out_elevation(env):
     # aicomplete 103: samply's UAC prompt sat unseen on the desktop for ~30 minutes. Hooked since 122.
-    assert "Write files with Write/Edit only: hooks refuse `-c`/`-e`/`sed -i` writes" in render(env, SHORT)
+    light = " ".join(render(env, SHORT).split())
+    assert "Write/Edit files, never bypass mode's shell edits; hooks refuse `sed -i`, heredoc-fed Python, `-c`/`-e` writes" in light
     assert "elevation" in render(env, SHORT * 3)
 
 

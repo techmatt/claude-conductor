@@ -17,7 +17,7 @@ def test_both_preambles_and_the_refusal_say_write_scripts_never_heredocs(env):
             "escaping), run alone, never mid-chain.") in full
     assert "<<'EOF'" not in full
     light = " ".join(render(env, SHORT).split())
-    assert "Write files with Write/Edit only" in light and "heredocs mangle backslashes" in light
+    assert "Write/Edit files, never bypass" in light and "heredocs mangle backslashes" in light
     why = rules.check({"tool_name": "Bash", "tool_input": {"command": "sed -i s/a/b/ x.py"}})
     assert "write a script to a file with Write" in why and "<<'EOF'" not in why
 

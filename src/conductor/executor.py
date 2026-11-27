@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from . import audits, kept, load, questions
+from . import audits, docbudget, kept, load, questions
 from . import parked as parked_mod
 from .config import Config
 from .items import Item
@@ -24,9 +24,9 @@ paused: plan to it.
 
 Files. Write every file with Write or Edit; for a scripted change, one script for the whole
 change (every edit checked before any is written) in `out/{item_name}/`, written with Write
-(a heredoc loses a level of backslash escaping), run alone, never mid-chain. Never
-a heredoc into another file, `sed -i`, or a `-c`/`-e` script that writes one: conductor's
-hooks refuse each, and the call is lost.
+(a heredoc loses a level of backslash escaping), run alone, never mid-chain. Hooks refuse
+(call lost) `sed -i`, heredoc-fed Python (`python - <<EOF`), a writing `-c`/`-e`, a
+heredoc into a file. Bypass mode's shell-edit note doesn't apply.
 
 Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
 hard to undo, with a default where one is reasonable: unanswered, it returns after
@@ -159,8 +159,9 @@ A conductor executor: headless Claude Code, item {item_id},
 project {project}. Nobody is watching. Time limit: {max_hours:g}h; killed at {deadline}, later
 if blocked. Plan by the last tool return's clock.
 
-Write files with Write/Edit only: hooks refuse `-c`/`-e`/`sed -i` writes, heredocs outside
-`out/` (scripts: `out/{item_name}/`, run alone; heredocs mangle backslashes), %TEMP% and the like.
+Write/Edit files, never bypass mode's shell edits; hooks refuse `sed -i`,
+heredoc-fed Python, `-c`/`-e` writes, heredocs outside `out/` (scripts: Write to
+`out/{item_name}/`, run alone; heredocs mangle backslashes), %TEMP%.
 
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
 default (unanswered after {ask_minutes:g} min; it holds the session: background work
@@ -289,16 +290,16 @@ under ~{cap:g} seconds (`timeout` ≤ {cap_ms}); conductor moves one still runni
 the background{bg}. Run longer work with `run_in_background` and a `timeout` sized to its
 estimate with margin; a job that may outlast 10 minutes goes through `start`
 (mcp__conductor__start, detached), then `wait_for` its pid. Wait with `wait_for`
-(mcp__conductor__wait_for: a path, a pid exiting or a log line; a message or a subagent
-finishing returns it early), never by ending your turn: a message cannot reach you idle.
-For a background subagent, `wait_for` with `minutes` near its expected length, or check its
-output; never a path nothing will write.
+(mcp__conductor__wait_for: a path, a pid exiting, a log line, or `agent`, a subagent's id; a
+message returns it early), never by ending your turn: a message cannot reach you idle.
+For a background subagent, `wait_for` with `agent` (its id) and `minutes` near its expected
+length; other subagents finishing (a Workflow's) don't end it. Never a path nothing will write.
 """
 
 CALLS_LIGHT = """
 Short calls. Nothing foreground over ~{cap:g} s (`timeout` ≤ {cap_ms}): background longer
 work (`run_in_background` with a `timeout`; over 10m: mcp__conductor__start), wait with
-mcp__conductor__wait_for (`minutes` near a subagent's length, never a path nothing writes),
+mcp__conductor__wait_for (a subagent: `agent` its id, `minutes` near its length; never a path nothing writes),
 never by ending your turn.
 """
 
@@ -315,7 +316,8 @@ LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of th
                   "run a further check on the goal, its outputs in scratch, inside the load budget.\n")
 LEFTOVER_FULL = (" With over an hour of the time limit left at the end, check each done-when item against\n"
                  "its measured result (a band met is not a target met) and take the next in-scope step on\n"
-                 "one unmet and not shown unreachable, saying which.")
+                 "one unmet and not shown unreachable, saying which. Only unmet bar needing reads out of\n"
+                 "scope: `ask` (`design: true`) before finishing partial.")
 AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (as above); the report lists\n"
              "the notes you implemented.\n")
 LEFTOVER_LIGHT = " Goal unmet, over an hour left: next useful step."
@@ -354,8 +356,12 @@ READONLY_TREE = READONLY.lstrip()      # says all a worktree item needs: it neve
 # The full preamble's working papers (*The box*) and warning-checks clause; a readonly item
 # commits nothing and measures nothing it touched, so it gets its own (146, helium-hustle 045).
 PAPERS = ("Working papers the prompt asks for go\nunder the repo's results folder "
-          "(`experiments/results/{item_name}/`), committed; read outputs\na later item could reuse go in "
-          "`out/keep/`, kept at `{kept}` for your report to name.")
+          "(`{results}/{item_name}/`), committed (unless the repo's CLAUDE.md files them elsewhere); read outputs\n"
+          "a later item could reuse go in `out/keep/`, kept at `{kept}` for your report to name.")
+# 151: the repo's `results` (conductor.toml) is git-ignored or `out/...` (fractals' repos).
+PAPERS_KEPT = ("Working papers the prompt asks for, and read\noutputs a later item could reuse, go in "
+               "`out/keep/{item_name}/` (this repo commits no results folder: the report carries what "
+               "matters). It is kept at\n`{papers}`: your report and `carry:` lines name files there, never `out/keep/`.")
 PAPERS_READONLY = ("Working papers the prompt asks for, and read\noutputs a later item could reuse, go in "
                    "`out/keep/{item_name}/` (nothing you write commits). It is kept at\n`{papers}`: "
                    "your report and `carry:` lines name files there, never `out/keep/`.")
@@ -623,9 +629,9 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
     text =(WATCH if watch else LIGHT if light else PREAMBLE).format(
         item_id=item.id, item_name=item.name, project=cfg.project, workdir=_where(cfg, item, run, light or watch, watch),
         threads=load.run_threads(),
-        papers=(PAPERS_READONLY if item.readonly else PAPERS).format(
-            item_name=item.name, kept=kept.where(cfg, item, run).as_posix(),
-            papers=kept.papers(cfg, item, run).as_posix()),
+        papers=(PAPERS_READONLY if item.readonly else PAPERS_KEPT if not (watch or light) and kept.no_results(cfg, item.repo)
+                else PAPERS).format(item_name=item.name, kept=kept.where(cfg, item, run).as_posix(),
+                                    papers=kept.papers(cfg, item, run).as_posix(), results=cfg.opts(item.repo).results),
         run_checks=RUN_CHECKS_READONLY if item.readonly else RUN_CHECKS,
         paths=PATHS.format(globs=_ticks(item.paths), prose=PROSE.format(globs=_ticks(prose)) if prose else "")
         if item.paths else "",
@@ -651,7 +657,9 @@ def build_prompt(cfg: Config, item: Item, paths: RunPaths, max_hours: float, dea
         tail="" if resume else PROMPT_FOLLOWS,
     )
     extra = (choices + parked_mod.section(list(parked)) + (EXTERNAL if item.external_data else "")
-             + ("" if watch else kept.section(cfg, item.repo)))
+             + ("" if watch else kept.section(cfg, item.repo))
+             + ("" if watch or item.readonly else docbudget.section(
+                 cfg, item.repo, item.body + (audits.template_text(item.template) if item.template else ""))))
     if not resume:
         return text + body(cfg, item, notes, usage) + extra + "".join(_amend(AMEND, m) for m in amends)
     n = resume["landed"]

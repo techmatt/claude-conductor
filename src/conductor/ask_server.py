@@ -10,10 +10,11 @@ the call back early with the question still open, and `ask(resume=<id>)` waits o
 remaining?, outline?)` appends a progress line (`talk.record_progress`) and returns at once; it
 hands out no waiting message (the PostToolUse hook after it does, on the lead's call only).
 `wait(minutes?)` is how a paused item idles: it returns once a message waits for the item
-(the hook after it delivers it) or the minutes pass. `wait_for(path | pid | log + line, every?,
-minutes?)` replaces an executor's shell polls: it checks every ~50s and returns when the
-target changes, a message waits, a subagent of the item finishes (the SubagentStop hook,
-`talk.note_subagent`, 128), or the minutes pass, saying what changed. `start(command, log?)`
+(the hook after it delivers it) or the minutes pass. `wait_for(path | pid | log + line | agent,
+every?, minutes?)` replaces an executor's shell polls: it checks every ~50s and returns when the
+target changes, a message waits, the subagent `agent` names finishes (the SubagentStop hook,
+`talk.note_subagent`, 128; since 151 only one it names, others counted in the return), or the
+minutes pass, saying what changed. `start(command, log?)`
 starts a long job detached (`procs.spawn_detached`), so it outlives the shell call, and
 returns its pid at once (106). JSON-RPC 2.0 over
 newline-delimited stdin/stdout; calls run on their own threads so `ping` and
@@ -149,9 +150,11 @@ WAIT_FOR_TOOL = {
         "beside either is the process doing the work, and its exit ends the wait too, with how "
         "things stand. A `log` wait also ends on a line matching `fail`. Returns "
         "with what changed, or early for a message from conductor (delivered as the call "
-        "returns) or a subagent of yours finishing, or after `minutes` with how things stand; "
-        "then call it again if you still need to. To wait on a background subagent, give "
-        "`minutes` near its expected length; never a path nothing will write. `pid` is a Windows pid: Git Bash's `$!` is not one, so there use a `log` line "
+        "returns), or after `minutes` with how things stand; then call it again if you still "
+        "need to. To wait on a background subagent, give `agent` (its id, or \"any\"), alone or "
+        "beside another target, with `minutes` near its expected length: only that one finishing "
+        "returns early; others (a Workflow's own agents) are counted in the return. Never a path "
+        "nothing will write. `pid` is a Windows pid: Git Bash's `$!` is not one, so there use a `log` line "
         "or a marker `path` the command writes last."
     ),
     "inputSchema": {
@@ -167,6 +170,8 @@ WAIT_FOR_TOOL = {
             "line": {"type": "string", "description": "With `log`: the regular expression a line must match."},
             "fail": {"type": "string", "description": ("With `log`: a line matching this regular expression ends the wait as "
                                                         f"a failure (default, any case: `{waitfor.FAIL_DEFAULT}`; \"\" for none).")},
+            "agent": {"type": "string", "description": ("A background subagent's id (from the Agent call's result), "
+                                                        "or \"any\": its finishing ends the wait.")},
             "every": {"type": "number", "description": f"Seconds between checks (default {WAIT_FOR_EVERY})."},
             "minutes": {"type": "number", "description": f"At most this long (default and most: {WAIT_MAX_MINUTES})."},
         },
@@ -539,31 +544,46 @@ class Server:
                 return f"`{name}` must be a positive number", True
         started = last_progress = time.time()
         end, checked = started + min(minutes, WAIT_MAX_MINUTES) * 60, 0.0
-        mark = talk.subagent_mark(self.control, self.item)     # subagents finishing after this end it
+        mark = talk.subagent_mark(self.control, self.item)     # subagents finishing after this count
+        agent = (args.get("agent") or "").strip()
         while not cancel.is_set():
             at = time.time()
             if at - checked >= every:
                 checked = at
                 if hit := target.check():
-                    return f"{hit} (after {round(at - started)}s).{waitfor.advice(hit)}{self._running_now()}", False
+                    return (f"{hit} (after {round(at - started)}s).{waitfor.advice(hit)}{self._meanwhile(mark)}"
+                            f"{self._running_now()}"), False
             if fresh := [p.name for p in talk.pending(self.control, self.item) if p.name not in self._announced]:
                 self._announced.update(fresh)
                 return (f"A message from conductor is waiting: it reaches you as this call returns. Do what it "
                         f"says, then call `wait_for` again if you still need to. So far: {target.state()}."
-                        f"{self._running_now()}"), False
-            if done := talk.subagents_done(self.control, self.item, mark):     # 128: SubagentStop
-                kinds = ", ".join(dict.fromkeys(str(d.get("agent_type") or "subagent") for d in done))
-                return (f"A subagent finished ({kinds}) after {round(at - started)}s: read its result as this call "
-                        f"returns, then call `wait_for` again if you still need to. So far: {target.state()}."
-                        f"{self._running_now()}"), False
+                        f"{self._meanwhile(mark)}{self._running_now()}"), False
+            # 128: SubagentStop. Since 151 only the one `agent` names ends it: a Workflow's
+            # inner agents returned every call early (fractals 086, ~10 extra calls per fan-out).
+            if agent and (done := [d for d in talk.subagents_done(self.control, self.item, mark)
+                                   if waitfor.named(agent, d)]):
+                d = done[0]
+                return (f"Subagent {d.get('agent_id') or '?'} ({d.get('agent_type') or 'subagent'}) finished after "
+                        f"{round(at - started)}s: read its result as this call returns, then call `wait_for` "
+                        f"again if you still need to. So far: {target.state()}.{self._running_now()}"), False
             if at >= end:
-                return f"Nothing yet after {round(at - started)}s: {target.state()}.{self._running_now()}", False
+                return (f"Nothing yet after {round(at - started)}s: {target.state()}.{self._meanwhile(mark)}"
+                        f"{self._running_now()}"), False
             if token is not None and at - last_progress >= PROGRESS_SECONDS:
                 last_progress = at
                 self.send({"jsonrpc": "2.0", "method": "notifications/progress", "params": {
                     "progressToken": token, "progress": round(at - started), "message": "waiting"}})
             time.sleep(min(POLL_SECONDS, every))
         return None, False
+
+    def _meanwhile(self, mark: int) -> str:
+        """The subagents that finished during a wait without ending it, as one sentence."""
+        done = talk.subagents_done(self.control, self.item, mark)
+        if not done:
+            return ""
+        named = [f"{d.get('agent_type') or 'subagent'} {d.get('agent_id') or '?'}" for d in done[-5:]]
+        more = f" and {len(done) - 5} more" if len(done) > 5 else ""
+        return f" Meanwhile {len(done)} subagent(s) finished: {', '.join(named)}{more}."
 
     def _text(self, q: questions.Question) -> str:
         r = q.result

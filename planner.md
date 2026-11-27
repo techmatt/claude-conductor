@@ -49,9 +49,9 @@ An `open:` path lies under the control folder, a repo or `open_roots` (`doc` `op
 
 **Front-matter** (`meta`; `doc` `items`): `locks`, `depends_on`, `after_red`, `needs_planner`, `readonly`, `alongside`, `max_hours`, `stage`, `ultracode`, `audit`, `template`, `resume`, `rules`, `needs_pick`, `remote`, `external_data`, `model` (resume items).
 - **Concurrency** (`scheduling`): one item per repo at a time; `locks: [quiet]` holds the whole box for a timing bar. `alongside: <what it touches>` runs one beside others when it shares nothing outside git (never a template). Exclusive templates run alone. `depends_on` only where queue order doesn't serialize; `readonly` never merges, starts at once.
-- **Ultracode** (`ultracode: true`): for large multi-part work, sweeps, redesigns, new systems; never sim-heavy items.
+- **Ultracode** (`ultracode: true`): large multi-part work, sweeps, redesigns, new systems; never sim-heavy.
 - **Templates and audits are conductor's texts**, never retyped (`templates`): `template: <name>`, Matt's extras as body. `audit: true` keeps notes for a later cleanup: on for rules and gate items, off for art and small ones.
-- **Parked edits** (`park`) never go in prompts; the next serial non-template item carries them. Matt never edits config or docs by hand.
+- **Parked edits** (`park`) never go in prompts; the next serial non-template item carries them. Matt's standing call: "accumulate" or "hold these for a batch" means `park`, never a batch list in `state.md`. Matt never edits config or docs by hand.
 
 **The body** is short and goal-first: new rulings, goal, bars; method suggested unless `(required)`. Standing rulings are in the repo's `docs/rulings.md`, which executors read: never retype them. Restate neither the repo's `CLAUDE.md` nor the preamble except where an item differs.
 - **Done when**: one or two checks Matt can observe. End with "Commit when done." unless the prompt says why not.

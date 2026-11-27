@@ -88,9 +88,9 @@ def test_wait_for_returns_when_a_subagent_finishes(env):
     timer = threading.Timer(0.3, talk.note_subagent,
                             (env.control, "code/001_a", {"agent_id": "a1", "agent_type": "general-purpose"}))
     timer.start()
-    text = server.wait_for(args | {"minutes": 1}, threading.Event())[0]
+    text = server.wait_for(args | {"minutes": 1, "agent": "a1"}, threading.Event())[0]     # 151: named
     timer.join()
-    assert text.startswith("A subagent finished (general-purpose) after ")
+    assert text.startswith("Subagent a1 (general-purpose) finished after ")
     assert "never does not exist yet" in text
 
 
@@ -108,17 +108,17 @@ def test_the_subagent_stop_hook_is_wired_and_records(env, monkeypatch):
 # ---------------------------------------------------------------- preambles
 def test_the_preambles_say_how_to_wait_estimate_and_write(env):
     full, light = flat(render(env, LONG)), flat(render(env, SHORT))
-    assert "a message or a subagent finishing returns it early" in full
-    assert ("For a background subagent, `wait_for` with `minutes` near its expected length, or check its output; "
-            "never a path nothing will write.") in full
-    assert "`minutes` near a subagent's length, never a path nothing writes" in light
+    assert "or `agent`, a subagent's id; a message returns it early" in full
+    assert ("For a background subagent, `wait_for` with `agent` (its id) and `minutes` near its expected length; "
+            "other subagents finishing (a Workflow's) don't end it. Never a path nothing will write.") in full
+    assert "a subagent: `agent` its id, `minutes` near its length; never a path nothing writes" in light
     assert ("once you have a plan, an estimate by rate (`5:40pm (by rate)`); `(to the cap)` only when you expect "
             "to use the whole time limit") in full
-    assert "Write every file with Write or Edit" in full and "Never a heredoc into another file, `sed -i`" in full
+    assert "Write every file with Write or Edit" in full and "a writing `-c`/`-e`, a heredoc into a file." in full
     assert ("for a scripted change, one script for the whole change (every edit checked before any is "
             "written) in `out/001_a/`") in full and "run alone, never mid-chain." in full   # 133, 142, 146, 147
-    assert "(scripts: `out/001_a/`, run alone; heredocs mangle backslashes)" in light   # 148
-    assert "Write files with Write/Edit only: hooks refuse `-c`/`-e`/`sed -i` writes, heredocs outside `out/`" in light
+    assert "(scripts: Write to `out/001_a/`, run alone; heredocs mangle backslashes)" in light   # 148, 151
+    assert "`-c`/`-e` writes, heredocs outside `out/`" in light
 
 
 # ---------------------------------------------------------------- reviewed: a list

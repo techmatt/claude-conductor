@@ -374,7 +374,7 @@ class MergeMixin:
             self._save(run)
         self._move_to_done(run)
         self.runs.pop(item_id, None)
-        self._compact_logs([item_id])
+        self._compact_logs([item_id], index=True)
         self._close_questions(item_id)
         qdir = cfg.path("queue", repo)
         still_running = any(r.rec["repo"] == repo for r in self.runs.values())

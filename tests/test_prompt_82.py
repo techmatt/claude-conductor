@@ -15,7 +15,7 @@ def test_both_preambles_carry_the_new_lines(env):
     assert "A load message is information: finish the unit in flight, start the next one smaller" in full
     assert "a `timeout` sized to its estimate with margin" in full
     light = " ".join(render(env, SHORT).split())
-    assert "hooks refuse `-c`/`-e`/`sed -i` writes" in light
+    assert "hooks refuse `sed -i`, heredoc-fed Python, `-c`/`-e` writes" in light
     assert "`run_in_background` with a `timeout`" in light
     assert len(render(env, SHORT).split()) <= 400
 

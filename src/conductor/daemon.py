@@ -30,7 +30,7 @@ from pathlib import Path
 import psutil
 
 from . import (audits, desktop, executor, git, globs, guard, inbox, items, load, memory, memory_notes, models, notify, quiet, parked, picker, picks, procs, questions,
-               request, session, state, talk, targets, winupdate, worktrees)
+               request, runlog, session, state, talk, targets, winupdate, worktrees)
 from . import resume as resume_items
 from . import config as config_mod
 from .config import RUNTIME, Config
@@ -1024,16 +1024,19 @@ class Daemon(SignalsMixin, ReorderMixin, MessagesMixin, ReapMixin, MergeMixin, S
                 self._worktree_op(rec, "kept", "red: branch and worktree kept for inspection")
         self._conclude(run)
 
-    def _compact_logs(self, item_ids) -> None:
+    def _compact_logs(self, item_ids, index: bool = False) -> None:
         """Shrink finished items' run logs (`executor.compact_log`, then `gzip_log`): after
         each finish, and at daemon start for every finished item, which also catches logs
-        written before either existed."""
+        written before either existed. `index`: first its `.steps.md` (a finish; an older log
+        gets one when a resume item reads it, `resume.readable`)."""
         for item_id in item_ids:
             if item_id in self.runs or item_id in self.stages:
                 continue
             paths = executor.RunPaths.for_name(self.cfg, *item_id.split("/", 1))
             for log in (paths.log, paths.stage_log, paths.merge_log):
                 try:
+                    if index and log == paths.log:
+                        runlog.index_log(log)
                     executor.compact_log(log)
                     executor.gzip_log(log)
                 except OSError as exc:

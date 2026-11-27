@@ -42,7 +42,14 @@ restart never takes them twice). The `start` event lists them (`parked`).
 do each unless it conflicts or is unsafe, and to answer each in its report as `parked
 P<n>: done` or `parked P<n>: skipped (why)`. They are in scope whatever the prompt's own
 file limits say; only a declared `paths:` binds them (75: aicomplete 094 skipped all four
-of its edits under "touch no other files", and they waited a cycle).
+of its edits under "touch no other files", and they waited a cycle). Since 151 (helium-hustle
+115) it adds that an edit changing play may turn a sim or loadout check red: patch the check
+when the red is the edit's intended effect (an expected value moving), else leave it red and
+report it, the `parked P<n>:` line saying which.
+
+**"Accumulate" is `park`** (Matt, 2026-11-26). "Accumulate these" or "hold these for a batch"
+means park them, nothing more: never a batch list kept in `state.md` (helium-hustle's
+*Playtest batch 3* sat outside the parked edits and missed two carrying items).
 
 **At finish.** Before the `finish` event (`_settle_parked`, once per item, saved before it
 acts): if the item's work landed (not red), the edits its report answered `done` stay

@@ -2,7 +2,9 @@ Self-audit of your own run of {{original}} in `{{repo}}`. Look back over that ru
 what this session remembers and from your record named above (its prompt, report, run
 log, stage log, audit notes, amendments and events). If the item was staged, its real
 prompt is `<name>.stage.prompt.md`: `<name>.prompt.md` then holds only the resume preamble.
-`<name>.amend.md` holds every amendment. This is a look back, not rework of the run's goal.
+`<name>.amend.md` holds every amendment; `<name>.steps.md` indexes the run log by step (time,
+line, tool), so read it first and open only the log lines it points at. This is a look back,
+not rework of the run's goal.
 
 Fix what is obvious in place, before you finish, even at some extra time: a stale doc or
 CLAUDE.md line, a small bug, dead code, a finding of yours or of the run's own notes with

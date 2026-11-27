@@ -37,11 +37,15 @@ waits on an exited script running out at 4 and 11 min). After `minutes` it says
 how things stand: `path` not there, `pid` running, or `log`'s size, age and last line. The target
 is checked every `every` seconds, the item's mailbox every second, so a message ends the
 wait at once and the hook after the call delivers it; each mail file does that once, so a
-helper's call can't spin (`ask`'s rule). A subagent of the item finishing ends it too (128:
-helium-hustle 027 and 030 sat 12 and 10 minutes in a wait on a path nothing would write,
-their reviewer long done): the executor's `SubagentStop` hook (`talk.py subagent`) appends a
-line to `.conductor/touch/<repo>__<NNN_name>.subagents.jsonl`, and a wait returns for any
-line written after it began (`A subagent finished (<type>) after Ns: …`). Claude Code
+helper's call can't spin (`ask`'s rule). `agent` (a subagent's id, or `any`), alone or beside
+another target, waits on a background subagent (128: helium-hustle 027 and 030 sat 12 and 10
+minutes in a wait on a path nothing would write, their reviewer long done): the executor's
+`SubagentStop` hook (`talk.py subagent`) appends a line to
+`.conductor/touch/<repo>__<NNN_name>.subagents.jsonl`, and a wait returns for a line it names
+written after it began (`Subagent <id> (<type>) finished after Ns: …`; an id prefix of 6+
+characters matches). Since 151 no other subagent ends a wait (128 ended it on any: a
+Workflow's inner agents returned it ~10 times a fan-out, fractals 086, 022); those finishing
+during it are named in its return (`Meanwhile N subagent(s) finished: …`). Claude Code
 2.1.326 runs that hook as a background subagent ends, while the lead is inside another call. `pid` is a Windows pid: Git Bash's `$!` is not one,
 so a bash job waits on a `log` line or a marker `path`, or is launched with `start`. A `wait_for` counts as one tool call
 and pings as `ask` does (*Long tool calls*). Code: `waitfor.py`, `ask_server.py`.

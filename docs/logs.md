@@ -18,3 +18,14 @@ tabs, a resume item's readable files, a disk cleanup's measurements), so either 
 works; by hand, `python -c "import gzip,sys; sys.stdout.write(gzip.open(sys.argv[1],'rt',encoding='utf-8').read())" <file>`.
 At daemon start the same pass runs over every finished item's logs, which also covers
 logs from before either step existed. A failure is a `warning`; the log is left as it was.
+
+**Step index** (151: fractals 091's post-audit of an `audit: false` run had only the event log
+and a 480 KB gzip with no index by step). As an item finishes, before compaction, conductor
+writes `reports/<repo>__<NNN_name>.steps.md` (`runlog.index_log`): one line per tool call of
+the lead session, numbered, with its local time (when its result came back), `L<n>` (its line
+in the stream, which compaction keeps), the tool and its main argument cut at 140 characters;
+`progress` notes in bold, a subagent's own calls counted as `+N inner` on the call that ran it.
+A resume item (a post-audit) gets it in its readable files, written then for a log from
+before 151 (`resume.readable`); the self-audit template says to read it first. Chosen over
+audit notes on by default for long items: it costs an executor nothing, covers every item, and
+older logs get one on demand.

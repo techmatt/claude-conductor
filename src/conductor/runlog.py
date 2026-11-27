@@ -108,6 +108,80 @@ def compact_log(log: Path) -> tuple[int, int] | None:
     return before, log.stat().st_size
 
 
+STEPS_HEAD = """# Steps of {name}
+
+One line per tool call of the lead session, from `{name}.log.gz` (`{name}.log` under 256 KB):
+its local time (when the result came back), `L<n>` the stream-json line holding the call, the
+tool and what it was given. `progress` notes are in bold; `+N inner` counts a subagent's own
+calls under it. A line's call and result: `gzip -dcf <log> | sed -n '<n>,<n+1>p'`.
+
+"""
+STEP_CHARS = 140
+
+
+def _what(tool: str, ti: dict) -> str:
+    for key in ("command", "file_path", "note", "description", "pattern", "path", "log", "pid", "query",
+                "prompt", "url"):
+        if ti.get(key) not in (None, ""):
+            text = str(ti[key])
+            break
+    else:
+        text = json.dumps(ti, ensure_ascii=False)[:STEP_CHARS]
+    text = " ".join(text.split())
+    return text if len(text) <= STEP_CHARS else text[:STEP_CHARS - 1] + "…"
+
+
+def steps_path(log: Path) -> Path:
+    return log.with_name(log.name.removesuffix(".log") + ".steps.md")
+
+
+def index_log(log: Path) -> Path | None:
+    """Write `<name>.steps.md` beside a finished run log (151: fractals 091's post-audit of an
+    `audit: false` run had only a 480 KB gzip with no index by step). Returns its path, or
+    None when there is no log or the index is already there."""
+    from datetime import datetime
+    from .util import clock
+    out = steps_path(log)
+    if out.is_file() or (stored := stored_log(log)) is None:
+        return None
+    steps, by_id, inner = [], {}, {}
+    with open_log(log) as fh:
+        for n, raw in enumerate(fh, 1):
+            try:
+                obj = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(obj, dict) or not isinstance(msg := obj.get("message"), dict):
+                continue
+            parent = obj.get("parent_tool_use_id")
+            for block in msg.get("content") or []:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_use" and obj.get("type") == "assistant":
+                    if parent:
+                        inner[parent] = inner.get(parent, 0) + 1
+                        continue
+                    step = {"n": n, "id": block.get("id"), "tool": str(block.get("name", "?")), "when": "",
+                            "what": _what(str(block.get("name")), block.get("input") or {})}
+                    steps.append(step)
+                    by_id[block.get("id")] = step
+                elif block.get("type") == "tool_result" and (step := by_id.get(block.get("tool_use_id"))):
+                    try:
+                        dt = datetime.fromisoformat(str(obj.get("timestamp")).replace("Z", "+00:00")).astimezone()
+                        step["when"] = clock(dt, dt)        # the time alone; the header's log has the date
+                    except ValueError:
+                        pass
+    lines = []
+    for i, s in enumerate(steps, 1):
+        tool = s["tool"].removeprefix("mcp__conductor__")
+        more = f" (+{inner[s['id']]} inner)" if s["id"] in inner else ""
+        row = f"{i}. {s['when'] or '?'} L{s['n']} {tool}: {s['what']}{more}"
+        lines.append(f"**{row}**" if tool == "progress" else row)
+    text = STEPS_HEAD.format(name=log.name.removesuffix(".log")) + "\n".join(lines) + "\n"
+    out.write_text(text, encoding="utf-8", newline="\n")
+    return out
+
+
 GZIP_MIN_BYTES = 256 << 10      # a finished log smaller than this stays plain text
 
 

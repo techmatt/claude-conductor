@@ -19,7 +19,8 @@ RUNTIME = (
 )
 
 REPO_KEYS = {"path", "worktrees", "stage", "main", "shared", "setup", "prose", "background", "push", "append_only",
-             "doc_budget_exempt", "warning_checks", "rebuildable"}
+             "doc_budget_exempt", "warning_checks", "rebuildable", "results"}
+DEFAULT_RESULTS = "experiments/results"     # where the full preamble files working papers (151)
 DEFAULT_REBUILDABLE = ["target", "node_modules"]   # build output a kept worktree loses once reviewed (disk.py)
 
 # Shared prose nearly every item touches: exempt from `paths`, merged textually.
@@ -46,6 +47,7 @@ class RepoOptions:
     doc_budget_exempt: list[str] = field(default_factory=list)  # doc globs the digest's doc trim skips (generated docs)
     warning_checks: list[str] = field(default_factory=list)     # commands the preamble has an executor run for `warnings:`
     rebuildable: list[str] = field(default_factory=lambda: list(DEFAULT_REBUILDABLE))  # folder names trimmed from a reviewed kept worktree ([] off)
+    results: str = DEFAULT_RESULTS   # committed working papers' folder; git-ignored or "out/keep": papers kept, not committed
 
     def is_prose(self, path: str) -> bool:
         return any(globs.matches(path, g) for g in self.prose)
@@ -190,6 +192,11 @@ def _repo_options(name: str, table: dict) -> RepoOptions:
         if not isinstance(table["main"], str) or not table["main"]:
             raise ConfigError(f"{where}.main must be a branch name")
         opts.main = table["main"]
+    if "results" in table:
+        rel = table["results"]
+        if not isinstance(rel, str) or not rel.strip("/") or Path(rel).is_absolute() or ".." in Path(rel).parts:
+            raise ConfigError(f"{where}.results must be a folder inside the repo")
+        opts.results = rel.replace("\\", "/").strip("/")
     for key in ("shared", "setup", "prose", "background", "append_only", "doc_budget_exempt", "warning_checks",
                 "rebuildable"):
         value = table.get(key, getattr(opts, key))

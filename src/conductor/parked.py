@@ -31,7 +31,9 @@ conflicts with it or can't be done safely. They are part of this item whatever t
 own file limits say ("touch no other files" included; only a declared `paths:` binds them).
 Your report answers each on its own line, right
 after the header: `parked P<n>: done` or `parked P<n>: skipped (why)`. A skipped one goes
-back to the list for a later item.
+back to the list for a later item. An edit that changes play (a rule, a number) may turn a
+sim or loadout check red: patch the check when the red is the edit's intended effect (an
+expected value moving), else leave it red and report it; its `parked P<n>:` line says which.
 
 {lines}
 """
