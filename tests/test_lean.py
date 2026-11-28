@@ -39,16 +39,16 @@ def test_a_readonly_item_loses_the_commit_rules_and_keeps_the_rest(env):
     text = render(env, readonly=True, max_hours=2.0)
     for kept in ("Asking.", "`outline`", "The box.", "commit nothing"):
         assert kept in text, kept
-    for dropped in ("Commit your work", "uncommitted", "over an hour", "rebases this branch"):
+    for dropped in ("Commit your work", "uncommitted", "over 30 minutes", "rebases this branch"):
         assert dropped not in text, dropped
     light = render(env, body="short", readonly=True)
-    assert "commit nothing" in light and "Commit everything" not in light and "over an hour" not in light
+    assert "commit nothing" in light and "Commit everything" not in light and "over 30 minutes" not in light
 
 
 def test_a_landing_item_keeps_them(env):
     assert "uncommitted changes make the item red" in render(env, max_hours=2.0)
-    assert "over an hour of the time limit" in render(env, max_hours=2.0)
-    assert "over an hour left" in render(env, body="short")
+    assert "over 30 minutes of the time limit" in render(env, max_hours=2.0)
+    assert "over 30 minutes left" in render(env, body="short")
 
 
 def test_the_full_preamble_says_ask_holds_the_session(env):

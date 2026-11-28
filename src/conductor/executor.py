@@ -26,7 +26,7 @@ Files. Write every file with Write or Edit; for a scripted change, one script fo
 change (every edit checked before any is written) in `out/{item_name}/`, written with Write
 (a heredoc loses a level of backslash escaping), run alone, never mid-chain. Hooks refuse
 (call lost) `sed -i`, heredoc-fed Python (`python - <<EOF`), a writing `-c`/`-e`, a
-heredoc into a file. Bypass mode's shell-edit note doesn't apply.
+heredoc into a file outside `out/`. Bypass mode's shell-edit note doesn't apply.
 
 Asking. `ask` (mcp__conductor__ask) Matt only when a wrong guess would waste real work or be
 hard to undo, with a default where one is reasonable: unanswered, it returns after
@@ -101,12 +101,13 @@ The report starts with these six lines:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
-slow: none | <component> ~<time>, <why>, <what would fix it>[; <another>]
+slow: none | <component> ~<time>, <why>, <`use <flag>` | `needs <work>`>[; <another>]
 friction: none | <what cost you time or tokens>[; <another>]
 warnings: none | <kind>: <what tripped>[; <kind>: <another>]
 and, only when `partial`, one more:
 partial: <each unmet bar and why>[; <another>], `matt: ` leading one only Matt's call is left on
-{pick_line}`slow:` names only a part over ~15 minutes or twice your estimate; `friction:`, one
+{pick_line}`slow:` names only a part over ~15 minutes or twice your estimate (check flags before
+`needs`); `friction:`, one
 or two things (prompt, repo docs or tools, conductor) that cost time or tokens; `warnings:`,
 what the repo's CLAUDE.md *Warning checks*{checks} trip ({run_checks}) and any other warning you notice, each led by a kind (`design`, `data`,
 `perf`, `docs`, `security` or the repo's own). A warning as on main, or from a check measuring
@@ -141,15 +142,16 @@ Diff review. Before the report, send one read-only subagent `git diff {base}` (t
 whole change), the prompt's rulings quoted word for word,{rulings} its done-when list, and the repo
 CLAUDE.md's *What failure looks like* section if it has one. It looks for bugs and for
 done-when rows unmet or broken, each finding naming a file and line, no style-only comments.
-Fix what is real; at most one more pass, on the new diff only. A rules change gets it before
-fresh seeds; a self-check of the config diff is not it. The report body carries one
+Fix what is real; at most one more pass, on the new diff only. Any item with a bar read on
+seeds (rules, tuning, sim players, balance) gets it before its fresh seeds, so its fixes need
+no second set; a self-check of the config diff is not it. The report body carries one
 line: `Diff review: N found, M fixed, K rejected (why)`.
 """
 REVIEW_ULTRA = """
 Diff review. Your Ultracode adversarial review of the diff (`git diff {base}`) is this item's
 diff review{rulings}: fix what is real, then one line in the report body: `Diff review: N found, M
-fixed, K rejected (why)`. A rules change gets it before fresh seeds; a self-check of the
-config diff is not it.
+fixed, K rejected (why)`. Any item with a bar read on seeds (rules, tuning, sim players,
+balance) gets it before its fresh seeds; a self-check of the config diff is not it.
 """
 
 # The preamble for a small item (`is_light`): the rules a short job can trip on, and none
@@ -161,7 +163,7 @@ if blocked. Plan by the last tool return's clock.
 
 Write/Edit files, never bypass mode's shell edits; hooks refuse `sed -i`,
 heredoc-fed Python, `-c`/`-e` writes, heredocs outside `out/` (scripts: Write to
-`out/{item_name}/`, run alone; heredocs mangle backslashes), %TEMP%.
+`out/{item_name}/`, run alone; heredocs mangle backslashes), %TEMP%, `&` jobs.
 
 Asking. If a wrong guess wastes work, `ask` (mcp__conductor__ask) Matt with a
 default (unanswered after {ask_minutes:g} min; it holds the session: background work
@@ -189,7 +191,7 @@ Header:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
-slow: none | <part> ~<time>, <why>, <fix>
+slow: none | <part> ~<time>, <why>, <`use <flag>`|`needs <work>`>
 friction: none | <what slowed you>
 warnings: none | <kind>: <what CLAUDE.md's *Warning checks*{checks} or you caught>; …
 `done`: goal met (a reported soft-band miss is done). `partial`: planned work undelivered
@@ -221,7 +223,7 @@ Start it with:
 status: done | partial | red
 blocks: <what this blocks, or none>
 carry: <what state.md should change, or none>
-slow: none | <component> ~<time>, <why>, <what would fix it>
+slow: none | <component> ~<time>, <why>, <`use <existing flag>` | `needs <new thing>`>
 friction: none | <what slowed you>
 warnings: none | <kind>: <anything that looks wrong>[; …]
 Answer every message and amendment by number. End your final message with
@@ -314,13 +316,13 @@ LEFTOVER = ("\n**Leftover budget.** Finishing this with over an hour of the time
             "most useful step toward its goal, in scope, and say in the report what it was.\n")
 LEFTOVER_AUDIT = ("\n**Leftover budget.** Optional here: with over an hour of the time limit left you may stop, or "
                   "run a further check on the goal, its outputs in scratch, inside the load budget.\n")
-LEFTOVER_FULL = (" With over an hour of the time limit left at the end, check each done-when item against\n"
+LEFTOVER_FULL = (" With over 30 minutes of the time limit left at the end, check each done-when item against\n"
                  "its measured result (a band met is not a target met) and take the next in-scope step on\n"
-                 "one unmet and not shown unreachable, saying which. Only unmet bar needing reads out of\n"
-                 "scope: `ask` (`design: true`) before finishing partial.")
+                 "one unmet and not shown unreachable, saying which; repeat while any such bar remains.\n"
+                 "Only unmet bar needing reads out of scope: `ask` (`design: true`) before finishing partial.")
 AUDIT_FIX = ("\nBefore finishing, implement each obvious note yourself (as above); the report lists\n"
              "the notes you implemented.\n")
-LEFTOVER_LIGHT = " Goal unmet, over an hour left: next useful step."
+LEFTOVER_LIGHT = " Goal unmet, over 30 minutes left: next useful step."
 
 ONLY_ONE = "That file is the only thing you may write outside the working directory."
 ONLY_LIGHT = "Nothing else outside the working directory"

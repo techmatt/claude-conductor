@@ -68,7 +68,9 @@ the planner reads one file instead of round-tripping a checkpoint, a re-stage an
      past `state_budget_kb` (15 KB since 137; `[defaults]`), with its growth and `fold:` lines (`receipts.md`);
      `**due** split state` instead while `state.md` still holds *Planner habits*, *Paged*
      or *Standing rulings* with content (`session.unsplit`), one line naming each and
-     where it goes (`habits.md`, `paged.md`, the code repo's `docs/rulings.md`); then per repo, with no judgement: for each template (bug hunt,
+     where it goes (`habits.md`, `paged.md`, the code repo's `docs/rulings.md`); then
+     `**due** trim habits` when the planner habits hold more than 15 top-level bullets
+     (`session.HABITS_CAP`, 152), naming the file and count, for the next retro to prune; then per repo, with no judgement: for each template (bug hunt,
      general cleanup, cleanup, test cleanup, claude.md cleanup, disk space cleanup; an item run under an old name, `general_audit`, `test_perf` or `disk_audit`, counts as the new one) the
      last finished item that ran it, when and its status, or *never*, the number of
      non-template items finished since (or in all), and any in flight; the repo's

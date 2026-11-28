@@ -56,6 +56,7 @@ Live, by area (the doc named holds the detail):
 - **143–146**: `memory_note`; API-red stub reports; `locks: [quiet]`; one thread budget; `retry: X model:`, usage-limit waits; design asks toast; readonly: `out/keep/` papers, no checks.
 - **147–150**: an hourly disk sweep (`retention.md`); farm jobs oldest first, `--native-only`, `--shard-seeds N` (`farm-seeds.md`); scripts by Write, never a heredoc; retros queued unasked when they fit; *Open questions* only what Matt answers now; picker `label`s; farm-seeds' Ctrl-Break stops at once; `needs_pick: [a, b]`; readonly kept files at kept paths.
 - **151**: per-repo `results`; `wait_for` `agent`; *Doc budget* section; `.steps.md` log index; bypass's shell-edit note overridden; leftover ask; "accumulate" = `park`.
+- **152**: fresh seeds after the diff review for any seeded bar; an `&` job anywhere refused; `slow:` says `use …` or `needs …`; leftover rule at 30 min; **trim habits** over 15.
 
 Planner docs: `planner.md` (`start_session` returns it whole), `planner-bridge.md`, `planner-vocab.md` (rare ops, 125), `claude-ai-new-project.md` (new / park / resume, setup); README is an overview and an index into `docs/`.
 
@@ -97,6 +98,10 @@ Chores:
 - fractals website 016 (#2582): kill an item's stray processes by tree or by command lines naming its `out/` (015's headless Chrome held a port 1.5 h); an event when a sibling repo's commit moves an item's pinned target.
 - fractals 076 (#2582): a cut's resume preamble names the background subagents running at the cut (SendMessage resumes them). (`wait_for` `agent`: 151.)
 - `Path.write_text` CRLF broke tests in helium-hustle 062, 063: the hook normalizes files executors write, or refuses with the fix named (due from helium-hustle closeout s8).
+- Executor self-kill (fractals 094): `Stop-Process` by CommandLine match on its item name killed its own Claude Code. Fix: a stop tool for a `start`ed pid tree; preamble: stop jobs only by that pid; maybe a hook refusing a match on its own tree.
+- A `pick:` after picks are saved reopens the picker (helium-hustle 118, #3421): no-op it, or vocab says no signal needed.
+- No resume for a red item in a `worktrees = false` repo (fractals 094, #3669): `retry:` needs a main-checkout form, or a writable resume.
+- fractals 109/030 (#4328): returns name "landed beside you: <repo> <sha>"; in a picker round a design default leaves the shipped build alone.
 - Matt (11-24, #2582): `locks: [quiet]` only when his request allows it ("quiet okay"); planner.md *Front-matter* says so, and 143's timing-step text defers to him (suggest, never require).
 - Fractals s8 (#2582): picker keeps strand with no serial item to ride (079, 084): offer (or by setting queue) a carrier item when parked edits wait on an empty queue.
 
@@ -104,33 +109,29 @@ Chores:
 
 Still not live:
 
-- **105**: a cut-off run's resume (redoing the cut step?), the update-restart warning, `external_data`'s red line, restaged amendments' receipt.
+- **105**: a cut run's resume, the update-restart warning, `external_data`'s red line.
 
-- **127–132**, unseen live: a cut taskbar button reading `◐ 1 running` (127); `matt:` only on real hand-offs naming a question or choice (131–132).
-- **134**: unseen live: is aicomplete's cause in its sim's last 20 lines? A browser's exception enough?
-- **133**: unseen live: the design-default revisit nudge, and a paired read farming its old side with `--at`.
-- **124**: the worker test is proven in the sandbox (headless Chrome) only: run it on aicomplete with the laptop joined. Does the farm reminder catch aicomplete's real direct runs, and stay quiet otherwise?
-- **123**: short preambles and the diff review, sandbox only: anything lost from *Dropped in 123*? real bugs found, at what cost?
-- **119–122**, unseen live: Helium's **Run game** by the card viewer, old servers replaced (119); a Workflow call at the hook, stages naming defaults (120); `unchanged from main:`, `UNCHANGED_RE` over-catching (121); hook denies in items, a helper's `agent_id`, legit calls denied (122).
-- **150**, unseen live: a two-picker `needs_pick`; carry lines naming `kept/` paths.
-- **151**, unseen live: is SubagentStop's `agent_id` the Agent call's id? fewer refused edits?
+- Unseen live: `◐ 1 running` on a cut taskbar button (127); `matt:` only on real hand-offs (131–132); the revisit nudge, `--at` old sides (133); aicomplete's cause in a sim's last 20 lines (134).
+- **124**: run the worker test on aicomplete with the laptop joined; does the farm reminder catch only real direct runs?
+- **123**: anything lost from *Dropped in 123*? diff reviews' real bugs, at what cost?
+- **119–122**, unseen live: Helium's **Run game** (119); a Workflow at the hook (120); `UNCHANGED_RE` over-catching (121); legit calls denied (122).
+- Unseen live: a two-picker `needs_pick`, `kept/` carry paths (150); SubagentStop's `agent_id` = the Agent call's id? (151); `( … ) &` refusals, fresh seeds after review, `use`/`needs` slow lines (152).
 - **149**: the app's daemon restart is sandbox-proven (toast 12 s after a kill); autostart off till Matt turns it on. `stats`' corrections rule right (139)?
 - **143**, unseen live: a `[rules]` edit carried; a `memory_note`; a stub report; `quiet` holding another project. **148**: do executors stop writing heredoc scripts?
-- **147**, unseen live: the hourly sweep in a daemon (run by hand via `prune` on every project); job order steering a multi-row farm; `--native-only` on a costly agent; aicomplete's `[remote] header` (`aic-sim farm {args} --header`) is its planner's to add; do 2 days / 5 GB of jobs suit its reads?
+- **147**, unseen live: the hourly sweep in a daemon; job order on a multi-row farm; `--native-only`; aicomplete's `[remote] header` is its planner's; 2 days / 5 GB of jobs right?
 - **144**, fake-tested only: check the usage-limit wait (box's zone) and `retry: … model:` on the first live limit red; build nothing till then.
 - TO VERIFY (11-19): habits.md pruned against `docs/tuning-items.md` (seen: fractals s7 did nine reports, 0 bridge writes).
 - `farm-seeds` keeps no per-worker offered/overtaken tally in `job.json`. (aicomplete 37)
 - **142**: the launcher's 75 s limit takes at the next app restart; two chats on one project are only counted (if it bites: a session token).
 - **MCP step 2 of 3** (11-19): sessions MCP-first, a non-image bridge write noted. Step 3 (retire the bridge to an emergency doc; the daemon flags planner writes without `via: mcp`) once `stats` shows five sessions in a row, two projects, `bridge` 0, no lost write. Later: a Fable preamble trim trial, reports writing `friction: none`.
 - **137**: fractals is split (19.6 KB, still over 15); wordwarriors, workbench, helium next: is 15 KB right? Does a diff review cite `docs/rulings.md`; do hunts stop on yield (two thin rounds) without dropping real bugs?
-- **117**: `told_to_stop` matching "don't stop"? **108**: do notes name files?
+- **117**: `told_to_stop` matching "don't stop"?
 - **114–115**, unseen live: `--cancel` freeing `aic-sim.exe`, a killed `native_build` finishing; toast settle times, a renumbered item's `depends_on`.
 - **135**: unseen live: does a `--resume` with `--model` keep the stage's cache; do Fable items obey preamble and hooks?
-- **113's fix-in-place**: unseen live: items fixing instead of noting; post-audits landing small fixes.
-- **112**: does claude.ai title a chat from the planner's bold first line?
+- Unseen live: items fixing in place, not noting (113); claude.ai titling a chat by the bold first line (112).
 - **111**: unseen live: a `--resume` after a 403 carrying on mid-step, its cost. **110**: kept reads' 3 items / 2 GB right?
 - **109's `warnings:`**: unseen live. aicomplete's design checker (205) is the first user: its `CLAUDE.md` *Warning checks* or `warning_checks` is its planner's to add; do executors run the checks and copy the parts verbatim?
-- **Farm load** (aicomplete 168, #7341): no broker → `run_local` runs native at full `--threads` (~95 min): cap at `main_slots`. A `remote: true` item's load warning should name `main_slots` as its share. A worker offline mid-item raised no flag: the watch or *Now* should.
-- A spec newer than a worker's bundle isn't in it (167's laptop failed every shard of one). 100 drops a worker from a job at its first failed shard; to do: rebuild the bundle when a job names a spec it lacks. Due from #7341.
+- **Farm load** (aicomplete 168, #7341): no broker → `run_local` at full `--threads`: cap at `main_slots`, which a `remote` item's load warning names; a worker offline mid-item should raise a flag (watch or *Now*).
+- A spec newer than a worker's bundle fails every shard (167): rebuild the bundle when a job names a spec it lacks. #7341.
 - **Remote workers** (87–89): the laptop joined over *Public* only via an old Allow rule for uv's `python.exe`; *Keep screen awake* hides on the LAN URL.
 - **`push = false` with a remote** (workbench, 92, fixed by hand): init should set `push = true` for a reachable one; the digest flag it.

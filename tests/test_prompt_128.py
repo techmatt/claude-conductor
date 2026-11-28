@@ -114,7 +114,7 @@ def test_the_preambles_say_how_to_wait_estimate_and_write(env):
     assert "a subagent: `agent` its id, `minutes` near its length; never a path nothing writes" in light
     assert ("once you have a plan, an estimate by rate (`5:40pm (by rate)`); `(to the cap)` only when you expect "
             "to use the whole time limit") in full
-    assert "Write every file with Write or Edit" in full and "a writing `-c`/`-e`, a heredoc into a file." in full
+    assert "Write every file with Write or Edit" in full and "a writing `-c`/`-e`, a heredoc into a file outside `out/`." in full
     assert ("for a scripted change, one script for the whole change (every edit checked before any is "
             "written) in `out/001_a/`") in full and "run alone, never mid-chain." in full   # 133, 142, 146, 147
     assert "(scripts: Write to `out/001_a/`, run alone; heredocs mangle backslashes)" in light   # 148, 151

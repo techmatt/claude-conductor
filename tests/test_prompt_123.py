@@ -69,6 +69,6 @@ def test_the_locked_lines_stay_and_the_incidents_leave(env):
 
 def test_word_targets(env):
     # 123's soft targets: full ~900 words before its optional blocks, light ~250; the report says what runs over.
-    assert len(executor.PREAMBLE.split("{calls}")[0].split()) <= 950
-    assert len(executor.LIGHT.split()) <= 315        # 151: +5 naming heredoc-fed Python and bypass mode
+    assert len(executor.PREAMBLE.split("{calls}")[0].split()) <= 955     # 152: +8 for `out/` heredocs and `slow:` fixes
+    assert len(executor.LIGHT.split()) <= 320        # 151: +5 naming heredoc-fed Python and bypass mode; 152: +3 `&` jobs, `slow:` fix
     assert len(render(env, SHORT).split()) <= 400

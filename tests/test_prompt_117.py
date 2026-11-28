@@ -61,7 +61,7 @@ def test_preamble_lines_for_baselines_status_fanout_and_seeds(env):
     assert "re-base a speed baseline only when the last" in full
     assert "or a hard bar missed, even within ~1 SE" in full
     assert "10 agents in any fan-out" in full
-    assert "A rules change gets it before fresh seeds; a self-check of the config diff is not it" in full  # 144
+    assert "gets it before its fresh seeds, so its fixes need no second set; a self-check of the config diff is not it" in full  # 144, 152
     assert "`seeds.py --take` or its like" in full
     assert len(render(env, SHORT).split()) <= 400
 

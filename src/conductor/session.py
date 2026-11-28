@@ -611,6 +611,22 @@ def planner_habits(control: Path) -> list[str]:
             if any(ln.strip() for ln in lines) else [])
 
 
+HABITS_CAP = 15     # planner.md: `habits.md` stays at this many or fewer; a workflow retro prunes it
+
+
+def habits_line(control: Path) -> str | None:
+    """`- **due** trim habits: `habits.md` 17 habits, cap 15 (…)` when the planner habits
+    (`habits.md`, else `state.md`'s section) hold more top-level bullets than `HABITS_CAP` (152)."""
+    if (found := control_section(control, "planner habits")) is None:
+        return None
+    body, source = found
+    count = sum(1 for ln in body if ln.startswith(("- ", "* ")))
+    if count <= HABITS_CAP:
+        return None
+    return (f"- **due** trim habits: `{source}` {count} habits, cap {HABITS_CAP}: "
+            "the next workflow retro (or post-audit) prunes it to the cap")
+
+
 def next_number(log: EventLog) -> int:
     """The number the next planner session takes: one more than the `session:` checkpoints
     logged so far (`session` in their detail), so it continues from history (112)."""
@@ -654,6 +670,8 @@ def render(cfg: Config, log: EventLog, view: View, cp: Event, rel: str, top: int
             out.append(f"  - {split_text(split).removeprefix('split state is due: ')}")
         else:
             out += [f"  - fold: {f}" for f in fold_candidates(state_text)]
+    if habits_cap := habits_line(cfg.control):
+        out.append(habits_cap)
     for repo in cfg.repos:
         out += maintenance(cfg, log, view, repo, docs)
     return "\n".join(out) + "\n"

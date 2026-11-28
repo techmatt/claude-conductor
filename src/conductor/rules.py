@@ -18,7 +18,7 @@ call through: a pattern that can't be matched without real false positives stays
 - **Helpers discarding**: a subagent's (`agent_id`) `git checkout`, `restore`, `switch`,
   `stash`, `clean` or `reset --hard`: the folder is the lead's.
 - **Found in the preambles** (122): elevation (`sudo`, `runas`, `-Verb RunAs`); a Bash job
-  left to die with its shell (`nohup`, a trailing `&`); waiting by `sleep` (5 s or more, or a
+  left to die with its shell (`nohup`, an `&` anywhere: `( … ) &`, 152); waiting by `sleep` (5 s or more, or a
   poll loop); a background call with no `timeout`; a `CLAUDE.md` or memory file under
   `~/.claude`; a file tool writing the control folder (outside `reports/`); a commit in a
   readonly item.
@@ -67,7 +67,16 @@ DISCARD_RE = re.compile(GIT + r"(?:checkout|restore|switch|clean\b[^;|&\n]*\s-\w
 COMMIT_RE = re.compile(GIT + r"commit\b")
 ELEVATE_RE = re.compile(r"(?:^|[\s;&|(])(?:sudo|gsudo|runas)(?:\.exe)?\s|-verb\s+['\"]?runas\b", re.IGNORECASE)
 NOHUP_RE = re.compile(r"(?:^|[\s;&|(])(?:nohup|disown|setsid)\b")
-TRAILING_AMP_RE = re.compile(r"(?<![&|>\\])&\s*$")
+# A job-control `&` anywhere (152: helium-hustle 131's `( … ) &` then `sleep 1` on the next line
+# ran): not `&&`, `|&`, `>&`, `&>`, `<&`, `2>&1` or an escaped `\&`, quotes and comments removed first.
+AMP_JOB_RE = re.compile(r"(?<![&|><\\])&(?![&>])")
+QUOTED_RE = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"|\$\(\([^)]*\)\)")
+COMMENT_RE = re.compile(r"(?:^|(?<=\s))#.*$", re.MULTILINE)
+
+
+def amp_job(outer: str) -> bool:
+    """A Bash command (heredoc bodies stripped) that backgrounds a job with `&`."""
+    return bool(AMP_JOB_RE.search(COMMENT_RE.sub("", QUOTED_RE.sub("''", outer))))
 SLEEP_RE = re.compile(r"\b(?:sleep|start-sleep(?:\s+-s(?:econds)?)?)\s+(\d+(?:\.\d+)?)(m|h)?\b"
                       r"|\bstart-sleep\s+-m(?:illiseconds)?\s+(\d+)|\btimeout(?:\.exe)?\s+/t\s+(\d+)", re.IGNORECASE)
 POLL_RE = re.compile(r"\b(?:until|while)\b[^\n]*\b(?:sleep|start-sleep)\b", re.IGNORECASE)
@@ -247,7 +256,7 @@ def _shell(cmd: str, tool: str, ti: dict, helper: bool, readonly: bool) -> str |
     if ELEVATE_RE.search(outer):
         return ("conductor: refused: nothing that needs elevation (UAC, admin installs, services): its prompt "
                 "waits unseen. Take a no-admin route, or say in the report what needs Matt.")
-    if tool == "Bash" and (NOHUP_RE.search(outer) or TRAILING_AMP_RE.search(outer.rstrip())):
+    if tool == "Bash" and (NOHUP_RE.search(outer) or amp_job(outer)):
         return ("conductor: refused: a Git Bash `&` / nohup job dies with its shell. Use `run_in_background` "
                 "(with a `timeout`), or `start` (mcp__conductor__start) for one that may outrun 10 minutes.")
     if long_sleep(outer):
